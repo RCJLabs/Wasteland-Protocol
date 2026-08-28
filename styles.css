@@ -244,3 +244,24 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
    without selecting each one in turn to see what lights up. */
 button.combo-ready { border-color: #ff44ff; color: #ff9cff; box-shadow: 0 0 10px rgba(255,68,255,0.35) inset; }
 .combo-tag { font-size: 9px; letter-spacing: 1px; color: #ff44ff; text-shadow: 0 0 4px #ff44ff; }
+
+/* Formation feedback. Rank is stated on each deployed unit; a swing that will land short and a
+   unit currently covering the line behind it are both called out before the turn is spent. */
+.rank-chip { font-size: 8px; letter-spacing: 1px; font-weight: bold; line-height: 11px;
+  text-align: center; color: #0b0b0b; border-radius: 2px; margin-bottom: 2px; opacity: 0.9; }
+.rank-1 { background: #c98b3a; }
+.rank-2 { background: #8a9a5b; }
+.rank-3 { background: #6a8fb5; }
+
+.reach-flag, .guard-flag { position: absolute; left: 50%; transform: translateX(-50%); z-index: 25;
+  font-size: 9px; font-weight: bold; letter-spacing: 1px; white-space: nowrap; padding: 2px 5px;
+  border-radius: 2px; }
+.reach-flag { top: -46px; color: #ffb347; background: rgba(40,22,0,0.9); border: 1px solid #ffb347;
+  text-shadow: 0 0 4px #ffb347; }
+.guard-flag { top: -46px; color: #7fd4ff; background: rgba(0,26,40,0.9); border: 1px solid #7fd4ff;
+  text-shadow: 0 0 4px #7fd4ff; }
+.entity.out-of-reach .portrait { filter: grayscale(0.5) brightness(0.75); }
+.entity.covering .portrait { filter: drop-shadow(0 0 12px #7fd4ff); }
+
+button.reach-short { border-color: #7a5a20; }
+.reach-tag { font-size: 9px; letter-spacing: 1px; color: #ffb347; }

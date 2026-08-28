@@ -386,8 +386,10 @@ function nextTurn() {
 function executeSelfAction(type) {
     let actEnt = turnQueue[activeIndex];
     if (type === 'IRON_GUARD') {
-        actEnt.armor += 15; actEnt.armorTurns = 2; actEnt.cooldowns.iron_guard = 3;
-        log(`> ${actEnt.name} braces behind scrap plating (+15 ARMOR).`, "log-status");
+        actEnt.armor += 15; actEnt.armorTurns = 2; actEnt.guardTurns = 2; actEnt.cooldowns.iron_guard = 3;
+        // Armour alone only ever protected the Bruiser. Bracing now covers the ranks behind it,
+        // which is what gives the front rank a job beyond absorbing whatever walks into it.
+        log(`> ${actEnt.name} braces and covers the line behind (+15 ARMOR).`, "log-status");
         spawnFCT(actEnt.id, "+ARMOR", "fct-heal"); playSFX('heal');
     }
     pendingAction = null; checkWinState();
@@ -979,7 +981,7 @@ function resolveCamp(type) {
 }
 function finishCamp() { currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap(); }
 
-const INTENT_ICONS = { AOE: '🧨', HEAVY: '💥', STATUS: '☣️', DEFEND: '🛡️', ATTACK: '⚔️' };
+const INTENT_ICONS = { AOE: '🧨', HEAVY: '💥', STATUS: '☣️', DEFEND: '🛡️', ATTACK: '⚔️', FLANK: '🌀' };
 
 function intentFor(type, enemy) {
     const icon = (type === 'ATTACK' && enemy.range === 'ranged') ? '🔫' : INTENT_ICONS[type];
@@ -1007,6 +1009,9 @@ function rollIntent(enemy) {
     } else {
         if (rand < 0.2) return { type: 'HEAVY', icon: '💥' };
         if (rand < 0.3) return { type: 'DEFEND', icon: '🛡️' };
+        // A fast unit will go round the front rank rather than through it. Telegraphed a turn
+        // ahead like every other intent, so the squad gets to answer it.
+        if (rand < 0.45 && enemy.speed >= 14) return intentFor('FLANK', enemy);
         return { type: 'ATTACK', icon: '⚔️' };
     }
 }
@@ -1132,28 +1137,60 @@ const COMBOS = [
 // One row per ability: who fields it, what the button reads, and which cooldown key it burns.
 // The command deck is rendered from this, so an ability exists in exactly one place.
 const ABILITIES = {
-    BRUISER:    [{ move: 'SCRAP_BLADE',   label: 'Scrap Blade' },
-                 { move: 'HEAVY_WRENCH',  label: 'Heavy Wrench',        cd: 'heavy_wrench' },
-                 { move: 'IRON_GUARD',    label: 'Iron Guard',          cd: 'iron_guard', act: 'self' }],
-    MEDIC:      [{ move: 'PISTOL',        label: 'Pistol' },
-                 { move: 'RAD_SHOT',      label: 'Rad Shot' },
-                 { move: 'CAUTERIZE',     label: 'Cauterize',           cd: 'cauterize' }],
-    SCAVENGER:  [{ move: 'PIPE_RIFLE',    label: 'Pipe Rifle' },
-                 { move: 'FLASHBANG',     label: 'Flashbang',           cd: 'flashbang' },
-                 { move: 'ACID_FLASK',    label: 'Acid Flask (Corrode)', cd: 'acid_flask' }],
-    PYROMANIAC: [{ move: 'FLARE_GUN',     label: 'Flare Gun (Oil)' },
-                 { move: 'MOLOTOV',       label: 'Molotov (AoE)',       cd: 'molotov' },
-                 { move: 'THERMITE',      label: 'Thermite',            cd: 'thermite' }],
-    SHOTGUNNER: [{ move: 'SLUG_SHOT',     label: 'Slug Shot' },
-                 { move: 'BUCKSHOT',      label: 'Buckshot (Front)',    cd: 'buckshot' },
-                 { move: 'EXECUTE_SHOT',  label: 'Execute',             cd: 'execute_shot' }],
-    SNIPER:     [{ move: 'QUICK_SHOT',    label: 'Quick Shot' },
-                 { move: 'DEADEYE',       label: 'Deadeye (Back)',      cd: 'deadeye' },
-                 { move: 'SPOTTERS_MARK', label: "Spotter's Mark",      cd: 'spotters_mark' }],
-    HOUND:      [{ move: 'SNAP',          label: 'Snap' },
-                 { move: 'FERAL_BITE',    label: 'Feral Bite (Bleed)',  cd: 'feral_bite' },
-                 { move: 'RIP_AND_TEAR',  label: 'Rip and Tear (Bleed)', cd: 'rip_and_tear' }]
+    BRUISER:    [{ move: 'SCRAP_BLADE',   label: 'Scrap Blade',           reach: 'melee' },
+                 { move: 'HEAVY_WRENCH',  label: 'Heavy Wrench',         reach: 'melee', cd: 'heavy_wrench' },
+                 { move: 'IRON_GUARD',    label: 'Iron Guard',           reach: 'self',  cd: 'iron_guard', act: 'self' }],
+    MEDIC:      [{ move: 'PISTOL',        label: 'Pistol',               reach: 'ranged' },
+                 { move: 'RAD_SHOT',      label: 'Rad Shot',             reach: 'ranged' },
+                 { move: 'CAUTERIZE',     label: 'Cauterize',            reach: 'self',  cd: 'cauterize' }],
+    SCAVENGER:  [{ move: 'PIPE_RIFLE',    label: 'Pipe Rifle',           reach: 'ranged' },
+                 { move: 'FLASHBANG',     label: 'Flashbang',            reach: 'ranged', cd: 'flashbang' },
+                 { move: 'ACID_FLASK',    label: 'Acid Flask (Corrode)', reach: 'ranged', cd: 'acid_flask' }],
+    PYROMANIAC: [{ move: 'FLARE_GUN',     label: 'Flare Gun (Oil)',      reach: 'ranged' },
+                 { move: 'MOLOTOV',       label: 'Molotov (AoE)',        reach: 'ranged', cd: 'molotov' },
+                 { move: 'THERMITE',      label: 'Thermite',             reach: 'ranged', cd: 'thermite' }],
+    SHOTGUNNER: [{ move: 'SLUG_SHOT',     label: 'Slug Shot',            reach: 'ranged' },
+                 { move: 'BUCKSHOT',      label: 'Buckshot (Front)',     reach: 'melee', cd: 'buckshot' },
+                 { move: 'EXECUTE_SHOT',  label: 'Execute',              reach: 'ranged', cd: 'execute_shot' }],
+    SNIPER:     [{ move: 'QUICK_SHOT',    label: 'Quick Shot',           reach: 'ranged' },
+                 { move: 'DEADEYE',       label: 'Deadeye (Back)',       reach: 'ranged', cd: 'deadeye' },
+                 { move: 'SPOTTERS_MARK', label: "Spotter's Mark",       reach: 'ranged', cd: 'spotters_mark' }],
+    HOUND:      [{ move: 'SNAP',          label: 'Snap',                 reach: 'melee' },
+                 { move: 'FERAL_BITE',    label: 'Feral Bite (Bleed)',   reach: 'melee', cd: 'feral_bite' },
+                 { move: 'RIP_AND_TEAR',  label: 'Rip and Tear (Bleed)', reach: 'melee', cd: 'rip_and_tear' }]
 };
+
+// Formation used to be decided at the Outpost and then mean nothing once the shooting started.
+// A melee weapon swung from the back rank, or at something standing behind the enemy front, is
+// reaching further than it wants to; a rifle does not care where either side stands. So the
+// front rank is where a melee unit earns its damage - and where the enemy melee comes for it.
+const REACH_PENALTY = { 2: 0.85, 3: 0.6 };
+const RANK_LABELS = { 1: 'FRONT', 2: 'MID', 3: 'BACK' };
+const DEPTH_PENALTY = 0.65;
+const FRONT_RANKS = 2;
+
+const MOVE_REACH = Object.fromEntries(
+    Object.values(ABILITIES).flat().map(a => [a.move, a.reach]));
+
+// Every ability an entity can be standing behind, in one place, so nothing needs a second list.
+function isMelee(move) { return MOVE_REACH[move] === 'melee'; }
+function isRanged(move) { return MOVE_REACH[move] === 'ranged'; }
+
+function reachMult(move, attacker, dist) {
+    if (!isMelee(move)) return 1;
+    let m = REACH_PENALTY[attacker.gridPos] || 1;
+    if (dist >= FRONT_RANKS) m *= DEPTH_PENALTY;
+    return m;
+}
+
+// Two separate things cost a melee swing damage, and they are surfaced separately: the attacker's
+// own rank costs the same against every target, so it belongs on the button, while reaching past
+// the enemy front rank depends on which one is picked, so it belongs on that target.
+function reachNote(move, attacker, dist) {
+    const m = reachMult(move, attacker, dist);
+    return m < 1 ? `-${Math.round((1 - m) * 100)}%` : null;
+}
+function isOutOfDepth(move, dist) { return isMelee(move) && dist >= FRONT_RANKS; }
 
 const OVERDRIVE_NAMES = { BRUISER: 'EARTHSHAKER', MEDIC: 'FIELD REVIVE', SCAVENGER: 'SCRAP STORM',
     PYROMANIAC: 'HELLFIRE', SHOTGUNNER: 'BREACH CHARGE', SNIPER: 'HEADSHOT', HOUND: 'APEX PREDATOR' };
@@ -1214,7 +1251,10 @@ function initiateCombat(nodeType, isEliteNode) {
     }
     applyCombatScenery(bgFile, nodeType === 'BOSS' ? bossForSector().banner : null);
 
-    playerRoster.forEach(ent => { ent.stunnedTurns = 0; ent.bleedingTurns = 0; ent.armorTurns = 0; ent.armor = 0; ent.oiledTurns = 0; });
+    // Enemies are built fresh each fight; the squad persists, so anything left on a unit has to
+    // be cleared here or it rides into the next node.
+    playerRoster.forEach(ent => { ent.stunnedTurns = 0; ent.bleedingTurns = 0; ent.armorTurns = 0; ent.armor = 0;
+        ent.oiledTurns = 0; ent.corrodedTurns = 0; ent.markedTurns = 0; ent.guardTurns = 0; });
     // HP keeps the steep 1.5x-per-sector curve; damage climbs far more slowly so a deep fight
     // is dangerous rather than an unavoidable one-shot. Player power compounds through
     // repeatable percentage perks, which is what makes the curve climbable at all.
@@ -1265,26 +1305,39 @@ function renderField() {
             if (pendingAction === 'OVERDRIVE' && turnQueue[activeIndex].classType === 'MEDIC' && ent.isPlayer) {
                 tCls = 'targetable-ally'; clk = targetable(`data-action="target" data-id="${ent.id}"`);
             } else if (!isDead) {
-                if (pendingAction === 'CAUTERIZE' && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="target" data-id="${ent.id}"`); } 
+                if ((pendingAction === 'CAUTERIZE' || pendingAction === 'REPOSITION') && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="target" data-id="${ent.id}"`); } 
                 else if (['ITEM_MED', 'ITEM_BOMB', 'ITEM_ADRENALINE', 'ITEM_EMP'].includes(pendingAction)) {
                     if (pendingAction === 'ITEM_MED' && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="use-item" data-id="${ent.id}"`); }
                     else if (pendingAction === 'ITEM_ADRENALINE' && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="use-item" data-id="${ent.id}"`); }
                     else if (pendingAction === 'ITEM_BOMB' && !ent.isPlayer) { tCls = 'targetable-enemy'; clk = targetable(`data-action="use-item" data-id="${ent.id}"`); }
                     else if (pendingAction === 'ITEM_EMP' && !ent.isPlayer) { tCls = 'targetable-enemy'; clk = targetable(`data-action="use-item" data-id="${ent.id}"`); }
                 }
-                else if (pendingAction !== 'CAUTERIZE' && !ent.isPlayer) { tCls = 'targetable-enemy'; clk = targetable(`data-action="target" data-id="${ent.id}"`); }
+                else if (pendingAction !== 'CAUTERIZE' && pendingAction !== 'REPOSITION' && !ent.isPlayer) { tCls = 'targetable-enemy'; clk = targetable(`data-action="target" data-id="${ent.id}"`); }
             }
         }
         let eff = ''; if (ent.bleedingTurns > 0 && !isDead) eff += `💧`; if (ent.stunnedTurns > 0 && !isDead) eff += `💫`; if (ent.armorTurns > 0 && !isDead) eff += `🛡️`; if (ent.oiledTurns > 0 && !isDead) eff += `🛢️`; if (ent.corrodedTurns > 0 && !isDead) eff += `🧪`; if (ent.markedTurns > 0 && !isDead) eff += `🎯`;
         let hoverCls = ent.isHovering && !isDead ? 'hovering' : '';
         const hint = (pendingAction && !isDead && tCls === 'targetable-enemy') ? comboHint(pendingAction, ent) : null;
+        // Rank is currently only legible from the left-to-right ordering, which says nothing
+        // about which slot a unit is in once someone is down. Say it outright.
+        const rank = (ent.isPlayer && !isDead && ent.gridPos > 0) ? RANK_LABELS[ent.gridPos] : null;
+        const guarding = (ent.isPlayer && !isDead && (ent.guardTurns || 0) > 0);
+        // Whether this particular target is further back than the swing wants to reach.
+        let farTag = false;
+        if (pendingAction && !isDead && tCls === 'targetable-enemy') {
+            const foes = activeEntities.filter(e => !e.isPlayer && e.hp > 0);
+            farTag = isOutOfDepth(pendingAction, foes.findIndex(e => e.id === ent.id));
+        }
         let eliteGlow = ent.eliteType && !isDead ? 'filter: drop-shadow(0 0 15px #8B0000);' : '';
 
         const html = `
-            <div class="entity ${isAct} ${dCls} ${tCls} ${hint ? 'has-combo' : ''}" id="${ent.id}" ${clk} style="--sprite-scale: ${ent.scale || 1}; --sprite-sink: ${ent.sink || 0}px;">
+            <div class="entity ${isAct} ${dCls} ${tCls} ${hint ? 'has-combo' : ''} ${farTag ? 'out-of-reach' : ''} ${guarding ? 'covering' : ''}" id="${ent.id}" ${clk} style="--sprite-scale: ${ent.scale || 1}; --sprite-sink: ${ent.sink || 0}px;">
                 <div class="intent-icon" style="display:${ent.intent && !isDead && !ent.isPlayer ? 'flex' : 'none'}">${ent.intent ? ent.intent.icon : ''}</div>
                 ${hint ? `<div class="combo-flag">${hint}</div>` : ''}
+                ${farTag ? `<div class="reach-flag">FAR</div>` : ''}
+                ${guarding ? `<div class="guard-flag">COVERING</div>` : ''}
                 <div style="width: 100%; position: relative; z-index: 10; transform: translateY(${ent.hpDrop || 0}px);">
+                    ${rank ? `<div class="rank-chip rank-${ent.gridPos}">${rank}</div>` : ''}
                     ${eff ? `<div class="status-badge">${eff}</div>` : ''}
                     <div class="hp-text">${ent.hp}/${ent.maxHp}</div>
                     <div class="hp-container"><div class="hp-fill ${ent.isPlayer ? 'player-hp' : 'enemy-hp'}" style="width: ${(ent.hp / ent.maxHp) * 100}%"></div></div>
@@ -1320,11 +1373,24 @@ function renderCommandDeck() {
     const foes = activeEntities.filter(e => !e.isPlayer && e.hp > 0);
     const liveCombo = move => (foes.map(f => comboFor(move, f)).find(Boolean) || {}).name || null;
 
-    for (const a of (ABILITIES[aE.classType] || [])) {
+    const deck = [...(ABILITIES[aE.classType] || [])];
+    // Formation was fixed the moment the fight started, so a medic caught in the front rank
+    // stayed there until it died. Swapping costs the whole turn, which is the price of it.
+    if (activeEntities.filter(e => e.isPlayer && e.hp > 0 && e.id !== aE.id).length > 0) {
+        deck.push({ move: 'REPOSITION', label: '↔ Reposition', reach: 'self' });
+    }
+
+    for (const a of deck) {
         const cd = a.cd ? (cds[a.cd] || 0) : 0;
         const ready = cd === 0 ? liveCombo(a.move) : null;
-        deckHtml += `<button ${cd > 0 ? 'disabled' : ''} ${ready ? 'class="combo-ready"' : ''} data-action="${a.act || 'queue'}" data-move="${a.move}">`
-                  + `${a.label}${cd > 0 ? ` [${cd}]` : ''}${ready ? ` <span class="combo-tag">${ready}</span>` : ''}</button>`;
+        // A melee ability swung from the second or third rank lands soft wherever it is aimed,
+        // and that is worth knowing before the ability is even selected.
+        const short = (cd === 0 && isMelee(a.move) && (REACH_PENALTY[aE.gridPos] || 1) < 1)
+            ? `-${Math.round((1 - REACH_PENALTY[aE.gridPos]) * 100)}%` : null;
+        const cls = [ready ? 'combo-ready' : '', short ? 'reach-short' : ''].filter(Boolean).join(' ');
+        deckHtml += `<button ${cd > 0 ? 'disabled' : ''} ${cls ? `class="${cls}"` : ''} data-action="${a.act || 'queue'}" data-move="${a.move}">`
+                  + `${a.label}${cd > 0 ? ` [${cd}]` : ''}${ready ? ` <span class="combo-tag">${ready}</span>` : ''}`
+                  + `${short ? ` <span class="reach-tag">REACH ${short}</span>` : ''}</button>`;
     }
 
     if (inventory.length > 0) { deckHtml += `<button style="border-color:#B8860B; color:#B8860B;" data-action="bag">BAG (${inventory.length})</button>`; }
@@ -1353,6 +1419,7 @@ function applyTurnStartEffects(ent) {
         const cap = (ent.baseArmor || 0) + 30;
         if (ent.armor < cap) { ent.armor = Math.min(cap, ent.armor + 6); spawnFCT(ent.id, "+PLATE", "fct-heal"); chg = true; }
     }
+    if (ent.guardTurns > 0) { ent.guardTurns--; chg = true; }
     if (ent.oiledTurns > 0) { ent.oiledTurns--; chg = true; }
     if (ent.corrodedTurns > 0) { ent.corrodedTurns--; chg = true; }
     if (ent.markedTurns > 0) { ent.markedTurns--; chg = true; }
@@ -1391,6 +1458,16 @@ function resolveAction(targetId) {
         pendingAction = null; checkWinState(); return;
     }
 
+    if (pendingAction === 'REPOSITION') {
+        if (!target || !target.isPlayer || target.id === actEnt.id || target.hp <= 0) { pendingAction = null; renderField(); return; }
+        const mine = actEnt.gridPos; actEnt.gridPos = target.gridPos; target.gridPos = mine;
+        const order = (a, b) => (a.isPlayer && b.isPlayer) ? a.gridPos - b.gridPos : 0;
+        activeEntities = [...activeEntities.filter(e => e.isPlayer).sort(order), ...activeEntities.filter(e => !e.isPlayer)];
+        log(`> ${actEnt.name} and ${target.name} swap positions.`, "log-status");
+        spawnFCT(actEnt.id, "MOVED", "fct-status"); playSFX('heal');
+        pendingAction = null; checkWinState(); return;
+    }
+
     if (pendingAction === 'CAUTERIZE') {
         let heal = 20 + Math.floor(Math.random() * 10); target.hp = Math.min(target.maxHp, target.hp + heal); actEnt.cooldowns.cauterize = 3; 
         log(`> ${actEnt.name} heals ${target.name} for ${heal}.`, "log-heal"); spawnFCT(target.id, `+${heal}`, "fct-heal"); playSFX('heal');
@@ -1412,6 +1489,10 @@ function resolveAction(targetId) {
         if (pendingAction === 'SPOTTERS_MARK') { dmgMult = 0.4; actEnt.cooldowns.spotters_mark = 3; }
         if (pendingAction === 'RIP_AND_TEAR') { dmgMult *= 1.2; actEnt.cooldowns.rip_and_tear = 3; }
 
+        // Where the two of them are standing, before anything else is figured in.
+        const reach = reachMult(pendingAction, actEnt, dist);
+        if (reach < 1) { dmgMult *= reach; log(`> ${actEnt.name} is reaching (${Math.round(reach * 100)}% DMG).`, "log-status"); }
+
         // The combo multiplies whatever the ability was already worth. It has to come after every
         // profile above: an ability that assigns dmgMult outright would otherwise throw the bonus
         // away, spending the player's setup for nothing while the prompt still promised a payoff.
@@ -1427,8 +1508,10 @@ function resolveAction(targetId) {
 
         if (activeRelics.some(r => r.id === 'THERMAL_CORE') && atkType === 'energy') { dmgMult *= 1.3; }
 
-        const rangedMoves = ['PISTOL', 'RAD_SHOT', 'PIPE_RIFLE', 'FLASHBANG', 'FLARE_GUN', 'QUICK_SHOT', 'DEADEYE', 'ACID_FLASK', 'SPOTTERS_MARK'];
-        if (currentWeather === 'SANDSTORM' && rangedMoves.includes(pendingAction)) { dmgMult *= 0.75; }
+        // A sandstorm blinds anything fired across the field. This used to be a second hand-kept
+        // list that had drifted - a thrown molotov was somehow unaffected - and now reads the
+        // same reach the formation rules use.
+        if (currentWeather === 'SANDSTORM' && isRanged(pendingAction)) { dmgMult *= 0.75; }
         if (currentWeather === 'BLOODLUST') { dmgMult *= 1.2; }
         
         playSFX('shoot');
@@ -1498,6 +1581,24 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     }
 }
 
+// Melee walks into whoever is nearest. Ranged fire used to pick uniformly at random, which meant
+// a front rank protected nobody and standing a sniper at the back was free. It now leans on the
+// back line, where the fragile units are - and a flank ignores the ranks entirely.
+const BACKLINE_WEIGHT = { 1: 1, 2: 3, 3: 5 };
+
+function pickTarget(enemy, candidates, intent) {
+    if (candidates.length === 0) return null;
+    if (intent && intent.type === 'FLANK') {
+        return [...candidates].sort((a, b) => b.gridPos - a.gridPos)[0];
+    }
+    if (enemy.range === 'melee') {
+        return [...candidates].sort((a, b) => a.gridPos - b.gridPos)[0];
+    }
+    const weighted = [];
+    candidates.forEach(t => { const w = BACKLINE_WEIGHT[t.gridPos] || 1; for (let i = 0; i < w; i++) weighted.push(t); });
+    return weighted[Math.floor(Math.random() * weighted.length)];
+}
+
 function executeEnemyAi(enemy) {
     if (!combatActive) return;
     
@@ -1546,10 +1647,16 @@ function executeEnemyAi(enemy) {
 
     let validTargets = activeEntities.filter(e => e.isPlayer && e.hp > 0); 
     if (validTargets.length === 0) return;
-    let target;
-    if (enemy.range === 'melee') { validTargets.sort((a, b) => a.gridPos - b.gridPos); target = validTargets[0]; } else { target = validTargets.sort(() => 0.5 - Math.random())[0]; }
-
     let intent = enemy.intent || { type: 'ATTACK' };
+    let target = pickTarget(enemy, validTargets, intent);
+
+    // A braced unit standing in front of the mark takes the hit instead, softened. This is
+    // what makes a formation worth arranging rather than a row of interchangeable slots.
+    let intercepted = null;
+    if (target && ['ATTACK', 'HEAVY', 'STATUS', 'FLANK'].includes(intent.type)) {
+        const cover = validTargets.find(p => (p.guardTurns || 0) > 0 && p.gridPos < target.gridPos);
+        if (cover) { intercepted = target; target = cover; }
+    }
     
     if (intent.type === 'DEFEND') {
         enemy.armor += 15; enemy.armorTurns = 2; spawnFCT(enemy.id, "+ARMOR", "fct-heal"); log(`> ${enemy.name} took a defensive stance!`, "log-status"); playSFX('heal');
@@ -1571,6 +1678,11 @@ function executeEnemyAi(enemy) {
         let rawDmg = enemy.dmgBase + Math.floor(Math.random() * 5);
         
         if (intent.type === 'HEAVY') { rawDmg = Math.floor(rawDmg * 1.5); triggerShake(); }
+        if (intercepted) {
+            rawDmg = Math.floor(rawDmg * 0.6);
+            log(`> ${target.name} steps in front of ${intercepted.name}.`, "log-status");
+            spawnFCT(target.id, "COVERED", "fct-heal");
+        }
 
         if (currentWeather === 'SANDSTORM' && enemy.range === 'ranged') rawDmg = Math.floor(rawDmg * 0.75);
         if (currentWeather === 'BLOODLUST') rawDmg = Math.floor(rawDmg * 1.2);
@@ -1658,9 +1770,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, OVERDRIVE_NAMES, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, OVERDRIVE_NAMES, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },
