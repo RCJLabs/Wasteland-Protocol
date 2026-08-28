@@ -204,6 +204,14 @@ function dispatchAction(el) {
 
 document.addEventListener('click', e => dispatchAction(e.target.closest('[data-action]')));
 
+// Last resort: if a sprite ever fails to load, hide it rather than stamping a broken-image
+// icon across the battlefield - the health bar and turn queue still identify the unit. Error
+// events do not bubble, so this listens in the capture phase.
+document.addEventListener('error', e => {
+    const el = e.target;
+    if (el && el.tagName === 'IMG' && el.classList.contains('portrait')) el.style.visibility = 'hidden';
+}, true);
+
 // Buttons handle Enter and Space themselves; the elements that are not buttons - the combat
 // targets - need it wired up so the game is playable without a pointer.
 document.addEventListener('keydown', e => {
@@ -566,7 +574,11 @@ function buildCombatSnapshot() {
 }
 
 function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, activeRelics, runStats, combat: buildCombatSnapshot() })); }
-function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = migrateTraits(d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE))); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; activeRelics = d.activeRelics || []; pendingCombat = d.combat || null; runStats = d.runStats || newRunStats(); } }
+function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = migrateAssetPaths(migrateTraits(d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)))); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; activeRelics = d.activeRelics || []; pendingCombat = d.combat || null;
+        if (pendingCombat) {
+            migrateAssetPaths(pendingCombat.enemies);
+            if (typeof pendingCombat.bgFile === 'string') pendingCombat.bgFile = pendingCombat.bgFile.replace(/\.png$/, '.webp');
+        } runStats = d.runStats || newRunStats(); } }
 
 function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`; document.getElementById('meta-lbl-scrap').innerText = `LVL ${metaUpgrades.startScrap / 50}`; document.getElementById('meta-lbl-level').innerText = `LVL ${metaUpgrades.startLevel - 1}`; document.getElementById('meta-lbl-inv').innerText = `LVL ${metaUpgrades.invMax - 4}`; }
 function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossSkulls -= 1; metaUpgrades.startScrap += 50; } else if (type === 'LEVEL' && bossSkulls >= 2) { bossSkulls -= 2; metaUpgrades.startLevel += 1; } else if (type === 'INV' && bossSkulls >= 3) { bossSkulls -= 3; metaUpgrades.invMax += 1; } saveMeta(); renderCitadel(); }
@@ -678,6 +690,17 @@ function assignPerk(charId, perkId) {
     char.traits.push(perk.id);
     char.perkPoints--;
     activePerkSelector = null; saveGameState(); renderOutpost();
+}
+
+// The art set moved from PNG to WebP, but a saved roster stores each unit's image path, so
+// saves written before that migration point at files that no longer exist and render as a
+// browser broken-image icon. Rewrite the extension on load. Anything persisting an asset path
+// needs the same treatment - enemies inside a combat snapshot, and its background.
+function migrateAssetPaths(entities) {
+    (entities || []).forEach(e => {
+        if (e && typeof e.img === 'string') e.img = e.img.replace(/\.png$/, '.webp');
+    });
+    return entities;
 }
 
 // Older saves carried a single `trait` string; fold it into the list so progress survives.
@@ -1255,7 +1278,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, awardXp, log, playSFX, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, migrateAssetPaths, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, awardXp, log, playSFX, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
