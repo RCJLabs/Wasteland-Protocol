@@ -83,6 +83,17 @@ const QUIRK_POOL = [
     { id: 'LETHARGIC', name: 'LETHARGIC (+8 DMG, -3 SPD)', dmg: 8, hp: 0, spd: -3 }
 ];
 
+// Perks are repeatable. The percentage ones compound with each pick, which is the player's
+// only multiplicative axis against enemies that scale exponentially - see PERK note in
+// initiateCombat.
+const PERK_POOL = [
+    { id: 'VETERAN',   label: 'VETERAN (+5 DMG)',        apply: c => { c.dmgBase += 5; } },
+    { id: 'FORTIFIED', label: 'FORTIFIED (+25 HP)',      apply: c => { c.maxHp += 25; c.hp += 25; } },
+    { id: 'SWIFT',     label: 'SWIFT (+3 SPD)',          apply: c => { c.speed += 3; } },
+    { id: 'HONED',     label: 'HONED (+10% DMG)',        apply: c => { c.dmgBase = Math.ceil(c.dmgBase * 1.1); } },
+    { id: 'HARDENED',  label: 'HARDENED (+10% MAX HP)',  apply: c => { const g = Math.ceil(c.maxHp * 0.1); c.maxHp += g; c.hp += g; } }
+];
+
 const RELIC_POOL = [
     { id: 'THERMAL_CORE', name: "Thermal Core", desc: "Energy attacks deal +30% DMG." },
     { id: 'KINETIC_MESH', name: "Kinetic Mesh", desc: "Frontline position takes -25% Physical DMG." },
@@ -104,6 +115,12 @@ const SECTOR_LAYOUT = [
 ];
 const TOTAL_TIERS = SECTOR_LAYOUT.length;
 const SECTOR_TIER_BONUS = 3;
+// Difficulty still climbs hard, but through lethality rather than bullet sponges: health
+// tracks player damage growth so a fight stays ~10 rounds at any depth, while damage
+// outpaces player health so a run reliably ends somewhere around sector 10.
+const SECTOR_HP_SCALE = 1.25;
+const SECTOR_DMG_SCALE = 1.32;
+const XP_CURVE = 1.35;         // was 1.5 - levels kept stalling, starving the perk economy
 
 const EVENT_POOL = [
     { title: "WRECKED CARAVAN", desc: "You stumble upon a destroyed merchant rig. The engine block is sparking dangerously, but the cargo hold is partially intact.", choices: [ { label: "Salvage Cargo (+30 Scrap)", canAfford: () => true, execute: () => { scrap += 30; playSFX('heal'); return "Salvaged 30 Scrap from the wreckage."; } }, { label: "Gut the Engine (+1 Tech, +2 Parts, -15 HP to random unit)", canAfford: () => true, execute: () => { materials.tech += 1; materials.parts += 2; let active = playerRoster.filter(p => p.gridPos > 0 && p.hp > 0); let target = active[Math.floor(Math.random() * active.length)]; target.hp = Math.max(1, target.hp - 15); playSFX('hit'); triggerHitFlash(target.id); return `Extracted parts, but an electrical surge shocked ${target.name} for 15 DMG.`; } }, { label: "Leave it", canAfford: () => true, execute: () => { return "You move on safely without risking the sparks."; } } ] },
@@ -113,13 +130,13 @@ const EVENT_POOL = [
 ];
 
 const ROSTER_TEMPLATE = [
-    { id: 'p1', name: "Bruiser", classType: "BRUISER", maxHp: 80, hp: 80, speed: 8, armor: 0, isPlayer: true, dmgBase: 20, img: "hero_bruiser.webp", scale: 1.15, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 5, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 1, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { heavy_wrench: 0, iron_guard: 0 } },
-    { id: 'p2', name: "Medic", classType: "MEDIC", maxHp: 50, hp: 50, speed: 12, armor: 0, isPlayer: true, dmgBase: 10, img: "hero_medic.webp", scale: 1.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 2, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { cauterize: 0 } },
-    { id: 'p3', name: "Scavenger", classType: "SCAVENGER", maxHp: 45, hp: 45, speed: 15, armor: 0, isPlayer: true, dmgBase: 15, img: "hero_scavenger.webp", scale: 1.25, hpDrop: -25, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 5 }, upgradeCount: 0, gridPos: 3, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { flashbang: 0 } },
-    { id: 'p4', name: "Pyro", classType: "PYROMANIAC", maxHp: 55, hp: 55, speed: 11, armor: 0, isPlayer: true, dmgBase: 12, img: "hero_pyro.webp", scale: 1.1, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 10 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { molotov: 0 } },
-    { id: 'p5', name: "Breacher", classType: "SHOTGUNNER", maxHp: 65, hp: 65, speed: 9, armor: 5, isPlayer: true, dmgBase: 22, img: "hero_shotgunner.webp", scale: 1.15, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 5, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { buckshot: 0 } },
-    { id: 'p6', name: "Ghost", classType: "SNIPER", maxHp: 40, hp: 40, speed: 16, armor: 0, isPlayer: true, dmgBase: 28, img: "hero_sniper.webp", scale: 0.9, hpDrop: -10, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { deadeye: 0 } },
-    { id: 'p7', name: "War Hound", classType: "HOUND", maxHp: 35, hp: 35, speed: 19, armor: 0, isPlayer: true, dmgBase: 16, img: "hero_hound.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: -2, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { feral_bite: 0 } }
+    { id: 'p1', name: "Bruiser", classType: "BRUISER", maxHp: 80, hp: 80, speed: 8, armor: 0, isPlayer: true, dmgBase: 20, img: "hero_bruiser.webp", scale: 1.15, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 5, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 1, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { heavy_wrench: 0, iron_guard: 0 } },
+    { id: 'p2', name: "Medic", classType: "MEDIC", maxHp: 50, hp: 50, speed: 12, armor: 0, isPlayer: true, dmgBase: 10, img: "hero_medic.webp", scale: 1.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 2, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { cauterize: 0 } },
+    { id: 'p3', name: "Scavenger", classType: "SCAVENGER", maxHp: 45, hp: 45, speed: 15, armor: 0, isPlayer: true, dmgBase: 15, img: "hero_scavenger.webp", scale: 1.25, hpDrop: -25, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 5 }, upgradeCount: 0, gridPos: 3, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { flashbang: 0 } },
+    { id: 'p4', name: "Pyro", classType: "PYROMANIAC", maxHp: 55, hp: 55, speed: 11, armor: 0, isPlayer: true, dmgBase: 12, img: "hero_pyro.webp", scale: 1.1, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 10 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { molotov: 0 } },
+    { id: 'p5', name: "Breacher", classType: "SHOTGUNNER", maxHp: 65, hp: 65, speed: 9, armor: 5, isPlayer: true, dmgBase: 22, img: "hero_shotgunner.webp", scale: 1.15, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 5, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { buckshot: 0 } },
+    { id: 'p6', name: "Ghost", classType: "SNIPER", maxHp: 40, hp: 40, speed: 16, armor: 0, isPlayer: true, dmgBase: 28, img: "hero_sniper.webp", scale: 0.9, hpDrop: -10, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { deadeye: 0 } },
+    { id: 'p7', name: "War Hound", classType: "HOUND", maxHp: 35, hp: 35, speed: 19, armor: 0, isPlayer: true, dmgBase: 16, img: "hero_hound.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: -2, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { feral_bite: 0 } }
 ];
 
 let playerRoster = []; let activeEntities = []; let turnQueue = []; let activeIndex = -1; let combatActive = false; let pendingAction = null;
@@ -470,13 +487,13 @@ function selectSlot(slotNum, exists) { currentSlot = slotNum; if (exists) { cont
 function confirmNewGame(diff) {
     difficultyMult = diff; currentSector = 1; currentTier = 1; tuneUpBattles = 0; momentum = 0;
     scrap = metaUpgrades.startScrap || 0; inventory = ['MED_STIM']; materials = { parts: 0, chems: 0, tech: 0 }; 
-    playerRoster = JSON.parse(JSON.stringify(ROSTER_TEMPLATE)); 
+    playerRoster = migrateTraits(JSON.parse(JSON.stringify(ROSTER_TEMPLATE)));
     activeBounties = generateBounties(); activeRelics = []; runStats = newRunStats();
     
     playerRoster.forEach(p => { 
         let q = QUIRK_POOL[Math.floor(Math.random() * QUIRK_POOL.length)];
         p.quirk = q; p.maxHp += q.hp; p.hp = p.maxHp; p.dmgBase += q.dmg; p.speed += q.spd;
-        p.level = metaUpgrades.startLevel; p.perkPoints = metaUpgrades.startLevel - 1; p.xpToNext = Math.floor(100 * Math.pow(1.5, metaUpgrades.startLevel - 1)); 
+        p.level = metaUpgrades.startLevel; p.perkPoints = metaUpgrades.startLevel - 1; p.xpToNext = Math.floor(100 * Math.pow(XP_CURVE, metaUpgrades.startLevel - 1)); 
     });
 
     saveGameState(); renderMap(); 
@@ -512,7 +529,7 @@ function buildCombatSnapshot() {
 }
 
 function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, activeRelics, runStats, combat: buildCombatSnapshot() })); }
-function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; activeRelics = d.activeRelics || []; pendingCombat = d.combat || null; runStats = d.runStats || newRunStats(); } }
+function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = migrateTraits(d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE))); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; activeRelics = d.activeRelics || []; pendingCombat = d.combat || null; runStats = d.runStats || newRunStats(); } }
 
 function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`; document.getElementById('meta-lbl-scrap').innerText = `LVL ${metaUpgrades.startScrap / 50}`; document.getElementById('meta-lbl-level').innerText = `LVL ${metaUpgrades.startLevel - 1}`; document.getElementById('meta-lbl-inv').innerText = `LVL ${metaUpgrades.invMax - 4}`; }
 function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossSkulls -= 1; metaUpgrades.startScrap += 50; } else if (type === 'LEVEL' && bossSkulls >= 2) { bossSkulls -= 2; metaUpgrades.startLevel += 1; } else if (type === 'INV' && bossSkulls >= 3) { bossSkulls -= 3; metaUpgrades.invMax += 1; } saveMeta(); renderCitadel(); }
@@ -567,17 +584,21 @@ function renderOutpost() {
         let cost = 30 + (char.upgradeCount * 25); let canUpg = scrap >= cost; let isDead = char.hp <= 0; let isInj = char.hp < char.maxHp && char.hp > 0;
         let medHtml = isDead ? `<button class="upg-btn revive-btn" ${scrap < 50 ? 'disabled' : ''} data-action="medbay" data-id="${char.id}" data-mode="REVIVE">DEFIB (50)</button>` : `<button class="upg-btn med-btn" ${!isInj || scrap < 10 ? 'disabled' : ''} data-action="medbay" data-id="${char.id}" data-mode="HEAL">TRIAGE (10)</button>`;
         
-        let perkStatus = char.perkPoints > 0 ? `<button class="upg-btn perk-btn" style="padding:2px 5px;" data-action="perk-menu" data-id="${char.id}">CHOOSE PERK (!)</button>` : `LVL ${char.level} (${char.xp}/${char.xpToNext} XP)`;
-        let traitDisplay = char.trait ? `TRAIT: ${char.trait}` : perkStatus;
+        // Unspent points always win the slot, however many perks the character already has.
+        let traitDisplay = char.perkPoints > 0
+            ? `<button class="upg-btn perk-btn" style="padding:2px 5px;" data-action="perk-menu" data-id="${char.id}">CHOOSE PERK (${char.perkPoints})</button>`
+            : `LVL ${char.level} (${char.xp}/${char.xpToNext} XP)`;
+        let traitLine = traitSummary(char);
+        let traitsDisplay = traitLine ? `<div style="font-size:9px; color:#6B8E23; text-transform:uppercase; margin-top:2px;">${traitLine}</div>` : '';
         let quirkDisplay = char.quirk ? `<div style="font-size:9px; color:#ffaa00; text-transform:uppercase; margin-top:2px;">[ ${char.quirk.name} ]</div>` : '';
 
         let posText = char.gridPos === 1 ? '[1] FRONTLINE' : char.gridPos === 2 ? '[2] MIDLINE' : char.gridPos === 3 ? '[3] BACKLINE' : '[X] BENCHED'; let posClass = `pos-btn-${char.gridPos}`; let btnGroupHtml = '';
 
         if (activePosSelector === char.id) { btnGroupHtml = `<button class="upg-btn sub-menu-btn pos-btn-1" data-action="assign-slot" data-id="${char.id}" data-slot="1">[1] FRONT</button> <button class="upg-btn sub-menu-btn pos-btn-2" data-action="assign-slot" data-id="${char.id}" data-slot="2">[2] MID</button> <button class="upg-btn sub-menu-btn pos-btn-3" data-action="assign-slot" data-id="${char.id}" data-slot="3">[3] BACK</button> <button class="upg-btn sub-menu-btn pos-btn-0" data-action="assign-slot" data-id="${char.id}" data-slot="0">[X] BENCH</button> <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
-        else if (activePerkSelector === char.id) { btnGroupHtml = `<button class="upg-btn sub-menu-btn perk-btn" data-action="assign-perk" data-id="${char.id}" data-perk="VETERAN">VETERAN (+5 DMG)</button> <button class="upg-btn sub-menu-btn perk-btn" data-action="assign-perk" data-id="${char.id}" data-perk="FORTIFIED">FORTIFIED (+25 HP)</button> <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
+        else if (activePerkSelector === char.id) { btnGroupHtml = PERK_POOL.map(p => `<button class="upg-btn sub-menu-btn perk-btn" data-action="assign-perk" data-id="${char.id}" data-perk="${p.id}">${p.label}</button>`).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
         else { btnGroupHtml = `<button class="upg-btn ${posClass}" data-action="pos-menu" data-id="${char.id}">${posText}</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="HP" data-cost="${cost}">+10 HP</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="DMG" data-cost="${cost}">+3 DMG</button> ${medHtml}`; }
 
-        c.innerHTML += `<div class="upgrade-card" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> <div class="upgrade-btn-group">${btnGroupHtml}</div> </div>`;
+        c.innerHTML += `<div class="upgrade-card" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay}${traitsDisplay} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> <div class="upgrade-btn-group">${btnGroupHtml}</div> </div>`;
     });
 
     document.getElementById('mat-parts-wb').innerText = `⚙️ PARTS: ${materials.parts}`; document.getElementById('mat-chems-wb').innerText = `🧪 CHEMS: ${materials.chems}`; document.getElementById('mat-tech-wb').innerText = `💻 TECH: ${materials.tech}`; document.getElementById('btn-breakdown').disabled = scrap < 25;
@@ -607,7 +628,34 @@ function craftItem(item) {
 }
 function installAugment(charId, type) { let char = playerRoster.find(c => c.id === charId); if (!char.augments) char.augments = []; if (type === 'PLATING' && materials.parts >= 3) { materials.parts -= 3; char.maxHp += 20; char.hp += 20; char.augments.push('Plating'); } else if (type === 'OPTICS' && materials.tech >= 2) { materials.tech -= 2; char.dmgBase += 4; char.augments.push('Optics'); } else if (type === 'PUMP' && materials.chems >= 2) { materials.chems -= 2; char.speed += 3; char.augments.push('Pump'); } saveGameState(); renderOutpost(); }
 function assignSlot(charId, newSlot) { let char = playerRoster.find(c => c.id === charId); let oldSlot = char.gridPos; if (newSlot > 0) { let existingChar = playerRoster.find(c => c.gridPos === newSlot && c.id !== charId); if (existingChar) existingChar.gridPos = oldSlot; } char.gridPos = newSlot; activePosSelector = null; saveGameState(); renderOutpost(); }
-function assignPerk(charId, traitName) { let char = playerRoster.find(c => c.id === charId); if (traitName === 'VETERAN') { char.trait = 'VETERAN'; char.dmgBase += 5; } else if (traitName === 'FORTIFIED') { char.trait = 'FORTIFIED'; char.maxHp += 25; char.hp += 25; } char.perkPoints--; activePerkSelector = null; saveGameState(); renderOutpost(); }
+function assignPerk(charId, perkId) {
+    let char = playerRoster.find(c => c.id === charId);
+    if (!char || char.perkPoints <= 0) return;
+    const perk = PERK_POOL.find(p => p.id === perkId);
+    if (!perk) return;
+    perk.apply(char);
+    if (!char.traits) char.traits = [];
+    char.traits.push(perk.id);
+    char.perkPoints--;
+    activePerkSelector = null; saveGameState(); renderOutpost();
+}
+
+// Older saves carried a single `trait` string; fold it into the list so progress survives.
+function migrateTraits(roster) {
+    roster.forEach(c => {
+        if (!Array.isArray(c.traits)) c.traits = c.trait ? [c.trait] : [];
+        delete c.trait;
+    });
+    return roster;
+}
+
+// A compact tally like VETERAN x2, HONED x3 rather than a wall of repeats.
+function traitSummary(char) {
+    if (!char.traits || char.traits.length === 0) return '';
+    const counts = {};
+    char.traits.forEach(t => { counts[t] = (counts[t] || 0) + 1; });
+    return Object.entries(counts).map(([t, n]) => n > 1 ? `${t} x${n}` : t).join(', ');
+}
 function useOutpostItem(index) { inventory.splice(index, 1); scrap += 20; saveGameState(); renderOutpost(); }
 function buyUpgrade(charId, type, cost) { if (scrap < cost) return; scrap -= cost; let c = playerRoster.find(c => c.id === charId); if (c.hp <= 0) return; if (type === 'HP') { c.maxHp += 10; c.hp += 10; } else if (type === 'DMG') { c.dmgBase += 3; } c.upgradeCount++; saveGameState(); renderOutpost(); }
 function medBay(charId, action) { 
@@ -680,7 +728,7 @@ function rollIntent(enemy) {
 // too, and the run ends on a build/skill wall rather than an arithmetic one.
 function sectorRewardMult() { return Math.pow(1.4, currentSector - 1); }
 
-function generateEnemies(nodeType, mult, isEliteNode) {
+function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     const pool = {
         'BEASTS': [
             { name: "Attack Dog", minTier: 1, isHeavy: false, classType: "BEAST", range: 'melee', maxHp: 30, speed: 18, armor: 0, dmgBase: 10, img: "enemy_dog.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } }, 
@@ -700,10 +748,10 @@ function generateEnemies(nodeType, mult, isEliteNode) {
         ]
     };
 
-    let bossBaseHp = currentSector === 1 ? 100 : 400;
+    let bossBaseHp = currentSector === 1 ? 100 : 300;
     let bossBaseDmg = currentSector === 1 ? 30 : 40;
     
-    if (nodeType === 'BOSS') return [{ id: 'b1', name: "Warlord", classType: "BOSS", range: 'melee', maxHp: Math.floor(bossBaseHp*mult), hp: Math.floor(bossBaseHp*mult), speed: 9, armor: 15, isPlayer: false, dmgBase: Math.floor(bossBaseDmg*mult), img: "enemy_boss.webp", scale: 2.2, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 10, bio: 5, energy: 5 }, phase: 1, intent: {type:'ATTACK', icon:'⚔️'} }];
+    if (nodeType === 'BOSS') return [{ id: 'b1', name: "Warlord", classType: "BOSS", range: 'melee', maxHp: Math.floor(bossBaseHp*mult), hp: Math.floor(bossBaseHp*mult), speed: 9, armor: 15, isPlayer: false, dmgBase: Math.floor(bossBaseDmg*dmgMult), img: "enemy_boss.webp", scale: 2.2, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 10, bio: 5, energy: 5 }, phase: 1, intent: {type:'ATTACK', icon:'⚔️'} }];
     
     // Later sectors unlock tougher stock progressively rather than all at once: the old gate
     // was bypassed outright from sector 2, which dropped tier-8 units into tier-1 fights.
@@ -733,7 +781,7 @@ function generateEnemies(nodeType, mult, isEliteNode) {
         let usePool = homePool;
         if (effTier >= 6 && i > 0 && Math.random() < 0.25) usePool = poolFor(otherTypes[Math.floor(Math.random() * otherTypes.length)]);
         let t = JSON.parse(JSON.stringify(usePool[Math.floor(Math.random() * usePool.length)])); 
-        let hp = Math.floor(t.maxHp * mult); t.hp = hp; t.maxHp = hp; t.dmgBase = Math.floor(t.dmgBase * mult);
+        let hp = Math.floor(t.maxHp * mult); t.hp = hp; t.maxHp = hp; t.dmgBase = Math.floor(t.dmgBase * dmgMult);
         
         if (isEliteNode && Math.random() < 0.6) {
             let affixes = ['FRENZIED', 'ARMORED', 'VAMPIRIC'];
@@ -780,9 +828,13 @@ function initiateCombat(nodeType, isEliteNode) {
     applyCombatScenery(bgFile);
 
     playerRoster.forEach(ent => { ent.stunnedTurns = 0; ent.bleedingTurns = 0; ent.armorTurns = 0; ent.armor = 0; ent.oiledTurns = 0; });
-    const mult = difficultyMult * (1 + ((currentTier - 1) * 0.2)) * Math.pow(1.5, currentSector - 1);
+    // HP keeps the steep 1.5x-per-sector curve; damage climbs far more slowly so a deep fight
+    // is dangerous rather than an unavoidable one-shot. Player power compounds through
+    // repeatable percentage perks, which is what makes the curve climbable at all.
+    const mult = difficultyMult * (1 + ((currentTier - 1) * 0.2)) * Math.pow(SECTOR_HP_SCALE, currentSector - 1);
+    const dmgMult = difficultyMult * (1 + ((currentTier - 1) * 0.12)) * Math.pow(SECTOR_DMG_SCALE, currentSector - 1);
     
-    activeEntities = [...deployedRoster, ...generateEnemies(nodeType, mult, isEliteNode)];
+    activeEntities = [...deployedRoster, ...generateEnemies(nodeType, mult, isEliteNode, dmgMult)];
     turnQueue = [...activeEntities].sort((a, b) => b.speed - a.speed);
     activeIndex = 0; log("> COMBAT INITIATED.", "log-turn"); processTurn();
 }
@@ -793,6 +845,25 @@ function log(msg, styleClass = "log-dmg") { const el = document.createElement('d
 function renderQueue() {
     const qStr = turnQueue.map(e => { if (e.hp <= 0) return ''; return (e.stunnedTurns > 0 ? '!' : '') + e.name.substring(0,3).toUpperCase(); }).filter(s => s !== '').join(' > ');
     document.getElementById('queue-display').innerText = `Q: ${qStr}`;
+}
+
+// The resistance system decides whether an attack lands, is shrugged off, or does nothing at
+// all - but it used to be revealed only in the log, after the turn was already spent. Show it
+// on the unit so the choice can be made before committing.
+// Letters, not symbols: the badges render at 9px, where a monochrome glyph is unreadable
+// and an emoji-presentation one ignores our colours entirely.
+const DMG_TYPES = [['phys', 'P'], ['bio', 'B'], ['energy', 'E']];
+
+function resistBadges(ent) {
+    if (ent.isPlayer || !ent.resistances) return '';
+    const marks = DMG_TYPES.map(([type, glyph]) => {
+        const v = ent.resistances[type] || 0;
+        if (v >= 100) return `<span class="res res-immune" title="Immune to ${type}">${glyph}</span>`;
+        if (v > 5)    return `<span class="res res-strong" title="Resists ${type}">${glyph}</span>`;
+        if (v < 0)    return `<span class="res res-weak" title="Weak to ${type}">${glyph}</span>`;
+        return '';
+    }).join('');
+    return marks ? `<div class="res-row">${marks}</div>` : '';
 }
 
 function renderField() {
@@ -824,6 +895,7 @@ function renderField() {
                 <div style="width: 100%; position: relative; z-index: 10; transform: translateY(${ent.hpDrop || 0}px);">
                     <div class="hp-text"><span class="status-badge">${eff}</span> ${ent.hp}/${ent.maxHp}</div>
                     <div class="hp-container"><div class="hp-fill ${ent.isPlayer ? 'player-hp' : 'enemy-hp'}" style="width: ${(ent.hp / ent.maxHp) * 100}%"></div></div>
+                    ${isDead ? '' : resistBadges(ent)}
                 </div><img class="portrait ${hoverCls}" src="${ent.img}" style="${eliteGlow}">
             </div>`;
         if (ent.isPlayer) pTeam.innerHTML += html; else eTeam.innerHTML += html;
@@ -1078,7 +1150,7 @@ function awardXp(char, amount) {
     if (amount <= 0) return;
     char.xp += amount;
     while (char.xp >= char.xpToNext) {
-        char.level++; char.xp -= char.xpToNext; char.xpToNext = Math.floor(char.xpToNext * 1.5); char.perkPoints++;
+        char.level++; char.xp -= char.xpToNext; char.xpToNext = Math.floor(char.xpToNext * XP_CURVE); char.perkPoints++;
         log(`> ${char.name} reached Level ${char.level}! Perk point available.`, "log-heal");
     }
 }
@@ -1140,9 +1212,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, computeScore, newRunStats, noteDepth, sectorRewardMult, awardXp, log, playSFX, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, awardXp, log, playSFX, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, resistBadges, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },
