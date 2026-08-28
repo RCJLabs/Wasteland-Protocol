@@ -1,11 +1,11 @@
 // Wasteland Protocol service worker.
 // Bump CACHE on release so clients discard the previous build's assets.
-const CACHE = 'wasteland-v1';
+const CACHE = 'wasteland-v2';
 
 // Only the shell is precached. The game preloads its own art on boot, so the art set
 // populates the cache at runtime on the first visit - which keeps this file from having
 // to duplicate (and drift from) ASSET_LIST in index.html.
-const SHELL = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
+const SHELL = ['./', './index.html', './styles.css', './game.js', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png'];
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
