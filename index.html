@@ -8,7 +8,7 @@
 body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0; padding: 0; display: flex; justify-content: center; height: 100dvh; align-items: center; overflow: hidden; }
 #engine { width: 100%; max-width: 900px; height: 100dvh; background: #000; position: relative; display: flex; flex-direction: column; }
 
-#screen-title { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; background: linear-gradient(rgba(10, 10, 10, 0.8), rgba(0, 0, 0, 0.95)), repeating-linear-gradient(45deg, #111 0, #111 2px, #000 2px, #000 6px), url('bg_title.png'); background-size: cover, auto, cover; background-position: center; text-align: center; padding: 20px; }
+#screen-title { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; background: linear-gradient(rgba(10, 10, 10, 0.25), rgba(0, 0, 0, 0.88)), repeating-linear-gradient(45deg, rgba(17, 17, 17, 0.35) 0, rgba(17, 17, 17, 0.35) 2px, transparent 2px, transparent 6px), url('bg_title.png'); background-size: cover, auto, cover; background-position: center; text-align: center; padding: 20px; }
 .title-header { font-size: clamp(30px, 8vw, 60px); color: #B8860B; font-weight: bold; text-transform: uppercase; letter-spacing: 4px; text-shadow: 3px 3px 0px #8B0000, 0 0 15px rgba(184, 134, 11, 0.5); margin-bottom: 10px; }
 .title-sub { color: #666; font-size: clamp(12px, 3vw, 16px); letter-spacing: 8px; margin-bottom: 8vh; text-shadow: 1px 1px 2px #000; }
 .title-menu { display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 300px; }
@@ -446,6 +446,114 @@ function triggerHitFlash(id) {
         }
     }
 }
+
+function playSFX(type) {
+    if (!globalSettings.sfx || !audioCtx) return;
+    try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const t = audioCtx.currentTime; const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        if (type === 'click') { osc.type = 'square'; osc.frequency.setValueAtTime(880, t); gain.gain.setValueAtTime(0.03, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06); osc.start(t); osc.stop(t + 0.06); }
+        else if (type === 'shoot') { osc.type = 'sawtooth'; osc.frequency.setValueAtTime(650, t); osc.frequency.exponentialRampToValueAtTime(120, t + 0.15); gain.gain.setValueAtTime(0.07, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15); osc.start(t); osc.stop(t + 0.15); }
+        else if (type === 'hit') { osc.type = 'triangle'; osc.frequency.setValueAtTime(200, t); osc.frequency.exponentialRampToValueAtTime(55, t + 0.12); gain.gain.setValueAtTime(0.09, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12); osc.start(t); osc.stop(t + 0.12); }
+        else if (type === 'heal') { osc.type = 'sine'; osc.frequency.setValueAtTime(440, t); osc.frequency.exponentialRampToValueAtTime(880, t + 0.18); gain.gain.setValueAtTime(0.05, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18); osc.start(t); osc.stop(t + 0.18); }
+    } catch (e) {}
+}
+
+function spawnFCT(id, text, cls) {
+    const host = document.getElementById(id); if (!host) return;
+    const el = document.createElement('div'); el.className = `fct ${cls}`; el.innerText = text;
+    host.appendChild(el); setTimeout(() => el.remove(), 1000);
+}
+
+function addMomentum(amt) {
+    momentum = Math.max(0, Math.min(100, momentum + amt));
+    const fill = document.getElementById('momentum-fill'); const txt = document.getElementById('momentum-txt');
+    if (fill) fill.style.width = momentum + '%';
+    if (txt) txt.innerText = momentum >= 100 ? 'MOMENTUM: FULL — OVERDRIVE READY' : `MOMENTUM: ${momentum}%`;
+}
+
+function generateBounties() {
+    return [
+        { type: 'CRAFT', desc: 'CRAFT 2 ITEMS', current: 0, target: 2, reward: 40, claimed: false },
+        { type: 'COMBO', desc: 'TRIGGER 3 COMBOS', current: 0, target: 3, reward: 50, claimed: false },
+        { type: 'ELITE', desc: 'DEFEAT 1 ELITE SQUAD', current: 0, target: 1, reward: 75, claimed: false }
+    ];
+}
+
+function checkBountyProgress(type) {
+    if (!activeBounties) return;
+    activeBounties.forEach(b => {
+        if (b.type === type && !b.claimed) {
+            b.current++;
+            if (b.current >= b.target) { b.claimed = true; scrap += b.reward; if (combatActive) log(`> BOUNTY COMPLETE: ${b.desc} (+${b.reward} SCRAP)`, "log-combo"); }
+        }
+    });
+}
+
+function nextTurn() {
+    if (!combatActive || turnQueue.length === 0) return;
+    let guard = 0;
+    do { activeIndex = (activeIndex + 1) % turnQueue.length; guard++; } while (turnQueue[activeIndex].hp <= 0 && guard <= turnQueue.length);
+    if (turnQueue[activeIndex].hp <= 0) { checkWinState(); return; }
+    processTurn();
+}
+
+function executeSelfAction(type) {
+    let actEnt = turnQueue[activeIndex];
+    if (type === 'IRON_GUARD') {
+        actEnt.armor += 15; actEnt.armorTurns = 2; actEnt.cooldowns.iron_guard = 3;
+        log(`> ${actEnt.name} braces behind scrap plating (+15 ARMOR).`, "log-status");
+        spawnFCT(actEnt.id, "+ARMOR", "fct-heal"); playSFX('heal');
+    }
+    pendingAction = null; checkWinState();
+}
+
+const ITEM_DATA = {
+    MED_STIM:   { label: '💉 Med-Stim',   action: 'ITEM_MED' },
+    SCRAP_BOMB: { label: '💣 Scrap Bomb', action: 'ITEM_BOMB' },
+    ADRENALINE: { label: '⚡ Adrenaline', action: 'ITEM_ADRENALINE' },
+    EMP_CHARGE: { label: '🔋 EMP Charge', action: 'ITEM_EMP' }
+};
+
+function openInventoryMenu() {
+    const d = document.getElementById('command-deck'); let h = '';
+    inventory.forEach(it => { let m = ITEM_DATA[it]; if (m) h += `<button style="border-color:#B8860B; color:#B8860B;" onclick="queueAction('${m.action}')">${m.label}</button>`; });
+    h += `<button style="color:#8B0000; border-color:#8B0000" onclick="cancelAction()">BACK</button>`;
+    d.innerHTML = h;
+}
+
+function resolveConsumableItem(targetId) {
+    let actEnt = turnQueue[activeIndex]; let target = activeEntities.find(e => e.id === targetId);
+    const itemKey = { ITEM_MED: 'MED_STIM', ITEM_BOMB: 'SCRAP_BOMB', ITEM_ADRENALINE: 'ADRENALINE', ITEM_EMP: 'EMP_CHARGE' }[pendingAction];
+    if (!itemKey || !target) { pendingAction = null; renderField(); return; }
+    let idx = inventory.indexOf(itemKey); if (idx === -1) { pendingAction = null; renderField(); return; }
+    inventory.splice(idx, 1);
+    if (pendingAction === 'ITEM_MED') {
+        let heal = 30; target.hp = Math.min(target.maxHp, target.hp + heal);
+        log(`> ${actEnt.name} injects ${target.name} with a Med-Stim (+${heal} HP).`, "log-heal"); spawnFCT(target.id, `+${heal}`, "fct-heal"); playSFX('heal');
+    } else if (pendingAction === 'ITEM_ADRENALINE') {
+        target.stunnedTurns = 0; target.bleedingTurns = 0; target.hp = Math.min(target.maxHp, target.hp + 10);
+        log(`> ${target.name} surges with Adrenaline (cleansed, +10 HP).`, "log-heal"); spawnFCT(target.id, "CLEANSED", "fct-status"); playSFX('heal');
+    } else if (pendingAction === 'ITEM_BOMB') {
+        triggerShake(); log(`> ${actEnt.name} hurls a Scrap Bomb!`, "log-dmg"); playSFX('shoot');
+        applyDamageHit(actEnt, target, 35, 'phys', null);
+    } else if (pendingAction === 'ITEM_EMP') {
+        log(`> ${actEnt.name} detonates an EMP Charge!`, "log-dmg"); playSFX('shoot');
+        applyDamageHit(actEnt, target, 25, 'energy', null);
+        if (target.hp > 0) { target.stunnedTurns = 1; log(`> ${target.name} systems disrupted!`, "log-status"); setTimeout(() => spawnFCT(target.id, "STUNNED", "fct-status"), 300 * globalSettings.combatSpeed); }
+    }
+    pendingAction = null; checkWinState();
+}
+
+function handleSquadWipe() {
+    playerRoster.forEach(p => { p.hp = p.maxHp; p.stunnedTurns = 0; p.bleedingTurns = 0; p.armorTurns = 0; p.armor = 0; p.oiledTurns = 0; });
+    scrap = Math.floor(scrap / 2); currentTier = 1; momentum = 0; addMomentum(0);
+    combatActive = false; activeEntities = []; turnQueue = [];
+    saveGameState(); renderMap();
+}
+
+function collectLoot(amount) { scrap += amount; currentTier++; momentum = 0; addMomentum(0); saveGameState(); renderMap(); }
 
 function migrateOldSaves() {
     for(let i=1; i<=3; i++) {
