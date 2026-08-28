@@ -40,10 +40,21 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
   // The template deploys the same three operators every time, so a sim that leaves the formation
   // alone measures three classes and reports the other four as dead content. A player rotates the
   // roster; so does this.
+  // A player fields a line, not a lottery: someone to hold the front, usually a medic, and
+  // whoever else. The old shuffle regularly deployed three glass cannons and measured the
+  // resulting deaths as difficulty.
   const slots = hasContract('SHORT_HANDED') ? [1, 2] : [1, 2, 3];
-  const bench = [...playerRoster].sort(() => Math.random() - 0.5);
   playerRoster.forEach(p => { p.gridPos = 0; });
-  slots.forEach((slot, i) => { if (bench[i]) bench[i].gridPos = slot; });
+  const byClass = c => playerRoster.filter(p => c.includes(p.classType));
+  const pickFrom = list => list[Math.floor(Math.random() * list.length)];
+  const draft = [];
+  draft.push(pickFrom(byClass(['BRUISER', 'SHOTGUNNER'])));
+  if (slots.length > 2 && Math.random() < 0.7) draft.push(pickFrom(byClass(['MEDIC'])));
+  while (draft.length < slots.length) {
+    const rest = playerRoster.filter(p => !draft.includes(p));
+    draft.push(pickFrom(rest));
+  }
+  draft.forEach((p, i) => { p.gridPos = slots[i]; });
   stat.deployed = playerRoster.filter(p => p.gridPos > 0).map(p => p.classType);
   const bountiesAtStart = () => activeBounties.map(b => b.desc).join('|');
   let boardBefore = bountiesAtStart();
@@ -75,6 +86,20 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
       stat.moves.OVERDRIVE = (stat.moves.OVERDRIVE || 0) + 1;
       pendingAction = 'OVERDRIVE'; resolveAction(foes[0].id); return true;
     }
+    // Tactics first: a STIM is free tempo when someone is hurting, and it costs no action.
+    if (momentum >= 30 && stimTarget()) { stat.moves.STIM = (stat.moves.STIM || 0) + 1; spendTactic('STIM'); }
+
+    // A ranged operator caught holding the front rank swaps out - the one formation fix
+    // that actually changes what enemy melee reaches.
+    if (actor.gridPos === 1 && isRanged((ABILITIES[actor.classType] || [{}])[0].move)) {
+      const meleeAlly = activeEntities.find(e => e.isPlayer && e.hp > 0 && e.gridPos > 1 &&
+        isMelee((ABILITIES[e.classType] || [{}])[0].move));
+      if (meleeAlly) {
+        stat.moves.REPOSITION = (stat.moves.REPOSITION || 0) + 1;
+        pendingAction = 'REPOSITION'; resolveAction(meleeAlly.id); return true;
+      }
+    }
+
     // A player in trouble reaches for the bag before they reach for another attack.
     const badlyHurt = activeEntities.filter(e => e.isPlayer && e.hp > 0 && e.hp < e.maxHp * 0.35)
                                     .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];

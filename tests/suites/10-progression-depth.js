@@ -54,8 +54,8 @@ module.exports = {
       const rows = [];
       for (let s = 1; s <= 10; s++) {
         currentSector = s; currentTier = 10;
-        const hp = (1 + 9 * 0.2) * Math.pow(SECTOR_HP_SCALE, s - 1);
-        const dm = (1 + 9 * 0.12) * Math.pow(SECTOR_DMG_SCALE, s - 1);
+        const hp = (1 + 9 * TIER_HP_GROWTH) * Math.pow(SECTOR_HP_SCALE, s - 1);
+        const dm = (1 + 9 * TIER_DMG_GROWTH) * Math.pow(SECTOR_DMG_SCALE, s - 1);
         rows.push({ s, bossHp: Math.floor(300 * hp), bossHit: Math.floor(40 * dm) });
       }
       return { rows, hpScale: SECTOR_HP_SCALE, dmgScale: SECTOR_DMG_SCALE, xpCurve: XP_CURVE };
@@ -70,13 +70,30 @@ module.exports = {
 
     const dmgSplit = await page.evaluate(() => {
       currentSector = 6; currentTier = 10;
-      const hpMult = 1 * (1 + 9 * 0.2) * Math.pow(SECTOR_HP_SCALE, 5);
-      const dmgMult = 1 * (1 + 9 * 0.12) * Math.pow(SECTOR_DMG_SCALE, 5);
+      const hpMult = 1 * (1 + 9 * TIER_HP_GROWTH) * Math.pow(SECTOR_HP_SCALE, 5);
+      const dmgMult = 1 * (1 + 9 * TIER_DMG_GROWTH) * Math.pow(SECTOR_DMG_SCALE, 5);
       const squad = generateEnemies('RAIDERS', hpMult, false, dmgMult);
       return { hpMult, dmgMult, maxHp: Math.max(...squad.map(e => e.maxHp)), maxDmg: Math.max(...squad.map(e => e.dmgBase)) };
     });
     ok('generateEnemies applies the two multipliers separately',
       dmgSplit.maxHp > 0 && dmgSplit.maxDmg > 0 && dmgSplit.hpMult !== dmgSplit.dmgMult);
+
+    // Heavies used to jump from weight 1 to weight 5 the moment tier 6 arrived, and the
+    // simulator showed a sector's deaths clustering exactly there. They ramp in now.
+    const ramp = await page.evaluate(() => {
+      const shareAt = (tier) => {
+        currentSector = 1; currentTier = tier;
+        let heavy = 0, total = 0;
+        for (let i = 0; i < 300; i++) {
+          generateEnemies('BEASTS', 1, false, 1).forEach(e => { total++; if (e.isHeavy) heavy++; });
+        }
+        return heavy / total;
+      };
+      return { early: shareAt(5), mid: shareAt(7), late: shareAt(9) };
+    });
+    ok(`heavies are rare at tier 5 (${(ramp.early * 100).toFixed(0)}%)`, ramp.early < 0.25);
+    ok(`common by tier 7 (${(ramp.mid * 100).toFixed(0)}%)`, ramp.mid > ramp.early);
+    ok(`and usual by tier 9 (${(ramp.late * 100).toFixed(0)}%)`, ramp.late > ramp.mid);
 
     // ---- 05: resistances are visible on the unit ----
     await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); currentSector = 2; currentTier = 6; initiateCombat('MECH', false); });

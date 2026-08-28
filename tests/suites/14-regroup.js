@@ -58,6 +58,8 @@ module.exports = {
     ok(`half the scrap is the price (600 -> ${after.scrap})`, after.scrap === 300);
     ok('a regroup was spent', after.regroups === 1);
     ok('the save survived the defeat', after.slotAlive);
+    ok('and the squad comes back with tuned weapons, not just poorer',
+      await page.evaluate(() => tuneUpBattles) >= 3);
 
     // ---- the last regroup, then the run really ends ----
     await wipe(); await page.waitForTimeout(200);
@@ -104,6 +106,30 @@ module.exports = {
       return runStats.regroups;
     });
     ok('a run saved before regroups existed is topped up', legacy === 2);
+
+    // ---- felling a commander refunds a fallback ----
+    // Measured before this, squads entered every new sector with their regroups already spent
+    // and died holding nothing.
+    const refund = await page.evaluate(() => {
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      runStats.regroups = 0;
+      currentSector = 1; currentTier = TOTAL_TIERS;
+      playerRoster.forEach(c => { if (c.gridPos > 0) { c.maxHp = 9999; c.hp = 9999; } });
+      initiateCombat('BOSS', false);
+      activeEntities.filter(e => !e.isPlayer).forEach(e => { e.hp = 0; });
+      checkWinState();
+      const afterBoss = runStats.regroups;
+      // and never past the allowance
+      runStats.regroups = totalRegroups();
+      pendingRelicOffer = null;
+      initiateCombat('BOSS', false);
+      activeEntities.filter(e => !e.isPlayer).forEach(e => { e.hp = 0; });
+      checkWinState();
+      return { afterBoss, capped: runStats.regroups === totalRegroups() };
+    });
+    ok('felling a commander refunds a fallback', refund.afterBoss === 1);
+    ok('but never past the allowance', refund.capped);
+    await page.evaluate(() => { combatActive = false; pendingRelicOffer = null; });
 
     // ---- the Citadel can buy another ----
     const citadel = await page.evaluate(() => {

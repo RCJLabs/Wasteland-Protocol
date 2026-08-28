@@ -352,13 +352,18 @@ function enterNode(id) {
     return node;
 }
 const SECTOR_TIER_BONUS = 3;
+// Per-tier growth within a sector. Damage eased from 0.12 after the simulator showed every
+// expedition dying in sector 1, stacked on the heavy-unlock cliff at tier 6 - see the heavy
+// weight ramp in generateEnemies, which was the other half of that wall.
+const TIER_HP_GROWTH = 0.2;
+const TIER_DMG_GROWTH = 0.10;
 const BASE_REGROUPS = 2;       // second chances per run, before a defeat ends it
 const FACTION_ALLIES = { RAIDERS: ['MECH', 'BEASTS'], BEASTS: [], MECH: [] };
 // Difficulty still climbs hard, but through lethality rather than bullet sponges: health
 // tracks player damage growth so a fight stays ~10 rounds at any depth, while damage
 // outpaces player health so a run reliably ends somewhere around sector 10.
 const SECTOR_HP_SCALE = 1.25;
-const SECTOR_DMG_SCALE = 1.32;
+const SECTOR_DMG_SCALE = 1.28;   // eased from 1.32: measured, lethality still wins the long game
 const XP_CURVE = 1.35;         // was 1.5 - levels kept stalling, starving the perk economy
 
 // Some choices should not settle on the screen that offered them. An event can book a
@@ -466,7 +471,7 @@ const CODEX = [
         'Nodes show their faction and a weather forecast, so route around trouble or into it on purpose.',
         'Two elite fights per sector, at different depths, never forced - there is always another road. An elite drops a relic.',
         'A commander drops a choice of three.',
-        `A wipe spends a regroup - ${BASE_REGROUPS} to start, more from the Citadel. Out of regroups ends the run and banks the score.`,
+        `A wipe spends a regroup - ${BASE_REGROUPS} to start, more from the Citadel - and the squad comes back with tuned weapons. Felling a commander refunds one. Out of regroups ends the run and banks the score.`,
         'Depth is worth far more than any single haul: pushing one sector deeper always beats farming the one you are on.'
     ] },
     { id: 'CONTRACTS', title: 'CONTRACTS', body: () => [
@@ -1058,6 +1063,9 @@ function regroupSquad() {
     runStats.regroups--;
     playerRoster.forEach(p => { p.hp = p.maxHp; p.stunnedTurns = 0; p.bleedingTurns = 0; p.armorTurns = 0; p.armor = 0; p.oiledTurns = 0; });
     scrap = Math.floor(scrap / 2);
+    // The fallback costs half the scrap, but the squad walks back in with tuned weapons -
+    // a wipe should sting, not start a death spiral.
+    tuneUpBattles = Math.max(tuneUpBattles, 3);
     currentTier = 1;
     // The sector keeps its map; the squad walks back in at the bottom of it.
     currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
@@ -1817,7 +1825,9 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     };
 
     let bossBaseHp = currentSector === 1 ? 100 : 300;
-    let bossBaseDmg = currentSector === 1 ? 30 : 40;
+    // Eased from 30/40 when the simulator showed the wall had just moved to tier 10: squads
+    // finally reached the commander and its HEAVY telegraph one-shot anyone it touched.
+    let bossBaseDmg = currentSector === 1 ? 24 : 34;
     
     if (nodeType === 'BOSS') {
         const b = bossForSector();
@@ -1850,7 +1860,9 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
             valid = pool[type].filter(e => e.minTier === minT);
         }
         let weighted = [];
-        valid.forEach(e => { let weight = (e.isHeavy && effTier < 6) ? 1 : 5; for (let j = 0; j < weight; j++) weighted.push(e); });
+        // Heavies used to jump from weight 1 to weight 5 the moment tier 6 arrived - most of a
+        // sector's deaths clustered exactly there. They ramp in now: rare, then common, then usual.
+        valid.forEach(e => { let weight = !e.isHeavy ? 5 : effTier < 6 ? 1 : effTier < 9 ? 3 : 5; for (let j = 0; j < weight; j++) weighted.push(e); });
         return weighted;
     }
 
@@ -1860,7 +1872,7 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     // recruits, and a turret standing among a pack of dogs just reads as a bug.
     const allies = (FACTION_ALLIES[nodeType] || []).filter(t => pool[t]);
 
-    let sZ = effTier >= 8 ? (Math.random() < 0.45 ? 4 : 3)
+    let sZ = effTier >= 9 ? (Math.random() < 0.25 ? 4 : 3)
            : effTier >= 4 ? (Math.random() < 0.5 ? 3 : 2)
            : 2;
     let squad = [];
@@ -2072,8 +2084,8 @@ function initiateCombat(nodeType, isEliteNode) {
     // HP keeps the steep 1.5x-per-sector curve; damage climbs far more slowly so a deep fight
     // is dangerous rather than an unavoidable one-shot. Player power compounds through
     // repeatable percentage perks, which is what makes the curve climbable at all.
-    const mult = difficultyMult * (1 + ((currentTier - 1) * 0.2)) * Math.pow(SECTOR_HP_SCALE, currentSector - 1);
-    const dmgMult = difficultyMult * (1 + ((currentTier - 1) * 0.12)) * Math.pow(SECTOR_DMG_SCALE, currentSector - 1);
+    const mult = difficultyMult * (1 + ((currentTier - 1) * TIER_HP_GROWTH)) * Math.pow(SECTOR_HP_SCALE, currentSector - 1);
+    const dmgMult = difficultyMult * (1 + ((currentTier - 1) * TIER_DMG_GROWTH)) * Math.pow(SECTOR_DMG_SCALE, currentSector - 1);
     
     activeEntities = [...deployedRoster, ...generateEnemies(nodeType, mult, isEliteNode, dmgMult)];
     turnQueue = [...activeEntities].sort((a, b) => b.speed - a.speed);
@@ -2630,7 +2642,16 @@ function checkWinState() {
     const pA = activeEntities.some(e => e.isPlayer && e.hp > 0); const eA = activeEntities.some(e => !e.isPlayer && e.hp > 0);
     if (!pA) { document.getElementById('command-deck').innerHTML = `<button data-action="squad-down">SQUAD DOWN</button>`; combatActive = false; stopAmbience(); } 
     else if (!eA) { 
-        if (currentNodeType === 'BOSS') { bossSkulls++; if (runStats) runStats.bosses++; saveMeta(); log(`> VICTORY! Warlord Skull acquired!`, "log-heal"); }
+        if (currentNodeType === 'BOSS') {
+            bossSkulls++; if (runStats) runStats.bosses++; saveMeta(); log(`> VICTORY! Warlord Skull acquired!`, "log-heal");
+            // Felling a commander refunds a fallback, up to the allowance. Measured before this,
+            // squads entered every new sector with their regroups already spent and died holding
+            // nothing - a cleared sector should buy a breath.
+            if (runStats && runStats.regroups < totalRegroups()) {
+                runStats.regroups++;
+                log(`> The squad regroups behind the kill. +1 FALLBACK (${regroupsLeft()}/${totalRegroups()}).`, "log-heal");
+            }
+        }
         if (isCurrentNodeElite) {
             checkBountyProgress('ELITE'); if (runStats) runStats.elites++;
             const rDrop = rollRelic();
@@ -2654,7 +2675,7 @@ function checkWinState() {
         // Deployed survivors earn full XP; the bench trains at half rate so reserves stay
         // rotatable instead of falling permanently behind. Downed units earn nothing.
         playerRoster.forEach(char => {
-            const base = Math.floor(35 * scrapMult * sectorRewardMult());
+            const base = Math.floor((22 + currentTier * 5) * scrapMult * sectorRewardMult());
             if (char.gridPos > 0 && char.hp > 0) awardXp(char, base);
             else if (char.gridPos === 0) awardXp(char, Math.floor(base * RESERVE_XP_RATE));
         });
@@ -2694,7 +2715,7 @@ globalThis.WP = {
     // entry points and pure helpers the suites exercise
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
