@@ -3,7 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Wasteland RPG - Engine V57.1 (VFX & Optimization)</title>
+<title>Wasteland Protocol</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0a0a0a">
+<meta name="description" content="A post-apocalyptic squad RPG. Push deeper into the wasteland and bank a score before your squad falls.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Wasteland">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="apple-touch-icon" href="icon-192.png">
+<link rel="icon" href="icon-192.png">
 <style>
 body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0; padding: 0; display: flex; justify-content: center; height: 100dvh; align-items: center; overflow: hidden; }
 #engine { width: 100%; max-width: 900px; height: 100dvh; background: #000; position: relative; display: flex; flex-direction: column; }
@@ -1377,6 +1386,17 @@ function checkWinState() {
 }
 
 initEngine();
+
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', async () => {
+        try {
+            await navigator.serviceWorker.register('sw.js');
+            const reg = await navigator.serviceWorker.ready;
+            // Hand the worker the art set so offline play does not depend on the HTTP cache.
+            if (reg.active) reg.active.postMessage({ type: 'CACHE_ART', urls: ASSET_LIST });
+        } catch (e) { /* offline play is a bonus, never a requirement */ }
+    });
+}
 </script>
 </body>
 </html>
