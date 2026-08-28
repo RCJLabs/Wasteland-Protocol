@@ -299,3 +299,12 @@ button.reach-short { border-color: #7a5a20; }
 .contract-mult { text-align: center; font-size: 13px; font-weight: bold; letter-spacing: 1px;
   color: #B8860B; margin-bottom: 10px; font-variant-numeric: tabular-nums; }
 .contract-back { border-color: #888; color: #888; margin-top: 8px; }
+
+/* Field manual: what the game never explained. */
+#screen-codex { display: none; flex-direction: column; padding: 20px; height: 100%; box-sizing: border-box;
+  overflow: hidden; background: linear-gradient(rgba(12,11,8,0.96), rgba(0,0,0,0.98)); }
+.codex-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-bottom: 6px; }
+.codex-entry { border-left: 2px solid #B8860B; padding-left: 10px; }
+.codex-title { font-size: 12px; font-weight: bold; letter-spacing: 2px; color: #B8860B; margin-bottom: 6px; }
+.codex-line { font-size: 11px; line-height: 1.6; color: #a9a396; margin-bottom: 3px; }
+#screen-codex .return-btn { flex-shrink: 0; margin-top: 12px; }

@@ -1,0 +1,319 @@
+// Every balance claim in this repo's history came from arithmetic models, never from play.
+// This drives real expeditions headlessly through the real engine - the same functions a player
+// touches - and reports where runs actually end, what gets used, and what never fires.
+//
+//   node tests/simulate.js [runs] [--difficulty 1.0] [--contracts GLASS,NO_REGROUPS]
+//
+// It asserts nothing. It is a measuring instrument, and it prints what it measured.
+const path = require('path');
+const { serve } = require('./server');
+
+let chromium;
+try { ({ chromium } = require('playwright')); }
+catch (e) { ({ chromium } = require('playwright-core')); }
+
+const ROOT = path.join(__dirname, '..');
+
+const args = process.argv.slice(2);
+const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
+const flag = (name, fallback) => {
+  const i = args.indexOf(`--${name}`);
+  return i >= 0 && args[i + 1] ? args[i + 1] : fallback;
+};
+const DIFFICULTY = Number(flag('difficulty', '1.0'));
+const CONTRACTS = flag('contracts', '').split(',').filter(Boolean);
+
+// Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
+// regroups, or the safety cap is hit.
+const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
+  const stat = { sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
+                 wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
+                 wipes: 0, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
+                 moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
+                 endedBy: 'cap', score: 0, contractMult: 1 };
+
+  activeContracts = [...contracts];
+  currentSlot = 1;
+  confirmNewGame(difficulty);
+  stat.contractMult = runStats.contractMult;
+
+  // The template deploys the same three operators every time, so a sim that leaves the formation
+  // alone measures three classes and reports the other four as dead content. A player rotates the
+  // roster; so does this.
+  const slots = hasContract('SHORT_HANDED') ? [1, 2] : [1, 2, 3];
+  const bench = [...playerRoster].sort(() => Math.random() - 0.5);
+  playerRoster.forEach(p => { p.gridPos = 0; });
+  slots.forEach((slot, i) => { if (bench[i]) bench[i].gridPos = slot; });
+  stat.deployed = playerRoster.filter(p => p.gridPos > 0).map(p => p.classType);
+  const bountiesAtStart = () => activeBounties.map(b => b.desc).join('|');
+  let boardBefore = bountiesAtStart();
+
+  // A squad that never spends scrap dies to arithmetic rather than to play, so the sim shops
+  // the way a player would: heal the hurt, upgrade when it can afford to.
+  const spend = () => {
+    playerRoster.forEach(c => {
+      if (c.hp <= 0 && scrap >= 50) { scrap -= 50; c.hp = Math.floor(c.maxHp * 0.5); }
+      else if (c.hp < c.maxHp && scrap >= 10) { scrap -= 10; c.hp = Math.min(c.maxHp, c.hp + 30); }
+    });
+    while (canCarry() && materials.chems >= 2) { craftItem('MED_STIM'); stat.crafted++; }
+    playerRoster.forEach(c => {
+      const cost = 30 + (c.upgradeCount * 25);
+      if (c.gridPos > 0 && scrap >= cost * 2) { scrap -= cost; c.upgradeCount++; c.maxHp += 10; c.hp += 10; c.dmgBase += 3; }
+      while (c.perkPoints > 0) { assignPerk(c.id, PERK_POOL[Math.floor(Math.random() * PERK_POOL.length)].id); }
+    });
+  };
+
+  // Picks the ability with a live combo if there is one, otherwise the first available. This is
+  // a competent player, not an optimal one.
+  const takeTurn = () => {
+    const actor = turnQueue[activeIndex];
+    const foes = activeEntities.filter(e => !e.isPlayer && e.hp > 0);
+    if (!foes.length) return false;
+    const deck = (ABILITIES[actor.classType] || []).filter(a => !a.cd || (actor.cooldowns[a.cd] || 0) === 0);
+    if (!deck.length) return false;
+    if (momentum >= overdriveAt()) {
+      stat.moves.OVERDRIVE = (stat.moves.OVERDRIVE || 0) + 1;
+      pendingAction = 'OVERDRIVE'; resolveAction(foes[0].id); return true;
+    }
+    // A player in trouble reaches for the bag before they reach for another attack.
+    const badlyHurt = activeEntities.filter(e => e.isPlayer && e.hp > 0 && e.hp < e.maxHp * 0.35)
+                                    .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
+    if (badlyHurt && inventory.includes('MED_STIM')) {
+        stat.items.MED_STIM = (stat.items.MED_STIM || 0) + 1;
+        pendingAction = 'ITEM_MED'; resolveConsumableItem(badlyHurt.id); return true;
+    }
+    const stuck = activeEntities.find(e => e.isPlayer && e.hp > 0 && (e.stunnedTurns > 0 || e.bleedingTurns > 0));
+    if (stuck && inventory.includes('ADRENALINE')) {
+        stat.items.ADRENALINE = (stat.items.ADRENALINE || 0) + 1;
+        pendingAction = 'ITEM_ADRENALINE'; resolveConsumableItem(stuck.id); return true;
+    }
+    const nearlyDead = foes.find(f => f.hp <= 35);
+    if (nearlyDead && inventory.includes('SCRAP_BOMB')) {
+        stat.items.SCRAP_BOMB = (stat.items.SCRAP_BOMB || 0) + 1;
+        pendingAction = 'ITEM_BOMB'; resolveConsumableItem(nearlyDead.id); return true;
+    }
+
+    let chosen = null, target = foes[0];
+    for (const a of deck) {
+      const hit = foes.find(f => comboFor(a.move, f));
+      if (hit) { chosen = a; target = hit; break; }
+    }
+    if (!chosen) chosen = deck[Math.floor(Math.random() * deck.length)];
+    if (chosen.act === 'self') { stat.moves[chosen.move] = (stat.moves[chosen.move] || 0) + 1; executeSelfAction(chosen.move); return true; }
+    if (chosen.move === 'CAUTERIZE') {
+      const hurt = activeEntities.filter(e => e.isPlayer && e.hp > 0 && e.hp < e.maxHp)[0];
+      if (!hurt) { chosen = deck.find(a => a.move !== 'CAUTERIZE') || deck[0]; }
+      else { stat.moves.CAUTERIZE = (stat.moves.CAUTERIZE || 0) + 1; pendingAction = 'CAUTERIZE'; resolveAction(hurt.id); return true; }
+    }
+    stat.moves[chosen.move] = (stat.moves[chosen.move] || 0) + 1;
+    pendingAction = chosen.move; resolveAction(target.id);
+    return true;
+  };
+
+  // Drives one fight to its end without any timers - every turn resolved synchronously.
+  const fight = (nodeType, elite) => {
+    initiateCombat(nodeType, elite);
+    stat.fights++;
+    let rounds = 0;
+    while (combatActive && rounds < 400) {
+      rounds++;
+      const actor = turnQueue[activeIndex];
+      if (!actor || actor.hp <= 0) { activeIndex = (activeIndex + 1) % turnQueue.length; continue; }
+      if (actor.stunnedTurns > 0) { actor.stunnedTurns--; activeIndex = (activeIndex + 1) % turnQueue.length; continue; }
+      applyTurnStartEffects(actor);
+      if (!activeEntities.some(e => e.isPlayer && e.hp > 0)) break;
+      if (!activeEntities.some(e => !e.isPlayer && e.hp > 0)) break;
+      if (actor.isPlayer) { if (!takeTurn()) { activeIndex = (activeIndex + 1) % turnQueue.length; continue; } }
+      else { actor.intent = rollIntent(actor); executeEnemyAi(actor); }
+      activeIndex = (activeIndex + 1) % turnQueue.length;
+    }
+    stat.rounds += rounds;
+    const survived = activeEntities.some(e => e.isPlayer && e.hp > 0);
+    const foesLeft = activeEntities.filter(e => !e.isPlayer && e.hp > 0).length;
+    stat.kills += activeEntities.filter(e => !e.isPlayer && e.hp <= 0).length;
+    combatActive = false;
+    return survived && foesLeft === 0;
+  };
+
+  while (stat.nodes < capNodes) {
+    if (currentTier > TOTAL_TIERS) {
+      currentSector++; currentTier = 1; noteDepth();
+      // consequences that came due
+      const due = consequencesDue().length;
+      if (due) { stat.consequences += due; while (consequencesDue().length) { const c = consequencesDue()[0]; pendingConsequences = pendingConsequences.filter(o => o !== c); (CONSEQUENCE_POOL[c.kind] || { resolve: () => '' }).resolve(c); } }
+      spend();
+      continue;
+    }
+    const row = SECTOR_LAYOUT[TOTAL_TIERS - currentTier];
+    // Prefer an elite when the squad is healthy, which is the interesting decision the map offers.
+    const healthy = playerRoster.filter(p => p.gridPos > 0 && p.hp > p.maxHp * 0.6).length >= 2;
+    const node = (healthy && row.find(n => n.elite)) || row[Math.floor(Math.random() * row.length)];
+
+    if (node.type === 'EVENT') {
+      stat.events++;
+      const ev = pickEvent();
+      const options = ev.choices.filter(c => c.canAfford());
+      if (options.length) options[Math.floor(Math.random() * options.length)].execute();
+      currentTier++; stat.nodes++; noteDepth(); runStats.nodes++;
+      continue;
+    }
+    if (node.type === 'CAMP') {
+      stat.camps++;
+      playerRoster.forEach(p => { if (p.gridPos > 0 && p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp * 0.35)); });
+      currentTier++; stat.nodes++; noteDepth(); runStats.nodes++;
+      continue;
+    }
+
+    currentNodeType = node.type; isCurrentNodeElite = !!node.elite;
+    const won = fight(node.type, !!node.elite);
+    stat.nodes++; runStats.nodes++;
+
+    if (!won) {
+      stat.wipes++;
+      stat.wipedInSector.push(currentSector); stat.wipedAtTier.push(currentTier); stat.wipedOnElite.push(!!node.elite);
+      if (regroupsLeft() > 0) { stat.regroupsSpent++; regroupSquad(); spend(); continue; }
+      stat.endedBy = 'wiped'; break;
+    }
+
+    if (node.type === 'BOSS') {
+      stat.bosses++; runStats.bosses++; bossSkulls++;
+      const offer = rollRelicOffer();
+      if (offer.length) { const pick = offer.find(r => r.tier === 'RARE') || offer[0]; activeRelics.push(pick); }
+    }
+    if (node.elite) {
+      stat.elites++; runStats.elites++; checkBountyProgress('ELITE');
+      const drop = rollRelic();
+      if (drop) activeRelics.push(drop);
+    }
+    checkBountyProgress('KILL');
+    runStats.kills = stat.kills;
+    scrap += Math.floor((20 + currentTier * 20) * (node.elite ? 2 : 1) * sectorRewardMult());
+    runStats.scrapEarned += 40;
+    currentTier++; noteDepth();
+    spend();
+
+    const boardNow = bountiesAtStart();
+    if (boardNow !== boardBefore) { stat.bountiesDone++; boardBefore = boardNow; }
+  }
+
+  stat.sector = runStats.deepestSector; stat.tier = runStats.deepestTier;
+  stat.relics = activeRelics.map(r => r.id);
+  stat.score = computeScore(runStats);
+  stat.regroupsLeft = regroupsLeft();
+  return stat;
+};
+
+(async () => {
+  const { server, port } = await serve(ROOT);
+  const launch = {};
+  if (process.env.CHROMIUM_PATH) launch.executablePath = process.env.CHROMIUM_PATH;
+  const browser = await chromium.launch(launch);
+  const context = await browser.newContext({ viewport: { width: 400, height: 800 } });
+  await context.addInitScript(() => {
+    let engine;
+    Object.defineProperty(window, 'WP', {
+      configurable: true,
+      get: () => engine,
+      set: value => {
+        engine = value;
+        for (const [key, desc] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
+          if (key in window) continue;
+          try { Object.defineProperty(window, key, { ...desc, configurable: true }); } catch (e) {}
+        }
+      }
+    });
+  });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', e => errors.push(e.message));
+  await page.goto(`http://127.0.0.1:${port}/index.html`);
+  await page.waitForTimeout(800);
+  await page.evaluate(() => { globalSettings.sfx = false; });
+
+  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}` +
+              (CONTRACTS.length ? ` under ${CONTRACTS.join(', ')}` : '') + '\n');
+
+  const results = [];
+  for (let i = 0; i < RUNS; i++) {
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400 });
+    results.push(r);
+    if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
+  }
+
+  const n = results.length;
+  const nums = key => results.map(r => r[key]).sort((a, b) => a - b);
+  const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+  const pct = (a, p) => a[Math.min(a.length - 1, Math.floor(a.length * p))];
+  const line = (label, v) => console.log(`  ${String(label).padEnd(26)} ${v}`);
+
+  console.log('\n── WHERE RUNS END ' + '─'.repeat(40));
+  const sectors = nums('sector');
+  line('deepest sector, median', pct(sectors, 0.5));
+  line('  mean / p10 / p90', `${mean(sectors).toFixed(1)} / ${pct(sectors, 0.1)} / ${pct(sectors, 0.9)}`);
+  line('range', `${sectors[0]} to ${sectors[sectors.length - 1]}`);
+  const ends = {};
+  results.forEach(r => { ends[r.endedBy] = (ends[r.endedBy] || 0) + 1; });
+  line('ended by', Object.entries(ends).map(([k, v]) => `${k} ${v}`).join(', '));
+  line('nodes cleared, median', pct(nums('nodes'), 0.5));
+  line('score, median', pct(nums('score'), 0.5).toLocaleString());
+
+  console.log('\n── FIGHTS ' + '─'.repeat(48));
+  const roundsPerFight = results.map(r => r.fights ? r.rounds / r.fights : 0).sort((a, b) => a - b);
+  line('actor turns per fight', pct(roundsPerFight, 0.5).toFixed(1) + ' (median)');
+  line('fights per run, median', pct(nums('fights'), 0.5));
+  line('bosses felled, mean', mean(nums('bosses')).toFixed(2));
+  line('elites broken, mean', mean(nums('elites')).toFixed(2));
+  line('wipes per run, mean', mean(nums('wipes')).toFixed(2));
+  line('regroups spent, mean', mean(nums('regroupsSpent')).toFixed(2));
+  const wipeSectors = {};
+  results.forEach(r => r.wipedInSector.forEach(sx => { wipeSectors[sx] = (wipeSectors[sx] || 0) + 1; }));
+  line('wipes by sector', Object.entries(wipeSectors).sort((a, b) => a[0] - b[0]).map(([k, v]) => `s${k}:${v}`).join(' ') || 'none');
+  const wipeTiers = {};
+  results.forEach(r => r.wipedAtTier.forEach(t => { wipeTiers[t] = (wipeTiers[t] || 0) + 1; }));
+  line('wipes by tier', Object.entries(wipeTiers).sort((a, b) => a[0] - b[0]).map(([k, v]) => `t${k}:${v}`).join(' ') || 'none');
+  const onElite = results.reduce((n, r) => n + r.wipedOnElite.filter(Boolean).length, 0);
+  const allWipes = results.reduce((n, r) => n + r.wipedOnElite.length, 0);
+  line('wipes on an elite node', allWipes ? `${onElite}/${allWipes} (${(onElite / allWipes * 100).toFixed(0)}%)` : 'none');
+
+  console.log('\n── WHAT GETS USED ' + '─'.repeat(40));
+  const moves = {};
+  results.forEach(r => Object.entries(r.moves).forEach(([m, c]) => { moves[m] = (moves[m] || 0) + c; }));
+  const totalMoves = Object.values(moves).reduce((a, b) => a + b, 0);
+  const declared = await page.evaluate(() => Object.values(ABILITIES).flat().map(a => a.move));
+  const ranked = Object.entries(moves).sort((a, b) => b[1] - a[1]);
+  ranked.forEach(([m, c]) => line(m, `${String(c).padStart(6)}  ${(c / totalMoves * 100).toFixed(1)}%`));
+  const never = declared.filter(m => !moves[m]);
+  line('never used', never.length ? never.join(', ') : 'none');
+  const classCounts = {};
+  results.forEach(r => r.deployed.forEach(c => { classCounts[c] = (classCounts[c] || 0) + 1; }));
+  line('classes deployed', Object.entries(classCounts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', '));
+
+  const items = {};
+  results.forEach(r => Object.entries(r.items).forEach(([k, v]) => { items[k] = (items[k] || 0) + v; }));
+  line('items used per run', Object.entries(items).map(([k, v]) => `${k} ${(v / n).toFixed(1)}`).join(', ') || 'none');
+  line('items crafted per run', (results.reduce((a, r) => a + r.crafted, 0) / n).toFixed(1));
+
+  console.log('\n── RELICS ' + '─'.repeat(48));
+  const relics = {};
+  results.forEach(r => r.relics.forEach(id => { relics[id] = (relics[id] || 0) + 1; }));
+  const allRelics = await page.evaluate(() => RELIC_POOL.map(r => ({ id: r.id, tier: r.tier })));
+  allRelics.forEach(r => line(`${r.id} (${r.tier})`, `${((relics[r.id] || 0) / n * 100).toFixed(0)}% of runs`));
+  line('relics held, mean', (Object.values(relics).reduce((a, b) => a + b, 0) / n).toFixed(1));
+  const unreachable = allRelics.filter(r => !relics[r.id]).map(r => r.id);
+  line('never dropped', unreachable.length ? unreachable.join(', ') : 'none');
+
+  console.log('\n── THE BOARD ' + '─'.repeat(45));
+  line('bounties completed, mean', mean(nums('bountiesDone')).toFixed(2));
+  line('consequences resolved, mean', mean(nums('consequences')).toFixed(2));
+  line('events seen, mean', mean(nums('events')).toFixed(1));
+
+  if (errors.length) {
+    console.log('\n── PAGE ERRORS ' + '─'.repeat(43));
+    [...new Set(errors)].slice(0, 10).forEach(e => console.log('  ' + e));
+  }
+  console.log(`\n${n} expeditions, ${errors.length} page errors.\n`);
+
+  await browser.close();
+  server.close();
+  process.exit(errors.length ? 2 : 0);
+})().catch(e => { console.error(e); process.exit(1); });

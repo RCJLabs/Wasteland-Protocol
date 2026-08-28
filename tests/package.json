@@ -2,7 +2,12 @@
   "name": "wasteland-protocol-tests",
   "private": true,
   "version": "1.0.0",
-  "description": "Headless browser tests for Wasteland Protocol",
-  "scripts": { "test": "node run.js" },
-  "devDependencies": { "playwright": "^1.49.0" }
+  "description": "Headless browser tests and balance simulation for Wasteland Protocol",
+  "scripts": {
+    "test": "node run.js",
+    "simulate": "node simulate.js"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0"
+  }
 }

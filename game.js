@@ -285,6 +285,68 @@ function resolveConsequence() {
     return true;
 }
 
+// Nothing in the game explained resistances, momentum, overdrive, combos or what the position
+// slots do. A player learned the resistance badges by losing a turn to a bio-immune drone.
+// Every entry below reads from the live tables rather than restating them, so a codex page
+// cannot describe a system the engine no longer has.
+const CODEX = [
+    { id: 'POSITION', title: 'THE LINE', body: () => [
+        'Three slots. The front rank is where melee earns its damage and where enemy melee comes for it.',
+        `Melee from the middle rank lands at ${Math.round(REACH_PENALTY[2] * 100)}%, from the back at ${Math.round(REACH_PENALTY[3] * 100)}%.`,
+        `Reaching past the enemy's front ${FRONT_RANKS} costs another ${Math.round((1 - DEPTH_PENALTY) * 100)}%. Ranged weapons ignore all of it.`,
+        'Enemy melee walks into whoever is nearest. Enemy fire leans on the back line. A flank (🌀) ignores both.',
+        'Iron Guard covers the ranks behind it: a single-target hit aimed past the guard is taken by the guard, softened.',
+        'Reposition swaps two operators and costs the whole turn.'
+    ] },
+    { id: 'RESISTANCE', title: 'ARMOUR AND RESISTANCE', body: () => [
+        'Every enemy carries three badges under its health: P physical, B biological, E energy.',
+        'Orange means weak to it. Grey means it shrugs it off. Struck through means immune - that attack does nothing at all.',
+        'Armour subtracts from every hit. Corroding a target strips its armour outright, which is the answer to anything that re-plates itself.'
+    ] },
+    { id: 'STATUS', title: 'STATUS', body: () => [
+        '💧 bleeding - loses health at the start of its turn.',
+        '💫 stunned - loses its turn.',
+        '🛢️ oiled - takes far more from energy.',
+        '🧪 corroded - armour ignored while it lasts.',
+        '🎯 marked - the next hit from anyone lands harder, and spends it.',
+        '🛡️ braced - temporary armour.'
+    ] },
+    { id: 'COMBOS', title: 'COMBOS', body: () => [
+        'Setting a status up and then cashing it in is where the damage is.',
+        ...COMBOS.map(c => `${c.move.replace(/_/g, ' ')} into ${c.needs.replace('Turns', '')} — ${c.name}, x${c.mult}`),
+        `Any damaging move against a marked target lands at x${MARK_BONUS} and spends the mark.`,
+        'The deck flags an ability whose pairing is already on the field, and aiming names it above the target.'
+    ] },
+    { id: 'MOMENTUM', title: 'MOMENTUM AND OVERDRIVE', body: () => [
+        'Momentum builds as the squad takes and deals damage.',
+        `At ${OVERDRIVE_AT}% any operator can spend it on their Overdrive - a class-specific attack that ends the fight or turns it.`,
+        `Overcharged Cell lowers that to ${OVERDRIVE_AT_CHARGED}%.`,
+        'Spending it empties the bar.'
+    ] },
+    { id: 'RUN', title: 'THE EXPEDITION', body: () => [
+        `${TOTAL_TIERS} tiers to a sector, one node per tier, and a commander at the top.`,
+        'Two elite nodes per sector, each beside a normal one, so taking them is a choice. An elite drops a relic.',
+        'A commander drops a choice of three.',
+        `A wipe spends a regroup - ${BASE_REGROUPS} to start, more from the Citadel. Out of regroups ends the run and banks the score.`,
+        'Depth is worth far more than any single haul: pushing one sector deeper always beats farming the one you are on.'
+    ] },
+    { id: 'CONTRACTS', title: 'CONTRACTS', body: () => [
+        'Optional conditions taken before deploying. Each makes the run harder and every point it earns worth more.',
+        ...CONTRACT_POOL.map(c => `${c.name} +${Math.round(c.bonus * 100)}% — ${c.desc}`)
+    ] }
+];
+
+function renderCodex() {
+    switchScreen('screen-codex');
+    // The settings panel is an overlay rather than a screen, so switchScreen leaves it up - and
+    // it sits on top of the manual, swallowing every click meant for it.
+    closeSettings();
+    document.getElementById('codex-body').innerHTML = CODEX.map(entry =>
+        `<div class="codex-entry"><div class="codex-title">${entry.title}</div>` +
+        entry.body().map(line => `<div class="codex-line">${line}</div>`).join('') +
+        `</div>`).join('');
+}
+
 // Optional conditions taken before a run, each buying a share of the final score. A run stops
 // being the same shape every time, and a leaderboard entry says how it was earned.
 const CONTRACT_POOL = [
@@ -457,6 +519,7 @@ const ACTIONS = {
     'take-relic':       el => takeRelic(Number(el.dataset.index)),
     'toggle-contract':  el => toggleContract(el.dataset.id),
     'begin-expedition': () => beginExpedition(),
+    'codex':            () => renderCodex(),
     'erase-slot':       el => { Store.remove(BASE_SAVE_KEY + Number(el.dataset.slot)); renderTitleScreen(); },
     'dev-open':         () => renderDev(),
     'dev-exit':         () => renderMap(),
@@ -2323,9 +2386,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, executeSelfAction, resolveConsumableItem, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SECTOR_LAYOUT, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, OVERDRIVE_NAMES, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SECTOR_LAYOUT, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, OVERDRIVE_NAMES, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },

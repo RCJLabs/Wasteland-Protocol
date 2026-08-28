@@ -37,6 +37,7 @@
         <div class="settings-menu">
             <button class="title-btn" id="btn-toggle-speed" data-action="toggle-speed">COMBAT SPEED: NORMAL</button>
             <button class="title-btn" id="btn-toggle-sfx" data-action="toggle-sfx">AUDIO SFX: ON</button>
+            <button class="title-btn" style="border-color:#B8860B; color:#B8860B;" data-action="codex">FIELD MANUAL</button>
             <button class="title-btn" style="border-color:#6aa6d8; color:#6aa6d8;" data-action="dev-open">DEV TOOLS</button>
             <button class="title-btn btn-meta" data-action="return-title">RETURN TO TITLE</button>
             <button class="title-btn" id="btn-erase" style="border-color: #8B0000; color: #ff4444;" data-action="erase-save">ERASE SAVE DATA</button>
@@ -115,6 +116,12 @@
             <div class="runover-lines" id="runover-lines"></div>
             <div class="event-choices" id="runover-choices"></div>
         </div>
+    </div>
+
+    <div id="screen-codex">
+        <div class="screen-title-bar">FIELD MANUAL</div>
+        <div id="codex-body" class="codex-body"></div>
+        <button class="return-btn" data-action="title">CLOSE</button>
     </div>
 
     <div id="screen-contracts">
