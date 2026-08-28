@@ -147,7 +147,10 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .res-weak { color: #ff9c3a; }
 .res-strong { color: #7f8ea3; }
 .res-immune { color: #55606e; text-decoration: line-through; }
-.status-badge { font-size: 10px; width: 12px; height: 12px; display: flex; align-items: center; justify-content: center; border-radius: 2px; }
+/* Six statuses can stack on one unit, which will not fit on the HP line beside the numbers.
+   They get their own row and wrap onto a second line rather than being squeezed and clipped. */
+.status-badge { font-size: 10px; line-height: 12px; display: flex; flex-wrap: wrap; align-items: center;
+  justify-content: center; gap: 1px; margin-bottom: 1px; text-shadow: 1px 1px 2px #000; }
 .status-bleed { background-color: rgba(139,0,0,0.7); color: #fff; text-shadow: 0 0 2px #000; }
 .status-stun { background-color: rgba(184,134,11,0.7); color: #000; font-weight: bold; }
 .status-shield { background-color: rgba(107,142,35,0.7); color: #fff; }
@@ -228,3 +231,16 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
 .dev-title { font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: #6aa6d8; margin-bottom: 7px; }
 .dev-row { display: flex; flex-wrap: wrap; gap: 6px; }
 .dev-btn { flex: 1 1 auto; min-width: 78px; font-size: 11px; padding: 9px 6px; }
+
+/* A pairing the player can see before spending the turn, rather than discovering afterwards. */
+.combo-flag { position: absolute; top: -46px; left: 50%; transform: translateX(-50%); z-index: 25;
+  font-size: 9px; font-weight: bold; letter-spacing: 1px; white-space: nowrap; padding: 2px 5px;
+  color: #ff44ff; background: rgba(30,0,30,0.9); border: 1px solid #ff44ff; border-radius: 2px;
+  text-shadow: 0 0 4px #ff44ff; animation: pulseOD 1.2s infinite; }
+.entity.has-combo .portrait { filter: drop-shadow(0 0 14px #ff44ff); }
+@media (prefers-reduced-motion: reduce) { .combo-flag { animation: none; } }
+
+/* An ability whose pairing is already live on the field, so the player can find a combo
+   without selecting each one in turn to see what lights up. */
+button.combo-ready { border-color: #ff44ff; color: #ff9cff; box-shadow: 0 0 10px rgba(255,68,255,0.35) inset; }
+.combo-tag { font-size: 9px; letter-spacing: 1px; color: #ff44ff; text-shadow: 0 0 4px #ff44ff; }

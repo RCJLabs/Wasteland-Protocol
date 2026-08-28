@@ -29,14 +29,25 @@ module.exports = {
       await page.$eval('#btn-global-settings', e => { const r = e.getBoundingClientRect(); return r.width >= 44 && r.height >= 44; }));
 
     // ---- combat targets are announced and operable ----
-    await page.evaluate(() => {
-      initiateCombat('RAIDERS', false);
-      const hero = playerRoster.find(p => p.gridPos > 0);
-      const foes = activeEntities.filter(e => !e.isPlayer);
-      activeEntities = [hero, ...foes]; turnQueue = [hero, ...foes];
-      activeIndex = 0; combatActive = true; pendingAction = 'PISTOL'; renderField();
-    });
-    await page.waitForTimeout(300);
+    // Resolving an action queues the next turn on a timer, and when that timer lands it clears
+    // the pending order and re-renders - leaving no target to aim at. Standing combat down first
+    // lets any queued turn fire as a no-op, so each scenario below starts from a settled field.
+    const aimAt = async (move) => {
+      await page.evaluate(() => { combatActive = false; });
+      await page.waitForTimeout(1200);
+      await page.evaluate((m) => {
+        const hero = playerRoster.find(p => p.gridPos > 0);
+        const foes = activeEntities.filter(e => !e.isPlayer);
+        foes.forEach(e => { e.hp = e.maxHp; });
+        hero.hp = hero.maxHp; hero.stunnedTurns = 0;
+        activeEntities = [hero, ...foes]; turnQueue = [hero, ...foes];
+        activeIndex = 0; combatActive = true; pendingAction = m; renderField();
+      }, move);
+      await page.waitForFunction(() => document.querySelector('.targetable-enemy') !== null, null, { timeout: 5000 });
+    };
+
+    await page.evaluate(() => { initiateCombat('RAIDERS', false); });
+    await aimAt('PISTOL');
     const targets = await page.evaluate(() => {
       const t = [...document.querySelectorAll('.targetable-enemy')];
       return { count: t.length, focusable: t.every(e => e.tabIndex === 0),
@@ -56,12 +67,7 @@ module.exports = {
     ok('Enter on a focused target resolves the attack', after < before);
 
     // Space works too, and does not scroll the page
-    await page.evaluate(() => {
-      const hero = playerRoster.find(p => p.gridPos > 0);
-      activeEntities.filter(e => !e.isPlayer).forEach(e => e.hp = e.maxHp);
-      activeIndex = turnQueue.indexOf(hero); combatActive = true; pendingAction = 'PISTOL'; renderField();
-    });
-    await page.waitForTimeout(250);
+    await aimAt('PISTOL');
     const b2 = await page.evaluate(() => activeEntities.find(e => !e.isPlayer).hp);
     await page.evaluate(() => document.querySelector('.targetable-enemy').focus());
     await page.keyboard.press(' ');

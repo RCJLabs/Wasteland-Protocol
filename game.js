@@ -180,13 +180,13 @@ const EVENT_POOL = [
 ];
 
 const ROSTER_TEMPLATE = [
-    { id: 'p1', name: "Bruiser", classType: "BRUISER", maxHp: 80, hp: 80, speed: 8, armor: 0, isPlayer: true, dmgBase: 20, img: "hero_bruiser.webp", scale: 1.15, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 5, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 1, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { heavy_wrench: 0, iron_guard: 0 } },
-    { id: 'p2', name: "Medic", classType: "MEDIC", maxHp: 50, hp: 50, speed: 12, armor: 0, isPlayer: true, dmgBase: 10, img: "hero_medic.webp", scale: 1.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 2, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { cauterize: 0 } },
-    { id: 'p3', name: "Scavenger", classType: "SCAVENGER", maxHp: 45, hp: 45, speed: 15, armor: 0, isPlayer: true, dmgBase: 15, img: "hero_scavenger.webp", scale: 1.25, hpDrop: -25, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 5 }, upgradeCount: 0, gridPos: 3, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { flashbang: 0 } },
-    { id: 'p4', name: "Pyro", classType: "PYROMANIAC", maxHp: 55, hp: 55, speed: 11, armor: 0, isPlayer: true, dmgBase: 12, img: "hero_pyro.webp", scale: 1.1, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 10 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { molotov: 0 } },
-    { id: 'p5', name: "Breacher", classType: "SHOTGUNNER", maxHp: 65, hp: 65, speed: 9, armor: 5, isPlayer: true, dmgBase: 22, img: "hero_shotgunner.webp", scale: 1.15, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 5, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { buckshot: 0 } },
-    { id: 'p6', name: "Ghost", classType: "SNIPER", maxHp: 40, hp: 40, speed: 16, armor: 0, isPlayer: true, dmgBase: 28, img: "hero_sniper.webp", scale: 0.9, hpDrop: -10, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { deadeye: 0 } },
-    { id: 'p7', name: "War Hound", classType: "HOUND", maxHp: 35, hp: 35, speed: 19, armor: 0, isPlayer: true, dmgBase: 16, img: "hero_hound.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: -2, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { feral_bite: 0 } }
+    { id: 'p1', name: "Bruiser", classType: "BRUISER", maxHp: 80, hp: 80, speed: 8, armor: 0, isPlayer: true, dmgBase: 20, img: "hero_bruiser.webp", scale: 1.15, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 1, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { heavy_wrench: 0, iron_guard: 0 } },
+    { id: 'p2', name: "Medic", classType: "MEDIC", maxHp: 50, hp: 50, speed: 12, armor: 0, isPlayer: true, dmgBase: 10, img: "hero_medic.webp", scale: 1.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 2, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { cauterize: 0 } },
+    { id: 'p3', name: "Scavenger", classType: "SCAVENGER", maxHp: 45, hp: 45, speed: 15, armor: 0, isPlayer: true, dmgBase: 15, img: "hero_scavenger.webp", scale: 1.25, hpDrop: -25, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 5 }, upgradeCount: 0, gridPos: 3, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { flashbang: 0, acid_flask: 0 } },
+    { id: 'p4', name: "Pyro", classType: "PYROMANIAC", maxHp: 55, hp: 55, speed: 11, armor: 0, isPlayer: true, dmgBase: 12, img: "hero_pyro.webp", scale: 1.1, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 10 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { molotov: 0, thermite: 0 } },
+    { id: 'p5', name: "Breacher", classType: "SHOTGUNNER", maxHp: 65, hp: 65, speed: 9, armor: 5, isPlayer: true, dmgBase: 22, img: "hero_shotgunner.webp", scale: 1.15, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { buckshot: 0, execute_shot: 0 } },
+    { id: 'p6', name: "Ghost", classType: "SNIPER", maxHp: 40, hp: 40, speed: 16, armor: 0, isPlayer: true, dmgBase: 28, img: "hero_sniper.webp", scale: 0.9, hpDrop: -10, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { deadeye: 0, spotters_mark: 0 } },
+    { id: 'p7', name: "War Hound", classType: "HOUND", maxHp: 35, hp: 35, speed: 19, armor: 0, isPlayer: true, dmgBase: 16, img: "hero_hound.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { feral_bite: 0, rip_and_tear: 0 } }
 ];
 
 let playerRoster = []; let activeEntities = []; let turnQueue = []; let activeIndex = -1; let combatActive = false; let pendingAction = null;
@@ -1027,20 +1027,20 @@ function formatStat(n) {
 function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     const pool = {
         'BEASTS': [
-            { name: "Attack Dog", minTier: 1, isHeavy: false, classType: "BEAST", range: 'melee', maxHp: 30, speed: 18, armor: 0, dmgBase: 10, img: "enemy_dog.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } }, 
-            { name: "Mutant", minTier: 5, isHeavy: true, classType: "MUTANT", range: 'melee', maxHp: 70, speed: 7, armor: 0, dmgBase: 25, img: "enemy_mutant.webp", scale: 1.5, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 20, energy: -5 } }, 
-            { name: "Chem Fiend", minTier: 6, isHeavy: true, classType: "MUTANT", range: 'ranged', maxHp: 60, speed: 11, armor: 0, dmgBase: 15, img: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 50, energy: -5 } }
+            { name: "Attack Dog", minTier: 1, isHeavy: false, classType: "BEAST", range: 'melee', maxHp: 30, speed: 18, armor: 0, dmgBase: 10, img: "enemy_dog.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } }, 
+            { name: "Mutant", minTier: 5, isHeavy: true, classType: "MUTANT", range: 'melee', maxHp: 70, speed: 7, armor: 0, dmgBase: 25, img: "enemy_mutant.webp", scale: 1.5, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 20, energy: -5 } }, 
+            { name: "Chem Fiend", minTier: 6, isHeavy: true, classType: "MUTANT", range: 'ranged', maxHp: 60, speed: 11, armor: 0, dmgBase: 15, img: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 50, energy: -5 } }
         ],
         'RAIDERS': [
-            { name: "Raider", minTier: 1, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 40, speed: 10, armor: 0, dmgBase: 12, img: "enemy_raider.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: -2, bio: 2, energy: 0 } }, 
-            { name: "Psycho", minTier: 4, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 45, speed: 14, armor: 0, dmgBase: 18, img: "enemy_psycho.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
-            { name: "Sniper", minTier: 5, isHeavy: false, classType: "RAIDER", range: 'ranged', maxHp: 35, speed: 16, armor: 0, dmgBase: 25, img: "enemy_sniper.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
-            { name: "Juggernaut", minTier: 7, isHeavy: true, classType: "RAIDER", range: 'melee', maxHp: 90, speed: 6, armor: 5, dmgBase: 18, img: "enemy_juggernaut.webp", scale: 1.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 10, bio: 0, energy: -5 } }
+            { name: "Raider", minTier: 1, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 40, speed: 10, armor: 0, dmgBase: 12, img: "enemy_raider.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 2, energy: 0 } }, 
+            { name: "Psycho", minTier: 4, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 45, speed: 14, armor: 0, dmgBase: 18, img: "enemy_psycho.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
+            { name: "Sniper", minTier: 5, isHeavy: false, classType: "RAIDER", range: 'ranged', maxHp: 35, speed: 16, armor: 0, dmgBase: 25, img: "enemy_sniper.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
+            { name: "Juggernaut", minTier: 7, isHeavy: true, classType: "RAIDER", range: 'melee', maxHp: 90, speed: 6, armor: 5, dmgBase: 18, img: "enemy_juggernaut.webp", scale: 1.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 0, energy: -5 } }
         ],
         'MECH': [
-            { name: "Drone", minTier: 4, isHeavy: false, classType: "DRONE", range: 'ranged', isHovering: true, maxHp: 25, speed: 18, armor: 5, dmgBase: 8, img: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 8, bio: 100, energy: -10 } }, 
-            { name: "Turret", minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
-            { name: "War Rig", minTier: 8, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
+            { name: "Drone", minTier: 4, isHeavy: false, classType: "DRONE", range: 'ranged', isHovering: true, maxHp: 25, speed: 18, armor: 5, dmgBase: 8, img: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 100, energy: -10 } }, 
+            { name: "Turret", minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
+            { name: "War Rig", minTier: 8, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
         ]
     };
 
@@ -1055,7 +1055,7 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
             speed: b.speed, armor: b.armor, baseArmor: b.armor, isPlayer: false,
             dmgBase: Math.floor(bossBaseDmg * b.dmgMult * dmgMult),
             img: b.img, scale: b.scale, hpDrop: 0,
-            stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0,
+            stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
             resistances: { ...b.resistances }, phase: 1,
             intents: b.intents, bossPassive: b.passive || null, enrage: b.enrage
         };
@@ -1117,6 +1117,65 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
 // how far up its ground line sits. Anything unlisted keeps the original footing.
 const GROUND_LIFT = { 'bg_nest.webp': '21vh', 'bg_foundry.webp': '25vh' };
 const DEFAULT_LIFT = '12vh';
+
+// Every pairing lives here so the damage maths and the on-screen prompt read the same table.
+const COMBOS = [
+    { move: 'BUCKSHOT',     needs: 'oiledTurns',    name: 'IGNITE',    mult: 2.0, consumes: 'oiledTurns' },
+    { move: 'MOLOTOV',      needs: 'oiledTurns',    name: 'IGNITE',    mult: 2.0, consumes: 'oiledTurns' },
+    { move: 'PIPE_RIFLE',   needs: 'bleedingTurns', name: 'EXPLOIT',   mult: 1.5 },
+    { move: 'SCRAP_BLADE',  needs: 'stunnedTurns',  name: 'EXECUTE',   mult: 1.5 },
+    { move: 'THERMITE',     needs: 'corrodedTurns', name: 'MELTDOWN',  mult: 2.0 },
+    { move: 'EXECUTE_SHOT', needs: 'markedTurns',   name: 'CONFIRMED', mult: 2.0, consumes: 'markedTurns' },
+    { move: 'RIP_AND_TEAR', needs: 'bleedingTurns', name: 'REND',      mult: 1.8 }
+];
+
+// One row per ability: who fields it, what the button reads, and which cooldown key it burns.
+// The command deck is rendered from this, so an ability exists in exactly one place.
+const ABILITIES = {
+    BRUISER:    [{ move: 'SCRAP_BLADE',   label: 'Scrap Blade' },
+                 { move: 'HEAVY_WRENCH',  label: 'Heavy Wrench',        cd: 'heavy_wrench' },
+                 { move: 'IRON_GUARD',    label: 'Iron Guard',          cd: 'iron_guard', act: 'self' }],
+    MEDIC:      [{ move: 'PISTOL',        label: 'Pistol' },
+                 { move: 'RAD_SHOT',      label: 'Rad Shot' },
+                 { move: 'CAUTERIZE',     label: 'Cauterize',           cd: 'cauterize' }],
+    SCAVENGER:  [{ move: 'PIPE_RIFLE',    label: 'Pipe Rifle' },
+                 { move: 'FLASHBANG',     label: 'Flashbang',           cd: 'flashbang' },
+                 { move: 'ACID_FLASK',    label: 'Acid Flask (Corrode)', cd: 'acid_flask' }],
+    PYROMANIAC: [{ move: 'FLARE_GUN',     label: 'Flare Gun (Oil)' },
+                 { move: 'MOLOTOV',       label: 'Molotov (AoE)',       cd: 'molotov' },
+                 { move: 'THERMITE',      label: 'Thermite',            cd: 'thermite' }],
+    SHOTGUNNER: [{ move: 'SLUG_SHOT',     label: 'Slug Shot' },
+                 { move: 'BUCKSHOT',      label: 'Buckshot (Front)',    cd: 'buckshot' },
+                 { move: 'EXECUTE_SHOT',  label: 'Execute',             cd: 'execute_shot' }],
+    SNIPER:     [{ move: 'QUICK_SHOT',    label: 'Quick Shot' },
+                 { move: 'DEADEYE',       label: 'Deadeye (Back)',      cd: 'deadeye' },
+                 { move: 'SPOTTERS_MARK', label: "Spotter's Mark",      cd: 'spotters_mark' }],
+    HOUND:      [{ move: 'SNAP',          label: 'Snap' },
+                 { move: 'FERAL_BITE',    label: 'Feral Bite (Bleed)',  cd: 'feral_bite' },
+                 { move: 'RIP_AND_TEAR',  label: 'Rip and Tear (Bleed)', cd: 'rip_and_tear' }]
+};
+
+const OVERDRIVE_NAMES = { BRUISER: 'EARTHSHAKER', MEDIC: 'FIELD REVIVE', SCAVENGER: 'SCRAP STORM',
+    PYROMANIAC: 'HELLFIRE', SHOTGUNNER: 'BREACH CHARGE', SNIPER: 'HEADSHOT', HOUND: 'APEX PREDATOR' };
+
+// Anything else striking a marked target still gets the mark's smaller bonus and spends it.
+const MARK_BONUS = 1.5;
+const DAMAGING_MOVES = ['SCRAP_BLADE','HEAVY_WRENCH','PISTOL','RAD_SHOT','PIPE_RIFLE','FLASHBANG','FLARE_GUN',
+    'MOLOTOV','SLUG_SHOT','BUCKSHOT','QUICK_SHOT','DEADEYE','SNAP','FERAL_BITE',
+    'ACID_FLASK','THERMITE','EXECUTE_SHOT','SPOTTERS_MARK','RIP_AND_TEAR'];
+
+function comboFor(move, target) {
+    if (!target || target.isPlayer) return null;
+    return COMBOS.find(c => c.move === move && (target[c.needs] || 0) > 0) || null;
+}
+
+// What the player is shown before committing: the named pairing, or the generic mark payoff.
+function comboHint(move, target) {
+    const c = comboFor(move, target);
+    if (c) return c.name;
+    if (target && !target.isPlayer && (target.markedTurns || 0) > 0 && DAMAGING_MOVES.includes(move)) return 'MARKED';
+    return null;
+}
 
 const WEATHER_BANNERS = {
     TOXIC_SMOG:     ['weather-smog',  '⚠️ TOXIC SMOG: Passive Bio DMG to Active Units ⚠️'],
@@ -1216,15 +1275,18 @@ function renderField() {
                 else if (pendingAction !== 'CAUTERIZE' && !ent.isPlayer) { tCls = 'targetable-enemy'; clk = targetable(`data-action="target" data-id="${ent.id}"`); }
             }
         }
-        let eff = ''; if (ent.bleedingTurns > 0 && !isDead) eff += `💧`; if (ent.stunnedTurns > 0 && !isDead) eff += `💫`; if (ent.armorTurns > 0 && !isDead) eff += `🛡️`; if (ent.oiledTurns > 0 && !isDead) eff += `🛢️`;
+        let eff = ''; if (ent.bleedingTurns > 0 && !isDead) eff += `💧`; if (ent.stunnedTurns > 0 && !isDead) eff += `💫`; if (ent.armorTurns > 0 && !isDead) eff += `🛡️`; if (ent.oiledTurns > 0 && !isDead) eff += `🛢️`; if (ent.corrodedTurns > 0 && !isDead) eff += `🧪`; if (ent.markedTurns > 0 && !isDead) eff += `🎯`;
         let hoverCls = ent.isHovering && !isDead ? 'hovering' : '';
+        const hint = (pendingAction && !isDead && tCls === 'targetable-enemy') ? comboHint(pendingAction, ent) : null;
         let eliteGlow = ent.eliteType && !isDead ? 'filter: drop-shadow(0 0 15px #8B0000);' : '';
 
         const html = `
-            <div class="entity ${isAct} ${dCls} ${tCls}" id="${ent.id}" ${clk} style="--sprite-scale: ${ent.scale || 1}; --sprite-sink: ${ent.sink || 0}px;">
+            <div class="entity ${isAct} ${dCls} ${tCls} ${hint ? 'has-combo' : ''}" id="${ent.id}" ${clk} style="--sprite-scale: ${ent.scale || 1}; --sprite-sink: ${ent.sink || 0}px;">
                 <div class="intent-icon" style="display:${ent.intent && !isDead && !ent.isPlayer ? 'flex' : 'none'}">${ent.intent ? ent.intent.icon : ''}</div>
+                ${hint ? `<div class="combo-flag">${hint}</div>` : ''}
                 <div style="width: 100%; position: relative; z-index: 10; transform: translateY(${ent.hpDrop || 0}px);">
-                    <div class="hp-text"><span class="status-badge">${eff}</span> ${ent.hp}/${ent.maxHp}</div>
+                    ${eff ? `<div class="status-badge">${eff}</div>` : ''}
+                    <div class="hp-text">${ent.hp}/${ent.maxHp}</div>
                     <div class="hp-container"><div class="hp-fill ${ent.isPlayer ? 'player-hp' : 'enemy-hp'}" style="width: ${(ent.hp / ent.maxHp) * 100}%"></div></div>
                     ${isDead ? '' : resistBadges(ent)}
                 </div><img class="portrait ${hoverCls}" src="${ent.img}" style="${eliteGlow}">
@@ -1245,36 +1307,24 @@ function renderCommandDeck() {
     if (aE.stunnedTurns > 0) { d.innerHTML = `<div class="dash-msg">STUNNED</div><button data-action="skip-turn">Skip Turn</button>`; return; }
 
     let cds = aE.cooldowns; let deckHtml = '';
-    
+
     if (momentum >= 100) {
-        let odName = 'ULTIMATE';
-        if (aE.classType === 'BRUISER') odName = 'EARTHSHAKER'; else if (aE.classType === 'MEDIC') odName = 'FIELD REVIVE'; else if (aE.classType === 'SCAVENGER') odName = 'SCRAP STORM'; else if (aE.classType === 'PYROMANIAC') odName = 'HELLFIRE'; else if (aE.classType === 'SHOTGUNNER') odName = 'BREACH CHARGE'; else if (aE.classType === 'SNIPER') odName = 'HEADSHOT'; else if (aE.classType === 'HOUND') odName = 'APEX PREDATOR';
+        const odName = OVERDRIVE_NAMES[aE.classType] || 'ULTIMATE';
         deckHtml += `<button class="title-btn btn-overdrive" data-action="queue" data-move="OVERDRIVE">OVERDRIVE: ${odName}</button>`;
     }
 
-    if (aE.classType === 'BRUISER') {
-        deckHtml += `<button data-action="queue" data-move="SCRAP_BLADE">Scrap Blade</button>`;
-        deckHtml += `<button ${cds.heavy_wrench > 0 ? 'disabled' : ''} data-action="queue" data-move="HEAVY_WRENCH">Heavy Wrench ${cds.heavy_wrench > 0 ? `[${cds.heavy_wrench}]` : ''}</button>`;
-        deckHtml += `<button ${cds.iron_guard > 0 ? 'disabled' : ''} data-action="self" data-move="IRON_GUARD">Iron Guard ${cds.iron_guard > 0 ? `[${cds.iron_guard}]` : ''}</button>`;
-    } else if (aE.classType === 'MEDIC') {
-        deckHtml += `<button data-action="queue" data-move="PISTOL">Pistol</button>`;
-        deckHtml += `<button data-action="queue" data-move="RAD_SHOT">Rad Shot</button>`;
-        deckHtml += `<button ${cds.cauterize > 0 ? 'disabled' : ''} data-action="queue" data-move="CAUTERIZE">Cauterize ${cds.cauterize > 0 ? `[${cds.cauterize}]` : ''}</button>`;
-    } else if (aE.classType === 'SCAVENGER') {
-        deckHtml += `<button data-action="queue" data-move="PIPE_RIFLE">Pipe Rifle</button>`;
-        deckHtml += `<button ${cds.flashbang > 0 ? 'disabled' : ''} data-action="queue" data-move="FLASHBANG">Flashbang ${cds.flashbang > 0 ? `[${cds.flashbang}]` : ''}</button>`;
-    } else if (aE.classType === 'PYROMANIAC') {
-        deckHtml += `<button data-action="queue" data-move="FLARE_GUN">Flare Gun (Oil)</button>`;
-        deckHtml += `<button ${cds.molotov > 0 ? 'disabled' : ''} data-action="queue" data-move="MOLOTOV">Molotov (AoE) ${cds.molotov > 0 ? `[${cds.molotov}]` : ''}</button>`;
-    } else if (aE.classType === 'SHOTGUNNER') {
-        deckHtml += `<button data-action="queue" data-move="SLUG_SHOT">Slug Shot</button>`;
-        deckHtml += `<button ${cds.buckshot > 0 ? 'disabled' : ''} data-action="queue" data-move="BUCKSHOT">Buckshot (Front) ${cds.buckshot > 0 ? `[${cds.buckshot}]` : ''}</button>`;
-    } else if (aE.classType === 'SNIPER') {
-        deckHtml += `<button data-action="queue" data-move="QUICK_SHOT">Quick Shot</button>`;
-        deckHtml += `<button ${cds.deadeye > 0 ? 'disabled' : ''} data-action="queue" data-move="DEADEYE">Deadeye (Back) ${cds.deadeye > 0 ? `[${cds.deadeye}]` : ''}</button>`;
-    } else if (aE.classType === 'HOUND') {
-        deckHtml += `<button data-action="queue" data-move="SNAP">Snap</button>`;
-        deckHtml += `<button ${cds.feral_bite > 0 ? 'disabled' : ''} data-action="queue" data-move="FERAL_BITE">Feral Bite (Bleed) ${cds.feral_bite > 0 ? `[${cds.feral_bite}]` : ''}</button>`;
+    // A pairing is only worth surfacing if the player can act on it now, so the button is flagged
+    // when some enemy already on the field carries the status the ability cashes in. Only named
+    // pairings count here: a mark boosts every move equally, so flagging them all would light the
+    // whole deck and say nothing about which one to pick. Aiming still calls the mark out.
+    const foes = activeEntities.filter(e => !e.isPlayer && e.hp > 0);
+    const liveCombo = move => (foes.map(f => comboFor(move, f)).find(Boolean) || {}).name || null;
+
+    for (const a of (ABILITIES[aE.classType] || [])) {
+        const cd = a.cd ? (cds[a.cd] || 0) : 0;
+        const ready = cd === 0 ? liveCombo(a.move) : null;
+        deckHtml += `<button ${cd > 0 ? 'disabled' : ''} ${ready ? 'class="combo-ready"' : ''} data-action="${a.act || 'queue'}" data-move="${a.move}">`
+                  + `${a.label}${cd > 0 ? ` [${cd}]` : ''}${ready ? ` <span class="combo-tag">${ready}</span>` : ''}</button>`;
     }
 
     if (inventory.length > 0) { deckHtml += `<button style="border-color:#B8860B; color:#B8860B;" data-action="bag">BAG (${inventory.length})</button>`; }
@@ -1304,6 +1354,8 @@ function applyTurnStartEffects(ent) {
         if (ent.armor < cap) { ent.armor = Math.min(cap, ent.armor + 6); spawnFCT(ent.id, "+PLATE", "fct-heal"); chg = true; }
     }
     if (ent.oiledTurns > 0) { ent.oiledTurns--; chg = true; }
+    if (ent.corrodedTurns > 0) { ent.corrodedTurns--; chg = true; }
+    if (ent.markedTurns > 0) { ent.markedTurns--; chg = true; }
     if (chg) renderField();
 }
 
@@ -1343,31 +1395,39 @@ function resolveAction(targetId) {
         let heal = 20 + Math.floor(Math.random() * 10); target.hp = Math.min(target.maxHp, target.hp + heal); actEnt.cooldowns.cauterize = 3; 
         log(`> ${actEnt.name} heals ${target.name} for ${heal}.`, "log-heal"); spawnFCT(target.id, `+${heal}`, "fct-heal"); playSFX('heal');
     } else {
-        let atkType = 'phys'; if(['RAD_SHOT', 'FERAL_BITE'].includes(pendingAction)) atkType = 'bio'; if(['FLASHBANG', 'MOLOTOV', 'FLARE_GUN'].includes(pendingAction)) atkType = 'energy';
+        let atkType = 'phys'; if(['RAD_SHOT', 'FERAL_BITE', 'RIP_AND_TEAR'].includes(pendingAction)) atkType = 'bio'; if(['FLASHBANG', 'MOLOTOV', 'FLARE_GUN', 'ACID_FLASK', 'THERMITE'].includes(pendingAction)) atkType = 'energy';
         let tuneUpBonus = tuneUpBattles > 0 ? 4 : 0;
         let baseDmg = actEnt.dmgBase + tuneUpBonus + Math.floor(Math.random() * 6); 
         let dmgMult = 1.0; let isCombo = false; let comboType = '';
 
+        // Each ability's own profile first - flat rates and positional swings both settle here.
         if (pendingAction === 'FLASHBANG') { dmgMult = 0.4; actEnt.cooldowns.flashbang = 4; }
         if (pendingAction === 'HEAVY_WRENCH') { dmgMult = 1.5; actEnt.cooldowns.heavy_wrench = 3; }
         if (pendingAction === 'FERAL_BITE') { dmgMult = 1.2; actEnt.cooldowns.feral_bite = 3; }
         if (pendingAction === 'DEADEYE') { if (dist === livingEnemies.length - 1 && dist !== 0) dmgMult = 1.8; else dmgMult = 0.8; actEnt.cooldowns.deadeye = 2; }
-        
-        if (pendingAction === 'BUCKSHOT' || pendingAction === 'MOLOTOV') { 
-            if (target.oiledTurns > 0) { dmgMult *= 2; target.oiledTurns = 0; isCombo = true; comboType = 'IGNITE!'; }
-        }
-        
-        if (pendingAction === 'BUCKSHOT') { 
-            if (dist === 0) dmgMult *= 1.5; else dmgMult *= 0.8; 
-            actEnt.cooldowns.buckshot = 2; 
-        }
+        if (pendingAction === 'BUCKSHOT') { dmgMult *= (dist === 0 ? 1.5 : 0.8); actEnt.cooldowns.buckshot = 2; }
+        if (pendingAction === 'ACID_FLASK') { dmgMult = 0.5; actEnt.cooldowns.acid_flask = 3; }
+        if (pendingAction === 'THERMITE') { dmgMult *= 1.6; actEnt.cooldowns.thermite = 4; }
+        if (pendingAction === 'EXECUTE_SHOT') { dmgMult *= 1.4; actEnt.cooldowns.execute_shot = 3; }
+        if (pendingAction === 'SPOTTERS_MARK') { dmgMult = 0.4; actEnt.cooldowns.spotters_mark = 3; }
+        if (pendingAction === 'RIP_AND_TEAR') { dmgMult *= 1.2; actEnt.cooldowns.rip_and_tear = 3; }
 
-        if (pendingAction === 'PIPE_RIFLE' && target.bleedingTurns > 0) { dmgMult *= 1.5; isCombo = true; comboType = 'EXPLOIT!'; }
-        if (pendingAction === 'SCRAP_BLADE' && target.stunnedTurns > 0) { dmgMult *= 1.5; isCombo = true; comboType = 'EXECUTE!'; }
+        // The combo multiplies whatever the ability was already worth. It has to come after every
+        // profile above: an ability that assigns dmgMult outright would otherwise throw the bonus
+        // away, spending the player's setup for nothing while the prompt still promised a payoff.
+        const combo = comboFor(pendingAction, target);
+        if (combo) {
+            dmgMult *= combo.mult;
+            if (combo.consumes) target[combo.consumes] = 0;
+            isCombo = true; comboType = `${combo.name}!`;
+        } else if ((target.markedTurns || 0) > 0 && DAMAGING_MOVES.includes(pendingAction)) {
+            dmgMult *= MARK_BONUS; target.markedTurns = 0;
+            isCombo = true; comboType = 'MARKED!';
+        }
 
         if (activeRelics.some(r => r.id === 'THERMAL_CORE') && atkType === 'energy') { dmgMult *= 1.3; }
 
-        const rangedMoves = ['PISTOL', 'RAD_SHOT', 'PIPE_RIFLE', 'FLASHBANG', 'FLARE_GUN', 'QUICK_SHOT', 'DEADEYE'];
+        const rangedMoves = ['PISTOL', 'RAD_SHOT', 'PIPE_RIFLE', 'FLASHBANG', 'FLARE_GUN', 'QUICK_SHOT', 'DEADEYE', 'ACID_FLASK', 'SPOTTERS_MARK'];
         if (currentWeather === 'SANDSTORM' && rangedMoves.includes(pendingAction)) { dmgMult *= 0.75; }
         if (currentWeather === 'BLOODLUST') { dmgMult *= 1.2; }
         
@@ -1391,13 +1451,18 @@ function resolveAction(targetId) {
         }
 
         if (pendingAction === 'FLARE_GUN') { target.oiledTurns = 3; log(`> ${target.name} is coated in oil!`, "log-dmg"); setTimeout(() => spawnFCT(target.id, "OILED", "fct-weak"), 400); }
+        if (pendingAction === 'ACID_FLASK') { target.corrodedTurns = 3; log(`> ${target.name}'s plating is corroding!`, "log-dmg"); setTimeout(() => spawnFCT(target.id, "CORRODED", "fct-weak"), 400); }
+        if (pendingAction === 'SPOTTERS_MARK') { target.markedTurns = 3; log(`> ${target.name} is marked.`, "log-status"); setTimeout(() => spawnFCT(target.id, "MARKED", "fct-status"), 400); }
+        if (pendingAction === 'RIP_AND_TEAR' && target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns, 3); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400); }
         if (pendingAction === 'MOLOTOV') { actEnt.cooldowns.molotov = 3; triggerShake(); let secondaries = livingEnemies.filter(e => e.id !== targetId); if (secondaries.length > 0) { let sTarg = secondaries[Math.floor(Math.random() * secondaries.length)]; applyDamageHit(actEnt, sTarg, Math.floor(baseDmg * 0.7), atkType, null); } }
     }
     pendingAction = null; checkWinState();
 }
 
 function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
-    if (target.hp <= 0) return; let resistValue = target.resistances[atkType] || 0; let armorCalc = abilityStr === 'FERAL_BITE' ? 0 : target.armor;
+    if (target.hp <= 0) return; let resistValue = target.resistances[atkType] || 0;
+    // Corrosion eats plating outright - the counter to a unit that re-plates itself each turn.
+    let armorCalc = (abilityStr === 'FERAL_BITE' || (target.corrodedTurns || 0) > 0) ? 0 : target.armor;
     if (target.oiledTurns > 0 && atkType === 'energy') resistValue -= 15; 
     
     if (activeRelics.some(r => r.id === 'KINETIC_MESH') && target.isPlayer && target.gridPos === 1 && atkType === 'phys') {
@@ -1463,7 +1528,7 @@ function executeEnemyAi(enemy) {
                 maxHp: Math.floor(e.summon.hp * m), hp: Math.floor(e.summon.hp * m),
                 speed: e.summon.speed, armor: 0, baseArmor: 0, isPlayer: false,
                 dmgBase: Math.floor(e.summon.dmg * m), img: e.summon.img, scale: e.summon.scale,
-                hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0,
+                hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
                 resistances: { ...e.summon.resistances }
             };
             if (e.summon.isHovering) proto.isHovering = true;
@@ -1593,9 +1658,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, OVERDRIVE_NAMES, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },
