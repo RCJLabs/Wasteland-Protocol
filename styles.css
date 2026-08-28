@@ -13,7 +13,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .btn-corrupt { border-color: #8B0000; color: #ff6666; border-style: dashed; }
 .title-warning { text-align: center; font-size: 10px; letter-spacing: 1px; color: #ff8844; border: 1px solid #8B0000; background: rgba(60,0,0,0.35); padding: 6px 8px; margin-bottom: 6px; line-height: 1.4; }
 
-.settings-icon { position: absolute; top: 15px; right: 20px; font-size: 24px; cursor: pointer; color: #888; transition: 0.2s; z-index: 100; text-shadow: 0 0 5px #000; }
+.settings-icon { position: absolute; top: 8px; right: 12px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; font-size: 24px; cursor: pointer; color: #888; transition: 0.2s; z-index: 100; text-shadow: 0 0 5px #000; }
 .settings-icon:hover { color: #fff; transform: rotate(90deg); }
 #screen-settings { display: none; flex-direction: column; justify-content: center; align-items: center; padding: 20px; height: 100%; box-sizing: border-box; background: rgba(0,0,0,0.95); z-index: 200; position: absolute; top:0; left:0; width:100%; }
 .settings-menu { display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 300px; text-align: center; }
@@ -184,3 +184,17 @@ button:hover:not(:disabled) { background: #222; border-color: #888; }
 button:active { background: #000; }
 button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
 .dash-msg { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 14px; color: #666; text-align: center; }
+
+/* Keyboard users get no indication of position without this - there was none at all. */
+:focus-visible { outline: 2px solid #B8860B; outline-offset: 2px; }
+.entity:focus-visible { outline-offset: -2px; }
+
+/* Screen shake and the glitch pass are decorative and can be genuinely unpleasant. Damage
+   numbers and the active-unit pulse carry information, so they stay. */
+@media (prefers-reduced-motion: reduce) {
+    .fx-shake, .fx-glitch { animation: none !important; }
+    .hovering { animation: none; }
+    .settings-icon:hover { transform: none; }
+    .title-btn:hover, .title-btn:active { transform: none; }
+    * { transition-duration: 0.01ms !important; }
+}
