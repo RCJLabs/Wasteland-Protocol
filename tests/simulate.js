@@ -138,16 +138,24 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
   while (stat.nodes < capNodes) {
     if (currentTier > TOTAL_TIERS) {
       currentSector++; currentTier = 1; noteDepth();
+      sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = [];
       // consequences that came due
       const due = consequencesDue().length;
       if (due) { stat.consequences += due; while (consequencesDue().length) { const c = consequencesDue()[0]; pendingConsequences = pendingConsequences.filter(o => o !== c); (CONSEQUENCE_POOL[c.kind] || { resolve: () => '' }).resolve(c); } }
       spend();
       continue;
     }
-    const row = SECTOR_LAYOUT[TOTAL_TIERS - currentTier];
-    // Prefer an elite when the squad is healthy, which is the interesting decision the map offers.
+    // Walk the generated route graph the way a player does: only what the last node connects
+    // to is on offer, elites preferred when the squad is healthy, camps preferred when it hurts.
+    const availIds = availableNodeIds();
+    if (!availIds.length) { stat.endedBy = 'stranded'; break; }
+    const avail = availIds.map(id => sectorMap.nodes.find(n => n.id === id)).filter(Boolean);
     const healthy = playerRoster.filter(p => p.gridPos > 0 && p.hp > p.maxHp * 0.6).length >= 2;
-    const node = (healthy && row.find(n => n.elite)) || row[Math.floor(Math.random() * row.length)];
+    const hurting = playerRoster.filter(p => p.gridPos > 0 && p.hp < p.maxHp * 0.5).length >= 2;
+    const node = (hurting && avail.find(n => n.type === 'CAMP'))
+              || (healthy && avail.find(n => n.elite))
+              || avail[Math.floor(Math.random() * avail.length)];
+    enterNode(node.id);
 
     if (node.type === 'EVENT') {
       stat.events++;

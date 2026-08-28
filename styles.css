@@ -39,10 +39,26 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .relic-item { color: #ffaa00; font-weight: bold; display: flex; justify-content: space-between; margin-top: 2px;}
 
 .map-viewport { flex-grow: 1; border: 1px solid #222; background: linear-gradient(rgba(15,15,15,0.9), rgba(5,5,5,0.9)), repeating-linear-gradient(0deg, transparent, transparent 19px, #1a1a1a 19px, #1a1a1a 20px), repeating-linear-gradient(90deg, transparent, transparent 19px, #1a1a1a 19px, #1a1a1a 20px); overflow-y: auto; display: flex; flex-direction: column; align-items: center; padding: 30px 0; position: relative; }
-.map-track { display: flex; flex-direction: column; align-items: center; width: 100%; }
-.map-row { display: flex; gap: 20px; justify-content: center; width: 100%; position: relative; z-index: 2; flex-wrap: wrap;}
-.map-connector { width: 4px; height: 30px; background: #333; z-index: 1; transition: background 0.3s; }
-.connector-cleared { background: #6B8E23; box-shadow: 0 0 5px #6B8E23; }
+/* The route graph: nodes positioned absolutely on a tall canvas, edges drawn under them.
+   Gold-dashed edges are where you can go, green where you have been, near-black what the
+   routing has already cut off. */
+/* flex-shrink 0 is load-bearing: the viewport is a column flexbox, and a flex item whose
+   children are all absolutely positioned has a min-content height of zero - it collapses
+   to the viewport and the SVG clips away every edge below the fold. */
+.map-graph { position: relative; width: 100%; max-width: 340px; margin: 0 auto; flex-shrink: 0; }
+.map-edges { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; }
+.map-edges line { stroke-width: 3; }
+.map-edges .edge-base { stroke: #4d4a40; }
+.map-edges .edge-open { stroke: #B8860B; stroke-dasharray: 6 5; }
+.map-edges .edge-traveled { stroke: #6B8E23; }
+.map-edges .edge-dim { stroke: #26261f; }
+.map-graph .map-node { position: absolute; transform: translateX(-50%); margin: 0; z-index: 2; }
+.node-cutoff { opacity: 0.28; filter: grayscale(0.8); }
+.node-weather { position: absolute; top: 2px; right: 2px; width: 11px; height: 11px;
+  border-radius: 50%; border: 1px solid #000; z-index: 3; }
+.wx-smog { background: #7fbf5f; box-shadow: 0 0 6px #7fbf5f; }
+.wx-sand { background: #d8b25c; box-shadow: 0 0 6px #d8b25c; }
+.wx-shrap { background: #9fb6c9; box-shadow: 0 0 6px #9fb6c9; }
 
 .map-node { width: 75px; height: 75px; border-radius: 50%; background: #111; border: 2px solid #444; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: all 0.3s; font-family: monospace; color: #888; padding: 0; position: relative; }
 .node-lbl { font-size: 9px; margin-top: 4px; letter-spacing: 1px; font-weight: bold; text-align: center; }

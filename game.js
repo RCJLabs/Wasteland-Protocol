@@ -196,23 +196,161 @@ function rollRelicOffer(count = 3) {
     return out;
 }
 
-// Read bottom-up: the last row is tier 1, the first row is the boss. The only elite sat at
-// tier 9, one row below the commander, so a sector offered exactly one elite fight and it came
-// right at the end. A second one mid-sector gives a run two chances at a relic - and makes the
-// board's 'defeat 2 elite squads' contract possible, which it was not before.
-const SECTOR_LAYOUT = [
-    [{type:'BOSS', elite:false}], 
-    [{type:'RAIDERS', elite:true}, {type:'BEASTS', elite:false}], 
-    [{type:'MECH', elite:false}, {type:'RAIDERS', elite:false}],   
-    [{type:'EVENT', elite:false}, {type:'RAIDERS', elite:false}], 
-    [{type:'MECH', elite:true}, {type:'BEASTS', elite:false}], 
-    [{type:'CAMP', elite:false}, {type:'BEASTS', elite:false}, {type:'RAIDERS', elite:false}], 
-    [{type:'MECH', elite:false}, {type:'RAIDERS', elite:false}],   
-    [{type:'EVENT', elite:false}, {type:'CAMP', elite:false}], 
-    [{type:'BEASTS', elite:false}, {type:'RAIDERS', elite:false}], 
-    [{type:'RAIDERS', elite:false}] 
-];
-const TOTAL_TIERS = SECTOR_LAYOUT.length;
+// ── The sector map ──────────────────────────────────────────────────────────────────────
+// The map used to be one hard-coded ladder, identical every sector of every run - ten rows,
+// pick a node per row, with nothing downstream caring which. Each sector now generates a
+// route graph instead: taking a node commits you to the paths it connects to, so the map is
+// a plan with two or three tiers of lookahead rather than a series of coin flips.
+const TOTAL_TIERS = 10;
+const MAP_COL_X = [18, 50, 82];   // percent across the viewport, up to three abreast
+const MAP_ROW_H = 96;             // px per tier row in the rendered graph
+const ELITE_TIERS = [5, 6, 7, 8, 9];
+const WEATHER_DOTS = { TOXIC_SMOG: 'wx-smog', SANDSTORM: 'wx-sand', SHRAPNEL_WINDS: 'wx-shrap' };
+
+let sectorMap = null; let currentNodeId = null; let clearedNodeIds = []; let forecastWeather = null;
+
+function rollNodeFaction(tier, rng) {
+    if (tier < 3) return rng() < 0.55 ? 'RAIDERS' : 'BEASTS';
+    const r = rng();
+    return r < 0.4 ? 'RAIDERS' : r < 0.7 ? 'BEASTS' : 'MECH';
+}
+
+// What the generator promises, and validateSectorMap checks: exactly two elite fights at
+// different depths, never forced (every parent of an elite has another child to offer);
+// at least one camp and one event; every node leads somewhere; every route reaches the
+// commander. The bounty board's 'defeat 2 elites' contract depends on the elite count.
+function generateSectorMap(rng = Math.random) {
+    const byTier = [];
+    const nodes = [];
+    for (let t = 1; t <= TOTAL_TIERS; t++) {
+        const width = t === TOTAL_TIERS ? 1 : (t === 1 ? 2 : (rng() < 0.6 ? 3 : 2));
+        const cols = width === 1 ? [1] : width === 2 ? [0, 2] : [0, 1, 2];
+        const tierNodes = cols.map(c => ({
+            id: `n${t}_${c}`, tier: t, col: c,
+            type: t === TOTAL_TIERS ? 'BOSS' : rollNodeFaction(t, rng),
+            elite: false, weather: 'CLEAR', edges: []
+        }));
+        byTier.push(tierNodes); nodes.push(...tierNodes);
+    }
+
+    // Proportional windows keep edges from crossing; the extensions add the forks that make
+    // routing a real decision instead of a corridor.
+    for (let t = 0; t < TOTAL_TIERS - 1; t++) {
+        const a = byTier[t], b = byTier[t + 1];
+        a.forEach((src, i) => {
+            const lo = Math.floor(i * b.length / a.length);
+            const hi = Math.max(lo, Math.ceil((i + 1) * b.length / a.length) - 1);
+            for (let j = lo; j <= hi; j++) src.edges.push(b[j].id);
+            if (hi + 1 < b.length && rng() < 0.5) src.edges.push(b[hi + 1].id);
+        });
+    }
+
+    const parentsOf = n => nodes.filter(p => p.edges.includes(n.id));
+
+    // Elites are placed before camps and events so nothing overwrites them.
+    const eliteTiers = [...ELITE_TIERS].sort(() => rng() - 0.5).slice(0, 2);
+    eliteTiers.forEach(t => {
+        const tierNodes = byTier[t - 1];
+        const candidates = tierNodes.filter(n => parentsOf(n).every(p => p.edges.length >= 2));
+        const pool = candidates.length ? candidates : tierNodes;
+        const pick = pool[Math.floor(rng() * pool.length)];
+        pick.elite = true;
+        // Never forced: a parent whose only child is the elite gets an edge to a sibling too.
+        parentsOf(pick).forEach(p => {
+            if (p.edges.length < 2) {
+                const sibling = tierNodes.find(n => n.id !== pick.id);
+                if (sibling) p.edges.push(sibling.id);
+            }
+        });
+    });
+
+    const swapOne = (type, tierLo, tierHi) => {
+        const pool = nodes.filter(n => !n.elite && n.type !== 'BOSS' && n.type !== 'CAMP' && n.type !== 'EVENT'
+            && n.tier > 1 && n.tier >= tierLo && n.tier <= tierHi);
+        if (pool.length) pool[Math.floor(rng() * pool.length)].type = type;
+    };
+    swapOne('CAMP', 4, 7);
+    if (rng() < 0.4) swapOne('CAMP', 2, 9);
+    swapOne('EVENT', 2, 8);
+    if (rng() < 0.35) swapOne('EVENT', 2, 8);
+    if (rng() < 0.35) swapOne('EVENT', 2, 8);
+
+    // The forecast is a contract: the weather a node shows is the weather its fight gets.
+    nodes.forEach(n => {
+        if (n.type === 'BOSS') n.weather = 'BLOODLUST';
+        else if (['RAIDERS', 'BEASTS', 'MECH'].includes(n.type)) {
+            if (currentSector === 1 && n.tier === 1) n.weather = 'CLEAR';
+            else if (rng() < 0.4) n.weather = { MECH: 'TOXIC_SMOG', RAIDERS: 'SHRAPNEL_WINDS', BEASTS: 'SANDSTORM' }[n.type];
+        }
+    });
+
+    return { nodes, cols: 3 };
+}
+
+function validateSectorMap(map) {
+    if (!map || !Array.isArray(map.nodes)) return false;
+    const nodes = map.nodes;
+    const byId = {}; nodes.forEach(n => { byId[n.id] = n; });
+    const tierOf = t => nodes.filter(n => n.tier === t);
+    const top = tierOf(TOTAL_TIERS);
+    if (top.length !== 1 || top[0].type !== 'BOSS') return false;
+    for (let t = 1; t <= TOTAL_TIERS; t++) if (tierOf(t).length < 1) return false;
+    for (const n of nodes) {
+        if (n.tier === TOTAL_TIERS) { if (n.edges.length) return false; continue; }
+        if (!n.edges.length) return false;
+        for (const id of n.edges) { const m = byId[id]; if (!m || m.tier !== n.tier + 1) return false; }
+    }
+    // every node sits on some route from the ground floor
+    const seen = new Set(tierOf(1).map(n => n.id));
+    for (let t = 1; t < TOTAL_TIERS; t++) tierOf(t).forEach(n => { if (seen.has(n.id)) n.edges.forEach(id => seen.add(id)); });
+    if (seen.size !== nodes.length) return false;
+    const elites = nodes.filter(n => n.elite);
+    if (elites.length !== 2) return false;
+    if (new Set(elites.map(n => n.tier)).size !== 2) return false;
+    for (const e of elites) {
+        if (!ELITE_TIERS.includes(e.tier)) return false;
+        if (tierOf(e.tier).length < 2) return false;
+        if (nodes.filter(p => p.edges.includes(e.id)).some(p => p.edges.length < 2)) return false;
+    }
+    if (!nodes.some(n => n.type === 'CAMP')) return false;
+    if (!nodes.some(n => n.type === 'EVENT')) return false;
+    if (tierOf(1).some(n => n.elite || !['RAIDERS', 'BEASTS', 'MECH'].includes(n.type))) return false;
+    return true;
+}
+
+function nodeById(id) { return sectorMap ? sectorMap.nodes.find(n => n.id === id) || null : null; }
+
+// Which nodes can be entered right now. With no committed position (sector start, a regroup,
+// a dev jump) the whole active tier is open; otherwise only the committed node's connections.
+function availableNodeIds() {
+    if (!sectorMap || currentTier > TOTAL_TIERS) return [];
+    if (currentNodeId) {
+        const cur = nodeById(currentNodeId);
+        if (cur && cur.tier === currentTier - 1) return cur.edges.slice();
+    }
+    return sectorMap.nodes.filter(n => n.tier === currentTier).map(n => n.id);
+}
+
+// Everything still reachable from the open set - what the routing has not yet cut off.
+function reachableNodeIds() {
+    const open = availableNodeIds();
+    const seen = new Set(open); const queue = [...open];
+    while (queue.length) {
+        const n = nodeById(queue.shift());
+        if (!n) continue;
+        n.edges.forEach(id => { if (!seen.has(id)) { seen.add(id); queue.push(id); } });
+    }
+    return seen;
+}
+
+function enterNode(id) {
+    const node = nodeById(id);
+    if (!node) { forecastWeather = null; return null; }
+    currentNodeId = node.id;
+    if (!clearedNodeIds.includes(node.id)) clearedNodeIds.push(node.id);
+    forecastWeather = ['RAIDERS', 'BEASTS', 'MECH', 'BOSS'].includes(node.type) ? (node.weather || 'CLEAR') : null;
+    return node;
+}
 const SECTOR_TIER_BONUS = 3;
 const BASE_REGROUPS = 2;       // second chances per run, before a defeat ends it
 const FACTION_ALLIES = { RAIDERS: ['MECH', 'BEASTS'], BEASTS: [], MECH: [] };
@@ -324,8 +462,9 @@ const CODEX = [
         'Spending it empties the bar.'
     ] },
     { id: 'RUN', title: 'THE EXPEDITION', body: () => [
-        `${TOTAL_TIERS} tiers to a sector, one node per tier, and a commander at the top.`,
-        'Two elite nodes per sector, each beside a normal one, so taking them is a choice. An elite drops a relic.',
+        `${TOTAL_TIERS} tiers to a sector, laid out as branching routes. Taking a node commits you to the paths it connects to, and a commander waits at the top.`,
+        'Nodes show their faction and a weather forecast, so route around trouble or into it on purpose.',
+        'Two elite fights per sector, at different depths, never forced - there is always another road. An elite drops a relic.',
         'A commander drops a choice of three.',
         `A wipe spends a regroup - ${BASE_REGROUPS} to start, more from the Citadel. Out of regroups ends the run and banks the score.`,
         'Depth is worth far more than any single haul: pushing one sector deeper always beats farming the one you are on.'
@@ -534,9 +673,9 @@ const ACTIONS = {
     'regroup':          () => regroupSquad(),
     'advance-sector':   () => advanceSector(),
 
-    'node-event':       () => initiateEvent(),
-    'node-camp':        () => initiateCamp(),
-    'node-combat':      el => initiateCombat(el.dataset.type, el.dataset.elite === '1'),
+    'node-event':       el => { enterNode(el.dataset.node); initiateEvent(); },
+    'node-camp':        el => { enterNode(el.dataset.node); initiateCamp(); },
+    'node-combat':      el => { enterNode(el.dataset.node); initiateCombat(el.dataset.type, el.dataset.elite === '1'); },
 
     'outpost-tab':      el => setOutpostTab(el.dataset.tab),
     'breakdown':        () => breakdownScrap(),
@@ -919,6 +1058,8 @@ function regroupSquad() {
     playerRoster.forEach(p => { p.hp = p.maxHp; p.stunnedTurns = 0; p.bleedingTurns = 0; p.armorTurns = 0; p.armor = 0; p.oiledTurns = 0; });
     scrap = Math.floor(scrap / 2);
     currentTier = 1;
+    // The sector keeps its map; the squad walks back in at the bottom of it.
+    currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
     momentum = 0; addMomentum(0);
     combatActive = false; activeEntities = []; turnQueue = []; pendingCombat = null;
     saveGameState();
@@ -1196,6 +1337,7 @@ function confirmNewGame(diff) {
     playerRoster = migrateTraits(JSON.parse(JSON.stringify(ROSTER_TEMPLATE)));
     activeBounties = generateBounties(); runStats = newRunStats(); pendingRelicOffer = null;
     pendingConsequences = []; recentEvents = [];
+    sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
     const kept = heirloomRelic();
     activeRelics = kept ? [kept] : [];
     
@@ -1245,7 +1387,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, pendingConsequences, recentEvents, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -1253,7 +1395,12 @@ function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify
 function migrateRelics(saved) {
     return (saved || []).map(r => RELIC_POOL.find(p => p.id === (r && r.id))).filter(Boolean);
 }
-function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = migrateAssetPaths(migrateTraits(d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)))); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; pendingConsequences = Array.isArray(d.pendingConsequences) ? d.pendingConsequences : []; recentEvents = Array.isArray(d.recentEvents) ? d.recentEvents : []; activeRelics = migrateRelics(d.activeRelics); pendingRelicOffer = migrateRelics((d.relicOffer || []).map(id => ({ id }))); if (!pendingRelicOffer.length) pendingRelicOffer = null; pendingCombat = d.combat || null;
+function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = migrateAssetPaths(migrateTraits(d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)))); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; pendingConsequences = Array.isArray(d.pendingConsequences) ? d.pendingConsequences : []; recentEvents = Array.isArray(d.recentEvents) ? d.recentEvents : [];
+        // A save from before routes existed gets a fresh map with its whole current tier open.
+        sectorMap = (d.sectorMap && Array.isArray(d.sectorMap.nodes)) ? d.sectorMap : generateSectorMap();
+        currentNodeId = d.currentNodeId || null;
+        clearedNodeIds = Array.isArray(d.clearedNodeIds) ? d.clearedNodeIds : [];
+        forecastWeather = null; activeRelics = migrateRelics(d.activeRelics); pendingRelicOffer = migrateRelics((d.relicOffer || []).map(id => ({ id }))); if (!pendingRelicOffer.length) pendingRelicOffer = null; pendingCombat = d.combat || null;
         if (pendingCombat) {
             migrateAssetPaths(pendingCombat.enemies);
             if (typeof pendingCombat.bgFile === 'string') pendingCombat.bgFile = pendingCombat.bgFile.replace(/\.png$/, '.webp');
@@ -1324,6 +1471,9 @@ function renderDev() {
 function devJump(deltaSector, deltaTier) {
     currentSector = Math.max(1, currentSector + deltaSector);
     currentTier = Math.min(TOTAL_TIERS, Math.max(1, currentTier + deltaTier));
+    // A jump breaks route continuity on purpose: the whole target tier opens up.
+    if (deltaSector !== 0 || !sectorMap) { sectorMap = generateSectorMap(); clearedNodeIds = []; }
+    currentNodeId = null; forecastWeather = null;
     noteDepth(); saveGameState(); renderDev();
 }
 
@@ -1393,24 +1543,50 @@ function renderMap() {
         return; 
     }
     
-    let m = `<div class="map-track">`;
-    for (let i = 0; i < TOTAL_TIERS; i++) {
-        let t = TOTAL_TIERS - i; let rowStatus = (t === currentTier) ? 'active' : (t < currentTier) ? 'cleared' : 'locked'; let dis = (t !== currentTier) ? 'disabled' : '';
-        m += `<div class="map-row">`;
-        SECTOR_LAYOUT[i].forEach(n => {
-            let icon = '🎯'; let lbl = 'RAIDERS';
-            if (n.type === 'BOSS') { icon = '💀'; lbl = bossForSector().short; } else if (n.type === 'BEASTS') { icon = '☣️'; lbl = 'BEASTS'; } else if (n.type === 'MECH') { icon = '⚙️'; lbl = 'MECH'; } else if (n.type === 'EVENT') { icon = '❓'; lbl = 'UNKNOWN'; } else if (n.type === 'CAMP') { icon = '⛺'; lbl = 'CAMP'; }
-            let eCls = n.elite ? 'elite-node' : (n.type === 'EVENT' ? 'event-node' : n.type === 'CAMP' ? 'camp-node' : ''); let eLbl = n.elite ? ' (ELITE)' : '';
-            let nodeAction = n.type === 'EVENT' ? `data-action="node-event"` : n.type === 'CAMP' ? `data-action="node-camp"` : `data-action="node-combat" data-type="${n.type}" data-elite="${n.elite ? 1 : 0}"`;
-            m += `<button class="map-node node-${rowStatus} ${eCls} ${(n.type === 'BOSS' && t === currentTier) ? 'boss-node' : ''}" ${dis} ${nodeAction}><span class="node-icon">${icon}</span><span class="node-lbl">${lbl}${eLbl}</span></button>`;
-        });
-        m += `</div>`; if (t > 1) m += `<div class="map-connector ${(t <= currentTier) ? 'connector-cleared' : ''}"></div>`;
-    }
-    m += `</div>`; mapC.innerHTML = m; setTimeout(() => { mapC.scrollTop = mapC.scrollHeight; }, 10);
+    if (!sectorMap) sectorMap = generateSectorMap();
+    const avail = new Set(availableNodeIds());
+    const reach = reachableNodeIds();
+    const cleared = new Set(clearedNodeIds);
+    const yOf = t => (TOTAL_TIERS - t) * MAP_ROW_H + MAP_ROW_H / 2;
+
+    // Edges first, under the nodes: gold-dashed where you can go, green where you have been,
+    // near-black where the routing has already cut a path off.
+    let edges = '';
+    sectorMap.nodes.forEach(n => n.edges.forEach(id => {
+        const to = nodeById(id); if (!to) return;
+        let cls = 'edge-base';
+        if (cleared.has(n.id) && cleared.has(to.id)) cls = 'edge-traveled';
+        else if (n.id === currentNodeId && avail.has(to.id)) cls = 'edge-open';
+        else if (!reach.has(to.id) && !cleared.has(to.id)) cls = 'edge-dim';
+        edges += `<line class="${cls}" x1="${MAP_COL_X[n.col]}%" y1="${yOf(n.tier)}" x2="${MAP_COL_X[to.col]}%" y2="${yOf(to.tier)}"></line>`;
+    }));
+
+    let m = `<div class="map-graph" style="height:${TOTAL_TIERS * MAP_ROW_H}px">`;
+    m += `<svg class="map-edges" aria-hidden="true">${edges}</svg>`;
+    sectorMap.nodes.forEach(n => {
+        let icon = '🎯', lbl = n.type;
+        if (n.type === 'BOSS') { icon = '💀'; lbl = bossForSector().short; }
+        else if (n.type === 'BEASTS') icon = '☣️';
+        else if (n.type === 'MECH') icon = '⚙️';
+        else if (n.type === 'EVENT') { icon = '❓'; lbl = 'UNKNOWN'; }
+        else if (n.type === 'CAMP') icon = '⛺';
+        const status = cleared.has(n.id) ? 'cleared' : avail.has(n.id) ? 'active' : 'locked';
+        const cutoff = (status === 'locked' && !reach.has(n.id)) ? 'node-cutoff' : '';
+        const eCls = n.elite ? 'elite-node' : n.type === 'EVENT' ? 'event-node' : n.type === 'CAMP' ? 'camp-node' : '';
+        const act = n.type === 'EVENT' ? `data-action="node-event"` : n.type === 'CAMP' ? `data-action="node-camp"`
+                  : `data-action="node-combat" data-type="${n.type}" data-elite="${n.elite ? 1 : 0}"`;
+        const wx = WEATHER_DOTS[n.weather] || '';
+        m += `<button class="map-node node-${status} ${cutoff} ${eCls} ${(n.type === 'BOSS' && status === 'active') ? 'boss-node' : ''}" style="left:${MAP_COL_X[n.col]}%; top:${(TOTAL_TIERS - n.tier) * MAP_ROW_H + (MAP_ROW_H - 75) / 2}px" ${status === 'active' ? '' : 'disabled'} ${act} data-node="${n.id}"><span class="node-icon">${icon}</span><span class="node-lbl">${lbl}${n.elite ? ' (ELITE)' : ''}</span>${wx ? `<span class="node-weather ${wx}" title="Forecast: ${n.weather.replace('_', ' ')}"></span>` : ''}</button>`;
+    });
+    m += `</div>`; mapC.innerHTML = m;
+    const focusY = (TOTAL_TIERS - currentTier) * MAP_ROW_H - mapC.clientHeight * 0.45;
+    setTimeout(() => { mapC.scrollTop = Math.max(0, focusY); }, 10);
 }
 
 function advanceSector() {
-    currentSector++; currentTier = 1; noteDepth(); saveGameState();
+    currentSector++; currentTier = 1;
+    sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
+    noteDepth(); saveGameState();
     resolveConsequence();
 }
 
@@ -1839,6 +2015,9 @@ function initiateCombat(nodeType, isEliteNode) {
         else if (nodeType === 'RAIDERS') { bgFile = 'bg_highway.webp'; if (Math.random() < 0.4) currentWeather = 'SHRAPNEL_WINDS'; }
         else if (nodeType === 'BEASTS') { bgFile = 'bg_canyon.webp'; if (Math.random() < 0.4) currentWeather = 'SANDSTORM'; }
     }
+    // A fight entered from the map keeps the promise its node made; a fight staged directly
+    // (dev tools, suites) still rolls as before.
+    if (forecastWeather) { currentWeather = forecastWeather; forecastWeather = null; }
     if (hasContract('HARSH_SKIES') && currentWeather === 'CLEAR') {
         currentWeather = ['TOXIC_SMOG', 'SANDSTORM', 'SHRAPNEL_WINDS'][Math.floor(Math.random() * 3)];
     }
@@ -2386,9 +2565,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, executeSelfAction, resolveConsumableItem, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, executeSelfAction, resolveConsumableItem, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SECTOR_LAYOUT, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, OVERDRIVE_NAMES, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, OVERDRIVE_NAMES, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
@@ -2400,6 +2579,10 @@ globalThis.WP = {
     get metaUpgrades() { return metaUpgrades; }, set metaUpgrades(v) { metaUpgrades = v; },
     get scrap() { return scrap; }, set scrap(v) { scrap = v; },
     get currentTier() { return currentTier; }, set currentTier(v) { currentTier = v; },
+    get sectorMap() { return sectorMap; }, set sectorMap(v) { sectorMap = v; },
+    get currentNodeId() { return currentNodeId; }, set currentNodeId(v) { currentNodeId = v; },
+    get clearedNodeIds() { return clearedNodeIds; }, set clearedNodeIds(v) { clearedNodeIds = v; },
+    get forecastWeather() { return forecastWeather; }, set forecastWeather(v) { forecastWeather = v; },
     get currentSector() { return currentSector; }, set currentSector(v) { currentSector = v; },
     get difficultyMult() { return difficultyMult; }, set difficultyMult(v) { difficultyMult = v; },
     get inventory() { return inventory; }, set inventory(v) { inventory = v; },

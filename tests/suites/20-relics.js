@@ -22,27 +22,33 @@ module.exports = {
     ok('every relic is tiered', pool.untiered.length === 0);
     ok('and every one has a name and a description', pool.undescribed.length === 0);
 
-    // ---- a sector offers two elite fights, at different depths ----
+    // ---- every generated sector offers two elite fights, at different depths ----
+    // The layout is generated now, so the invariants are asserted over many maps rather than
+    // read off one fixed array.
     const layout = await page.evaluate(() => {
-      const rows = SECTOR_LAYOUT.map((row, i) => ({ tier: SECTOR_LAYOUT.length - i, elites: row.filter(n => n.elite).length }));
-      return { elites: rows.filter(r => r.elites), total: rows.reduce((n, r) => n + r.elites, 0),
-               tiers: rows.filter(r => r.elites).map(r => r.tier),
-               rowsWithTwo: SECTOR_LAYOUT.filter(row => row.filter(n => n.elite).length > 1).length,
-               eliteIsAChoice: SECTOR_LAYOUT.filter(row => row.some(n => n.elite)).every(row => row.length > 1) };
+      const counts = new Set(); const tiersDiffer = []; let sameTier = 0;
+      for (let i = 0; i < 200; i++) {
+        const m = generateSectorMap();
+        const elites = m.nodes.filter(n => n.elite);
+        counts.add(elites.length);
+        tiersDiffer.push(new Set(elites.map(n => n.tier)).size === 2);
+        const byTier = {};
+        elites.forEach(e => { byTier[e.tier] = (byTier[e.tier] || 0) + 1; });
+        if (Object.values(byTier).some(c => c > 1)) sameTier++;
+      }
+      return { counts: [...counts], allDiffer: tiersDiffer.every(Boolean), sameTier };
     });
-    ok(`a sector holds ${layout.total} elite nodes`, layout.total === 2);
-    ok(`at different depths (tiers ${layout.tiers.join(' and ')})`, new Set(layout.tiers).size === 2);
-    ok('never two in the same tier, which would make one unreachable', layout.rowsWithTwo === 0);
-    ok('and each sits beside a non-elite, so taking it is a choice', layout.eliteIsAChoice);
+    ok('every generated sector holds exactly 2 elite nodes', layout.counts.join() === '2');
+    ok('always at different depths', layout.allDiffer && layout.sameTier === 0);
 
-    // That is what makes the board's elite contract possible. It asks for up to two, and the
-    // sector used to contain exactly one, so the contract could not be completed where issued.
+    // That is what makes the board's elite contract possible: it asks for up to two, and every
+    // sector is guaranteed to offer two.
     const bounty = await page.evaluate(() => {
       const elite = BOUNTY_POOL.find(b => b.type === 'ELITE');
-      const perSector = SECTOR_LAYOUT.reduce((n, row) => n + row.filter(x => x.elite).length, 0);
+      const perSector = generateSectorMap().nodes.filter(n => n.elite).length;
       return { max: elite.range[1], min: elite.range[0], perSector };
     });
-    ok(`the elite contract asks for at most ${bounty.max}, and a sector now offers ${bounty.perSector}`,
+    ok(`the elite contract asks for at most ${bounty.max}, and a sector offers ${bounty.perSector}`,
       bounty.max <= bounty.perSector);
     ok('and never asks for none', bounty.min >= 1);
 
