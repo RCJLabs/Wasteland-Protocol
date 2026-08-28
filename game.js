@@ -115,6 +115,7 @@ const SECTOR_LAYOUT = [
 const TOTAL_TIERS = SECTOR_LAYOUT.length;
 const SECTOR_TIER_BONUS = 3;
 const BASE_REGROUPS = 2;       // second chances per run, before a defeat ends it
+const FACTION_ALLIES = { RAIDERS: ['MECH', 'BEASTS'], BEASTS: [], MECH: [] };
 // Difficulty still climbs hard, but through lethality rather than bullet sponges: health
 // tracks player damage growth so a fight stays ~10 rounds at any depth, while damage
 // outpaces player health so a run reliably ends somewhere around sector 10.
@@ -640,10 +641,10 @@ function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossS
 
 function renderMap() {
     switchScreen('screen-map'); 
-    document.getElementById('scrap-display').innerText = scrap; 
-    document.getElementById('map-sector-lbl').innerText = `SECTOR ${currentSector}`;
     noteDepth();
-    document.getElementById('map-score-lbl').innerText = `${computeScore(runStats).toLocaleString()} PTS`;
+    document.getElementById('scrap-display').innerText = formatStat(scrap);
+    document.getElementById('map-sector-lbl').innerText = currentSector;
+    document.getElementById('map-score-lbl').innerText = formatStat(computeScore(runStats));
     
     let bHtml = '';
     if(!activeBounties || activeBounties.length === 0) activeBounties = generateBounties();
@@ -846,6 +847,15 @@ function rollIntent(enemy) {
 // too, and the run ends on a build/skill wall rather than an arithmetic one.
 function sectorRewardMult() { return Math.pow(1.4, currentSector - 1); }
 
+// Scores run to six figures late in a run and the header is 400px wide on a phone, so keep
+// exact values while they fit and fall back to a compact form once they stop.
+function formatStat(n) {
+    n = Math.floor(n || 0);
+    if (n < 100000) return n.toLocaleString();
+    if (n < 1000000) return Math.round(n / 1000) + 'K';
+    return (n / 1000000).toFixed(1) + 'M';
+}
+
 function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     const pool = {
         'BEASTS': [
@@ -888,7 +898,10 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     }
 
     const homePool = poolFor(nodeType);
-    const otherTypes = Object.keys(pool).filter(t => t !== nodeType);
+    // Only raiders bring reinforcements from elsewhere - they are scavengers, so salvaged
+    // machinery and war dogs both fit. Beasts are wild and mechs are automated; neither
+    // recruits, and a turret standing among a pack of dogs just reads as a bug.
+    const allies = (FACTION_ALLIES[nodeType] || []).filter(t => pool[t]);
 
     let sZ = effTier >= 8 ? (Math.random() < 0.45 ? 4 : 3)
            : effTier >= 4 ? (Math.random() < 0.5 ? 3 : 2)
@@ -897,7 +910,7 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     for (let i = 0; i < sZ; i++) {
         // Above mid-game, squads can pick up an attached specialist from another faction.
         let usePool = homePool;
-        if (effTier >= 6 && i > 0 && Math.random() < 0.25) usePool = poolFor(otherTypes[Math.floor(Math.random() * otherTypes.length)]);
+        if (allies.length && effTier >= 6 && i > 0 && Math.random() < 0.25) usePool = poolFor(allies[Math.floor(Math.random() * allies.length)]);
         let t = JSON.parse(JSON.stringify(usePool[Math.floor(Math.random() * usePool.length)])); 
         let hp = Math.floor(t.maxHp * mult); t.hp = hp; t.maxHp = hp; t.dmgBase = Math.floor(t.dmgBase * dmgMult);
         
@@ -1333,9 +1346,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, awardXp, log, playSFX, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },

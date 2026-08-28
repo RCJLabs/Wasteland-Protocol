@@ -20,11 +20,11 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .settings-title { color: #B8860B; font-size: 24px; font-weight: bold; margin-bottom: 20px; letter-spacing: 2px; }
 
 #screen-citadel { display: none; flex-direction: column; padding: 20px; height: 100%; box-sizing: border-box; background: linear-gradient(rgba(10, 10, 20, 0.9), rgba(0, 0, 0, 0.95)); overflow-y: auto; }
-.citadel-header { display: flex; justify-content: space-between; color: #4488ff; font-weight: bold; font-size: 18px; margin-bottom: 15px; flex-shrink: 0; padding-right: 30px;}
+.citadel-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #4488ff; font-weight: bold; font-size: clamp(14px, 4.4vw, 18px); margin-bottom: 15px; flex-shrink: 0; padding-right: 56px; }
 .skull-icon { color: #fff; text-shadow: 0 0 5px #ff4444; }
 
 #screen-map { display: none; flex-direction: column; padding: 20px; height: 100%; box-sizing: border-box; position: relative;}
-.map-header { display: flex; justify-content: space-between; color: #B8860B; font-weight: bold; font-size: 18px; margin-bottom: 15px; flex-shrink: 0; padding-right: 30px;}
+.map-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #B8860B; font-weight: bold; font-size: clamp(14px, 4.4vw, 18px); margin-bottom: 15px; flex-shrink: 0; padding-right: 56px; }
 .outpost-btn { background: #0a110a; border: 1px solid #6B8E23; color: #6B8E23; font-weight: bold; padding: 15px; margin-bottom: 15px; font-family: monospace; font-size: 14px; cursor: pointer; text-align: center; border-radius: 4px; transition: 0.2s; flex-shrink: 0;}
 .outpost-btn:hover { background: #6B8E23; color: #000; }
 
@@ -201,3 +201,13 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
 
 .outpost-notice { border: 1px solid #8B0000; background: rgba(60,0,0,0.35); color: #ff9c6b; font-size: 11px; line-height: 1.5; padding: 8px 10px; margin-bottom: 10px; letter-spacing: 0.5px; }
 .btn-armed { background: #8B0000 !important; color: #fff !important; border-color: #ff4444 !important; }
+
+/* Three values on a 400px header used to run together - 'SECTOR 1' beside '1,111 PTS' read as
+   'SECTOR 11,111'. Each gets its own labelled cell, a divider, and tabular figures so digits
+   line up and the columns stop moving as the numbers grow. */
+.stat-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #262119; border: 1px solid #332c22; margin: 0 56px 14px 0; flex-shrink: 0; }
+.stat { background: #0c0b09; padding: 5px 9px 6px; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.stat-label { font-size: 8px; letter-spacing: 1.6px; text-transform: uppercase; color: #6b6459; line-height: 1; }
+.stat-value { font-size: clamp(14px, 4.6vw, 19px); font-weight: bold; line-height: 1.15; color: #B8860B; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-score .stat-value { color: #8fa0b5; }
+.stat-scrap .stat-value { color: #c9a227; }
