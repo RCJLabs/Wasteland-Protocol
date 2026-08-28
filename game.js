@@ -1,7 +1,7 @@
-"use strict";
-// Wasteland Protocol engine. Loaded as a classic script at the end of <body>, so
-// top-level declarations stay global for the inline handlers in index.html and the
-// DOM is already parsed when this runs.
+// Wasteland Protocol engine. An ES module (strict by default, deferred by default), so
+// none of its declarations leak onto window - the markup reaches the engine only through
+// data-action attributes, never by calling a global. See the inspection surface at the
+// foot of this file for the one deliberate export.
 
 const ASSET_LIST = [
     "bg_title.webp", "bg_combat.webp", "bg_thunderdome.webp", "bg_refinery.webp", "bg_highway.webp", "bg_canyon.webp",
@@ -1091,3 +1091,49 @@ if ('serviceWorker' in navigator) {
         } catch (e) { /* offline play is a bonus, never a requirement */ }
     });
 }
+
+// --- Inspection surface -------------------------------------------------------------
+// game.js is an ES module, so nothing above reaches window on its own. This is the single
+// deliberate exception: one namespaced object the headless suites drive the engine through.
+// Nothing in the game itself reads it - if you are adding a feature, you do not need it.
+globalThis.WP = {
+    // entry points and pure helpers the suites exercise
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, computeScore, newRunStats, noteDepth, sectorRewardMult, awardXp, log, playSFX, addMomentum, setOutpostTab,
+    // engine constants
+    BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    // live run state, readable and writable so a suite can set up a scenario
+    get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
+    get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },
+    get globalSettings() { return globalSettings; }, set globalSettings(v) { globalSettings = v; },
+    get previousScreen() { return previousScreen; }, set previousScreen(v) { previousScreen = v; },
+    get bossSkulls() { return bossSkulls; }, set bossSkulls(v) { bossSkulls = v; },
+    get metaUpgrades() { return metaUpgrades; }, set metaUpgrades(v) { metaUpgrades = v; },
+    get scrap() { return scrap; }, set scrap(v) { scrap = v; },
+    get currentTier() { return currentTier; }, set currentTier(v) { currentTier = v; },
+    get currentSector() { return currentSector; }, set currentSector(v) { currentSector = v; },
+    get difficultyMult() { return difficultyMult; }, set difficultyMult(v) { difficultyMult = v; },
+    get inventory() { return inventory; }, set inventory(v) { inventory = v; },
+    get materials() { return materials; }, set materials(v) { materials = v; },
+    get tuneUpBattles() { return tuneUpBattles; }, set tuneUpBattles(v) { tuneUpBattles = v; },
+    get activeBounties() { return activeBounties; }, set activeBounties(v) { activeBounties = v; },
+    get momentum() { return momentum; }, set momentum(v) { momentum = v; },
+    get activeRelics() { return activeRelics; }, set activeRelics(v) { activeRelics = v; },
+    get combatBgFile() { return combatBgFile; }, set combatBgFile(v) { combatBgFile = v; },
+    get pendingCombat() { return pendingCombat; }, set pendingCombat(v) { pendingCombat = v; },
+    get runStats() { return runStats; }, set runStats(v) { runStats = v; },
+    get activeEvent() { return activeEvent; }, set activeEvent(v) { activeEvent = v; },
+    get outpostTab() { return outpostTab; }, set outpostTab(v) { outpostTab = v; },
+    get activePosSelector() { return activePosSelector; }, set activePosSelector(v) { activePosSelector = v; },
+    get activePerkSelector() { return activePerkSelector; }, set activePerkSelector(v) { activePerkSelector = v; },
+    get currentWeather() { return currentWeather; }, set currentWeather(v) { currentWeather = v; },
+    get currentNodeType() { return currentNodeType; }, set currentNodeType(v) { currentNodeType = v; },
+    get isCurrentNodeElite() { return isCurrentNodeElite; }, set isCurrentNodeElite(v) { isCurrentNodeElite = v; },
+    get playerRoster() { return playerRoster; }, set playerRoster(v) { playerRoster = v; },
+    get activeEntities() { return activeEntities; }, set activeEntities(v) { activeEntities = v; },
+    get turnQueue() { return turnQueue; }, set turnQueue(v) { turnQueue = v; },
+    get activeIndex() { return activeIndex; }, set activeIndex(v) { activeIndex = v; },
+    get combatActive() { return combatActive; }, set combatActive(v) { combatActive = v; },
+    get pendingAction() { return pendingAction; }, set pendingAction(v) { pendingAction = v; },
+    get bestScore() { return bestScore; }, set bestScore(v) { bestScore = v; },
+    get bestSector() { return bestSector; }, set bestSector(v) { bestSector = v; },
+};

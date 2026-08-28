@@ -1,6 +1,6 @@
 // Wasteland Protocol service worker.
 // Bump CACHE on release so clients discard the previous build's assets.
-const CACHE = 'wasteland-v2';
+const CACHE = 'wasteland-v3';
 
 // Only the shell is precached. The game preloads its own art on boot, so the art set
 // populates the cache at runtime on the first visit - which keeps this file from having
@@ -51,6 +51,23 @@ self.addEventListener('fetch', event => {
         return fresh;
       } catch (e) {
         return (await caches.match('./index.html')) || (await caches.match('./')) || Response.error();
+      }
+    })());
+    return;
+  }
+
+  // Code is network-first for the same reason as the page itself: index.html and game.js
+  // are released together, and serving a cached engine beside a fresh page is how you get a
+  // build that half-updates. Art is content-addressed by filename, so it never has this
+  // problem and stays cache-first.
+  if (/\.(?:js|css|webmanifest)$/.test(new URL(req.url).pathname)) {
+    event.respondWith((async () => {
+      try {
+        const fresh = await fetch(req);
+        if (fresh.ok) { const cache = await caches.open(CACHE); cache.put(req, fresh.clone()); }
+        return fresh;
+      } catch (e) {
+        return (await caches.match(req)) || Response.error();
       }
     })());
     return;

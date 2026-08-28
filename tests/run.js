@@ -19,9 +19,51 @@ const SUITES = fs.readdirSync(path.join(__dirname, 'suites')).filter(f => f.ends
   const browser = await chromium.launch(launch);
 
   let passed = 0, failed = 0;
+
+  // Preflight, in a context WITHOUT the bridge below - this is the window a real visitor gets.
+  // The engine is a module and must not put anything on it but its one namespaced export.
+  {
+    const clean = await browser.newContext();
+    const page = await clean.newPage();
+    await page.goto(`${base}/index.html`);
+    await page.waitForTimeout(900);
+    const r = await page.evaluate(() => {
+      const names = ['confirmNewGame','initiateCombat','renderMap','scrap','playerRoster','currentSector',
+                     'checkWinState','ACTIONS','BASE_SAVE_KEY','activeEntities','generateEnemies','playSFX',
+                     'runStats','bossSkulls','metaUpgrades','turnQueue','initEngine','ASSET_LIST'];
+      return { leaked: names.filter(n => n in window),
+               wp: typeof window.WP === 'object' && window.WP !== null,
+               booted: getComputedStyle(document.getElementById('screen-title')).display };
+    });
+    console.log('\nGlobal namespace');
+    const check = (name, cond) => { cond ? passed++ : failed++; console.log(`  ${cond ? 'PASS' : 'FAIL'}  ${name}`); };
+    check('the engine leaks nothing onto window', r.leaked.length === 0);
+    check('it exposes exactly one namespaced surface', r.wp);
+    check('the game still boots as a module', r.booted === 'flex');
+    if (r.leaked.length) console.log('        leaked:', r.leaked.join(', '));
+    await clean.close();
+  }
+
   for (const file of SUITES) {
     const suite = require(path.join(__dirname, 'suites', file));
     const context = await browser.newContext({ viewport: { width: 400, height: 800 } });
+    // The engine is a module, so its declarations are not globals. Mirror its inspection
+    // surface onto globalThis for suite bodies - descriptors are copied, so the state
+    // accessors stay live in both directions. Re-applied on every navigation.
+    await context.addInitScript(() => {
+      let engine;
+      Object.defineProperty(window, 'WP', {
+        configurable: true,
+        get: () => engine,
+        set: value => {
+          engine = value;
+          for (const [key, desc] of Object.entries(Object.getOwnPropertyDescriptors(value))) {
+            try { Object.defineProperty(globalThis, key, { ...desc, configurable: true }); }
+            catch (e) { /* a read-only host global; the suite can use WP.<name> instead */ }
+          }
+        }
+      });
+    });
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
