@@ -116,6 +116,11 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .sky-layer { background-size: cover; background-position: center bottom; flex-grow: 1; display: flex; flex-direction: column; position: relative; }
 #queue-display { text-align: center; color: #ccc; padding: 8px; font-size: clamp(10px, 3vw, 12px); letter-spacing: 2px; font-weight: bold; background: rgba(0,0,0,0.7); text-shadow: 1px 1px 2px #000; border-bottom: 1px solid #222; }
 
+.runover-score { font-family: monospace; font-size: clamp(38px, 12vw, 60px); font-weight: bold; color: #B8860B; text-align: center; letter-spacing: 2px; text-shadow: 2px 2px 0 #8B0000; margin: 6px 0 2px; }
+.runover-best { text-align: center; font-size: 11px; letter-spacing: 2px; color: #6B8E23; text-transform: uppercase; margin-bottom: 14px; min-height: 14px; }
+.runover-lines { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #aaa; border-top: 1px solid #222; border-bottom: 1px solid #222; padding: 10px 0; margin-bottom: 14px; }
+.runover-line { display: flex; justify-content: space-between; }
+.runover-line span:last-child { color: #ccc; font-weight: bold; }
 #weather-banner { text-align: center; font-size: 11px; font-weight: bold; padding: 4px; letter-spacing: 1px; display: none; text-shadow: 1px 1px 2px #000; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
 .weather-smog { background: rgba(40, 60, 10, 0.8); color: #aaffaa; display: block !important; border-bottom: 1px solid #6B8E23; }
 .weather-sand { background: rgba(80, 50, 10, 0.8); color: #ffcc66; display: block !important; border-bottom: 1px solid #B8860B; }
@@ -237,6 +242,7 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
     <div id="screen-map">
         <div class="map-header">
             <span id="map-sector-lbl">SECTOR 1</span>
+            <span id="map-score-lbl" style="color:#888;">0 PTS</span>
             <span>SCRAP: <span id="scrap-display">0</span></span>
         </div>
         
@@ -257,6 +263,17 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
             <div id="event-title" class="event-title">ENCOUNTER</div>
             <div id="event-desc" class="event-desc">...</div>
             <div id="event-choices" class="event-choices"></div>
+        </div>
+    </div>
+
+    <div id="screen-runover">
+        <div class="event-box" style="border-color: #8B0000;">
+            <div class="event-title" style="color: #ff4444;">SQUAD LOST</div>
+            <div class="event-desc" id="runover-desc">The wasteland claimed them. What they salvaged reaches the Citadel.</div>
+            <div class="runover-score" id="runover-score">0</div>
+            <div class="runover-best" id="runover-best"></div>
+            <div class="runover-lines" id="runover-lines"></div>
+            <div class="event-choices" id="runover-choices"></div>
         </div>
     </div>
 
@@ -370,6 +387,7 @@ let momentum = 0;
 let activeRelics = [];
 
 let combatBgFile = 'bg_combat.png'; let pendingCombat = null;
+let runStats = null;
 let outpostTab = 'ROSTER'; let activePosSelector = null; let activePerkSelector = null; let currentWeather = 'CLEAR'; let currentNodeType = '';
 let isCurrentNodeElite = false;
 
@@ -568,16 +586,66 @@ function resolveConsumableItem(targetId) {
     pendingAction = null; checkWinState();
 }
 
-function handleSquadWipe() {
-    playerRoster.forEach(p => { p.hp = p.maxHp; p.stunnedTurns = 0; p.bleedingTurns = 0; p.armorTurns = 0; p.armor = 0; p.oiledTurns = 0; });
-    scrap = Math.floor(scrap / 2); currentTier = 1; momentum = 0; addMomentum(0);
+function handleSquadWipe() { endRun(); }
+
+// Endless mode: losing the squad ends the run. Skulls and Citadel upgrades are permanent,
+// so a lost run still moves the meta forward - only the expedition itself is gone.
+function endRun() {
     combatActive = false; activeEntities = []; turnQueue = []; pendingCombat = null;
-    saveGameState(); renderMap();
+    momentum = 0; addMomentum(0);
+    if (!runStats) runStats = newRunStats();
+    noteDepth();
+    const score = computeScore(runStats);
+    const isBest = score > bestScore;
+    if (isBest) bestScore = score;
+    if (runStats.deepestSector > bestSector) bestSector = runStats.deepestSector;
+    saveMeta();
+    localStorage.removeItem(BASE_SAVE_KEY + currentSlot);
+    renderRunOver(score, isBest);
 }
 
-function collectLoot(amount) { scrap += amount; currentTier++; momentum = 0; addMomentum(0); activeEntities = []; turnQueue = []; pendingCombat = null; saveGameState(); renderMap(); }
+function renderRunOver(score, isBest) {
+    switchScreen('screen-runover');
+    const st = runStats;
+    document.getElementById('runover-score').innerText = `${score.toLocaleString()} PTS`;
+    document.getElementById('runover-best').innerText = isBest ? '\u2605 NEW PERSONAL BEST \u2605' : `BEST: ${bestScore.toLocaleString()} PTS`;
+    const lines = [
+        ['DEPTH REACHED', `SECTOR ${st.deepestSector} \u00B7 TIER ${st.deepestTier}`],
+        ['NODES CLEARED', st.nodes],
+        ['HOSTILES KILLED', st.kills],
+        ['ELITE SQUADS BROKEN', st.elites],
+        ['WARLORDS FELLED', st.bosses],
+        ['SCRAP SALVAGED', st.scrapEarned],
+        ['SKULLS BANKED', `\uD83D\uDC80 ${bossSkulls}`]
+    ];
+    document.getElementById('runover-lines').innerHTML = lines.map(l => `<div class="runover-line"><span>${l[0]}</span><span>${l[1]}</span></div>`).join('');
+    document.getElementById('runover-choices').innerHTML =
+        `<button class="event-btn" style="border-color:#4488ff; color:#4488ff;" onclick="renderCitadel()">CITADEL (\uD83D\uDC80 ${bossSkulls})</button>` +
+        `<button class="event-btn" onclick="renderTitleScreen()">RETURN TO TITLE</button>`;
+}
 
-function saveMeta() { localStorage.setItem(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades })); }
+function collectLoot(amount) { scrap += amount; if (runStats) { runStats.scrapEarned += amount; runStats.nodes++; } currentTier++; noteDepth(); momentum = 0; addMomentum(0); activeEntities = []; turnQueue = []; pendingCombat = null; saveGameState(); renderMap(); }
+
+let bestScore = 0; let bestSector = 0;
+
+function saveMeta() { localStorage.setItem(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector })); }
+
+function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, deepestSector: 1, deepestTier: 1 }; }
+
+// Endless scoring: depth is worth far more than any single haul, so pushing one sector
+// deeper always beats farming the one you are on.
+function computeScore(st) {
+    if (!st) return 0;
+    return (st.deepestSector - 1) * 2500
+         + ((st.deepestSector - 1) * TOTAL_TIERS + (st.deepestTier - 1)) * 120
+         + st.bosses * 900 + st.elites * 250 + st.kills * 15 + Math.floor(st.scrapEarned / 2);
+}
+
+function noteDepth() {
+    if (!runStats) return;
+    if (currentSector > runStats.deepestSector) { runStats.deepestSector = currentSector; runStats.deepestTier = currentTier; }
+    else if (currentSector === runStats.deepestSector && currentTier > runStats.deepestTier) { runStats.deepestTier = currentTier; }
+}
 
 function loadMeta() {
     let m = localStorage.getItem(META_KEY);
@@ -585,6 +653,7 @@ function loadMeta() {
         let d = JSON.parse(m);
         bossSkulls = d.bossSkulls || 0;
         metaUpgrades = { ...metaUpgrades, ...(d.metaUpgrades || {}) };
+        bestScore = d.bestScore || 0; bestSector = d.bestSector || 0;
         return;
     }
     // First run under the global-meta system: adopt the best progress any slot recorded.
@@ -631,6 +700,7 @@ function eraseCurrentSave() { if(confirm("Are you sure you want to permanently d
 
 function renderTitleScreen() {
     switchScreen('screen-title'); let menuHTML = '';
+    if (bestScore > 0) menuHTML += `<div style="text-align:center; font-size:11px; letter-spacing:2px; color:#B8860B; margin-bottom:6px;">BEST RUN: ${bestScore.toLocaleString()} PTS \u00B7 SECTOR ${bestSector}</div>`;
     for(let i=1; i<=3; i++) {
         let d = JSON.parse(localStorage.getItem(BASE_SAVE_KEY + i));
         if (d) { menuHTML += `<button class="title-btn btn-continue" onclick="selectSlot(${i}, true)">SLOT ${i} [S${d.currentSector||1}-T${d.tier}]${d.combat ? ' ⚔' : ''}</button>`; } 
@@ -648,7 +718,7 @@ function confirmNewGame(diff) {
     difficultyMult = diff; currentSector = 1; currentTier = 1; tuneUpBattles = 0; momentum = 0;
     scrap = metaUpgrades.startScrap || 0; inventory = ['MED_STIM']; materials = { parts: 0, chems: 0, tech: 0 }; 
     playerRoster = JSON.parse(JSON.stringify(ROSTER_TEMPLATE)); 
-    activeBounties = generateBounties(); activeRelics = [];
+    activeBounties = generateBounties(); activeRelics = []; runStats = newRunStats();
     
     playerRoster.forEach(p => { 
         let q = QUIRK_POOL[Math.floor(Math.random() * QUIRK_POOL.length)];
@@ -688,8 +758,8 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { localStorage.setItem(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, activeRelics, combat: buildCombatSnapshot() })); }
-function loadGameState() { let d = JSON.parse(localStorage.getItem(BASE_SAVE_KEY + currentSlot)); if (d) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; activeRelics = d.activeRelics || []; pendingCombat = d.combat || null; } }
+function saveGameState() { localStorage.setItem(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, activeRelics, runStats, combat: buildCombatSnapshot() })); }
+function loadGameState() { let d = JSON.parse(localStorage.getItem(BASE_SAVE_KEY + currentSlot)); if (d) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; activeRelics = d.activeRelics || []; pendingCombat = d.combat || null; runStats = d.runStats || newRunStats(); } }
 
 function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`; document.getElementById('meta-lbl-scrap').innerText = `LVL ${metaUpgrades.startScrap / 50}`; document.getElementById('meta-lbl-level').innerText = `LVL ${metaUpgrades.startLevel - 1}`; document.getElementById('meta-lbl-inv').innerText = `LVL ${metaUpgrades.invMax - 4}`; }
 function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossSkulls -= 1; metaUpgrades.startScrap += 50; } else if (type === 'LEVEL' && bossSkulls >= 2) { bossSkulls -= 2; metaUpgrades.startLevel += 1; } else if (type === 'INV' && bossSkulls >= 3) { bossSkulls -= 3; metaUpgrades.invMax += 1; } saveMeta(); renderCitadel(); }
@@ -698,6 +768,8 @@ function renderMap() {
     switchScreen('screen-map'); 
     document.getElementById('scrap-display').innerText = scrap; 
     document.getElementById('map-sector-lbl').innerText = `SECTOR ${currentSector}`;
+    noteDepth();
+    document.getElementById('map-score-lbl').innerText = `${computeScore(runStats).toLocaleString()} PTS`;
     
     let bHtml = '';
     if(!activeBounties || activeBounties.length === 0) activeBounties = generateBounties();
@@ -731,7 +803,7 @@ function renderMap() {
     m += `</div>`; mapC.innerHTML = m; setTimeout(() => { mapC.scrollTop = mapC.scrollHeight; }, 10);
 }
 
-function advanceSector() { currentSector++; currentTier = 1; saveGameState(); renderMap(); }
+function advanceSector() { currentSector++; currentTier = 1; noteDepth(); saveGameState(); renderMap(); }
 
 function setOutpostTab(tab) { outpostTab = tab; document.getElementById('tab-roster').className = `op-tab-btn ${tab === 'ROSTER' ? 'op-tab-active' : ''}`; document.getElementById('tab-workbench').className = `op-tab-btn ${tab === 'WORKBENCH' ? 'op-tab-active' : ''}`; document.getElementById('tab-cyber').className = `op-tab-btn ${tab === 'CYBER' ? 'op-tab-active' : ''}`; document.getElementById('outpost-roster-view').style.display = tab === 'ROSTER' ? 'flex' : 'none'; document.getElementById('outpost-workbench-view').style.display = tab === 'WORKBENCH' ? 'flex' : 'none'; document.getElementById('outpost-cyber-view').style.display = tab === 'CYBER' ? 'flex' : 'none'; renderOutpost(); }
 
@@ -803,7 +875,7 @@ function resolveEvent(idx) {
     let resultText = activeEvent.choices[idx].execute();
     document.getElementById('event-choices').innerHTML = `<div style="color:#6B8E23; font-weight:bold; margin-bottom:15px;">> ${resultText}</div><button class="event-btn" style="border-color:#4488ff; color:#4488ff;" onclick="finishEvent()">CONTINUE EXPEDITION</button>`;
 }
-function finishEvent() { currentTier++; saveGameState(); renderMap(); }
+function finishEvent() { currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap(); }
 
 function initiateCamp() {
     switchScreen('screen-camp');
@@ -826,7 +898,7 @@ function resolveCamp(type) {
         document.getElementById('camp-choices').innerHTML = `<div style="color:#4488ff; font-weight:bold; margin-bottom:15px;">> Salvaged valuable materials from the perimeter.</div><button class="event-btn" onclick="finishCamp()">CONTINUE EXPEDITION</button>`;
     }
 }
-function finishCamp() { currentTier++; saveGameState(); renderMap(); }
+function finishCamp() { currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap(); }
 
 function rollIntent(enemy) {
     let rand = Math.random();
@@ -850,6 +922,10 @@ function rollIntent(enemy) {
         return { type: 'ATTACK', icon: '⚔️' };
     }
 }
+
+// Enemy stats climb 1.5x per sector; rewards climb alongside so player power can compound
+// too, and the run ends on a build/skill wall rather than an arithmetic one.
+function sectorRewardMult() { return Math.pow(1.4, currentSector - 1); }
 
 function generateEnemies(nodeType, mult, isEliteNode) {
     const pool = {
@@ -1177,7 +1253,7 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     
     log(logMsg, logStyle);
 
-    if (target.hp <= 0) { addMomentum(15); if (!target.isPlayer) checkBountyProgress('KILL'); } else if (target.isPlayer) { addMomentum(5); }
+    if (target.hp <= 0) { addMomentum(15); if (!target.isPlayer) { checkBountyProgress('KILL'); if (runStats) runStats.kills++; } } else if (target.isPlayer) { addMomentum(5); }
 
     if (abilityStr === 'RAD_SHOT' || abilityStr === 'FERAL_BITE') {
         if (Math.random() < (abilityStr === 'FERAL_BITE' ? 0.9 : 0.6)) { target.bleedingTurns = 3; log(`> ${target.name} bleeding!`, "log-dmg"); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
@@ -1259,9 +1335,9 @@ function checkWinState() {
     const pA = activeEntities.some(e => e.isPlayer && e.hp > 0); const eA = activeEntities.some(e => !e.isPlayer && e.hp > 0);
     if (!pA) { document.getElementById('command-deck').innerHTML = `<button onclick="handleSquadWipe()">EXPEDITION FAILED - RESTART</button>`; combatActive = false; } 
     else if (!eA) { 
-        if (currentNodeType === 'BOSS') { bossSkulls++; saveMeta(); log(`> VICTORY! Warlord Skull acquired!`, "log-heal"); }
+        if (currentNodeType === 'BOSS') { bossSkulls++; if (runStats) runStats.bosses++; saveMeta(); log(`> VICTORY! Warlord Skull acquired!`, "log-heal"); }
         if (isCurrentNodeElite) {
-            checkBountyProgress('ELITE');
+            checkBountyProgress('ELITE'); if (runStats) runStats.elites++;
             let availableRelics = RELIC_POOL.filter(r => !activeRelics.some(ar => ar.id === r.id));
             if (availableRelics.length > 0) {
                 let rDrop = availableRelics[Math.floor(Math.random() * availableRelics.length)];
@@ -1273,14 +1349,15 @@ function checkWinState() {
         if (tuneUpBattles > 0) tuneUpBattles--; 
 
         let scrapMult = isCurrentNodeElite ? 2 : 1;
-        let s = (Math.floor(Math.random() * 30) + (currentTier * 20)) * scrapMult; 
+        let s = Math.floor((Math.floor(Math.random() * 30) + (currentTier * 20)) * scrapMult * sectorRewardMult()); 
         if (activeRelics.some(r => r.id === 'SCRAP_MAGNET')) s += 15;
         
         // Deployed survivors earn full XP; the bench trains at half rate so reserves stay
         // rotatable instead of falling permanently behind. Downed units earn nothing.
         playerRoster.forEach(char => {
-            if (char.gridPos > 0 && char.hp > 0) awardXp(char, 35 * scrapMult);
-            else if (char.gridPos === 0) awardXp(char, Math.floor(35 * scrapMult * RESERVE_XP_RATE));
+            const base = Math.floor(35 * scrapMult * sectorRewardMult());
+            if (char.gridPos > 0 && char.hp > 0) awardXp(char, base);
+            else if (char.gridPos === 0) awardXp(char, Math.floor(base * RESERVE_XP_RATE));
         });
 
         let matDrops = (1 + Math.floor(Math.random() * 2)) * scrapMult;
