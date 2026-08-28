@@ -351,6 +351,7 @@ function preloadAssets() { ASSET_LIST.forEach(src => { let img = new Image(); im
 
 const BASE_SAVE_KEY = 'wasteland_rpg_core_slot_'; 
 const SETTINGS_KEY = 'wasteland_rpg_core_settings';
+const META_KEY = 'wasteland_rpg_core_meta';
 
 let audioCtx = null;
 let currentSlot = 1;
@@ -365,6 +366,7 @@ let activeBounties = [];
 let momentum = 0;
 let activeRelics = [];
 
+let combatBgFile = 'bg_combat.png'; let pendingCombat = null;
 let outpostTab = 'ROSTER'; let activePosSelector = null; let activePerkSelector = null; let currentWeather = 'CLEAR'; let currentNodeType = '';
 let isCurrentNodeElite = false;
 
@@ -473,21 +475,37 @@ function addMomentum(amt) {
     if (txt) txt.innerText = momentum >= 100 ? 'MOMENTUM: FULL — OVERDRIVE READY' : `MOMENTUM: ${momentum}%`;
 }
 
+const BOUNTY_POOL = [
+    { type: 'CRAFT', label: n => `CRAFT ${n} ITEMS`,        range: [2, 3], reward: 20 },
+    { type: 'COMBO', label: n => `TRIGGER ${n} COMBOS`,     range: [3, 5], reward: 18 },
+    { type: 'ELITE', label: n => `DEFEAT ${n} ELITE SQUAD${n > 1 ? 'S' : ''}`, range: [1, 2], reward: 75 },
+    { type: 'KILL',  label: n => `DEFEAT ${n} HOSTILES`,    range: [6, 12], reward: 8 }
+];
+
+function rollBounty(exclude) {
+    let choices = BOUNTY_POOL.filter(b => !exclude.includes(b.type));
+    if (choices.length === 0) choices = BOUNTY_POOL;
+    let pick = choices[Math.floor(Math.random() * choices.length)];
+    let target = pick.range[0] + Math.floor(Math.random() * (pick.range[1] - pick.range[0] + 1));
+    return { type: pick.type, desc: pick.label(target), current: 0, target, reward: pick.reward * target * currentSector, claimed: false };
+}
+
 function generateBounties() {
-    return [
-        { type: 'CRAFT', desc: 'CRAFT 2 ITEMS', current: 0, target: 2, reward: 40, claimed: false },
-        { type: 'COMBO', desc: 'TRIGGER 3 COMBOS', current: 0, target: 3, reward: 50, claimed: false },
-        { type: 'ELITE', desc: 'DEFEAT 1 ELITE SQUAD', current: 0, target: 1, reward: 75, claimed: false }
-    ];
+    let out = [];
+    for (let i = 0; i < 3; i++) out.push(rollBounty(out.map(b => b.type)));
+    return out;
 }
 
 function checkBountyProgress(type) {
     if (!activeBounties) return;
-    activeBounties.forEach(b => {
-        if (b.type === type && !b.claimed) {
-            b.current++;
-            if (b.current >= b.target) { b.claimed = true; scrap += b.reward; if (combatActive) log(`> BOUNTY COMPLETE: ${b.desc} (+${b.reward} SCRAP)`, "log-combo"); }
-        }
+    activeBounties.forEach((b, idx) => {
+        if (b.type !== type || b.claimed) return;
+        b.current++;
+        if (b.current < b.target) return;
+        scrap += b.reward;
+        if (combatActive) log(`> BOUNTY COMPLETE: ${b.desc} (+${b.reward} SCRAP)`, "log-combo");
+        // Issue a fresh contract in its place so the board never runs dry.
+        activeBounties[idx] = rollBounty(activeBounties.filter((o, i) => i !== idx).map(o => o.type));
     });
 }
 
@@ -549,11 +567,35 @@ function resolveConsumableItem(targetId) {
 function handleSquadWipe() {
     playerRoster.forEach(p => { p.hp = p.maxHp; p.stunnedTurns = 0; p.bleedingTurns = 0; p.armorTurns = 0; p.armor = 0; p.oiledTurns = 0; });
     scrap = Math.floor(scrap / 2); currentTier = 1; momentum = 0; addMomentum(0);
-    combatActive = false; activeEntities = []; turnQueue = [];
+    combatActive = false; activeEntities = []; turnQueue = []; pendingCombat = null;
     saveGameState(); renderMap();
 }
 
-function collectLoot(amount) { scrap += amount; currentTier++; momentum = 0; addMomentum(0); saveGameState(); renderMap(); }
+function collectLoot(amount) { scrap += amount; currentTier++; momentum = 0; addMomentum(0); activeEntities = []; turnQueue = []; pendingCombat = null; saveGameState(); renderMap(); }
+
+function saveMeta() { localStorage.setItem(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades })); }
+
+function loadMeta() {
+    let m = localStorage.getItem(META_KEY);
+    if (m) {
+        let d = JSON.parse(m);
+        bossSkulls = d.bossSkulls || 0;
+        metaUpgrades = { ...metaUpgrades, ...(d.metaUpgrades || {}) };
+        return;
+    }
+    // First run under the global-meta system: adopt the best progress any slot recorded.
+    for (let i = 1; i <= 3; i++) {
+        let raw = localStorage.getItem(BASE_SAVE_KEY + i); if (!raw) continue;
+        let d = JSON.parse(raw); if (!d) continue;
+        bossSkulls = Math.max(bossSkulls, d.bossSkulls || 0);
+        if (d.metaUpgrades) {
+            metaUpgrades.startScrap = Math.max(metaUpgrades.startScrap, d.metaUpgrades.startScrap || 0);
+            metaUpgrades.startLevel = Math.max(metaUpgrades.startLevel, d.metaUpgrades.startLevel || 1);
+            metaUpgrades.invMax = Math.max(metaUpgrades.invMax, d.metaUpgrades.invMax || 4);
+        }
+    }
+    saveMeta();
+}
 
 function migrateOldSaves() {
     for(let i=1; i<=3; i++) {
@@ -567,6 +609,7 @@ function migrateOldSaves() {
 function initEngine() { 
     preloadAssets();
     migrateOldSaves();
+    loadMeta();
     let s = localStorage.getItem(SETTINGS_KEY); 
     if (s) { globalSettings = { ...globalSettings, ...JSON.parse(s) }; } 
     updateSettingsUI(); 
@@ -586,9 +629,10 @@ function renderTitleScreen() {
     switchScreen('screen-title'); let menuHTML = '';
     for(let i=1; i<=3; i++) {
         let d = JSON.parse(localStorage.getItem(BASE_SAVE_KEY + i));
-        if (d) { menuHTML += `<button class="title-btn btn-continue" onclick="selectSlot(${i}, true)">SLOT ${i} [S${d.currentSector||1}-T${d.tier}] (💀 ${d.bossSkulls || 0})</button>`; } 
+        if (d) { menuHTML += `<button class="title-btn btn-continue" onclick="selectSlot(${i}, true)">SLOT ${i} [S${d.currentSector||1}-T${d.tier}]${d.combat ? ' ⚔' : ''}</button>`; } 
         else { menuHTML += `<button class="title-btn" onclick="selectSlot(${i}, false)">SLOT ${i} [ EMPTY ]</button>`; }
     }
+    menuHTML += `<button class="title-btn btn-meta" style="margin-top:12px;" onclick="renderCitadel()">CITADEL (💀 ${bossSkulls})</button>`;
     document.getElementById('title-menu-container').innerHTML = menuHTML;
     document.getElementById('title-menu-container').style.display = 'flex';
     document.getElementById('difficulty-menu-container').style.display = 'none';
@@ -598,7 +642,7 @@ function selectSlot(slotNum, exists) { currentSlot = slotNum; if (exists) { cont
 
 function confirmNewGame(diff) {
     difficultyMult = diff; currentSector = 1; currentTier = 1; tuneUpBattles = 0; momentum = 0;
-    scrap = metaUpgrades.startScrap || 0; inventory = ['MED_STIM']; materials = { parts: 0, chems: 0, tech: 0 }; bossSkulls = 0; metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4 }; 
+    scrap = metaUpgrades.startScrap || 0; inventory = ['MED_STIM']; materials = { parts: 0, chems: 0, tech: 0 }; 
     playerRoster = JSON.parse(JSON.stringify(ROSTER_TEMPLATE)); 
     activeBounties = generateBounties(); activeRelics = [];
     
@@ -611,12 +655,40 @@ function confirmNewGame(diff) {
     saveGameState(); renderMap(); 
 }
 
-function continueGame() { loadGameState(); renderMap(); }
-function saveGameState() { localStorage.setItem(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, bossSkulls, metaUpgrades, tuneUpBattles, activeBounties, momentum, activeRelics })); }
-function loadGameState() { let d = JSON.parse(localStorage.getItem(BASE_SAVE_KEY + currentSlot)); if (d) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; bossSkulls = d.bossSkulls || 0; metaUpgrades = d.metaUpgrades || { startScrap: 0, startLevel: 1, invMax: 4 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; activeRelics = d.activeRelics || []; } }
+function continueGame() { loadGameState(); addMomentum(0); if (pendingCombat) resumeCombat(pendingCombat); else renderMap(); }
+
+// Rebuilds a fight from its snapshot. Player entries are looked up in playerRoster by id so
+// damage keeps landing on the live roster objects rather than on detached copies.
+function resumeCombat(c) {
+    currentNodeType = c.nodeType; isCurrentNodeElite = c.isElite; currentWeather = c.weather || 'CLEAR';
+    let players = (c.playerIds || []).map(id => playerRoster.find(p => p.id === id)).filter(Boolean);
+    activeEntities = [...players, ...(c.enemies || [])];
+    turnQueue = (c.queueIds || []).map(id => activeEntities.find(e => e.id === id)).filter(Boolean);
+    pendingCombat = null;
+    if (turnQueue.length === 0) { renderMap(); return; }
+    activeIndex = Math.min(c.activeIndex || 0, turnQueue.length - 1);
+    combatActive = true;
+    switchScreen('screen-combat'); document.getElementById('log').innerHTML = '';
+    applyCombatScenery(c.bgFile || 'bg_combat.png');
+    log("> COMBAT RESUMED.", "log-turn");
+    processTurn();
+}
+function buildCombatSnapshot() {
+    if (!combatActive || turnQueue.length === 0) return null;
+    return {
+        nodeType: currentNodeType, isElite: isCurrentNodeElite, weather: currentWeather, bgFile: combatBgFile,
+        activeIndex,
+        playerIds: activeEntities.filter(e => e.isPlayer).map(e => e.id),
+        enemies: activeEntities.filter(e => !e.isPlayer),
+        queueIds: turnQueue.map(e => e.id)
+    };
+}
+
+function saveGameState() { localStorage.setItem(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, activeRelics, combat: buildCombatSnapshot() })); }
+function loadGameState() { let d = JSON.parse(localStorage.getItem(BASE_SAVE_KEY + currentSlot)); if (d) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; activeRelics = d.activeRelics || []; pendingCombat = d.combat || null; } }
 
 function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`; document.getElementById('meta-lbl-scrap').innerText = `LVL ${metaUpgrades.startScrap / 50}`; document.getElementById('meta-lbl-level').innerText = `LVL ${metaUpgrades.startLevel - 1}`; document.getElementById('meta-lbl-inv').innerText = `LVL ${metaUpgrades.invMax - 4}`; }
-function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossSkulls -= 1; metaUpgrades.startScrap += 50; } else if (type === 'LEVEL' && bossSkulls >= 2) { bossSkulls -= 2; metaUpgrades.startLevel += 1; } else if (type === 'INV' && bossSkulls >= 3) { bossSkulls -= 3; metaUpgrades.invMax += 1; } saveGameState(); renderCitadel(); }
+function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossSkulls -= 1; metaUpgrades.startScrap += 50; } else if (type === 'LEVEL' && bossSkulls >= 2) { bossSkulls -= 2; metaUpgrades.startLevel += 1; } else if (type === 'INV' && bossSkulls >= 3) { bossSkulls -= 3; metaUpgrades.invMax += 1; } saveMeta(); renderCitadel(); }
 
 function renderMap() {
     switchScreen('screen-map'); 
@@ -823,9 +895,29 @@ function generateEnemies(nodeType, mult, isEliteNode) {
     return squad;
 }
 
+const WEATHER_BANNERS = {
+    TOXIC_SMOG:     ['weather-smog',  '⚠️ TOXIC SMOG: Passive Bio DMG to Active Units ⚠️'],
+    SANDSTORM:      ['weather-sand',  '⚠️ SANDSTORM: Ranged Abilities deal -25% DMG ⚠️'],
+    SHRAPNEL_WINDS: ['weather-shrap', '⚠️ SHRAPNEL WINDS: 30% chance for random DMG at Turn Start ⚠️'],
+    BLOODLUST:      ['weather-blood', '💀 THUNDERDOME BLOODLUST: All units deal +20% DMG 💀']
+};
+
+function applyCombatScenery(bgFile) {
+    combatBgFile = bgFile;
+    document.getElementById('combat-sky-layer').style.backgroundImage = `linear-gradient(to bottom, rgba(43, 10, 10, 0.4) 0%, rgba(0, 0, 0, 0.5) 100%), url('${bgFile}')`;
+    const wBanner = document.getElementById('weather-banner'); const w = WEATHER_BANNERS[currentWeather];
+    wBanner.className = w ? w[0] : '';
+    wBanner.innerText = w ? w[1] : '';
+    wBanner.style.display = w ? 'block' : 'none';
+}
+
 function initiateCombat(nodeType, isEliteNode) {
+    let deployedRoster = playerRoster.filter(p => p.gridPos > 0);
+    if (!deployedRoster.some(p => p.hp > 0)) { alert("All deployed units are dead. Adjust squad at Outpost."); renderOutpost(); return; }
+    deployedRoster.sort((a, b) => a.gridPos - b.gridPos);
+
     switchScreen('screen-combat'); combatActive = true; document.getElementById('log').innerHTML = '';
-    
+
     let bgFile = 'bg_combat.png'; currentWeather = 'CLEAR'; currentNodeType = nodeType; isCurrentNodeElite = isEliteNode;
     if (currentTier === 1 && currentSector === 1) { bgFile = 'bg_combat.png'; } else {
         if (nodeType === 'BOSS') { bgFile = 'bg_thunderdome.png'; currentWeather = 'BLOODLUST'; }
@@ -833,18 +925,7 @@ function initiateCombat(nodeType, isEliteNode) {
         else if (nodeType === 'RAIDERS') { bgFile = 'bg_highway.png'; if (Math.random() < 0.4) currentWeather = 'SHRAPNEL_WINDS'; }
         else if (nodeType === 'BEASTS') { bgFile = 'bg_canyon.png'; if (Math.random() < 0.4) currentWeather = 'SANDSTORM'; }
     }
-    document.getElementById('combat-sky-layer').style.backgroundImage = `linear-gradient(to bottom, rgba(43, 10, 10, 0.4) 0%, rgba(0, 0, 0, 0.5) 100%), url('${bgFile}')`;
-    
-    const wBanner = document.getElementById('weather-banner'); wBanner.className = ''; 
-    if (currentWeather === 'CLEAR') { wBanner.style.display = 'none'; }
-    else if (currentWeather === 'TOXIC_SMOG') { wBanner.className = 'weather-smog'; wBanner.innerText = '⚠️ TOXIC SMOG: Passive Bio DMG to Active Units ⚠️'; }
-    else if (currentWeather === 'SANDSTORM') { wBanner.className = 'weather-sand'; wBanner.innerText = '⚠️ SANDSTORM: Ranged Abilities deal -25% DMG ⚠️'; }
-    else if (currentWeather === 'SHRAPNEL_WINDS') { wBanner.className = 'weather-shrap'; wBanner.innerText = '⚠️ SHRAPNEL WINDS: 30% chance for random DMG at Turn Start ⚠️'; }
-    else if (currentWeather === 'BLOODLUST') { wBanner.className = 'weather-blood'; wBanner.innerText = '💀 THUNDERDOME BLOODLUST: All units deal +20% DMG 💀'; }
-
-    let deployedRoster = playerRoster.filter(p => p.gridPos > 0);
-    if (!deployedRoster.some(p => p.hp > 0)) { alert("All deployed units are dead. Adjust squad at Outpost."); renderOutpost(); return; }
-    deployedRoster.sort((a, b) => a.gridPos - b.gridPos);
+    applyCombatScenery(bgFile);
 
     playerRoster.forEach(ent => { ent.stunnedTurns = 0; ent.bleedingTurns = 0; ent.armorTurns = 0; ent.armor = 0; ent.oiledTurns = 0; });
     const mult = difficultyMult * (1 + ((currentTier - 1) * 0.2)) * Math.pow(1.5, currentSector - 1);
@@ -944,6 +1025,7 @@ function renderCommandDeck() {
 
 function processTurn() {
     if (!combatActive) return; pendingAction = null; let aE = turnQueue[activeIndex]; if (aE.hp <= 0) { nextTurn(); return; }
+    saveGameState();
     renderField(); applyTurnStartEffects(aE); if (!combatActive) return; if (!aE.hp > 0) return checkWinState(); 
     if (aE.stunnedTurns > 0) { if (!aE.isPlayer) { log(`> ${aE.name} stunned.`, "log-status"); spawnFCT(aE.id, "STUNNED", "fct-status"); aE.stunnedTurns--; setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return; } else return; }
     if (!aE.isPlayer) setTimeout(() => executeEnemyAi(aE), 1000 * globalSettings.combatSpeed);
@@ -1070,7 +1152,7 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     
     log(logMsg, logStyle);
 
-    if (target.hp <= 0) { addMomentum(15); } else if (target.isPlayer) { addMomentum(5); }
+    if (target.hp <= 0) { addMomentum(15); if (!target.isPlayer) checkBountyProgress('KILL'); } else if (target.isPlayer) { addMomentum(5); }
 
     if (abilityStr === 'RAD_SHOT' || abilityStr === 'FERAL_BITE') {
         if (Math.random() < (abilityStr === 'FERAL_BITE' ? 0.9 : 0.6)) { target.bleedingTurns = 3; log(`> ${target.name} bleeding!`, "log-dmg"); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
@@ -1141,7 +1223,7 @@ function checkWinState() {
     const pA = activeEntities.some(e => e.isPlayer && e.hp > 0); const eA = activeEntities.some(e => !e.isPlayer && e.hp > 0);
     if (!pA) { document.getElementById('command-deck').innerHTML = `<button onclick="handleSquadWipe()">EXPEDITION FAILED - RESTART</button>`; combatActive = false; } 
     else if (!eA) { 
-        if (currentNodeType === 'BOSS') { bossSkulls++; log(`> VICTORY! Warlord Skull acquired!`, "log-heal"); }
+        if (currentNodeType === 'BOSS') { bossSkulls++; saveMeta(); log(`> VICTORY! Warlord Skull acquired!`, "log-heal"); }
         if (isCurrentNodeElite) {
             checkBountyProgress('ELITE');
             let availableRelics = RELIC_POOL.filter(r => !activeRelics.some(ar => ar.id === r.id));
@@ -1161,7 +1243,7 @@ function checkWinState() {
         playerRoster.forEach(char => {
             if (char.gridPos > 0 && char.hp > 0) {
                 char.xp += 35 * scrapMult;
-                if (char.xp >= char.xpToNext) { char.level++; char.xp -= char.xpToNext; char.xpToNext = Math.floor(char.xpToNext * 1.5); char.perkPoints++; log(`> ${char.name} reached Level ${char.level}! Perk point available.`, "log-heal"); }
+                while (char.xp >= char.xpToNext) { char.level++; char.xp -= char.xpToNext; char.xpToNext = Math.floor(char.xpToNext * 1.5); char.perkPoints++; log(`> ${char.name} reached Level ${char.level}! Perk point available.`, "log-heal"); }
             }
         });
 
