@@ -59,7 +59,6 @@ const Store = {
 let audioCtx = null;
 let currentSlot = 1;
 let globalSettings = { combatSpeed: 1.0, sfx: true };
-let previousScreen = '';
 
 let bossSkulls = 0; let metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4 };
 let scrap = 0; let currentTier = 1; let currentSector = 1; let difficultyMult = 1.0; 
@@ -72,7 +71,7 @@ let activeRelics = [];
 let combatBgFile = 'bg_combat.webp'; let pendingCombat = null;
 let runStats = null;
 let activeEvent = null;
-let outpostTab = 'ROSTER'; let activePosSelector = null; let activePerkSelector = null; let currentWeather = 'CLEAR'; let currentNodeType = '';
+let activePosSelector = null; let activePerkSelector = null; let currentWeather = 'CLEAR'; let currentNodeType = '';
 let isCurrentNodeElite = false;
 
 const QUIRK_POOL = [
@@ -464,13 +463,40 @@ function initEngine() {
 }
 
 function switchScreen(screenId) { document.querySelectorAll('#engine > div:not(.settings-icon):not(#screen-settings)').forEach(el => el.style.display = 'none'); document.getElementById(screenId).style.display = 'flex'; if (screenId === 'screen-map' || screenId === 'screen-outpost' || screenId === 'screen-citadel') { document.getElementById('btn-global-settings').style.display = 'block'; } else { document.getElementById('btn-global-settings').style.display = 'none'; } }
-function openSettings() { document.querySelectorAll('#engine > div:not(.settings-icon)').forEach(el => { if (el.style.display === 'flex' && el.id !== 'screen-settings') previousScreen = el.id; }); document.getElementById('screen-settings').style.display = 'flex'; }
-function closeSettings() { document.getElementById('screen-settings').style.display = 'none'; }
+function openSettings() { disarmErase(); document.getElementById('screen-settings').style.display = 'flex'; }
+function closeSettings() { disarmErase(); document.getElementById('screen-settings').style.display = 'none'; }
 function toggleGameSpeed() { globalSettings.combatSpeed = globalSettings.combatSpeed === 1.0 ? 0.5 : 1.0; Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); }
 function toggleSFX() { globalSettings.sfx = !globalSettings.sfx; if (globalSettings.sfx) initAudio(); Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); }
 function updateSettingsUI() { document.getElementById('btn-toggle-speed').innerText = globalSettings.combatSpeed === 1.0 ? "COMBAT SPEED: NORMAL" : "COMBAT SPEED: FAST"; document.getElementById('btn-toggle-sfx').innerText = globalSettings.sfx ? "AUDIO SFX: ON" : "AUDIO SFX: OFF"; }
 function returnToTitle() { closeSettings(); renderTitleScreen(); }
-function eraseCurrentSave() { if(confirm("Are you sure you want to permanently delete this save slot?")) { Store.remove(BASE_SAVE_KEY + currentSlot); closeSettings(); renderTitleScreen(); } }
+// A native confirm() is jarring on a phone, looks nothing like the game, and is suppressed
+// outright in some browsers - which would silently erase or silently do nothing. Two-step the
+// button instead: the first press arms it, the second commits.
+let eraseArmed = false;
+
+function disarmErase() {
+    eraseArmed = false;
+    const btn = document.getElementById('btn-erase');
+    if (btn) { btn.innerText = 'ERASE SAVE DATA'; btn.classList.remove('btn-armed'); }
+}
+
+function eraseCurrentSave() {
+    const btn = document.getElementById('btn-erase');
+    if (!eraseArmed) {
+        eraseArmed = true;
+        if (btn) { btn.innerText = `CONFIRM — ERASE SLOT ${currentSlot}`; btn.classList.add('btn-armed'); }
+        return;
+    }
+    Store.remove(BASE_SAVE_KEY + currentSlot);
+    disarmErase(); closeSettings(); renderTitleScreen();
+}
+
+function showOutpostNotice(msg) {
+    const el = document.getElementById('outpost-notice');
+    if (!el) return;
+    el.innerText = msg;
+    el.style.display = msg ? 'block' : 'none';
+}
 
 function renderTitleScreen() {
     switchScreen('screen-title'); let menuHTML = '';
@@ -586,11 +612,11 @@ function renderMap() {
 
 function advanceSector() { currentSector++; currentTier = 1; noteDepth(); saveGameState(); renderMap(); }
 
-function setOutpostTab(tab) { outpostTab = tab; document.getElementById('tab-roster').className = `op-tab-btn ${tab === 'ROSTER' ? 'op-tab-active' : ''}`; document.getElementById('tab-workbench').className = `op-tab-btn ${tab === 'WORKBENCH' ? 'op-tab-active' : ''}`; document.getElementById('tab-cyber').className = `op-tab-btn ${tab === 'CYBER' ? 'op-tab-active' : ''}`; document.getElementById('outpost-roster-view').style.display = tab === 'ROSTER' ? 'flex' : 'none'; document.getElementById('outpost-workbench-view').style.display = tab === 'WORKBENCH' ? 'flex' : 'none'; document.getElementById('outpost-cyber-view').style.display = tab === 'CYBER' ? 'flex' : 'none'; renderOutpost(); }
+function setOutpostTab(tab) { document.getElementById('tab-roster').className = `op-tab-btn ${tab === 'ROSTER' ? 'op-tab-active' : ''}`; document.getElementById('tab-workbench').className = `op-tab-btn ${tab === 'WORKBENCH' ? 'op-tab-active' : ''}`; document.getElementById('tab-cyber').className = `op-tab-btn ${tab === 'CYBER' ? 'op-tab-active' : ''}`; document.getElementById('outpost-roster-view').style.display = tab === 'ROSTER' ? 'flex' : 'none'; document.getElementById('outpost-workbench-view').style.display = tab === 'WORKBENCH' ? 'flex' : 'none'; document.getElementById('outpost-cyber-view').style.display = tab === 'CYBER' ? 'flex' : 'none'; renderOutpost(); }
 
 function renderOutpost() {
-    switchScreen('screen-outpost'); document.getElementById('outpost-scrap').innerText = scrap; 
-    const c = document.getElementById('outpost-roster'); c.innerHTML = '';
+    switchScreen('screen-outpost'); showOutpostNotice(''); document.getElementById('outpost-scrap').innerText = scrap; 
+    const c = document.getElementById('outpost-roster'); const cards = [];
     playerRoster.forEach(char => {
         let cost = 30 + (char.upgradeCount * 25); let canUpg = scrap >= cost; let isDead = char.hp <= 0; let isInj = char.hp < char.maxHp && char.hp > 0;
         let medHtml = isDead ? `<button class="upg-btn revive-btn" ${scrap < 50 ? 'disabled' : ''} data-action="medbay" data-id="${char.id}" data-mode="REVIVE">DEFIB (50)</button>` : `<button class="upg-btn med-btn" ${!isInj || scrap < 10 ? 'disabled' : ''} data-action="medbay" data-id="${char.id}" data-mode="HEAL">TRIAGE (10)</button>`;
@@ -609,23 +635,26 @@ function renderOutpost() {
         else if (activePerkSelector === char.id) { btnGroupHtml = PERK_POOL.map(p => `<button class="upg-btn sub-menu-btn perk-btn" data-action="assign-perk" data-id="${char.id}" data-perk="${p.id}">${p.label}</button>`).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
         else { btnGroupHtml = `<button class="upg-btn ${posClass}" data-action="pos-menu" data-id="${char.id}">${posText}</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="HP" data-cost="${cost}">+10 HP</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="DMG" data-cost="${cost}">+3 DMG</button> ${medHtml}`; }
 
-        c.innerHTML += `<div class="upgrade-card" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay}${traitsDisplay} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> <div class="upgrade-btn-group">${btnGroupHtml}</div> </div>`;
+        cards.push(`<div class="upgrade-card" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay}${traitsDisplay} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> <div class="upgrade-btn-group">${btnGroupHtml}</div> </div>`);
     });
 
+    c.innerHTML = cards.join('');
     document.getElementById('mat-parts-wb').innerText = `⚙️ PARTS: ${materials.parts}`; document.getElementById('mat-chems-wb').innerText = `🧪 CHEMS: ${materials.chems}`; document.getElementById('mat-tech-wb').innerText = `💻 TECH: ${materials.tech}`; document.getElementById('btn-breakdown').disabled = scrap < 25;
     let wbHtml = ''; let invFull = inventory.length >= metaUpgrades.invMax;
     wbHtml += `<button class="upg-btn" ${materials.chems < 2 || invFull ? 'disabled' : ''} data-action="craft" data-item="MED_STIM">CRAFT MED-STIM (2 🧪)</button>`; wbHtml += `<button class="upg-btn" ${materials.parts < 2 || invFull ? 'disabled' : ''} data-action="craft" data-item="SCRAP_BOMB">CRAFT SCRAP BOMB (2 ⚙️)</button>`; wbHtml += `<button class="upg-btn" ${materials.chems < 1 || materials.tech < 1 || invFull ? 'disabled' : ''} data-action="craft" data-item="ADRENALINE">CRAFT ADRENALINE (1 🧪, 1 💻)</button>`; wbHtml += `<button class="upg-btn" ${materials.tech < 2 || invFull ? 'disabled' : ''} data-action="craft" data-item="EMP_CHARGE">CRAFT EMP CHARGE (2 💻)</button>`;
     document.getElementById('crafting-grid').innerHTML = wbHtml;
 
     document.getElementById('mat-parts-cb').innerText = `⚙️ PARTS: ${materials.parts}`; document.getElementById('mat-chems-cb').innerText = `🧪 CHEMS: ${materials.chems}`; document.getElementById('mat-tech-cb').innerText = `💻 TECH: ${materials.tech}`;
-    const cybC = document.getElementById('cybernetics-roster'); cybC.innerHTML = '';
+    const cybC = document.getElementById('cybernetics-roster'); const cybCards = [];
     playerRoster.forEach(char => {
         let augList = char.augments && char.augments.length > 0 ? char.augments.join(', ') : 'NONE'; let canPlating = materials.parts >= 3; let canOptics = materials.tech >= 2; let canPump = materials.chems >= 2;
-        cybC.innerHTML += `<div class="upgrade-card"> <div class="upgrade-header"><span>${char.name}</span><span style="color:#4488ff; font-size:10px;">AUGS: ${augList}</span></div> <div class="upgrade-stats"><span>MAX HP: ${char.maxHp}</span><span>BASE DMG: ${char.dmgBase}</span><span>SPEED: ${char.speed}</span></div> <div class="upgrade-btn-group"> <button class="upg-btn" style="border-color:#4488ff;" ${!canPlating ? 'disabled' : ''} data-action="augment" data-id="${char.id}" data-kind="PLATING">SUB-DERMAL PLATING (+20 HP) [3 ⚙️]</button> <button class="upg-btn" style="border-color:#4488ff;" ${!canOptics ? 'disabled' : ''} data-action="augment" data-id="${char.id}" data-kind="OPTICS">OPTICS (+4 DMG) [2 💻]</button> <button class="upg-btn" style="border-color:#4488ff;" ${!canPump ? 'disabled' : ''} data-action="augment" data-id="${char.id}" data-kind="PUMP">ADRENAL PUMP (+3 SPD) [2 🧪]</button> </div> </div>`;
+        cybCards.push(`<div class="upgrade-card"> <div class="upgrade-header"><span>${char.name}</span><span style="color:#4488ff; font-size:10px;">AUGS: ${augList}</span></div> <div class="upgrade-stats"><span>MAX HP: ${char.maxHp}</span><span>BASE DMG: ${char.dmgBase}</span><span>SPEED: ${char.speed}</span></div> <div class="upgrade-btn-group"> <button class="upg-btn" style="border-color:#4488ff;" ${!canPlating ? 'disabled' : ''} data-action="augment" data-id="${char.id}" data-kind="PLATING">SUB-DERMAL PLATING (+20 HP) [3 ⚙️]</button> <button class="upg-btn" style="border-color:#4488ff;" ${!canOptics ? 'disabled' : ''} data-action="augment" data-id="${char.id}" data-kind="OPTICS">OPTICS (+4 DMG) [2 💻]</button> <button class="upg-btn" style="border-color:#4488ff;" ${!canPump ? 'disabled' : ''} data-action="augment" data-id="${char.id}" data-kind="PUMP">ADRENAL PUMP (+3 SPD) [2 🧪]</button> </div> </div>`);
     });
 
-    document.getElementById('inv-count').innerText = `${inventory.length}/${metaUpgrades.invMax}`; const invC = document.getElementById('outpost-inventory'); invC.innerHTML = '';
-    for (let i = 0; i < metaUpgrades.invMax; i++) { let item = inventory[i]; if (item) { let label = item === 'MED_STIM' ? '💉 Med-Stim' : item === 'SCRAP_BOMB' ? '💣 Scrap Bomb' : item === 'ADRENALINE' ? '⚡ Adrenaline' : '🔋 EMP Charge'; invC.innerHTML += `<button class="inv-slot" data-action="sell-item" data-index="${i}">${label} [SELL]</button>`; } else { invC.innerHTML += `<button class="inv-slot" disabled>[ EMPTY SLOT ]</button>`; } }
+    cybC.innerHTML = cybCards.join('');
+    document.getElementById('inv-count').innerText = `${inventory.length}/${metaUpgrades.invMax}`; const invC = document.getElementById('outpost-inventory'); const invCells = [];
+    for (let i = 0; i < metaUpgrades.invMax; i++) { let item = inventory[i]; if (item) { let label = item === 'MED_STIM' ? '💉 Med-Stim' : item === 'SCRAP_BOMB' ? '💣 Scrap Bomb' : item === 'ADRENALINE' ? '⚡ Adrenaline' : '🔋 EMP Charge'; invCells.push(`<button class="inv-slot" data-action="sell-item" data-index="${i}">${label} [SELL]</button>`); } else { invCells.push(`<button class="inv-slot" disabled>[ EMPTY SLOT ]</button>`); } }
+    invC.innerHTML = invCells.join('');
 }
 
 function breakdownScrap() { if (scrap < 25) return; scrap -= 25; let m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)]; materials[m]++; saveGameState(); renderOutpost(); }
@@ -824,7 +853,7 @@ function applyCombatScenery(bgFile) {
 
 function initiateCombat(nodeType, isEliteNode) {
     let deployedRoster = playerRoster.filter(p => p.gridPos > 0);
-    if (!deployedRoster.some(p => p.hp > 0)) { alert("All deployed units are dead. Adjust squad at Outpost."); renderOutpost(); return; }
+    if (!deployedRoster.some(p => p.hp > 0)) { renderOutpost(); showOutpostNotice('⚠ Every deployed operator is down. Revive someone, or deploy from the bench, before heading out.'); return; }
     deployedRoster.sort((a, b) => a.gridPos - b.gridPos);
 
     switchScreen('screen-combat'); combatActive = true; document.getElementById('log').innerHTML = '';
@@ -878,7 +907,7 @@ function resistBadges(ent) {
 }
 
 function renderField() {
-    renderQueue(); const pTeam = document.getElementById('player-team'); const eTeam = document.getElementById('enemy-team'); pTeam.innerHTML = ''; eTeam.innerHTML = '';
+    renderQueue(); const pTeam = document.getElementById('player-team'); const eTeam = document.getElementById('enemy-team'); pTeam.innerHTML = ''; eTeam.innerHTML = ''; const pCells = [], eCells = [];
     activeEntities.forEach(ent => {
         let isDead = ent.hp <= 0; const isAct = (!isDead && turnQueue.length > 0 && turnQueue[activeIndex]?.id === ent.id) ? 'active' : ''; const dCls = isDead ? 'dead' : '';
         let tCls = ''; let clk = '';
@@ -911,8 +940,9 @@ function renderField() {
                     ${isDead ? '' : resistBadges(ent)}
                 </div><img class="portrait ${hoverCls}" src="${ent.img}" style="${eliteGlow}">
             </div>`;
-        if (ent.isPlayer) pTeam.innerHTML += html; else eTeam.innerHTML += html;
+        if (ent.isPlayer) pCells.push(html); else eCells.push(html);
     });
+    pTeam.innerHTML = pCells.join(''); eTeam.innerHTML = eCells.join('');
     pTeam.classList.toggle('crowded', pTeam.children.length >= 4);
     eTeam.classList.toggle('crowded', eTeam.children.length >= 4);
     renderCommandDeck();
@@ -1232,7 +1262,6 @@ globalThis.WP = {
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },
     get globalSettings() { return globalSettings; }, set globalSettings(v) { globalSettings = v; },
-    get previousScreen() { return previousScreen; }, set previousScreen(v) { previousScreen = v; },
     get bossSkulls() { return bossSkulls; }, set bossSkulls(v) { bossSkulls = v; },
     get metaUpgrades() { return metaUpgrades; }, set metaUpgrades(v) { metaUpgrades = v; },
     get scrap() { return scrap; }, set scrap(v) { scrap = v; },
@@ -1249,7 +1278,6 @@ globalThis.WP = {
     get pendingCombat() { return pendingCombat; }, set pendingCombat(v) { pendingCombat = v; },
     get runStats() { return runStats; }, set runStats(v) { runStats = v; },
     get activeEvent() { return activeEvent; }, set activeEvent(v) { activeEvent = v; },
-    get outpostTab() { return outpostTab; }, set outpostTab(v) { outpostTab = v; },
     get activePosSelector() { return activePosSelector; }, set activePosSelector(v) { activePosSelector = v; },
     get activePerkSelector() { return activePerkSelector; }, set activePerkSelector(v) { activePerkSelector = v; },
     get currentWeather() { return currentWeather; }, set currentWeather(v) { currentWeather = v; },

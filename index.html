@@ -38,7 +38,7 @@
             <button class="title-btn" id="btn-toggle-speed" data-action="toggle-speed">COMBAT SPEED: NORMAL</button>
             <button class="title-btn" id="btn-toggle-sfx" data-action="toggle-sfx">AUDIO SFX: ON</button>
             <button class="title-btn btn-meta" data-action="return-title">RETURN TO TITLE</button>
-            <button class="title-btn" style="border-color: #8B0000; color: #ff4444;" data-action="erase-save">ERASE SAVE DATA</button>
+            <button class="title-btn" id="btn-erase" style="border-color: #8B0000; color: #ff4444;" data-action="erase-save">ERASE SAVE DATA</button>
             <button class="title-btn" style="border-color: #888; color: #888; margin-top: 20px;" data-action="settings-close">RESUME</button>
         </div>
     </div>
@@ -127,6 +127,7 @@
         </div>
 
         <div id="outpost-roster-view" style="display:flex; flex-direction:column; gap:15px; flex-grow:1; overflow-y:auto;">
+            <div id="outpost-notice" class="outpost-notice" style="display:none;"></div>
             <div id="outpost-roster" class="outpost-roster"></div>
         </div>
 

@@ -198,3 +198,6 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
     .title-btn:hover, .title-btn:active { transform: none; }
     * { transition-duration: 0.01ms !important; }
 }
+
+.outpost-notice { border: 1px solid #8B0000; background: rgba(60,0,0,0.35); color: #ff9c6b; font-size: 11px; line-height: 1.5; padding: 8px 10px; margin-bottom: 10px; letter-spacing: 0.5px; }
+.btn-armed { background: #8B0000 !important; color: #fff !important; border-color: #ff4444 !important; }

@@ -215,11 +215,13 @@ module.exports = {
     await click('[data-action="end-run"]');
     ok('end-run shows the run summary', await shown('screen-runover') === 'flex');
 
-    // ---- erase save ----
-    page.once('dialog', d => d.accept());
+    // ---- erase save (two-step, no native dialog) ----
     await state(() => { currentSlot = 3; saveGameState(); renderTitleScreen(); openSettings(); });
     await click('[data-action="erase-save"]');
-    ok('erase-save clears the slot',
+    ok('the first press arms rather than erases',
+      await state(() => localStorage.getItem(BASE_SAVE_KEY + 3)) !== null);
+    await click('[data-action="erase-save"]');
+    ok('the second press clears the slot',
       await state(() => localStorage.getItem(BASE_SAVE_KEY + 3)) === null);
 
     await state(() => { currentSlot = 1; confirmNewGame(1.0); openSettings(); });
