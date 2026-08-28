@@ -25,6 +25,11 @@ const SUITES = fs.readdirSync(path.join(__dirname, 'suites')).filter(f => f.ends
     const page = await context.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message));
+    // A data-action with no entry in the ACTIONS registry is a dead control: it throws
+    // nothing, it just silently does nothing. Treat that warning as a failure.
+    page.on('console', m => {
+      if (m.type() === 'warning' && /Unmapped action/.test(m.text())) errors.push(m.text());
+    });
 
     const ok = (name, cond) => {
       if (cond) { passed++; console.log(`  PASS  ${name}`); }

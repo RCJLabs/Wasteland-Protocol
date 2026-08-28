@@ -18,28 +18,28 @@
 <body>
 
 <div id="engine">
-    <div id="btn-global-settings" class="settings-icon" onclick="openSettings()" style="display:none;">⚙️</div>
+    <div id="btn-global-settings" class="settings-icon" data-action="settings-open" style="display:none;">⚙️</div>
 
     <div id="screen-title">
         <div class="title-header">Wasteland<br>Protocol</div>
         <div class="title-sub">ENGINE V57.1</div>
         <div class="title-menu" id="title-menu-container"></div>
         <div class="title-menu" id="difficulty-menu-container" style="display:none;">
-            <button class="title-btn" style="border-color:#6B8E23; color:#6B8E23;" onclick="confirmNewGame(0.75)">[EASY] 0.75x STATS</button>
-            <button class="title-btn" style="border-color:#B8860B; color:#B8860B;" onclick="confirmNewGame(1.0)">[NORMAL] 1.00x STATS</button>
-            <button class="title-btn" style="border-color:#8B0000; color:#ff4444;" onclick="confirmNewGame(1.3)">[HARD] 1.30x STATS</button>
-            <button class="title-btn" style="border-color:#888; color:#888; margin-top:20px;" onclick="renderTitleScreen()">CANCEL</button>
+            <button class="title-btn" style="border-color:#6B8E23; color:#6B8E23;" data-action="new-game" data-diff="0.75">[EASY] 0.75x STATS</button>
+            <button class="title-btn" style="border-color:#B8860B; color:#B8860B;" data-action="new-game" data-diff="1.0">[NORMAL] 1.00x STATS</button>
+            <button class="title-btn" style="border-color:#8B0000; color:#ff4444;" data-action="new-game" data-diff="1.3">[HARD] 1.30x STATS</button>
+            <button class="title-btn" style="border-color:#888; color:#888; margin-top:20px;" data-action="title">CANCEL</button>
         </div>
     </div>
 
     <div id="screen-settings">
         <div class="settings-title">SYSTEM SETTINGS</div>
         <div class="settings-menu">
-            <button class="title-btn" id="btn-toggle-speed" onclick="toggleGameSpeed()">COMBAT SPEED: NORMAL</button>
-            <button class="title-btn" id="btn-toggle-sfx" onclick="toggleSFX()">AUDIO SFX: ON</button>
-            <button class="title-btn btn-meta" onclick="returnToTitle()">RETURN TO TITLE</button>
-            <button class="title-btn" style="border-color: #8B0000; color: #ff4444;" onclick="eraseCurrentSave()">ERASE SAVE DATA</button>
-            <button class="title-btn" style="border-color: #888; color: #888; margin-top: 20px;" onclick="closeSettings()">RESUME</button>
+            <button class="title-btn" id="btn-toggle-speed" data-action="toggle-speed">COMBAT SPEED: NORMAL</button>
+            <button class="title-btn" id="btn-toggle-sfx" data-action="toggle-sfx">AUDIO SFX: ON</button>
+            <button class="title-btn btn-meta" data-action="return-title">RETURN TO TITLE</button>
+            <button class="title-btn" style="border-color: #8B0000; color: #ff4444;" data-action="erase-save">ERASE SAVE DATA</button>
+            <button class="title-btn" style="border-color: #888; color: #888; margin-top: 20px;" data-action="settings-close">RESUME</button>
         </div>
     </div>
 
@@ -52,20 +52,20 @@
             <div class="upgrade-card" style="border-color: #4488ff;">
                 <div class="upgrade-header"><span>SCRAP SCAVENGER</span><span id="meta-lbl-scrap">LVL 0</span></div>
                 <div class="upgrade-stats">Start new expeditions with +50 initial Scrap per level.</div>
-                <button class="upg-btn btn-meta" onclick="buyMetaUpgrade('SCRAP')">UPGRADE [COST: 1 💀]</button>
+                <button class="upg-btn btn-meta" data-action="buy-meta" data-kind="SCRAP">UPGRADE [COST: 1 💀]</button>
             </div>
             <div class="upgrade-card" style="border-color: #4488ff;">
                 <div class="upgrade-header"><span>VETERAN ROSTER</span><span id="meta-lbl-level">LVL 0</span></div>
                 <div class="upgrade-stats">All operators permanently start +1 Level higher (grants early Perk point).</div>
-                <button class="upg-btn btn-meta" onclick="buyMetaUpgrade('LEVEL')">UPGRADE [COST: 2 💀]</button>
+                <button class="upg-btn btn-meta" data-action="buy-meta" data-kind="LEVEL">UPGRADE [COST: 2 💀]</button>
             </div>
             <div class="upgrade-card" style="border-color: #4488ff;">
                 <div class="upgrade-header"><span>TACTICAL RIGGING</span><span id="meta-lbl-inv">LVL 0</span></div>
                 <div class="upgrade-stats">Increase maximum tactical inventory slots by +1.</div>
-                <button class="upg-btn btn-meta" onclick="buyMetaUpgrade('INV')">UPGRADE [COST: 3 💀]</button>
+                <button class="upg-btn btn-meta" data-action="buy-meta" data-kind="INV">UPGRADE [COST: 3 💀]</button>
             </div>
         </div>
-        <button class="return-btn" style="margin-top:20px;" onclick="renderTitleScreen()">RETURN TO TITLE</button>
+        <button class="return-btn" style="margin-top:20px;" data-action="title">RETURN TO TITLE</button>
     </div>
 
     <div id="screen-map">
@@ -83,7 +83,7 @@
             <div id="relic-list" style="margin-top: 4px;"></div>
         </div>
 
-        <button class="outpost-btn" onclick="renderOutpost()">⛺ OUTPOST COMMAND</button>
+        <button class="outpost-btn" data-action="outpost">⛺ OUTPOST COMMAND</button>
         <div class="map-viewport" id="map-nodes"></div>
     </div>
 
@@ -121,9 +121,9 @@
         </div>
         
         <div class="op-tabs">
-            <button id="tab-roster" class="op-tab-btn op-tab-active" onclick="setOutpostTab('ROSTER')">SQUAD ROSTER</button>
-            <button id="tab-workbench" class="op-tab-btn" onclick="setOutpostTab('WORKBENCH')">WORKBENCH</button>
-            <button id="tab-cyber" class="op-tab-btn" onclick="setOutpostTab('CYBER')">CYBERNETICS</button>
+            <button id="tab-roster" class="op-tab-btn op-tab-active" data-action="outpost-tab" data-tab="ROSTER">SQUAD ROSTER</button>
+            <button id="tab-workbench" class="op-tab-btn" data-action="outpost-tab" data-tab="WORKBENCH">WORKBENCH</button>
+            <button id="tab-cyber" class="op-tab-btn" data-action="outpost-tab" data-tab="CYBER">CYBERNETICS</button>
         </div>
 
         <div id="outpost-roster-view" style="display:flex; flex-direction:column; gap:15px; flex-grow:1; overflow-y:auto;">
@@ -139,7 +139,7 @@
                     <span id="mat-tech-wb">💻 TECH: 0</span>
                 </div>
                 <div class="upgrade-btn-group" style="margin-top: 5px;">
-                    <button class="upg-btn" id="btn-breakdown" onclick="breakdownScrap()">BREAKDOWN SCRAP (25 SCRAP)</button>
+                    <button class="upg-btn" id="btn-breakdown" data-action="breakdown">BREAKDOWN SCRAP (25 SCRAP)</button>
                 </div>
             </div>
             <div class="upgrade-card">
@@ -165,7 +165,7 @@
             <div id="outpost-inventory" class="inventory-grid"></div>
         </div>
 
-        <button class="return-btn" onclick="renderMap()">CONFIRM & RETURN TO MAP</button>
+        <button class="return-btn" data-action="map">CONFIRM & RETURN TO MAP</button>
     </div>
 
     <div id="screen-combat">
