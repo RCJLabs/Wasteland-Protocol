@@ -22,6 +22,40 @@ const BASE_SAVE_KEY = 'wasteland_rpg_core_slot_';
 const SETTINGS_KEY = 'wasteland_rpg_core_settings';
 const META_KEY = 'wasteland_rpg_core_meta';
 
+// All persistence goes through here. Storage can be missing entirely (private browsing,
+// site data blocked), full (quota), or hold something a half-finished write left behind -
+// none of which should stop the game from starting. Reads that fail look empty; writes that
+// fail flip Store.working so the title screen can say so honestly.
+const CORRUPT = Symbol('corrupt');
+const Store = {
+    working: true,
+    get(key) { try { return localStorage.getItem(key); } catch (e) { return null; } },
+    getJSON(key) {
+        const raw = this.get(key);
+        if (raw === null || raw === '') return null;
+        try {
+            const parsed = JSON.parse(raw);
+            return (parsed && typeof parsed === 'object') ? parsed : CORRUPT;
+        } catch (e) {
+            console.warn(`Unreadable data at ${key}; treating it as corrupt.`);
+            return CORRUPT;
+        }
+    },
+    set(key, value) {
+        try { localStorage.setItem(key, value); return true; }
+        catch (e) { this.working = false; console.warn(`Could not save to ${key}: ${e.name}.`); return false; }
+    },
+    remove(key) { try { localStorage.removeItem(key); } catch (e) {} },
+    probe() {
+        try {
+            const k = '__wp_probe__';
+            localStorage.setItem(k, '1'); localStorage.removeItem(k);
+            this.working = true;
+        } catch (e) { this.working = false; }
+        return this.working;
+    }
+};
+
 let audioCtx = null;
 let currentSlot = 1;
 let globalSettings = { combatSpeed: 1.0, sfx: true };
@@ -108,6 +142,7 @@ const ACTIONS = {
     'new-game':         el => confirmNewGame(parseFloat(el.dataset.diff)),
     'slot':             el => selectSlot(Number(el.dataset.slot), el.dataset.exists === '1'),
     'buy-meta':         el => buyMetaUpgrade(el.dataset.kind),
+    'erase-slot':       el => { Store.remove(BASE_SAVE_KEY + Number(el.dataset.slot)); renderTitleScreen(); },
     'advance-sector':   () => advanceSector(),
 
     'node-event':       () => initiateEvent(),
@@ -311,7 +346,7 @@ function endRun() {
     if (isBest) bestScore = score;
     if (runStats.deepestSector > bestSector) bestSector = runStats.deepestSector;
     saveMeta();
-    localStorage.removeItem(BASE_SAVE_KEY + currentSlot);
+    Store.remove(BASE_SAVE_KEY + currentSlot);
     renderRunOver(score, isBest);
 }
 
@@ -339,7 +374,7 @@ function collectLoot(amount) { scrap += amount; if (runStats) { runStats.scrapEa
 
 let bestScore = 0; let bestSector = 0;
 
-function saveMeta() { localStorage.setItem(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector })); }
+function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector })); }
 
 function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, deepestSector: 1, deepestTier: 1 }; }
 
@@ -359,18 +394,17 @@ function noteDepth() {
 }
 
 function loadMeta() {
-    let m = localStorage.getItem(META_KEY);
-    if (m) {
-        let d = JSON.parse(m);
+    let d = Store.getJSON(META_KEY);
+    if (d && d !== CORRUPT) {
         bossSkulls = d.bossSkulls || 0;
         metaUpgrades = { ...metaUpgrades, ...(d.metaUpgrades || {}) };
         bestScore = d.bestScore || 0; bestSector = d.bestSector || 0;
         return;
     }
-    // First run under the global-meta system: adopt the best progress any slot recorded.
+    // No readable meta yet - adopt the best progress any slot recorded. A corrupt meta blob
+    // falls through to the same rebuild rather than taking the boot down with it.
     for (let i = 1; i <= 3; i++) {
-        let raw = localStorage.getItem(BASE_SAVE_KEY + i); if (!raw) continue;
-        let d = JSON.parse(raw); if (!d) continue;
+        let d = Store.getJSON(BASE_SAVE_KEY + i); if (!d || d === CORRUPT) continue;
         bossSkulls = Math.max(bossSkulls, d.bossSkulls || 0);
         if (d.metaUpgrades) {
             metaUpgrades.startScrap = Math.max(metaUpgrades.startScrap, d.metaUpgrades.startScrap || 0);
@@ -383,19 +417,20 @@ function loadMeta() {
 
 function migrateOldSaves() {
     for(let i=1; i<=3; i++) {
-        let oldSave = localStorage.getItem('wasteland_rpg_v37_slot_' + i);
-        if (oldSave && !localStorage.getItem(BASE_SAVE_KEY + i)) { localStorage.setItem(BASE_SAVE_KEY + i, oldSave); }
+        let oldSave = Store.get('wasteland_rpg_v37_slot_' + i);
+        if (oldSave && !Store.get(BASE_SAVE_KEY + i)) { Store.set(BASE_SAVE_KEY + i, oldSave); }
     }
-    let oldSettings = localStorage.getItem('wasteland_rpg_settings');
-    if (oldSettings && !localStorage.getItem(SETTINGS_KEY)) { localStorage.setItem(SETTINGS_KEY, oldSettings); }
+    let oldSettings = Store.get('wasteland_rpg_settings');
+    if (oldSettings && !Store.get(SETTINGS_KEY)) { Store.set(SETTINGS_KEY, oldSettings); }
 }
 
 function initEngine() { 
     preloadAssets();
+    Store.probe();
     migrateOldSaves();
     loadMeta();
-    let s = localStorage.getItem(SETTINGS_KEY); 
-    if (s) { globalSettings = { ...globalSettings, ...JSON.parse(s) }; } 
+    let saved = Store.getJSON(SETTINGS_KEY);
+    if (saved && saved !== CORRUPT) { globalSettings = { ...globalSettings, ...saved }; }
     updateSettingsUI(); 
     renderTitleScreen(); 
 }
@@ -403,19 +438,26 @@ function initEngine() {
 function switchScreen(screenId) { document.querySelectorAll('#engine > div:not(.settings-icon):not(#screen-settings)').forEach(el => el.style.display = 'none'); document.getElementById(screenId).style.display = 'flex'; if (screenId === 'screen-map' || screenId === 'screen-outpost' || screenId === 'screen-citadel') { document.getElementById('btn-global-settings').style.display = 'block'; } else { document.getElementById('btn-global-settings').style.display = 'none'; } }
 function openSettings() { document.querySelectorAll('#engine > div:not(.settings-icon)').forEach(el => { if (el.style.display === 'flex' && el.id !== 'screen-settings') previousScreen = el.id; }); document.getElementById('screen-settings').style.display = 'flex'; }
 function closeSettings() { document.getElementById('screen-settings').style.display = 'none'; }
-function toggleGameSpeed() { globalSettings.combatSpeed = globalSettings.combatSpeed === 1.0 ? 0.5 : 1.0; localStorage.setItem(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); }
-function toggleSFX() { globalSettings.sfx = !globalSettings.sfx; if (globalSettings.sfx) initAudio(); localStorage.setItem(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); }
+function toggleGameSpeed() { globalSettings.combatSpeed = globalSettings.combatSpeed === 1.0 ? 0.5 : 1.0; Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); }
+function toggleSFX() { globalSettings.sfx = !globalSettings.sfx; if (globalSettings.sfx) initAudio(); Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); }
 function updateSettingsUI() { document.getElementById('btn-toggle-speed').innerText = globalSettings.combatSpeed === 1.0 ? "COMBAT SPEED: NORMAL" : "COMBAT SPEED: FAST"; document.getElementById('btn-toggle-sfx').innerText = globalSettings.sfx ? "AUDIO SFX: ON" : "AUDIO SFX: OFF"; }
 function returnToTitle() { closeSettings(); renderTitleScreen(); }
-function eraseCurrentSave() { if(confirm("Are you sure you want to permanently delete this save slot?")) { localStorage.removeItem(BASE_SAVE_KEY + currentSlot); closeSettings(); renderTitleScreen(); } }
+function eraseCurrentSave() { if(confirm("Are you sure you want to permanently delete this save slot?")) { Store.remove(BASE_SAVE_KEY + currentSlot); closeSettings(); renderTitleScreen(); } }
 
 function renderTitleScreen() {
     switchScreen('screen-title'); let menuHTML = '';
     if (bestScore > 0) menuHTML += `<div style="text-align:center; font-size:11px; letter-spacing:2px; color:#B8860B; margin-bottom:6px;">BEST RUN: ${bestScore.toLocaleString()} PTS \u00B7 SECTOR ${bestSector}</div>`;
+    if (!Store.working) menuHTML += `<div class="title-warning">⚠ STORAGE UNAVAILABLE — THIS RUN WILL NOT BE SAVED</div>`;
     for(let i=1; i<=3; i++) {
-        let d = JSON.parse(localStorage.getItem(BASE_SAVE_KEY + i));
-        if (d) { menuHTML += `<button class="title-btn btn-continue" data-action="slot" data-slot="${i}" data-exists="1">SLOT ${i} [S${d.currentSector||1}-T${d.tier}]${d.combat ? ' ⚔' : ''}</button>`; } 
-        else { menuHTML += `<button class="title-btn" data-action="slot" data-slot="${i}" data-exists="0">SLOT ${i} [ EMPTY ]</button>`; }
+        let d = Store.getJSON(BASE_SAVE_KEY + i);
+        if (d === CORRUPT) {
+            // An unreadable slot costs that slot, never the boot: offer to clear it in place.
+            menuHTML += `<button class="title-btn btn-corrupt" data-action="erase-slot" data-slot="${i}">SLOT ${i} [ DAMAGED — ERASE ]</button>`;
+        } else if (d) {
+            menuHTML += `<button class="title-btn btn-continue" data-action="slot" data-slot="${i}" data-exists="1">SLOT ${i} [S${d.currentSector||1}-T${d.tier}]${d.combat ? ' ⚔' : ''}</button>`;
+        } else {
+            menuHTML += `<button class="title-btn" data-action="slot" data-slot="${i}" data-exists="0">SLOT ${i} [ EMPTY ]</button>`;
+        }
     }
     menuHTML += `<button class="title-btn btn-meta" style="margin-top:12px;" data-action="citadel">CITADEL (💀 ${bossSkulls})</button>`;
     document.getElementById('title-menu-container').innerHTML = menuHTML;
@@ -469,8 +511,8 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { localStorage.setItem(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, activeRelics, runStats, combat: buildCombatSnapshot() })); }
-function loadGameState() { let d = JSON.parse(localStorage.getItem(BASE_SAVE_KEY + currentSlot)); if (d) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; activeRelics = d.activeRelics || []; pendingCombat = d.combat || null; runStats = d.runStats || newRunStats(); } }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, activeRelics, runStats, combat: buildCombatSnapshot() })); }
+function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; activeRelics = d.activeRelics || []; pendingCombat = d.combat || null; runStats = d.runStats || newRunStats(); } }
 
 function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`; document.getElementById('meta-lbl-scrap').innerText = `LVL ${metaUpgrades.startScrap / 50}`; document.getElementById('meta-lbl-level').innerText = `LVL ${metaUpgrades.startLevel - 1}`; document.getElementById('meta-lbl-inv').innerText = `LVL ${metaUpgrades.invMax - 4}`; }
 function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossSkulls -= 1; metaUpgrades.startScrap += 50; } else if (type === 'LEVEL' && bossSkulls >= 2) { bossSkulls -= 2; metaUpgrades.startLevel += 1; } else if (type === 'INV' && bossSkulls >= 3) { bossSkulls -= 3; metaUpgrades.invMax += 1; } saveMeta(); renderCitadel(); }
@@ -1100,7 +1142,7 @@ globalThis.WP = {
     // entry points and pure helpers the suites exercise
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, computeScore, newRunStats, noteDepth, sectorRewardMult, awardXp, log, playSFX, addMomentum, setOutpostTab,
     // engine constants
-    BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },

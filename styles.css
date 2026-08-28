@@ -10,6 +10,8 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .title-btn:active { transform: translateY(2px); box-shadow: none; }
 .btn-continue { border-color: #B8860B; color: #B8860B; }
 .btn-meta { border-color: #4488ff; color: #4488ff; }
+.btn-corrupt { border-color: #8B0000; color: #ff6666; border-style: dashed; }
+.title-warning { text-align: center; font-size: 10px; letter-spacing: 1px; color: #ff8844; border: 1px solid #8B0000; background: rgba(60,0,0,0.35); padding: 6px 8px; margin-bottom: 6px; line-height: 1.4; }
 
 .settings-icon { position: absolute; top: 15px; right: 20px; font-size: 24px; cursor: pointer; color: #888; transition: 0.2s; z-index: 100; text-shadow: 0 0 5px #000; }
 .settings-icon:hover { color: #fff; transform: rotate(90deg); }
