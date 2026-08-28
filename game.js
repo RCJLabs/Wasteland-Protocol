@@ -60,7 +60,7 @@ let audioCtx = null;
 let currentSlot = 1;
 let globalSettings = { combatSpeed: 1.0, sfx: true };
 
-let bossSkulls = 0; let metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4 };
+let bossSkulls = 0; let metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0 };
 let scrap = 0; let currentTier = 1; let currentSector = 1; let difficultyMult = 1.0; 
 let inventory = []; let materials = { parts: 0, chems: 0, tech: 0 }; 
 let tuneUpBattles = 0; 
@@ -114,6 +114,7 @@ const SECTOR_LAYOUT = [
 ];
 const TOTAL_TIERS = SECTOR_LAYOUT.length;
 const SECTOR_TIER_BONUS = 3;
+const BASE_REGROUPS = 2;       // second chances per run, before a defeat ends it
 // Difficulty still climbs hard, but through lethality rather than bullet sponges: health
 // tracks player damage growth so a fight stays ~10 rounds at any depth, while damage
 // outpaces player health so a run reliably ends somewhere around sector 10.
@@ -159,6 +160,7 @@ const ACTIONS = {
     'slot':             el => selectSlot(Number(el.dataset.slot), el.dataset.exists === '1'),
     'buy-meta':         el => buyMetaUpgrade(el.dataset.kind),
     'erase-slot':       el => { Store.remove(BASE_SAVE_KEY + Number(el.dataset.slot)); renderTitleScreen(); },
+    'regroup':          () => regroupSquad(),
     'advance-sector':   () => advanceSector(),
 
     'node-event':       () => initiateEvent(),
@@ -191,7 +193,8 @@ const ACTIONS = {
     'target':           el => resolveAction(el.dataset.id),
     'use-item':         el => resolveConsumableItem(el.dataset.id),
     'loot':             el => collectLoot(Number(el.dataset.amount)),
-    'end-run':          () => handleSquadWipe()
+    'end-run':          () => endRun(),
+    'squad-down':       () => handleSquadWipe()
 };
 
 function dispatchAction(el) {
@@ -367,10 +370,59 @@ function resolveConsumableItem(targetId) {
     pendingAction = null; checkWinState();
 }
 
-function handleSquadWipe() { endRun(); }
+// Losing the squad costs a regroup, not the expedition. Only when regroups run out does the
+// run actually end - so a defeat never destroys a session the player did not choose to end.
+function handleSquadWipe() {
+    if (!runStats) runStats = newRunStats();
+    if (regroupsLeft() > 0) renderSquadBroken();
+    else endRun();
+}
 
-// Endless mode: losing the squad ends the run. Skulls and Citadel upgrades are permanent,
-// so a lost run still moves the meta forward - only the expedition itself is gone.
+function regroupsLeft() {
+    if (!runStats) return 0;
+    if (typeof runStats.regroups !== 'number') runStats.regroups = totalRegroups();
+    return Math.max(0, runStats.regroups);
+}
+
+function totalRegroups() { return BASE_REGROUPS + (metaUpgrades.extraRegroups || 0); }
+
+// Revive the squad, take half the scrap, and put them back at the start of the sector. The
+// save is left intact - this is the outcome the player expects from losing a fight.
+function regroupSquad() {
+    if (regroupsLeft() <= 0) { endRun(); return; }
+    runStats.regroups--;
+    playerRoster.forEach(p => { p.hp = p.maxHp; p.stunnedTurns = 0; p.bleedingTurns = 0; p.armorTurns = 0; p.armor = 0; p.oiledTurns = 0; });
+    scrap = Math.floor(scrap / 2);
+    currentTier = 1;
+    momentum = 0; addMomentum(0);
+    combatActive = false; activeEntities = []; turnQueue = []; pendingCombat = null;
+    saveGameState();
+    renderMap();
+}
+
+function renderSquadBroken() {
+    combatActive = false; activeEntities = []; turnQueue = []; pendingCombat = null;
+    momentum = 0; addMomentum(0);
+    noteDepth();
+    const left = regroupsLeft();
+    switchScreen('screen-runover');
+    document.getElementById('runover-title').innerText = 'SQUAD BROKEN';
+    document.getElementById('runover-desc').innerText =
+        `The squad is down but the expedition holds. Regrouping costs half your scrap and pushes you back to the start of Sector ${currentSector}.`;
+    document.getElementById('runover-score').innerText = `${left} REGROUP${left === 1 ? '' : 'S'} LEFT`;
+    document.getElementById('runover-best').innerText = `RUN SCORE SO FAR: ${computeScore(runStats).toLocaleString()} PTS`;
+    document.getElementById('runover-lines').innerHTML = [
+        ['SCRAP ON HAND', `${scrap} \u2192 ${Math.floor(scrap / 2)}`],
+        ['DEPTH REACHED', `SECTOR ${runStats.deepestSector} \u00B7 TIER ${runStats.deepestTier}`],
+        ['SKULLS BANKED', `\uD83D\uDC80 ${bossSkulls}`]
+    ].map(l => `<div class="runover-line"><span>${l[0]}</span><span>${l[1]}</span></div>`).join('');
+    document.getElementById('runover-choices').innerHTML =
+        `<button class="event-btn" style="border-color:#6B8E23; color:#6B8E23;" data-action="regroup">REGROUP (${left} LEFT)</button>` +
+        `<button class="event-btn" style="border-color:#8B0000; color:#ff6666;" data-action="end-run">END RUN &amp; BANK SCORE</button>`;
+    saveGameState();
+}
+
+// The run only ends when the player has no regroups left, or chooses to stop.
 function endRun() {
     combatActive = false; activeEntities = []; turnQueue = []; pendingCombat = null;
     momentum = 0; addMomentum(0);
@@ -387,6 +439,8 @@ function endRun() {
 
 function renderRunOver(score, isBest) {
     switchScreen('screen-runover');
+    document.getElementById('runover-title').innerText = 'RUN OVER';
+    document.getElementById('runover-desc').innerText = 'The wasteland claimed them. What they salvaged reaches the Citadel.';
     const st = runStats;
     document.getElementById('runover-score').innerText = `${score.toLocaleString()} PTS`;
     document.getElementById('runover-best').innerText = isBest ? '\u2605 NEW PERSONAL BEST \u2605' : `BEST: ${bestScore.toLocaleString()} PTS`;
@@ -411,7 +465,7 @@ let bestScore = 0; let bestSector = 0;
 
 function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector })); }
 
-function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, deepestSector: 1, deepestTier: 1 }; }
+function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, deepestSector: 1, deepestTier: 1, regroups: totalRegroups() }; }
 
 // Endless scoring: depth is worth far more than any single haul, so pushing one sector
 // deeper always beats farming the one you are on.
@@ -578,10 +632,11 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         if (pendingCombat) {
             migrateAssetPaths(pendingCombat.enemies);
             if (typeof pendingCombat.bgFile === 'string') pendingCombat.bgFile = pendingCombat.bgFile.replace(/\.png$/, '.webp');
-        } runStats = d.runStats || newRunStats(); } }
+        } runStats = d.runStats || newRunStats();
+        if (typeof runStats.regroups !== 'number') runStats.regroups = totalRegroups(); } }
 
-function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`; document.getElementById('meta-lbl-scrap').innerText = `LVL ${metaUpgrades.startScrap / 50}`; document.getElementById('meta-lbl-level').innerText = `LVL ${metaUpgrades.startLevel - 1}`; document.getElementById('meta-lbl-inv').innerText = `LVL ${metaUpgrades.invMax - 4}`; }
-function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossSkulls -= 1; metaUpgrades.startScrap += 50; } else if (type === 'LEVEL' && bossSkulls >= 2) { bossSkulls -= 2; metaUpgrades.startLevel += 1; } else if (type === 'INV' && bossSkulls >= 3) { bossSkulls -= 3; metaUpgrades.invMax += 1; } saveMeta(); renderCitadel(); }
+function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`; document.getElementById('meta-lbl-scrap').innerText = `LVL ${metaUpgrades.startScrap / 50}`; document.getElementById('meta-lbl-level').innerText = `LVL ${metaUpgrades.startLevel - 1}`; document.getElementById('meta-lbl-inv').innerText = `LVL ${metaUpgrades.invMax - 4}`; document.getElementById('meta-lbl-regroup').innerText = `LVL ${metaUpgrades.extraRegroups || 0}`; }
+function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossSkulls -= 1; metaUpgrades.startScrap += 50; } else if (type === 'LEVEL' && bossSkulls >= 2) { bossSkulls -= 2; metaUpgrades.startLevel += 1; } else if (type === 'INV' && bossSkulls >= 3) { bossSkulls -= 3; metaUpgrades.invMax += 1; } else if (type === 'REGROUP' && bossSkulls >= 4) { bossSkulls -= 4; metaUpgrades.extraRegroups = (metaUpgrades.extraRegroups || 0) + 1; } saveMeta(); renderCitadel(); }
 
 function renderMap() {
     switchScreen('screen-map'); 
@@ -1224,7 +1279,7 @@ function awardXp(char, amount) {
 function checkWinState() {
     renderField();
     const pA = activeEntities.some(e => e.isPlayer && e.hp > 0); const eA = activeEntities.some(e => !e.isPlayer && e.hp > 0);
-    if (!pA) { document.getElementById('command-deck').innerHTML = `<button data-action="end-run">EXPEDITION FAILED - RESTART</button>`; combatActive = false; } 
+    if (!pA) { document.getElementById('command-deck').innerHTML = `<button data-action="squad-down">SQUAD DOWN</button>`; combatActive = false; } 
     else if (!eA) { 
         if (currentNodeType === 'BOSS') { bossSkulls++; if (runStats) runStats.bosses++; saveMeta(); log(`> VICTORY! Warlord Skull acquired!`, "log-heal"); }
         if (isCurrentNodeElite) {
@@ -1278,9 +1333,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, migrateAssetPaths, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, awardXp, log, playSFX, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, awardXp, log, playSFX, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },

@@ -20,6 +20,9 @@ module.exports = {
       confirmNewGame(1.0);
       currentSector = 2; currentTier = 4; noteDepth();
       Object.assign(runStats, { kills: 30, elites: 1, bosses: 1, scrapEarned: 400, nodes: 12 });
+      // A wipe only ends the run once regroups are gone - spend them so this exercises the
+      // real end-of-run path rather than the squad-broken prompt.
+      runStats.regroups = 0;
       const expected = computeScore(runStats);
       initiateCombat('RAIDERS', false);
       playerRoster.forEach(c => c.hp = 0);
@@ -34,7 +37,7 @@ module.exports = {
                bestScore, bestSector, skulls: bossSkulls,
                cleared: localStorage.getItem(BASE_SAVE_KEY + 1) === null };
     });
-    ok('a wipe presents the failure prompt', /FAILED/.test(run.deck));
+    ok('a wipe presents the defeat prompt', /SQUAD DOWN/.test(run.deck));
     ok('the run-over screen is shown', run.screen === 'flex');
     ok('the reported score matches the computed one', run.shown === `${run.expected.toLocaleString()} PTS`);
     ok('a first run is flagged a personal best', /NEW PERSONAL BEST/.test(run.best));
@@ -52,7 +55,7 @@ module.exports = {
 
     const weaker = await page.evaluate(() => {
       currentSlot = 2; confirmNewGame(1.0); runStats.kills = 1; noteDepth();
-      const before = bestScore; endRun();
+      const before = bestScore; endRun();   // ending early is always available
       return { before, after: bestScore, banner: document.getElementById('runover-best').innerText };
     });
     ok('a weaker run leaves the record intact', weaker.after === weaker.before);

@@ -64,6 +64,11 @@
                 <div class="upgrade-stats">Increase maximum tactical inventory slots by +1.</div>
                 <button class="upg-btn btn-meta" data-action="buy-meta" data-kind="INV">UPGRADE [COST: 3 💀]</button>
             </div>
+            <div class="upgrade-card" style="border-color: #4488ff;">
+                <div class="upgrade-header"><span>FALLBACK PROTOCOL</span><span id="meta-lbl-regroup">LVL 0</span></div>
+                <div class="upgrade-stats">Carry +1 extra regroup into every expedition.</div>
+                <button class="upg-btn btn-meta" data-action="buy-meta" data-kind="REGROUP">UPGRADE [COST: 4 💀]</button>
+            </div>
         </div>
         <button class="return-btn" style="margin-top:20px;" data-action="title">RETURN TO TITLE</button>
     </div>
@@ -97,7 +102,7 @@
 
     <div id="screen-runover">
         <div class="event-box" style="border-color: #8B0000;">
-            <div class="event-title" style="color: #ff4444;">SQUAD LOST</div>
+            <div class="event-title" id="runover-title" style="color: #ff4444;">SQUAD LOST</div>
             <div class="event-desc" id="runover-desc">The wasteland claimed them. What they salvaged reaches the Citadel.</div>
             <div class="runover-score" id="runover-score">0</div>
             <div class="runover-best" id="runover-best"></div>

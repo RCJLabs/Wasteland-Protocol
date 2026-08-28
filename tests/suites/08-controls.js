@@ -209,9 +209,19 @@ module.exports = {
     ok('advance-sector moves to the next sector',
       await state(() => currentSector) === 2 && await state(() => currentTier) === 1);
 
-    // ---- run end ----
+    // ---- defeat: squad-down opens the choice, regroup returns to the map ----
     await state(() => { initiateCombat('RAIDERS', false); playerRoster.forEach(c => c.hp = 0); checkWinState(); });
     await page.waitForTimeout(200);
+    await click('[data-action="squad-down"]');
+    ok('squad-down opens the squad-broken screen', await shown('screen-runover') === 'flex');
+    await click('[data-action="regroup"]');
+    ok('regroup puts the squad back on the map',
+      await shown('screen-map') === 'flex' && await state(() => currentTier) === 1);
+
+    // ---- and end-run banks the score instead ----
+    await state(() => { initiateCombat('RAIDERS', false); playerRoster.forEach(c => c.hp = 0); checkWinState(); });
+    await page.waitForTimeout(200);
+    await click('[data-action="squad-down"]');
     await click('[data-action="end-run"]');
     ok('end-run shows the run summary', await shown('screen-runover') === 'flex');
 
