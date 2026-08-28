@@ -12,8 +12,13 @@ module.exports = {
     await page.click('.title-btn:has-text("EMPTY")');
     await page.waitForTimeout(300);
     await page.click('.title-btn:has-text("NORMAL")');
+    await page.waitForTimeout(400);
+    // A difficulty now opens the contract board rather than deploying straight away.
+    ok('picking a difficulty offers the contract board',
+      (await page.$eval('#screen-contracts', e => getComputedStyle(e).display)) === 'flex');
+    await page.click('[data-action="begin-expedition"]');
     await page.waitForTimeout(500);
-    ok('picking a difficulty reaches the map',
+    ok('deploying from it reaches the map',
       (await page.$eval('#screen-map', e => getComputedStyle(e).display)) === 'flex');
 
     await page.click('.outpost-btn');

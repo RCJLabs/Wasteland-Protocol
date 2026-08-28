@@ -49,8 +49,15 @@ module.exports = {
       await page.$eval('#title-menu-container', e => getComputedStyle(e).display) === 'flex');
     await click('[data-action="slot"][data-slot="1"]');
     await click('[data-action="new-game"][data-diff="0.75"]');
-    ok('new-game starts a run at the chosen difficulty',
+    ok('new-game opens the contract board holding that difficulty',
+      await shown('screen-contracts') === 'flex' && await state(() => pendingDifficulty) === 0.75);
+    await click('[data-action="toggle-contract"][data-id="GLASS"]');
+    ok('a contract can be signed from it',
+      await state(() => activeContracts.join()) === 'GLASS');
+    await click('[data-action="begin-expedition"]');
+    ok('deploying starts a run at the chosen difficulty',
       await shown('screen-map') === 'flex' && await state(() => difficultyMult) === 0.75);
+    await state(() => { activeContracts = []; });
 
     // ---- settings ----
     const speed0 = await state(() => globalSettings.combatSpeed);

@@ -282,3 +282,20 @@ button.reach-short { border-color: #7a5a20; }
 .relic-common { border-color: #8a9a5b; color: #b7c98a; }
 .relic-rare { border-color: #b07fd4; color: #d9b6f2; box-shadow: 0 0 10px rgba(176,127,212,0.25) inset; }
 .relic-rare .relic-card-desc { color: #c8b6d8; }
+
+/* Expedition contracts: optional conditions taken before deploying. */
+#screen-contracts { display: none; flex-direction: column; padding: 20px; height: 100%; box-sizing: border-box;
+  overflow: hidden; background: linear-gradient(rgba(14,12,8,0.95), rgba(0,0,0,0.98)); }
+.contract-note { font-size: 11px; line-height: 1.5; color: #8a8578; margin-bottom: 12px; flex-shrink: 0; }
+.contract-list { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.contract-card { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 10px 12px;
+  line-height: 1.4; border-color: #4a463c; color: #8a8578; }
+.contract-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; width: 100%; }
+.contract-name { font-size: 13px; font-weight: bold; letter-spacing: 1px; }
+.contract-bonus { font-size: 11px; font-variant-numeric: tabular-nums; }
+.contract-desc { font-size: 10.5px; white-space: normal; opacity: 0.85; }
+.contract-on { border-color: #B8860B; color: #d9a93d; box-shadow: 0 0 10px rgba(184,134,11,0.2) inset; }
+.contract-footer { flex-shrink: 0; padding-top: 12px; }
+.contract-mult { text-align: center; font-size: 13px; font-weight: bold; letter-spacing: 1px;
+  color: #B8860B; margin-bottom: 10px; font-variant-numeric: tabular-nums; }
+.contract-back { border-color: #888; color: #888; margin-top: 8px; }

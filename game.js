@@ -70,7 +70,7 @@ let activeRelics = []; let pendingRelicOffer = null;
 
 let combatBgFile = 'bg_combat.webp'; let pendingCombat = null;
 let runStats = null;
-let activeEvent = null;
+let activeEvent = null; let pendingConsequences = []; let recentEvents = []; let activeContracts = []; let pendingDifficulty = 1.0;
 let activePosSelector = null; let activePerkSelector = null; let currentWeather = 'CLEAR'; let currentNodeType = '';
 let isCurrentNodeElite = false;
 
@@ -223,11 +223,205 @@ const SECTOR_HP_SCALE = 1.25;
 const SECTOR_DMG_SCALE = 1.32;
 const XP_CURVE = 1.35;         // was 1.5 - levels kept stalling, starving the perk economy
 
+// Some choices should not settle on the screen that offered them. An event can book a
+// consequence a sector or two out; it comes due when the run reaches that depth, whether or not
+// the player still remembers agreeing to it.
+const CONSEQUENCE_POOL = {
+    DEBT: {
+        title: "THE COLLECTOR FINDS YOU",
+        resolve: (c) => {
+            const owed = c.amount || 0;
+            if (scrap >= owed) { scrap -= owed; return `You settle up. ${owed} Scrap changes hands and the crew moves on.`; }
+            const short = owed - scrap; scrap = 0;
+            deployed().forEach(u => { u.hp = Math.max(1, u.hp - Math.floor(u.maxHp * 0.15)); });
+            return `You are ${short} Scrap short. They take what you have, and a payment in bruises.`;
+        }
+    },
+    AMBUSH: {
+        title: "IT WAS BAIT",
+        resolve: () => {
+            const hit = deployed();
+            hit.forEach(u => { u.hp = Math.max(1, u.hp - Math.floor(u.maxHp * 0.2)); });
+            return `Whoever left that cache was waiting for whoever took it. The squad fights clear, ${hit.length} of them bleeding.`;
+        }
+    },
+    SURVIVOR: {
+        title: "A DEBT REPAID",
+        resolve: () => {
+            deployed().forEach(u => { u.hp = u.maxHp; });
+            const m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)];
+            materials[m] += 2; scrap += 60;
+            return `The scavenger you patched up finds your camp with a full kit. Everyone is treated, and they leave 60 Scrap and 2 ${m}.`;
+        }
+    }
+};
+
+function deployed() { return playerRoster.filter(p => p.gridPos > 0 && p.hp > 0); }
+
+// Booked against a sector rather than a node count, so it reads the same to the player as the
+// event that promised it: "two sectors from now".
+function bookConsequence(kind, inSectors, extra = {}) {
+    pendingConsequences.push({ kind, dueSector: currentSector + inSectors, ...extra });
+}
+function consequencesDue() { return pendingConsequences.filter(c => c.dueSector <= currentSector); }
+
+// Shown on the event screen, one at a time, before the sector's map.
+function resolveConsequence() {
+    const due = consequencesDue();
+    if (due.length === 0) { renderMap(); return false; }
+    const c = due[0];
+    pendingConsequences = pendingConsequences.filter(o => o !== c);
+    const spec = CONSEQUENCE_POOL[c.kind];
+    if (!spec) { saveGameState(); return resolveConsequence(); }
+    activeEvent = null;
+    switchScreen('screen-event');
+    document.getElementById('event-title').innerText = spec.title;
+    document.getElementById('event-desc').innerText = '';
+    const text = spec.resolve(c);
+    document.getElementById('event-choices').innerHTML =
+        `<div style="color:#B8860B; font-weight:bold; margin-bottom:15px;">> ${text}</div>` +
+        `<button class="event-btn" style="border-color:#4488ff; color:#4488ff;" data-action="consequence-ack">CONTINUE EXPEDITION</button>`;
+    saveGameState();
+    return true;
+}
+
+// Optional conditions taken before a run, each buying a share of the final score. A run stops
+// being the same shape every time, and a leaderboard entry says how it was earned.
+const CONTRACT_POOL = [
+    { id: 'NO_CONSUMABLES', name: "DRY RUN",       bonus: 0.15, desc: "Deploy with an empty bag. Nothing can be carried or crafted into it." },
+    { id: 'SHORT_HANDED',   name: "SHORT HANDED",  bonus: 0.20, desc: "One fewer operator deploys. The back rank stays empty." },
+    { id: 'THEY_MOVE_FIRST',name: "SECOND WATCH",  bonus: 0.15, desc: "The enemy takes the first turn of every fight." },
+    { id: 'HARSH_SKIES',    name: "HARSH SKIES",   bonus: 0.20, desc: "Every node carries weather. It is never clear." },
+    { id: 'GLASS',          name: "GLASS JAW",     bonus: 0.30, desc: "Every operator deploys with 25% less maximum health." },
+    { id: 'NO_REGROUPS',    name: "NO FALLBACK",   bonus: 0.35, desc: "No regroups. The first squad wipe ends the expedition." }
+];
+
+function hasContract(id) { return activeContracts.includes(id); }
+// Every route into the bag goes through here. Dry Run promises nothing can be carried or
+// crafted into it, and events hand out items too - so the rule cannot live at the crafting
+// bench alone.
+function canCarry() { return !hasContract('NO_CONSUMABLES') && inventory.length < metaUpgrades.invMax; }
+function contractMult() {
+    return 1 + CONTRACT_POOL.filter(c => hasContract(c.id)).reduce((n, c) => n + c.bonus, 0);
+}
+function contractNames() {
+    return CONTRACT_POOL.filter(c => hasContract(c.id)).map(c => c.name);
+}
+
 const EVENT_POOL = [
     { title: "WRECKED CARAVAN", desc: "You stumble upon a destroyed merchant rig. The engine block is sparking dangerously, but the cargo hold is partially intact.", choices: [ { label: "Salvage Cargo (+30 Scrap)", canAfford: () => true, execute: () => { scrap += 30; playSFX('heal'); return "Salvaged 30 Scrap from the wreckage."; } }, { label: "Gut the Engine (+1 Tech, +2 Parts, -15 HP to random unit)", canAfford: () => true, execute: () => { materials.tech += 1; materials.parts += 2; let active = playerRoster.filter(p => p.gridPos > 0 && p.hp > 0); let target = active[Math.floor(Math.random() * active.length)]; target.hp = Math.max(1, target.hp - 15); playSFX('hit'); triggerHitFlash(target.id); return `Extracted parts, but an electrical surge shocked ${target.name} for 15 DMG.`; } }, { label: "Leave it", canAfford: () => true, execute: () => { return "You move on safely without risking the sparks."; } } ] },
     { title: "THE CHEM OASIS", desc: "A glowing pool of bio-luminescent fluid sits in a blast crater. It smells like synthetic ozone and iron.", choices: [ { label: "Extract Fluid (+2 Chems)", canAfford: () => true, execute: () => { materials.chems += 2; playSFX('heal'); return "Carefully extracted 2 Chems from the pool."; } }, { label: "Bathe Wounds (Heal All Deployed for 25 HP)", canAfford: () => true, execute: () => { playerRoster.forEach(p => { if(p.gridPos > 0 && p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + 25); }); playSFX('heal'); return "The fluid burned, but the wounds sealed rapidly."; } } ] },
-    { title: "WANDERING TINKER", desc: "A hooded cyborg sits by a campfire. They gesture toward a pile of tactical gear and hold out a mechanical hand.", choices: [ { label: "Trade Scrap for Bomb (Cost: 40 Scrap)", canAfford: () => scrap >= 40 && inventory.length < metaUpgrades.invMax, execute: () => { scrap -= 40; inventory.push('SCRAP_BOMB'); checkBountyProgress('CRAFT'); playSFX('click'); return "Acquired 1 Scrap Bomb."; } }, { label: "Trade Parts for Tech (Cost: 2 Parts)", canAfford: () => materials.parts >= 2, execute: () => { materials.parts -= 2; materials.tech += 1; playSFX('click'); return "Traded 2 Parts for 1 Tech."; } }, { label: "Decline", canAfford: () => true, execute: () => { return "You nod respectfully and continue walking."; } } ] },
-    { title: "RADIATION STORM", desc: "The geiger counter screams. A violent wall of radioactive dust is rapidly approaching your position.", choices: [ { label: "Sprint Through (-10 HP to All Deployed)", canAfford: () => true, execute: () => { playerRoster.forEach(p => { if(p.gridPos > 0 && p.hp > 0) p.hp = Math.max(1, p.hp - 10); }); playSFX('hit'); triggerShake(); return "The squad powered through, but took heavy radiation burns."; } }, { label: "Deploy EMP Shield (-1 EMP Charge)", canAfford: () => inventory.includes('EMP_CHARGE'), execute: () => { inventory.splice(inventory.indexOf('EMP_CHARGE'), 1); playSFX('heal'); return "The EMP Charge detonated, creating a localized magnetic shield against the storm."; } } ] }
+    { title: "WANDERING TINKER", desc: "A hooded cyborg sits by a campfire. They gesture toward a pile of tactical gear and hold out a mechanical hand.", choices: [ { label: "Trade Scrap for Bomb (Cost: 40 Scrap)", canAfford: () => scrap >= 40 && canCarry(), execute: () => { scrap -= 40; inventory.push('SCRAP_BOMB'); checkBountyProgress('CRAFT'); playSFX('click'); return "Acquired 1 Scrap Bomb."; } }, { label: "Trade Parts for Tech (Cost: 2 Parts)", canAfford: () => materials.parts >= 2, execute: () => { materials.parts -= 2; materials.tech += 1; playSFX('click'); return "Traded 2 Parts for 1 Tech."; } }, { label: "Decline", canAfford: () => true, execute: () => { return "You nod respectfully and continue walking."; } } ] },
+    { title: "RADIATION STORM", desc: "The geiger counter screams. A violent wall of radioactive dust is rapidly approaching your position.", choices: [ { label: "Sprint Through (-10 HP to All Deployed)", canAfford: () => true, execute: () => { playerRoster.forEach(p => { if(p.gridPos > 0 && p.hp > 0) p.hp = Math.max(1, p.hp - 10); }); playSFX('hit'); triggerShake(); return "The squad powered through, but took heavy radiation burns."; } }, { label: "Deploy EMP Shield (-1 EMP Charge)", canAfford: () => inventory.includes('EMP_CHARGE'), execute: () => { inventory.splice(inventory.indexOf('EMP_CHARGE'), 1); playSFX('heal'); return "The EMP Charge detonated, creating a localized magnetic shield against the storm."; } } ] },
+
+    { title: "THE DEBT COLLECTOR", desc: "A fixer in a rebreather deals cards on the hood of a burnt-out truck. She does not look up. 'Everyone out here needs something. I need to be paid back.'",
+      choices: [
+        { label: "Borrow 200 Scrap (owe 400 in two sectors)", canAfford: () => true,
+          execute: () => { scrap += 200; bookConsequence('DEBT', 2, { amount: 400 }); playSFX('click');
+            return "She counts out 200 Scrap without looking at you. 'Two sectors. Four hundred.'"; } },
+        { label: "Sell her a favour instead (+80 Scrap, -1 Tech)", canAfford: () => materials.tech >= 1,
+          execute: () => { materials.tech -= 1; scrap += 80; playSFX('click');
+            return "She takes the component, turns it over once, and pays you 80 Scrap for it."; } },
+        { label: "Walk away", canAfford: () => true, execute: () => "She deals another hand. 'Smart. Most of them aren't.'" }
+      ] },
+
+    { title: "THE BURIED CACHE", desc: "A sealed military container, half out of the sand, seals intact. Nothing has touched it. Nothing at all, for a very long time.",
+      choices: [
+        { label: "Crack it open (+1 item, +1 Tech)", canAfford: () => canCarry(),
+          execute: () => { inventory.push('SCRAP_BOMB'); materials.tech += 1; checkBountyProgress('CRAFT');
+            bookConsequence('AMBUSH', 1); playSFX('heal');
+            return "A Scrap Bomb and a clean tech core. Nobody says what everyone is thinking: why was this still here?"; } },
+        { label: "Strip the shell for parts (+3 Parts)", canAfford: () => true,
+          execute: () => { materials.parts += 3; playSFX('click');
+            return "You leave the seals alone and take the plating. Three Parts, and nothing follows you."; } },
+        { label: "Leave it buried", canAfford: () => true, execute: () => "You mark it on nobody's map and keep walking." }
+      ] },
+
+    { title: "THE SURVIVOR", desc: "A scavenger is propped against a wheel rim, one leg opened to the bone. They have a rifle across their lap and no rounds left for it.",
+      choices: [
+        { label: "Patch them up (-2 Chems)", canAfford: () => materials.chems >= 2,
+          execute: () => { materials.chems -= 2; bookConsequence('SURVIVOR', 2); playSFX('heal');
+            return "You seal the leg and leave them water. They ask for your route. 'I pay what I owe.'"; } },
+        { label: "Take the rifle (+50 Scrap)", canAfford: () => true,
+          execute: () => { scrap += 50; playSFX('click');
+            return "The rifle is worth 50 Scrap to the right buyer. They watch you take it and say nothing."; } },
+        { label: "Leave them the water and go", canAfford: () => true,
+          execute: () => "You set the canteen down within reach and move on." }
+      ] },
+
+    { title: "THE SIGNAL TOWER", desc: "A relay mast still has power, blinking against the dust. From the top you could see the next stretch of road before it sees you.",
+      choices: [
+        { label: "Send someone up (-15 HP, next fight starts at 50 momentum)", canAfford: () => deployed().length > 0,
+          execute: () => { const u = deployed()[0]; u.hp = Math.max(1, u.hp - 15); momentum = Math.max(momentum, 50); addMomentum(0); playSFX('click');
+            return `${u.name} makes the climb and comes down bleeding, with the shape of the next fight in their head.`; } },
+        { label: "Strip the transmitter (+2 Tech)", canAfford: () => true,
+          execute: () => { materials.tech += 2; playSFX('click'); return "The relay goes dark. You are two Tech richer and slightly less welcome here."; } }
+      ] },
+
+    { title: "FIELD HOSPITAL", desc: "Rows of cots, all empty, all made. Someone packed this place up carefully and never came back for it.",
+      choices: [
+        { label: "Treat the squad (heal 40 to all deployed)", canAfford: () => true,
+          execute: () => { deployed().forEach(u => { u.hp = Math.min(u.maxHp, u.hp + 40); }); playSFX('heal');
+            return "Clean bandages and working antiseptic. The squad has not been this patched up in weeks."; } },
+        { label: "Strip the dispensary (+3 Chems)", canAfford: () => true,
+          execute: () => { materials.chems += 3; playSFX('click'); return "Three Chems, and a wall of neatly labelled shelves you leave picked clean."; } }
+      ] },
+
+    { title: "THE MINEFIELD", desc: "The shortest way through is a flat stretch of hardpan studded with pressure plates. The long way around loses you most of a day.",
+      choices: [
+        { label: "Cross it (+70 Scrap, one unit takes 25)", canAfford: () => deployed().length > 0,
+          execute: () => { const list = deployed(); const u = list[Math.floor(Math.random() * list.length)];
+            u.hp = Math.max(1, u.hp - 25); scrap += 70; playSFX('hit'); triggerShake(); triggerHitFlash(u.id);
+            return `A plate goes under ${u.name}. They walk it off. The salvage on the far side is worth 70 Scrap.`; } },
+        { label: "Take the long way", canAfford: () => true, execute: () => "Slow, dull, and everyone still has their legs." }
+      ] },
+
+    { title: "RIVAL CREW", desc: "Six of them, dug in behind a berm, weapons up but not raised. Their leader spits and waits to see which way this goes.",
+      choices: [
+        { label: "Trade with them (-2 Parts, +1 item)", canAfford: () => materials.parts >= 2 && canCarry(),
+          execute: () => { materials.parts -= 2; inventory.push('MED_STIM'); checkBountyProgress('CRAFT'); playSFX('click');
+            return "Two Parts for a sealed Med-Stim. Nobody shoots. Everyone counts it as a win."; } },
+        { label: "Face them down (+90 Scrap, -20 HP to your front rank)", canAfford: () => deployed().length > 0,
+          execute: () => { const front = deployed().sort((a, b) => a.gridPos - b.gridPos)[0];
+            front.hp = Math.max(1, front.hp - 20); scrap += 90; playSFX('hit');
+            return `${front.name} walks out alone and does not stop walking. They break, and leave 90 Scrap behind them.`; } },
+        { label: "Back out slowly", canAfford: () => true, execute: () => "Both crews walk backwards until the berm is out of sight." }
+      ] },
+
+    { title: "THE ORACLE", desc: "A figure wrapped in printed circuit boards sits in the shade of a dead reactor, reciting numbers. Some of them are your kill count.",
+      choices: [
+        { label: "Pay for a reading (-60 Scrap, +1 Perk Point)", canAfford: () => scrap >= 60 && deployed().length > 0,
+          execute: () => { scrap -= 60; const list = deployed(); const u = list[Math.floor(Math.random() * list.length)];
+            u.perkPoints++; playSFX('heal');
+            return `They speak to ${u.name} for a long time in a language nobody recognises. ${u.name} comes back knowing something new.`; } },
+        { label: "Ask about the road ahead (free)", canAfford: () => true,
+          execute: () => { tuneUpBattles = Math.max(tuneUpBattles, 2); playSFX('click');
+            return "'Two more fights,' they say, 'and then the ground changes.' The squad readies itself accordingly."; } },
+        { label: "Leave them to it", canAfford: () => true, execute: () => "The numbers continue behind you for longer than they should be audible." }
+      ] },
+
+    { title: "SCRAP GEYSER", desc: "A ruptured line vents superheated slurry every few minutes, and each burst throws up metal that was buried a century ago.",
+      choices: [
+        { label: "Work the vent (+120 Scrap, -12 HP to all deployed)", canAfford: () => true,
+          execute: () => { deployed().forEach(u => { u.hp = Math.max(1, u.hp - 12); }); scrap += 120; playSFX('hit');
+            return "Everyone comes away scalded and 120 Scrap heavier."; } },
+        { label: "Cap the line (+2 Parts, +1 Chems)", canAfford: () => true,
+          execute: () => { materials.parts += 2; materials.chems += 1; playSFX('click');
+            return "You seal it properly. Two Parts and a Chem out of the fittings, and the road stays walkable."; } }
+      ] },
+
+    { title: "THE HOARD", desc: "Crates stacked three high in an open drainage culvert, unlocked, unguarded, in the middle of raider country.",
+      choices: [
+        { label: "Take all of it (+180 Scrap)", canAfford: () => true,
+          execute: () => { scrap += 180; bookConsequence('AMBUSH', 1); playSFX('heal');
+            return "180 Scrap, and not one person in the squad believes this is free."; } },
+        { label: "Take a crate and go (+50 Scrap)", canAfford: () => true,
+          execute: () => { scrap += 50; playSFX('click');
+            return "One crate, 50 Scrap, and out of the culvert before anyone comes to see who is in it."; } },
+        { label: "Burn it", canAfford: () => true,
+          execute: () => { materials.parts += 1;
+            return "Whoever set this will find ash. You keep one salvaged Part out of the fire."; } }
+      ] }
 ];
 
 const ROSTER_TEMPLATE = [
@@ -257,10 +451,12 @@ const ACTIONS = {
     'citadel':          () => renderCitadel(),
     'map':              () => renderMap(),
     'outpost':          () => renderOutpost(),
-    'new-game':         el => confirmNewGame(parseFloat(el.dataset.diff)),
+    'new-game':         el => openContracts(parseFloat(el.dataset.diff)),
     'slot':             el => selectSlot(Number(el.dataset.slot), el.dataset.exists === '1'),
     'buy-meta':         el => buyMetaUpgrade(el.dataset.kind),
     'take-relic':       el => takeRelic(Number(el.dataset.index)),
+    'toggle-contract':  el => toggleContract(el.dataset.id),
+    'begin-expedition': () => beginExpedition(),
     'erase-slot':       el => { Store.remove(BASE_SAVE_KEY + Number(el.dataset.slot)); renderTitleScreen(); },
     'dev-open':         () => renderDev(),
     'dev-exit':         () => renderMap(),
@@ -293,6 +489,7 @@ const ACTIONS = {
     'selector-cancel':  () => { activePosSelector = null; activePerkSelector = null; renderOutpost(); },
 
     'event-choice':     el => resolveEvent(Number(el.dataset.index)),
+    'consequence-ack':  () => resolveConsequence(),
     'event-finish':     () => finishEvent(),
     'camp-choice':      el => resolveCamp(el.dataset.kind),
     'camp-finish':      () => finishCamp(),
@@ -498,7 +695,7 @@ function regroupsLeft() {
     return Math.max(0, runStats.regroups);
 }
 
-function totalRegroups() { return BASE_REGROUPS + (metaUpgrades.extraRegroups || 0); }
+function totalRegroups() { return hasContract('NO_REGROUPS') ? 0 : BASE_REGROUPS + (metaUpgrades.extraRegroups || 0); }
 
 // Revive the squad, take half the scrap, and put them back at the start of the sector. The
 // save is left intact - this is the outcome the player expects from losing a fight.
@@ -585,6 +782,11 @@ function renderRunOver(score, isBest) {
         ['SCRAP SALVAGED', st.scrapEarned],
         ['SKULLS BANKED', `\uD83D\uDC80 ${bossSkulls}`]
     ];
+    // A score is only comparable if it says what it was earned under.
+    if (st.contractMult && st.contractMult > 1) {
+        lines.push(['CONTRACT BONUS', `x${st.contractMult.toFixed(2)}`]);
+        lines.push(['SIGNED FOR', (st.contracts || []).join(', ')]);
+    }
     document.getElementById('runover-lines').innerHTML = lines.map(l => `<div class="runover-line"><span>${l[0]}</span><span>${l[1]}</span></div>`).join('');
     document.getElementById('runover-choices').innerHTML =
         `<button class="event-btn" style="border-color:#4488ff; color:#4488ff;" data-action="citadel">CITADEL (\uD83D\uDC80 ${bossSkulls})</button>` +
@@ -622,15 +824,18 @@ let bestScore = 0; let bestSector = 0;
 
 function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector })); }
 
-function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, deepestSector: 1, deepestTier: 1, regroups: totalRegroups() }; }
+function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames() }; }
 
 // Endless scoring: depth is worth far more than any single haul, so pushing one sector
 // deeper always beats farming the one you are on.
 function computeScore(st) {
     if (!st) return 0;
-    return (st.deepestSector - 1) * 2500
+    const base = (st.deepestSector - 1) * 2500
          + ((st.deepestSector - 1) * TOTAL_TIERS + (st.deepestTier - 1)) * 120
          + st.bosses * 900 + st.elites * 250 + st.kills * 15 + Math.floor(st.scrapEarned / 2);
+    // The multiplier is stored on the run rather than read live, so a score already banked is
+    // not re-scored by whatever the next expedition signs up for.
+    return Math.floor(base * (st.contractMult || 1));
 }
 
 function noteDepth() {
@@ -742,11 +947,41 @@ function renderTitleScreen() {
 
 function selectSlot(slotNum, exists) { currentSlot = slotNum; if (exists) { continueGame(); } else { document.getElementById('title-menu-container').style.display = 'none'; document.getElementById('difficulty-menu-container').style.display = 'flex'; } }
 
+// Contracts are chosen after the difficulty and before the squad exists, because three of them
+// change how that squad is built.
+function openContracts(diff) {
+    pendingDifficulty = diff; activeContracts = [];
+    renderContracts();
+}
+
+function renderContracts() {
+    switchScreen('screen-contracts');
+    document.getElementById('contract-list').innerHTML = CONTRACT_POOL.map(c => {
+        const on = hasContract(c.id);
+        return `<button class="contract-card ${on ? 'contract-on' : ''}" data-action="toggle-contract" data-id="${c.id}">
+            <span class="contract-head"><span class="contract-name">${on ? '☑' : '☐'} ${c.name}</span><span class="contract-bonus">+${Math.round(c.bonus * 100)}%</span></span>
+            <span class="contract-desc">${c.desc}</span>
+        </button>`;
+    }).join('');
+    const m = contractMult();
+    document.getElementById('contract-mult').innerText =
+        `SCORE x${m.toFixed(2)}${activeContracts.length ? ` — ${contractNames().join(', ')}` : ''}`;
+}
+
+function toggleContract(id) {
+    if (!CONTRACT_POOL.some(c => c.id === id)) return;
+    activeContracts = hasContract(id) ? activeContracts.filter(x => x !== id) : [...activeContracts, id];
+    playSFX('click'); renderContracts();
+}
+
+function beginExpedition() { confirmNewGame(pendingDifficulty); }
+
 function confirmNewGame(diff) {
     difficultyMult = diff; currentSector = 1; currentTier = 1; tuneUpBattles = 0; momentum = 0;
-    scrap = metaUpgrades.startScrap || 0; inventory = ['MED_STIM']; materials = { parts: 0, chems: 0, tech: 0 }; 
+    scrap = metaUpgrades.startScrap || 0; inventory = hasContract('NO_CONSUMABLES') ? [] : ['MED_STIM']; materials = { parts: 0, chems: 0, tech: 0 }; 
     playerRoster = migrateTraits(JSON.parse(JSON.stringify(ROSTER_TEMPLATE)));
     activeBounties = generateBounties(); runStats = newRunStats(); pendingRelicOffer = null;
+    pendingConsequences = []; recentEvents = [];
     const kept = heirloomRelic();
     activeRelics = kept ? [kept] : [];
     
@@ -754,7 +989,10 @@ function confirmNewGame(diff) {
         let q = QUIRK_POOL[Math.floor(Math.random() * QUIRK_POOL.length)];
         p.quirk = q; p.maxHp += q.hp; p.hp = p.maxHp; p.dmgBase += q.dmg; p.speed += q.spd;
         p.level = metaUpgrades.startLevel; p.perkPoints = metaUpgrades.startLevel - 1; p.xpToNext = Math.floor(100 * Math.pow(XP_CURVE, metaUpgrades.startLevel - 1)); 
+        if (hasContract('GLASS')) { p.maxHp = Math.max(1, Math.floor(p.maxHp * 0.75)); p.hp = p.maxHp; }
     });
+    // The back rank stays empty, and stays empty - the Outpost refuses to fill it below.
+    if (hasContract('SHORT_HANDED')) playerRoster.forEach(p => { if (p.gridPos === 3) p.gridPos = 0; });
 
     saveGameState(); renderMap(); 
 }
@@ -793,7 +1031,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, pendingConsequences, recentEvents, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -801,7 +1039,7 @@ function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify
 function migrateRelics(saved) {
     return (saved || []).map(r => RELIC_POOL.find(p => p.id === (r && r.id))).filter(Boolean);
 }
-function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = migrateAssetPaths(migrateTraits(d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)))); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; activeRelics = migrateRelics(d.activeRelics); pendingRelicOffer = migrateRelics((d.relicOffer || []).map(id => ({ id }))); if (!pendingRelicOffer.length) pendingRelicOffer = null; pendingCombat = d.combat || null;
+function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = migrateAssetPaths(migrateTraits(d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)))); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; pendingConsequences = Array.isArray(d.pendingConsequences) ? d.pendingConsequences : []; recentEvents = Array.isArray(d.recentEvents) ? d.recentEvents : []; activeRelics = migrateRelics(d.activeRelics); pendingRelicOffer = migrateRelics((d.relicOffer || []).map(id => ({ id }))); if (!pendingRelicOffer.length) pendingRelicOffer = null; pendingCombat = d.combat || null;
         if (pendingCombat) {
             migrateAssetPaths(pendingCombat.enemies);
             if (typeof pendingCombat.bgFile === 'string') pendingCombat.bgFile = pendingCombat.bgFile.replace(/\.png$/, '.webp');
@@ -957,7 +1195,10 @@ function renderMap() {
     m += `</div>`; mapC.innerHTML = m; setTimeout(() => { mapC.scrollTop = mapC.scrollHeight; }, 10);
 }
 
-function advanceSector() { currentSector++; currentTier = 1; noteDepth(); saveGameState(); renderMap(); }
+function advanceSector() {
+    currentSector++; currentTier = 1; noteDepth(); saveGameState();
+    resolveConsequence();
+}
 
 function setOutpostTab(tab) { document.getElementById('tab-roster').className = `op-tab-btn ${tab === 'ROSTER' ? 'op-tab-active' : ''}`; document.getElementById('tab-workbench').className = `op-tab-btn ${tab === 'WORKBENCH' ? 'op-tab-active' : ''}`; document.getElementById('tab-cyber').className = `op-tab-btn ${tab === 'CYBER' ? 'op-tab-active' : ''}`; document.getElementById('outpost-roster-view').style.display = tab === 'ROSTER' ? 'flex' : 'none'; document.getElementById('outpost-workbench-view').style.display = tab === 'WORKBENCH' ? 'flex' : 'none'; document.getElementById('outpost-cyber-view').style.display = tab === 'CYBER' ? 'flex' : 'none'; renderOutpost(); }
 
@@ -1008,7 +1249,7 @@ function renderOutpost() {
 
 function breakdownScrap() { if (scrap < 25) return; scrap -= 25; let m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)]; materials[m]++; saveGameState(); renderOutpost(); }
 function craftItem(item) { 
-    if (inventory.length >= metaUpgrades.invMax) return; 
+    if (!canCarry()) return; 
     if (item === 'MED_STIM' && materials.chems >= 2) { materials.chems -= 2; inventory.push(item); checkBountyProgress('CRAFT'); } 
     else if (item === 'SCRAP_BOMB' && materials.parts >= 2) { materials.parts -= 2; inventory.push(item); checkBountyProgress('CRAFT'); } 
     else if (item === 'ADRENALINE' && materials.chems >= 1 && materials.tech >= 1) { materials.chems -= 1; materials.tech -= 1; inventory.push(item); checkBountyProgress('CRAFT'); } 
@@ -1016,7 +1257,10 @@ function craftItem(item) {
     saveGameState(); renderOutpost(); 
 }
 function installAugment(charId, type) { let char = playerRoster.find(c => c.id === charId); if (!char.augments) char.augments = []; if (type === 'PLATING' && materials.parts >= 3) { materials.parts -= 3; char.maxHp += 20; char.hp += 20; char.augments.push('Plating'); } else if (type === 'OPTICS' && materials.tech >= 2) { materials.tech -= 2; char.dmgBase += 4; char.augments.push('Optics'); } else if (type === 'PUMP' && materials.chems >= 2) { materials.chems -= 2; char.speed += 3; char.augments.push('Pump'); } saveGameState(); renderOutpost(); }
-function assignSlot(charId, newSlot) { let char = playerRoster.find(c => c.id === charId); let oldSlot = char.gridPos; if (newSlot > 0) { let existingChar = playerRoster.find(c => c.gridPos === newSlot && c.id !== charId); if (existingChar) existingChar.gridPos = oldSlot; } char.gridPos = newSlot; activePosSelector = null; saveGameState(); renderOutpost(); }
+function assignSlot(charId, newSlot) {
+    // Short Handed is a condition for the whole expedition, not just its first node.
+    if (hasContract('SHORT_HANDED') && newSlot === 3) { activePosSelector = null; renderOutpost(); return; }
+    let char = playerRoster.find(c => c.id === charId); let oldSlot = char.gridPos; if (newSlot > 0) { let existingChar = playerRoster.find(c => c.gridPos === newSlot && c.id !== charId); if (existingChar) existingChar.gridPos = oldSlot; } char.gridPos = newSlot; activePosSelector = null; saveGameState(); renderOutpost(); }
 function assignPerk(charId, perkId) {
     let char = playerRoster.find(c => c.id === charId);
     if (!char || char.perkPoints <= 0) return;
@@ -1065,8 +1309,19 @@ function medBay(charId, action) {
     saveGameState(); renderOutpost(); 
 }
 
+// Fourteen events repeat far less than four did, but a uniform roll still hands the same one
+// back two nodes running. The last few are held out of the draw so the map keeps changing.
+const EVENT_MEMORY = 4;
+function pickEvent() {
+    const fresh = EVENT_POOL.filter(e => !recentEvents.includes(e.title));
+    const pool = fresh.length ? fresh : EVENT_POOL;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    recentEvents = [pick.title, ...recentEvents].slice(0, EVENT_MEMORY);
+    return pick;
+}
+
 function initiateEvent() {
-    switchScreen('screen-event'); activeEvent = EVENT_POOL[Math.floor(Math.random() * EVENT_POOL.length)];
+    switchScreen('screen-event'); activeEvent = pickEvent();
     document.getElementById('event-title').innerText = activeEvent.title; document.getElementById('event-desc').innerText = activeEvent.desc;
     let cHtml = ''; activeEvent.choices.forEach((c, idx) => { let canAfford = c.canAfford(); cHtml += `<button class="event-btn" ${!canAfford ? 'disabled' : ''} data-action="event-choice" data-index="${idx}">${c.label}</button>`; });
     document.getElementById('event-choices').innerHTML = cHtml;
@@ -1369,6 +1624,9 @@ function initiateCombat(nodeType, isEliteNode) {
         else if (nodeType === 'RAIDERS') { bgFile = 'bg_highway.webp'; if (Math.random() < 0.4) currentWeather = 'SHRAPNEL_WINDS'; }
         else if (nodeType === 'BEASTS') { bgFile = 'bg_canyon.webp'; if (Math.random() < 0.4) currentWeather = 'SANDSTORM'; }
     }
+    if (hasContract('HARSH_SKIES') && currentWeather === 'CLEAR') {
+        currentWeather = ['TOXIC_SMOG', 'SANDSTORM', 'SHRAPNEL_WINDS'][Math.floor(Math.random() * 3)];
+    }
     applyCombatScenery(bgFile, nodeType === 'BOSS' ? bossForSector().banner : null);
 
     // Enemies are built fresh each fight; the squad persists, so anything left on a unit has to
@@ -1383,7 +1641,13 @@ function initiateCombat(nodeType, isEliteNode) {
     
     activeEntities = [...deployedRoster, ...generateEnemies(nodeType, mult, isEliteNode, dmgMult)];
     turnQueue = [...activeEntities].sort((a, b) => b.speed - a.speed);
-    activeIndex = 0; log("> COMBAT INITIATED.", "log-turn");
+    activeIndex = 0;
+    // Second Watch hands the opening turn to whichever enemy is fastest, however quick the squad is.
+    if (hasContract('THEY_MOVE_FIRST')) {
+        const firstFoe = turnQueue.findIndex(e => !e.isPlayer);
+        if (firstFoe > 0) activeIndex = firstFoe;
+    }
+    log("> COMBAT INITIATED.", "log-turn");
     if (nodeType === 'BOSS') { const b = bossForSector(); log(`> ${b.name.toUpperCase()}: ${b.blurb}`, "log-combo"); } processTurn();
 }
 
@@ -1905,9 +2169,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, SECTOR_LAYOUT, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, OVERDRIVE_NAMES, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SECTOR_LAYOUT, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, OVERDRIVE_NAMES, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },
@@ -1928,7 +2192,11 @@ globalThis.WP = {
     get combatBgFile() { return combatBgFile; }, set combatBgFile(v) { combatBgFile = v; },
     get pendingCombat() { return pendingCombat; }, set pendingCombat(v) { pendingCombat = v; },
     get runStats() { return runStats; }, set runStats(v) { runStats = v; },
+    get activeContracts() { return activeContracts; }, set activeContracts(v) { activeContracts = v; },
+    get pendingDifficulty() { return pendingDifficulty; }, set pendingDifficulty(v) { pendingDifficulty = v; },
     get activeEvent() { return activeEvent; }, set activeEvent(v) { activeEvent = v; },
+    get pendingConsequences() { return pendingConsequences; }, set pendingConsequences(v) { pendingConsequences = v; },
+    get recentEvents() { return recentEvents; }, set recentEvents(v) { recentEvents = v; },
     get activePosSelector() { return activePosSelector; }, set activePosSelector(v) { activePosSelector = v; },
     get activePerkSelector() { return activePerkSelector; }, set activePerkSelector(v) { activePerkSelector = v; },
     get currentWeather() { return currentWeather; }, set currentWeather(v) { currentWeather = v; },
