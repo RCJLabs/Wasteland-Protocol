@@ -124,8 +124,11 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 
 .intent-icon { position: absolute; top: -25px; font-size: 14px; background: #111; border: 1px solid #444; border-radius: 50%; width: 22px; height: 22px; display: flex; justify-content: center; align-items: center; z-index: 20; box-shadow: 0 2px 4px #000; }
 
-.battlefield { display: flex; justify-content: center; gap: 15vw; flex-grow: 1; align-items: flex-end; padding: 0 5px; box-sizing: border-box; margin-bottom: 12vh; }
-.team { display: flex; align-items: flex-end; justify-content: center; }
+.battlefield { display: flex; justify-content: center; gap: clamp(10px, 4vw, 48px); flex-grow: 1; align-items: flex-end; padding: 0 5px; box-sizing: border-box; margin-bottom: 12vh; }
+.team { display: flex; align-items: flex-end; justify-content: center; min-width: 0; }
+/* Four-strong squads tighten up so oversized sprites stay inside the viewport. */
+.team.crowded .entity { width: clamp(42px, 11vw, 78px); }
+.team.crowded .portrait { width: calc(100% * min(var(--sprite-scale, 1), 1.45)); }
 #player-team { flex-direction: row-reverse; } 
 #enemy-team { flex-direction: row; }
 .entity { width: clamp(55px, 16vw, 110px); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; position: relative; transition: transform 0.2s; gap: 2px; margin: 0 -1.5vw; z-index: 1; }
@@ -398,6 +401,7 @@ const SECTOR_LAYOUT = [
     [{type:'RAIDERS', elite:false}] 
 ];
 const TOTAL_TIERS = SECTOR_LAYOUT.length;
+const SECTOR_TIER_BONUS = 3;
 
 const EVENT_POOL = [
     { title: "WRECKED CARAVAN", desc: "You stumble upon a destroyed merchant rig. The engine block is sparking dangerously, but the cargo hold is partially intact.", choices: [ { label: "Salvage Cargo (+30 Scrap)", canAfford: () => true, execute: () => { scrap += 30; playSFX('heal'); return "Salvaged 30 Scrap from the wreckage."; } }, { label: "Gut the Engine (+1 Tech, +2 Parts, -15 HP to random unit)", canAfford: () => true, execute: () => { materials.tech += 1; materials.parts += 2; let active = playerRoster.filter(p => p.gridPos > 0 && p.hp > 0); let target = active[Math.floor(Math.random() * active.length)]; target.hp = Math.max(1, target.hp - 15); playSFX('hit'); triggerHitFlash(target.id); return `Extracted parts, but an electrical surge shocked ${target.name} for 15 DMG.`; } }, { label: "Leave it", canAfford: () => true, execute: () => { return "You move on safely without risking the sparks."; } } ] },
@@ -872,15 +876,34 @@ function generateEnemies(nodeType, mult, isEliteNode) {
     
     if (nodeType === 'BOSS') return [{ id: 'b1', name: "Warlord", classType: "BOSS", range: 'melee', maxHp: Math.floor(bossBaseHp*mult), hp: Math.floor(bossBaseHp*mult), speed: 9, armor: 15, isPlayer: false, dmgBase: Math.floor(bossBaseDmg*mult), img: "enemy_boss.png", scale: 2.2, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 10, bio: 5, energy: 5 }, phase: 1, intent: {type:'ATTACK', icon:'⚔️'} }];
     
-    let validEnemies = pool[nodeType].filter(e => currentSector > 1 || currentTier >= e.minTier);
-    if(validEnemies.length === 0) validEnemies = pool[nodeType]; 
-    
-    let weightedPool = [];
-    validEnemies.forEach(e => { let weight = (currentSector === 1 && e.isHeavy) ? 1 : 5; for(let j=0; j<weight; j++) weightedPool.push(e); });
+    // Later sectors unlock tougher stock progressively rather than all at once: the old gate
+    // was bypassed outright from sector 2, which dropped tier-8 units into tier-1 fights.
+    const effTier = currentTier + (currentSector - 1) * SECTOR_TIER_BONUS;
 
-    let sZ = Math.random() > 0.5 ? 3 : 2; let squad = [];
+    function poolFor(type) {
+        let valid = pool[type].filter(e => effTier >= e.minTier);
+        if (valid.length === 0) {
+            // Nothing has unlocked yet - fall back to the cheapest stock, never the whole pool.
+            let minT = Math.min(...pool[type].map(e => e.minTier));
+            valid = pool[type].filter(e => e.minTier === minT);
+        }
+        let weighted = [];
+        valid.forEach(e => { let weight = (e.isHeavy && effTier < 6) ? 1 : 5; for (let j = 0; j < weight; j++) weighted.push(e); });
+        return weighted;
+    }
+
+    const homePool = poolFor(nodeType);
+    const otherTypes = Object.keys(pool).filter(t => t !== nodeType);
+
+    let sZ = effTier >= 8 ? (Math.random() < 0.45 ? 4 : 3)
+           : effTier >= 4 ? (Math.random() < 0.5 ? 3 : 2)
+           : 2;
+    let squad = [];
     for (let i = 0; i < sZ; i++) {
-        let t = JSON.parse(JSON.stringify(weightedPool[Math.floor(Math.random() * weightedPool.length)])); 
+        // Above mid-game, squads can pick up an attached specialist from another faction.
+        let usePool = homePool;
+        if (effTier >= 6 && i > 0 && Math.random() < 0.25) usePool = poolFor(otherTypes[Math.floor(Math.random() * otherTypes.length)]);
+        let t = JSON.parse(JSON.stringify(usePool[Math.floor(Math.random() * usePool.length)])); 
         let hp = Math.floor(t.maxHp * mult); t.hp = hp; t.maxHp = hp; t.dmgBase = Math.floor(t.dmgBase * mult);
         
         if (isEliteNode && Math.random() < 0.6) {
@@ -976,6 +999,8 @@ function renderField() {
             </div>`;
         if (ent.isPlayer) pTeam.innerHTML += html; else eTeam.innerHTML += html;
     });
+    pTeam.classList.toggle('crowded', pTeam.children.length >= 4);
+    eTeam.classList.toggle('crowded', eTeam.children.length >= 4);
     renderCommandDeck();
 }
 
@@ -1218,6 +1243,17 @@ function executeEnemyAi(enemy) {
     enemy.intent = rollIntent(enemy); checkWinState();
 }
 
+const RESERVE_XP_RATE = 0.5;
+
+function awardXp(char, amount) {
+    if (amount <= 0) return;
+    char.xp += amount;
+    while (char.xp >= char.xpToNext) {
+        char.level++; char.xp -= char.xpToNext; char.xpToNext = Math.floor(char.xpToNext * 1.5); char.perkPoints++;
+        log(`> ${char.name} reached Level ${char.level}! Perk point available.`, "log-heal");
+    }
+}
+
 function checkWinState() {
     renderField();
     const pA = activeEntities.some(e => e.isPlayer && e.hp > 0); const eA = activeEntities.some(e => !e.isPlayer && e.hp > 0);
@@ -1240,11 +1276,11 @@ function checkWinState() {
         let s = (Math.floor(Math.random() * 30) + (currentTier * 20)) * scrapMult; 
         if (activeRelics.some(r => r.id === 'SCRAP_MAGNET')) s += 15;
         
+        // Deployed survivors earn full XP; the bench trains at half rate so reserves stay
+        // rotatable instead of falling permanently behind. Downed units earn nothing.
         playerRoster.forEach(char => {
-            if (char.gridPos > 0 && char.hp > 0) {
-                char.xp += 35 * scrapMult;
-                while (char.xp >= char.xpToNext) { char.level++; char.xp -= char.xpToNext; char.xpToNext = Math.floor(char.xpToNext * 1.5); char.perkPoints++; log(`> ${char.name} reached Level ${char.level}! Perk point available.`, "log-heal"); }
-            }
+            if (char.gridPos > 0 && char.hp > 0) awardXp(char, 35 * scrapMult);
+            else if (char.gridPos === 0) awardXp(char, Math.floor(35 * scrapMult * RESERVE_XP_RATE));
         });
 
         let matDrops = (1 + Math.floor(Math.random() * 2)) * scrapMult;
