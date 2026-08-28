@@ -103,7 +103,7 @@ module.exports = {
     await click('[data-action="perk-menu"]');
     ok('perk-menu opens the perk selector', await state(() => activePerkSelector) !== null);
     await click('[data-action="assign-perk"][data-perk="VETERAN"]');
-    ok('assign-perk grants the trait', await state(() => playerRoster[0].trait) === 'VETERAN');
+    ok('assign-perk grants the trait', (await state(() => (playerRoster[0].traits || []).join(','))) === 'VETERAN');
 
     await state(() => { playerRoster[0].hp = 1; renderOutpost(); });
     await click('[data-action="medbay"][data-mode="HEAL"]');
