@@ -8,17 +8,21 @@ module.exports = {
 
     const bounty = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0);
-      const before = activeBounties.map(b => b.desc);
-      const type = activeBounties[0].type;
+      const beforeType = activeBounties[0].type;
+      const beforeDesc = activeBounties[0].desc;
       activeBounties[0].current = activeBounties[0].target - 1;
       const scrapBefore = scrap;
-      checkBountyProgress(type);
-      return { before, after: activeBounties.map(b => b.desc), count: activeBounties.length,
+      checkBountyProgress(beforeType);
+      return { beforeType, beforeDesc, afterType: activeBounties[0].type,
+               afterDesc: activeBounties[0].desc, afterProgress: activeBounties[0].current,
+               count: activeBounties.length,
                anyClaimed: activeBounties.some(b => b.claimed), paid: scrap > scrapBefore,
                types: activeBounties.map(b => b.type) };
     });
     ok('the board still holds three contracts', bounty.count === 3);
-    ok('a completed contract is replaced', bounty.before[0] !== bounty.after[0]);
+    ok('a completed contract is replaced by a different one',
+      bounty.afterType !== bounty.beforeType && bounty.afterDesc !== bounty.beforeDesc);
+    ok('the replacement starts at zero progress', bounty.afterProgress === 0);
     ok('no contract is left permanently claimed', !bounty.anyClaimed);
     ok('completing a contract pays out', bounty.paid);
     ok('contracts stay distinct types', new Set(bounty.types).size === 3);

@@ -176,8 +176,10 @@ function checkBountyProgress(type) {
         if (b.current < b.target) return;
         scrap += b.reward;
         if (combatActive) log(`> BOUNTY COMPLETE: ${b.desc} (+${b.reward} SCRAP)`, "log-combo");
-        // Issue a fresh contract in its place so the board never runs dry.
-        activeBounties[idx] = rollBounty(activeBounties.filter((o, i) => i !== idx).map(o => o.type));
+        // Issue a fresh contract in its place so the board never runs dry. Every type currently
+        // on the board is excluded - including this slot's - so a finished contract is never
+        // handed straight back and the board rotates through the pool.
+        activeBounties[idx] = rollBounty(activeBounties.map(o => o.type));
     });
 }
 
