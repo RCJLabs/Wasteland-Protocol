@@ -6,7 +6,7 @@
 const ASSET_LIST = [
     "bg_title.webp", "bg_combat.webp", "bg_thunderdome.webp", "bg_refinery.webp", "bg_highway.webp", "bg_canyon.webp",
     "hero_bruiser.webp", "hero_medic.webp", "hero_scavenger.webp", "hero_pyro.webp", "hero_shotgunner.webp", "hero_sniper.webp", "hero_hound.webp",
-    "enemy_dog.webp", "enemy_mutant.webp", "enemy_chem.webp", "enemy_raider.webp", "enemy_psycho.webp", "enemy_sniper.webp", "enemy_juggernaut.webp", "enemy_drone.webp", "enemy_turret.webp", "enemy_warrig.webp", "enemy_boss.webp"
+    "enemy_dog.webp", "enemy_mutant.webp", "enemy_chem.webp", "enemy_raider.webp", "enemy_psycho.webp", "enemy_sniper.webp", "enemy_juggernaut.webp", "enemy_drone.webp", "enemy_turret.webp", "enemy_warrig.webp", "enemy_boss.webp", "enemy_boss_mech.webp", "enemy_boss_vulture.webp"
 ];
 // The title art is fetched immediately; everything else waits until the menu is up so the
 // first screen is not stuck behind the whole art set.
@@ -92,6 +92,49 @@ const PERK_POOL = [
     { id: 'HONED',     label: 'HONED (+10% DMG)',        apply: c => { c.dmgBase = Math.ceil(c.dmgBase * 1.1); } },
     { id: 'HARDENED',  label: 'HARDENED (+10% MAX HP)',  apply: c => { const g = Math.ceil(c.maxHp * 0.1); c.maxHp += g; c.hp += g; } }
 ];
+
+// One Warlord fought at every depth made the back half of a run repetitive, so each sector
+// now draws a different commander. They differ in more than numbers: what they intend to do,
+// what they do passively, and what happens when you break them past half health.
+const BOSS_POOL = [
+    {
+        id: 'WARLORD', name: 'Warlord', short: 'WARLORD', img: 'enemy_boss.webp', scale: 2.2,
+        range: 'melee', hpMult: 1.0, dmgMult: 1.0, speed: 9, armor: 15,
+        resistances: { phys: 10, bio: 5, energy: 5 },
+        blurb: 'A raider chieftain who fights alongside their pack.',
+        intents: [['ATTACK', 0.30], ['AOE', 0.20], ['HEAVY', 0.20], ['STATUS', 0.20], ['DEFEND', 0.10]],
+        enrage: { cry: 'WARLORD ENRAGED - THE PACK ANSWERS!', dmgScale: 1.5,
+                  summon: { name: 'War Hound', classType: 'BEAST', range: 'melee', hp: 30, dmg: 12, speed: 18,
+                            img: 'enemy_dog.webp', scale: 0.8, resistances: { phys: -2, bio: 0, energy: 0 } },
+                  summonCount: 2 }
+    },
+    {
+        id: 'COLOSSUS', name: 'Siege Colossus', short: 'COLOSSUS', img: 'enemy_boss_mech.webp', scale: 2.4,
+        range: 'ranged', hpMult: 1.3, dmgMult: 0.8, speed: 5, armor: 30,
+        resistances: { phys: 18, bio: 100, energy: -15 },
+        passive: 'PLATING',
+        blurb: 'A walking battery. Immune to toxins, and it re-plates itself between salvoes.',
+        intents: [['AOE', 0.35], ['ATTACK', 0.30], ['DEFEND', 0.20], ['HEAVY', 0.15]],
+        enrage: { cry: 'SIEGE PROTOCOL ENGAGED - ALL BATTERIES', dmgScale: 1.15, armorBonus: 20, forceAoe: true,
+                  summon: { name: 'Sentry Drone', classType: 'DRONE', range: 'ranged', hp: 25, dmg: 8, speed: 18,
+                            img: 'enemy_drone.webp', scale: 0.7, isHovering: true,
+                            resistances: { phys: 8, bio: 100, energy: -10 } },
+                  summonCount: 2 }
+    },
+    {
+        id: 'MATRIARCH', name: 'Carrion Matriarch', short: 'MATRIARCH', img: 'enemy_boss_vulture.webp', scale: 2.1,
+        range: 'melee', hpMult: 0.85, dmgMult: 1.1, speed: 17, armor: 5,
+        resistances: { phys: -6, bio: 40, energy: 5 },
+        isHovering: true, dmgType: 'bio', passive: 'FEAST',
+        blurb: 'Fast, diseased, and it grows stronger off every wound it opens.',
+        intents: [['STATUS', 0.35], ['HEAVY', 0.25], ['ATTACK', 0.25], ['AOE', 0.15]],
+        enrage: { cry: 'THE MATRIARCH SHRIEKS - PLAGUE WIND!', dmgScale: 1.25, speedBonus: 4, plague: true }
+    }
+];
+
+// Rotates by sector so a run meets a different commander each time rather than the same one
+// ten times over.
+function bossForSector(sector = currentSector) { return BOSS_POOL[(Math.max(1, sector) - 1) % BOSS_POOL.length]; }
 
 const RELIC_POOL = [
     { id: 'THERMAL_CORE', name: "Thermal Core", desc: "Energy attacks deal +30% DMG." },
@@ -668,7 +711,7 @@ function renderMap() {
         m += `<div class="map-row">`;
         SECTOR_LAYOUT[i].forEach(n => {
             let icon = '🎯'; let lbl = 'RAIDERS';
-            if (n.type === 'BOSS') { icon = '💀'; lbl = 'WARLORD'; } else if (n.type === 'BEASTS') { icon = '☣️'; lbl = 'BEASTS'; } else if (n.type === 'MECH') { icon = '⚙️'; lbl = 'MECH'; } else if (n.type === 'EVENT') { icon = '❓'; lbl = 'UNKNOWN'; } else if (n.type === 'CAMP') { icon = '⛺'; lbl = 'CAMP'; }
+            if (n.type === 'BOSS') { icon = '💀'; lbl = bossForSector().short; } else if (n.type === 'BEASTS') { icon = '☣️'; lbl = 'BEASTS'; } else if (n.type === 'MECH') { icon = '⚙️'; lbl = 'MECH'; } else if (n.type === 'EVENT') { icon = '❓'; lbl = 'UNKNOWN'; } else if (n.type === 'CAMP') { icon = '⛺'; lbl = 'CAMP'; }
             let eCls = n.elite ? 'elite-node' : (n.type === 'EVENT' ? 'event-node' : n.type === 'CAMP' ? 'camp-node' : ''); let eLbl = n.elite ? ' (ELITE)' : '';
             let nodeAction = n.type === 'EVENT' ? `data-action="node-event"` : n.type === 'CAMP' ? `data-action="node-camp"` : `data-action="node-combat" data-type="${n.type}" data-elite="${n.elite ? 1 : 0}"`;
             m += `<button class="map-node node-${rowStatus} ${eCls} ${(n.type === 'BOSS' && t === currentTier) ? 'boss-node' : ''}" ${dis} ${nodeAction}><span class="node-icon">${icon}</span><span class="node-lbl">${lbl}${eLbl}</span></button>`;
@@ -822,15 +865,24 @@ function resolveCamp(type) {
 }
 function finishCamp() { currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap(); }
 
+const INTENT_ICONS = { AOE: '🧨', HEAVY: '💥', STATUS: '☣️', DEFEND: '🛡️', ATTACK: '⚔️' };
+
+function intentFor(type, enemy) {
+    const icon = (type === 'ATTACK' && enemy.range === 'ranged') ? '🔫' : INTENT_ICONS[type];
+    return { type, icon };
+}
+
 function rollIntent(enemy) {
     let rand = Math.random();
-    if (enemy.classType === 'BOSS') {
-        if (rand < 0.2) return { type: 'AOE', icon: '🧨' };
-        if (rand < 0.4) return { type: 'HEAVY', icon: '💥' };
-        if (rand < 0.6) return { type: 'STATUS', icon: '☣️' };
-        if (rand < 0.7) return { type: 'DEFEND', icon: '🛡️' };
-        return { type: 'ATTACK', icon: '⚔️' };
-    } else if (enemy.classType === 'MECH') {
+    // A boss past its threshold can be locked into one behaviour - the Colossus stops aiming
+    // at anyone in particular and just shells the whole line.
+    if (enemy.forceAoe) return intentFor('AOE', enemy);
+    if (enemy.intents) {
+        let roll = Math.random();
+        for (const [type, weight] of enemy.intents) { roll -= weight; if (roll <= 0) return intentFor(type, enemy); }
+        return intentFor(enemy.intents[enemy.intents.length - 1][0], enemy);
+    }
+    if (enemy.classType === 'MECH') {
         if (rand < 0.2) return { type: 'DEFEND', icon: '🛡️' };
         if (rand < 0.4) return { type: 'AOE', icon: '🧨' };
         return { type: 'ATTACK', icon: '🔫' };
@@ -881,7 +933,23 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     let bossBaseHp = currentSector === 1 ? 100 : 300;
     let bossBaseDmg = currentSector === 1 ? 30 : 40;
     
-    if (nodeType === 'BOSS') return [{ id: 'b1', name: "Warlord", classType: "BOSS", range: 'melee', maxHp: Math.floor(bossBaseHp*mult), hp: Math.floor(bossBaseHp*mult), speed: 9, armor: 15, isPlayer: false, dmgBase: Math.floor(bossBaseDmg*dmgMult), img: "enemy_boss.webp", scale: 2.2, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 10, bio: 5, energy: 5 }, phase: 1, intent: {type:'ATTACK', icon:'⚔️'} }];
+    if (nodeType === 'BOSS') {
+        const b = bossForSector();
+        const boss = {
+            id: 'b1', name: b.name, bossId: b.id, classType: 'BOSS', range: b.range,
+            maxHp: Math.floor(bossBaseHp * b.hpMult * mult), hp: Math.floor(bossBaseHp * b.hpMult * mult),
+            speed: b.speed, armor: b.armor, baseArmor: b.armor, isPlayer: false,
+            dmgBase: Math.floor(bossBaseDmg * b.dmgMult * dmgMult),
+            img: b.img, scale: b.scale, hpDrop: 0,
+            stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0,
+            resistances: { ...b.resistances }, phase: 1,
+            intents: b.intents, bossPassive: b.passive || null, enrage: b.enrage
+        };
+        if (b.isHovering) boss.isHovering = true;
+        if (b.dmgType) boss.dmgType = b.dmgType;
+        boss.intent = rollIntent(boss);
+        return [boss];
+    }
     
     // Later sectors unlock tougher stock progressively rather than all at once: the old gate
     // was bypassed outright from sector 2, which dropped tier-8 units into tier-1 fights.
@@ -914,7 +982,7 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
         let usePool = homePool;
         if (allies.length && effTier >= 6 && i > 0 && Math.random() < 0.25) usePool = poolFor(allies[Math.floor(Math.random() * allies.length)]);
         let t = JSON.parse(JSON.stringify(usePool[Math.floor(Math.random() * usePool.length)])); 
-        let hp = Math.floor(t.maxHp * mult); t.hp = hp; t.maxHp = hp; t.dmgBase = Math.floor(t.dmgBase * dmgMult);
+        let hp = Math.floor(t.maxHp * mult); t.hp = hp; t.maxHp = hp; t.dmgBase = Math.floor(t.dmgBase * dmgMult); t.baseArmor = t.armor || 0;
         
         if (isEliteNode && Math.random() < 0.6) {
             let affixes = ['FRENZIED', 'ARMORED', 'VAMPIRIC'];
@@ -969,7 +1037,8 @@ function initiateCombat(nodeType, isEliteNode) {
     
     activeEntities = [...deployedRoster, ...generateEnemies(nodeType, mult, isEliteNode, dmgMult)];
     turnQueue = [...activeEntities].sort((a, b) => b.speed - a.speed);
-    activeIndex = 0; log("> COMBAT INITIATED.", "log-turn"); processTurn();
+    activeIndex = 0; log("> COMBAT INITIATED.", "log-turn");
+    if (nodeType === 'BOSS') { const b = bossForSector(); log(`> ${b.name.toUpperCase()}: ${b.blurb}`, "log-combo"); } processTurn();
 }
 
 const logEl = document.getElementById('log');
@@ -1100,7 +1169,13 @@ function applyTurnStartEffects(ent) {
     if (currentWeather === 'SHRAPNEL_WINDS' && Math.random() < 0.3) { let shrapDmg = Math.floor(5 * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - shrapDmg); log(`> Shrapnel struck ${ent.name} for ${shrapDmg} DMG!`, "log-dmg"); spawnFCT(ent.id, `-${shrapDmg}`, "fct-dmg"); chg = true; addMomentum(5); triggerHitFlash(ent.id); }
 
     if (ent.bleedingTurns > 0) { let b = Math.max(1, Math.floor(ent.maxHp * 0.08)); ent.hp = Math.max(0, ent.hp - b); log(`> ${ent.name} bleeds for ${b}.`, "log-dmg"); spawnFCT(ent.id, `-${b}`, "fct-dmg"); ent.bleedingTurns--; chg = true; if(ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); }
-    if (ent.armorTurns > 0) { ent.armorTurns--; if (ent.armorTurns === 0) { ent.armor = 0; } chg = true; }
+    // Expiring temporary armour used to zero the unit's innate plating too, so any armoured
+    // enemy that braced permanently lost the armour it started with.
+    if (ent.armorTurns > 0) { ent.armorTurns--; if (ent.armorTurns === 0) { ent.armor = ent.baseArmor || 0; } chg = true; }
+    if (ent.bossPassive === 'PLATING' && ent.hp > 0) {
+        const cap = (ent.baseArmor || 0) + 30;
+        if (ent.armor < cap) { ent.armor = Math.min(cap, ent.armor + 6); spawnFCT(ent.id, "+PLATE", "fct-heal"); chg = true; }
+    }
     if (ent.oiledTurns > 0) { ent.oiledTurns--; chg = true; }
     if (chg) renderField();
 }
@@ -1216,6 +1291,13 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
 
     if (target.hp <= 0) { addMomentum(15); if (!target.isPlayer) { checkBountyProgress('KILL'); if (runStats) runStats.kills++; } } else if (target.isPlayer) { addMomentum(5); }
 
+    // Carrion Feast: the Matriarch grows on what it opens up.
+    if (attacker.bossPassive === 'FEAST' && attacker.hp > 0 && netDmg > 0 && attacker.hp < attacker.maxHp) {
+        const fed = Math.max(1, Math.floor(netDmg * 0.3));
+        attacker.hp = Math.min(attacker.maxHp, attacker.hp + fed);
+        setTimeout(() => spawnFCT(attacker.id, `+${fed}`, "fct-heal"), 260);
+    }
+
     if (abilityStr === 'RAD_SHOT' || abilityStr === 'FERAL_BITE') {
         if (Math.random() < (abilityStr === 'FERAL_BITE' ? 0.9 : 0.6)) { target.bleedingTurns = 3; log(`> ${target.name} bleeding!`, "log-dmg"); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
     } else if (abilityStr === 'HEAVY_WRENCH' || abilityStr === 'FLASHBANG') {
@@ -1228,9 +1310,45 @@ function executeEnemyAi(enemy) {
     if (!combatActive) return;
     
     if (enemy.classType === 'BOSS' && enemy.phase === 1 && enemy.hp <= (enemy.maxHp / 2)) {
-        enemy.phase = 2; log(`> WARLORD ENRAGED!`, "log-dmg"); spawnFCT(enemy.id, "ENRAGED!", "fct-status"); enemy.dmgBase = Math.floor(enemy.dmgBase * 1.5); playSFX('hit'); triggerShake();
-        const m = 1 + ((currentTier - 1) * 0.4); const d = { name: "War Hound", classType: "BEAST", range: 'melee', maxHp: Math.floor(30*m), hp: Math.floor(30*m), speed: 18, armor: 0, isPlayer: false, dmgBase: Math.floor(12*m), img: "enemy_dog.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } };
-        for(let i = 0; i < 2; i++) { let n = JSON.parse(JSON.stringify(d)); n.id = `summon_${Date.now()}_${i}`; activeEntities.push(n); turnQueue.push(n); }
+        enemy.phase = 2;
+        const e = enemy.enrage || {};
+        log(`> ${e.cry || 'THE COMMANDER ENRAGES!'}`, "log-dmg");
+        spawnFCT(enemy.id, "ENRAGED!", "fct-status"); playSFX('hit'); triggerShake();
+
+        if (e.dmgScale) enemy.dmgBase = Math.floor(enemy.dmgBase * e.dmgScale);
+        if (e.speedBonus) enemy.speed += e.speedBonus;
+        if (e.armorBonus) { enemy.armor += e.armorBonus; enemy.baseArmor = (enemy.baseArmor || 0) + e.armorBonus; }
+        if (e.forceAoe) enemy.forceAoe = true;
+
+        // Plague Wind: no reinforcements, it simply infects the whole line at once.
+        if (e.plague) {
+            activeEntities.filter(t => t.isPlayer && t.hp > 0).forEach(t => {
+                t.bleedingTurns = Math.max(t.bleedingTurns, 3);
+                spawnFCT(t.id, "PLAGUE", "fct-status");
+            });
+            log(`> The squad is choking on rot.`, "log-status");
+        }
+
+        if (e.summon) {
+            const m = 1 + ((currentTier - 1) * 0.4);
+            const proto = {
+                name: e.summon.name, classType: e.summon.classType, range: e.summon.range,
+                maxHp: Math.floor(e.summon.hp * m), hp: Math.floor(e.summon.hp * m),
+                speed: e.summon.speed, armor: 0, baseArmor: 0, isPlayer: false,
+                dmgBase: Math.floor(e.summon.dmg * m), img: e.summon.img, scale: e.summon.scale,
+                hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0,
+                resistances: { ...e.summon.resistances }
+            };
+            if (e.summon.isHovering) proto.isHovering = true;
+            for (let i = 0; i < (e.summonCount || 2); i++) {
+                let n = JSON.parse(JSON.stringify(proto));
+                n.id = `summon_${Date.now()}_${i}`;
+                n.intent = rollIntent(n);
+                activeEntities.push(n); turnQueue.push(n);
+            }
+            log(`> ${e.summonCount || 2}x ${e.summon.name} joins the fight!`, "log-dmg");
+        }
+
         enemy.intent = rollIntent(enemy); renderField(); setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return;
     }
 
@@ -1348,9 +1466,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },
