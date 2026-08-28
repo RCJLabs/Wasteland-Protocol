@@ -8,7 +8,7 @@
 body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0; padding: 0; display: flex; justify-content: center; height: 100dvh; align-items: center; overflow: hidden; }
 #engine { width: 100%; max-width: 900px; height: 100dvh; background: #000; position: relative; display: flex; flex-direction: column; }
 
-#screen-title { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; background: linear-gradient(rgba(10, 10, 10, 0.25), rgba(0, 0, 0, 0.88)), repeating-linear-gradient(45deg, rgba(17, 17, 17, 0.35) 0, rgba(17, 17, 17, 0.35) 2px, transparent 2px, transparent 6px), url('bg_title.png'); background-size: cover, auto, cover; background-position: center; text-align: center; padding: 20px; }
+#screen-title { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; background: linear-gradient(rgba(10, 10, 10, 0.25), rgba(0, 0, 0, 0.88)), repeating-linear-gradient(45deg, rgba(17, 17, 17, 0.35) 0, rgba(17, 17, 17, 0.35) 2px, transparent 2px, transparent 6px), url('bg_title.webp'); background-size: cover, auto, cover; background-position: center; text-align: center; padding: 20px; }
 .title-header { font-size: clamp(30px, 8vw, 60px); color: #B8860B; font-weight: bold; text-transform: uppercase; letter-spacing: 4px; text-shadow: 3px 3px 0px #8B0000, 0 0 15px rgba(184, 134, 11, 0.5); margin-bottom: 10px; }
 .title-sub { color: #666; font-size: clamp(12px, 3vw, 16px); letter-spacing: 8px; margin-bottom: 8vh; text-shadow: 1px 1px 2px #000; }
 .title-menu { display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 300px; }
@@ -363,11 +363,19 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
 
 <script>
 const ASSET_LIST = [
-    "bg_title.png", "bg_combat.png", "bg_thunderdome.png", "bg_refinery.png", "bg_highway.png", "bg_canyon.png",
-    "hero_bruiser.png", "hero_medic.png", "hero_scavenger.png", "hero_pyro.png", "hero_shotgunner.png", "hero_sniper.png", "hero_hound.png",
-    "enemy_dog.png", "enemy_mutant.png", "enemy_chem.png", "enemy_raider.png", "enemy_psycho.png", "enemy_sniper.png", "enemy_juggernaut.png", "enemy_drone.png", "enemy_turret.png", "enemy_warrig.png", "enemy_boss.png"
+    "bg_title.webp", "bg_combat.webp", "bg_thunderdome.webp", "bg_refinery.webp", "bg_highway.webp", "bg_canyon.webp",
+    "hero_bruiser.webp", "hero_medic.webp", "hero_scavenger.webp", "hero_pyro.webp", "hero_shotgunner.webp", "hero_sniper.webp", "hero_hound.webp",
+    "enemy_dog.webp", "enemy_mutant.webp", "enemy_chem.webp", "enemy_raider.webp", "enemy_psycho.webp", "enemy_sniper.webp", "enemy_juggernaut.webp", "enemy_drone.webp", "enemy_turret.webp", "enemy_warrig.webp", "enemy_boss.webp"
 ];
-function preloadAssets() { ASSET_LIST.forEach(src => { let img = new Image(); img.src = src; }); }
+// The title art is fetched immediately; everything else waits until the menu is up so the
+// first screen is not stuck behind the whole art set.
+function preloadAssets() {
+    const TITLE = 'bg_title.webp';
+    new Image().src = TITLE;
+    const rest = ASSET_LIST.filter(a => a !== TITLE);
+    const defer = window.requestIdleCallback || (fn => setTimeout(fn, 400));
+    defer(() => rest.forEach(src => { let img = new Image(); img.src = src; }));
+}
 
 const BASE_SAVE_KEY = 'wasteland_rpg_core_slot_'; 
 const SETTINGS_KEY = 'wasteland_rpg_core_settings';
@@ -386,7 +394,7 @@ let activeBounties = [];
 let momentum = 0;
 let activeRelics = [];
 
-let combatBgFile = 'bg_combat.png'; let pendingCombat = null;
+let combatBgFile = 'bg_combat.webp'; let pendingCombat = null;
 let runStats = null;
 let outpostTab = 'ROSTER'; let activePosSelector = null; let activePerkSelector = null; let currentWeather = 'CLEAR'; let currentNodeType = '';
 let isCurrentNodeElite = false;
@@ -429,13 +437,13 @@ const EVENT_POOL = [
 ];
 
 const ROSTER_TEMPLATE = [
-    { id: 'p1', name: "Bruiser", classType: "BRUISER", maxHp: 80, hp: 80, speed: 8, armor: 0, isPlayer: true, dmgBase: 20, img: "hero_bruiser.png", scale: 1.15, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 5, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 1, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { heavy_wrench: 0, iron_guard: 0 } },
-    { id: 'p2', name: "Medic", classType: "MEDIC", maxHp: 50, hp: 50, speed: 12, armor: 0, isPlayer: true, dmgBase: 10, img: "hero_medic.png", scale: 1.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 2, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { cauterize: 0 } },
-    { id: 'p3', name: "Scavenger", classType: "SCAVENGER", maxHp: 45, hp: 45, speed: 15, armor: 0, isPlayer: true, dmgBase: 15, img: "hero_scavenger.png", scale: 1.25, hpDrop: -25, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 5 }, upgradeCount: 0, gridPos: 3, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { flashbang: 0 } },
-    { id: 'p4', name: "Pyro", classType: "PYROMANIAC", maxHp: 55, hp: 55, speed: 11, armor: 0, isPlayer: true, dmgBase: 12, img: "hero_pyro.png", scale: 1.1, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 10 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { molotov: 0 } },
-    { id: 'p5', name: "Breacher", classType: "SHOTGUNNER", maxHp: 65, hp: 65, speed: 9, armor: 5, isPlayer: true, dmgBase: 22, img: "hero_shotgunner.png", scale: 1.15, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 5, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { buckshot: 0 } },
-    { id: 'p6', name: "Ghost", classType: "SNIPER", maxHp: 40, hp: 40, speed: 16, armor: 0, isPlayer: true, dmgBase: 28, img: "hero_sniper.png", scale: 0.9, hpDrop: -10, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { deadeye: 0 } },
-    { id: 'p7', name: "War Hound", classType: "HOUND", maxHp: 35, hp: 35, speed: 19, armor: 0, isPlayer: true, dmgBase: 16, img: "hero_hound.png", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: -2, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { feral_bite: 0 } }
+    { id: 'p1', name: "Bruiser", classType: "BRUISER", maxHp: 80, hp: 80, speed: 8, armor: 0, isPlayer: true, dmgBase: 20, img: "hero_bruiser.webp", scale: 1.15, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 5, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 1, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { heavy_wrench: 0, iron_guard: 0 } },
+    { id: 'p2', name: "Medic", classType: "MEDIC", maxHp: 50, hp: 50, speed: 12, armor: 0, isPlayer: true, dmgBase: 10, img: "hero_medic.webp", scale: 1.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 2, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { cauterize: 0 } },
+    { id: 'p3', name: "Scavenger", classType: "SCAVENGER", maxHp: 45, hp: 45, speed: 15, armor: 0, isPlayer: true, dmgBase: 15, img: "hero_scavenger.webp", scale: 1.25, hpDrop: -25, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 5 }, upgradeCount: 0, gridPos: 3, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { flashbang: 0 } },
+    { id: 'p4', name: "Pyro", classType: "PYROMANIAC", maxHp: 55, hp: 55, speed: 11, armor: 0, isPlayer: true, dmgBase: 12, img: "hero_pyro.webp", scale: 1.1, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 10 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { molotov: 0 } },
+    { id: 'p5', name: "Breacher", classType: "SHOTGUNNER", maxHp: 65, hp: 65, speed: 9, armor: 5, isPlayer: true, dmgBase: 22, img: "hero_shotgunner.webp", scale: 1.15, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 5, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { buckshot: 0 } },
+    { id: 'p6', name: "Ghost", classType: "SNIPER", maxHp: 40, hp: 40, speed: 16, armor: 0, isPlayer: true, dmgBase: 28, img: "hero_sniper.webp", scale: 0.9, hpDrop: -10, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { deadeye: 0 } },
+    { id: 'p7', name: "War Hound", classType: "HOUND", maxHp: 35, hp: 35, speed: 19, armor: 0, isPlayer: true, dmgBase: 16, img: "hero_hound.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: -2, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, trait: null, augments: [], quirk: null, cooldowns: { feral_bite: 0 } }
 ];
 
 let playerRoster = []; let activeEntities = []; let turnQueue = []; let activeIndex = -1; let combatActive = false; let pendingAction = null;
@@ -743,7 +751,7 @@ function resumeCombat(c) {
     activeIndex = Math.min(c.activeIndex || 0, turnQueue.length - 1);
     combatActive = true;
     switchScreen('screen-combat'); document.getElementById('log').innerHTML = '';
-    applyCombatScenery(c.bgFile || 'bg_combat.png');
+    applyCombatScenery(c.bgFile || 'bg_combat.webp');
     log("> COMBAT RESUMED.", "log-turn");
     processTurn();
 }
@@ -930,27 +938,27 @@ function sectorRewardMult() { return Math.pow(1.4, currentSector - 1); }
 function generateEnemies(nodeType, mult, isEliteNode) {
     const pool = {
         'BEASTS': [
-            { name: "Attack Dog", minTier: 1, isHeavy: false, classType: "BEAST", range: 'melee', maxHp: 30, speed: 18, armor: 0, dmgBase: 10, img: "enemy_dog.png", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } }, 
-            { name: "Mutant", minTier: 5, isHeavy: true, classType: "MUTANT", range: 'melee', maxHp: 70, speed: 7, armor: 0, dmgBase: 25, img: "enemy_mutant.png", scale: 1.5, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 20, energy: -5 } }, 
-            { name: "Chem Fiend", minTier: 6, isHeavy: true, classType: "MUTANT", range: 'ranged', maxHp: 60, speed: 11, armor: 0, dmgBase: 15, img: "enemy_chem.png", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 50, energy: -5 } }
+            { name: "Attack Dog", minTier: 1, isHeavy: false, classType: "BEAST", range: 'melee', maxHp: 30, speed: 18, armor: 0, dmgBase: 10, img: "enemy_dog.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } }, 
+            { name: "Mutant", minTier: 5, isHeavy: true, classType: "MUTANT", range: 'melee', maxHp: 70, speed: 7, armor: 0, dmgBase: 25, img: "enemy_mutant.webp", scale: 1.5, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 20, energy: -5 } }, 
+            { name: "Chem Fiend", minTier: 6, isHeavy: true, classType: "MUTANT", range: 'ranged', maxHp: 60, speed: 11, armor: 0, dmgBase: 15, img: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 50, energy: -5 } }
         ],
         'RAIDERS': [
-            { name: "Raider", minTier: 1, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 40, speed: 10, armor: 0, dmgBase: 12, img: "enemy_raider.png", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: -2, bio: 2, energy: 0 } }, 
-            { name: "Psycho", minTier: 4, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 45, speed: 14, armor: 0, dmgBase: 18, img: "enemy_psycho.png", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
-            { name: "Sniper", minTier: 5, isHeavy: false, classType: "RAIDER", range: 'ranged', maxHp: 35, speed: 16, armor: 0, dmgBase: 25, img: "enemy_sniper.png", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
-            { name: "Juggernaut", minTier: 7, isHeavy: true, classType: "RAIDER", range: 'melee', maxHp: 90, speed: 6, armor: 5, dmgBase: 18, img: "enemy_juggernaut.png", scale: 1.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 10, bio: 0, energy: -5 } }
+            { name: "Raider", minTier: 1, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 40, speed: 10, armor: 0, dmgBase: 12, img: "enemy_raider.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: -2, bio: 2, energy: 0 } }, 
+            { name: "Psycho", minTier: 4, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 45, speed: 14, armor: 0, dmgBase: 18, img: "enemy_psycho.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
+            { name: "Sniper", minTier: 5, isHeavy: false, classType: "RAIDER", range: 'ranged', maxHp: 35, speed: 16, armor: 0, dmgBase: 25, img: "enemy_sniper.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
+            { name: "Juggernaut", minTier: 7, isHeavy: true, classType: "RAIDER", range: 'melee', maxHp: 90, speed: 6, armor: 5, dmgBase: 18, img: "enemy_juggernaut.webp", scale: 1.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 10, bio: 0, energy: -5 } }
         ],
         'MECH': [
-            { name: "Drone", minTier: 4, isHeavy: false, classType: "DRONE", range: 'ranged', isHovering: true, maxHp: 25, speed: 18, armor: 5, dmgBase: 8, img: "enemy_drone.png", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 8, bio: 100, energy: -10 } }, 
-            { name: "Turret", minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.png", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
-            { name: "War Rig", minTier: 8, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.png", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
+            { name: "Drone", minTier: 4, isHeavy: false, classType: "DRONE", range: 'ranged', isHovering: true, maxHp: 25, speed: 18, armor: 5, dmgBase: 8, img: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 8, bio: 100, energy: -10 } }, 
+            { name: "Turret", minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
+            { name: "War Rig", minTier: 8, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
         ]
     };
 
     let bossBaseHp = currentSector === 1 ? 100 : 400;
     let bossBaseDmg = currentSector === 1 ? 30 : 40;
     
-    if (nodeType === 'BOSS') return [{ id: 'b1', name: "Warlord", classType: "BOSS", range: 'melee', maxHp: Math.floor(bossBaseHp*mult), hp: Math.floor(bossBaseHp*mult), speed: 9, armor: 15, isPlayer: false, dmgBase: Math.floor(bossBaseDmg*mult), img: "enemy_boss.png", scale: 2.2, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 10, bio: 5, energy: 5 }, phase: 1, intent: {type:'ATTACK', icon:'⚔️'} }];
+    if (nodeType === 'BOSS') return [{ id: 'b1', name: "Warlord", classType: "BOSS", range: 'melee', maxHp: Math.floor(bossBaseHp*mult), hp: Math.floor(bossBaseHp*mult), speed: 9, armor: 15, isPlayer: false, dmgBase: Math.floor(bossBaseDmg*mult), img: "enemy_boss.webp", scale: 2.2, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, resistances: { phys: 10, bio: 5, energy: 5 }, phase: 1, intent: {type:'ATTACK', icon:'⚔️'} }];
     
     // Later sectors unlock tougher stock progressively rather than all at once: the old gate
     // was bypassed outright from sector 2, which dropped tier-8 units into tier-1 fights.
@@ -1017,12 +1025,12 @@ function initiateCombat(nodeType, isEliteNode) {
 
     switchScreen('screen-combat'); combatActive = true; document.getElementById('log').innerHTML = '';
 
-    let bgFile = 'bg_combat.png'; currentWeather = 'CLEAR'; currentNodeType = nodeType; isCurrentNodeElite = isEliteNode;
-    if (currentTier === 1 && currentSector === 1) { bgFile = 'bg_combat.png'; } else {
-        if (nodeType === 'BOSS') { bgFile = 'bg_thunderdome.png'; currentWeather = 'BLOODLUST'; }
-        else if (nodeType === 'MECH') { bgFile = 'bg_refinery.png'; if (Math.random() < 0.4) currentWeather = 'TOXIC_SMOG'; }
-        else if (nodeType === 'RAIDERS') { bgFile = 'bg_highway.png'; if (Math.random() < 0.4) currentWeather = 'SHRAPNEL_WINDS'; }
-        else if (nodeType === 'BEASTS') { bgFile = 'bg_canyon.png'; if (Math.random() < 0.4) currentWeather = 'SANDSTORM'; }
+    let bgFile = 'bg_combat.webp'; currentWeather = 'CLEAR'; currentNodeType = nodeType; isCurrentNodeElite = isEliteNode;
+    if (currentTier === 1 && currentSector === 1) { bgFile = 'bg_combat.webp'; } else {
+        if (nodeType === 'BOSS') { bgFile = 'bg_thunderdome.webp'; currentWeather = 'BLOODLUST'; }
+        else if (nodeType === 'MECH') { bgFile = 'bg_refinery.webp'; if (Math.random() < 0.4) currentWeather = 'TOXIC_SMOG'; }
+        else if (nodeType === 'RAIDERS') { bgFile = 'bg_highway.webp'; if (Math.random() < 0.4) currentWeather = 'SHRAPNEL_WINDS'; }
+        else if (nodeType === 'BEASTS') { bgFile = 'bg_canyon.webp'; if (Math.random() < 0.4) currentWeather = 'SANDSTORM'; }
     }
     applyCombatScenery(bgFile);
 
@@ -1268,7 +1276,7 @@ function executeEnemyAi(enemy) {
     
     if (enemy.classType === 'BOSS' && enemy.phase === 1 && enemy.hp <= (enemy.maxHp / 2)) {
         enemy.phase = 2; log(`> WARLORD ENRAGED!`, "log-dmg"); spawnFCT(enemy.id, "ENRAGED!", "fct-status"); enemy.dmgBase = Math.floor(enemy.dmgBase * 1.5); playSFX('hit'); triggerShake();
-        const m = 1 + ((currentTier - 1) * 0.4); const d = { name: "War Hound", classType: "BEAST", range: 'melee', maxHp: Math.floor(30*m), hp: Math.floor(30*m), speed: 18, armor: 0, isPlayer: false, dmgBase: Math.floor(12*m), img: "enemy_dog.png", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } };
+        const m = 1 + ((currentTier - 1) * 0.4); const d = { name: "War Hound", classType: "BEAST", range: 'melee', maxHp: Math.floor(30*m), hp: Math.floor(30*m), speed: 18, armor: 0, isPlayer: false, dmgBase: Math.floor(12*m), img: "enemy_dog.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } };
         for(let i = 0; i < 2; i++) { let n = JSON.parse(JSON.stringify(d)); n.id = `summon_${Date.now()}_${i}`; activeEntities.push(n); turnQueue.push(n); }
         enemy.intent = rollIntent(enemy); renderField(); setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return;
     }
