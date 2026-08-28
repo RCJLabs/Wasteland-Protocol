@@ -124,7 +124,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 
 .intent-icon { position: absolute; top: -25px; font-size: 14px; background: #111; border: 1px solid #444; border-radius: 50%; width: 22px; height: 22px; display: flex; justify-content: center; align-items: center; z-index: 20; box-shadow: 0 2px 4px #000; }
 
-.battlefield { display: flex; justify-content: center; gap: clamp(18px, 9vw, 70px); flex-grow: 1; align-items: flex-end; padding: 0 22px 0 0; box-sizing: border-box; margin-bottom: 12vh; }
+.battlefield { display: flex; justify-content: center; gap: clamp(18px, 9vw, 70px); flex-grow: 1; align-items: flex-end; padding: 0 22px 0 0; box-sizing: border-box; margin-bottom: 12vh; /* overridden per backdrop by applyCombatScenery */ }
 .team { display: flex; align-items: flex-end; justify-content: center; min-width: 0; }
 /* Four-strong squads tighten up so oversized sprites stay inside the viewport. */
 .team.crowded .entity { width: clamp(42px, 11vw, 78px); }
@@ -221,3 +221,10 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
 .stat-parts .stat-value { color: #a9a196; }
 .stat-chems .stat-value { color: #7fae5e; }
 .stat-tech .stat-value { color: #6aa6d8; }
+
+#screen-dev { display: none; flex-direction: column; padding: 20px; height: 100%; box-sizing: border-box; overflow-y: auto; background: linear-gradient(rgba(8,10,14,0.96), rgba(0,0,0,0.98)); }
+.dev-body { display: flex; flex-direction: column; gap: 12px; }
+.dev-group { border: 1px solid #26303c; background: #0b0e12; padding: 9px 10px 11px; }
+.dev-title { font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: #6aa6d8; margin-bottom: 7px; }
+.dev-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.dev-btn { flex: 1 1 auto; min-width: 78px; font-size: 11px; padding: 9px 6px; }

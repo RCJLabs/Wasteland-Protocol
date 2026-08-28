@@ -210,6 +210,16 @@ const ACTIONS = {
     'slot':             el => selectSlot(Number(el.dataset.slot), el.dataset.exists === '1'),
     'buy-meta':         el => buyMetaUpgrade(el.dataset.kind),
     'erase-slot':       el => { Store.remove(BASE_SAVE_KEY + Number(el.dataset.slot)); renderTitleScreen(); },
+    'dev-open':         () => renderDev(),
+    'dev-exit':         () => renderMap(),
+    'dev-sector':       el => devJump(Number(el.dataset.delta), 0),
+    'dev-tier':         el => devJump(0, Number(el.dataset.delta)),
+    'dev-boss':         el => devFightBoss(el.dataset.boss),
+    'dev-fight':        el => { currentTier = Math.min(currentTier, TOTAL_TIERS); initiateCombat(el.dataset.type, el.dataset.elite === '1'); },
+    'dev-node':         el => { el.dataset.kind === 'EVENT' ? initiateEvent() : initiateCamp(); },
+    'dev-give':         el => devGive(el.dataset.kind),
+    'dev-win':          () => devResolve(true),
+    'dev-lose':         () => devResolve(false),
     'regroup':          () => regroupSquad(),
     'advance-sector':   () => advanceSector(),
 
@@ -685,6 +695,104 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         } runStats = d.runStats || newRunStats();
         if (typeof runStats.regroups !== 'number') runStats.regroups = totalRegroups(); } }
 
+// --- Dev tools -----------------------------------------------------------------------------
+// Reaching a boss meant playing ten nodes to get there. This jumps straight to any fight or
+// state worth testing. It only ever writes through the normal functions, so anything it sets
+// up behaves exactly as it would in a real run.
+function renderDev() {
+    switchScreen('screen-dev');
+    closeSettings();
+    const inFight = combatActive;
+    const group = (title, rows) => `<div class="dev-group"><div class="dev-title">${title}</div>${rows.join('')}</div>`;
+    const btn = (label, action, data = '', style = '') =>
+        `<button class="upg-btn dev-btn" ${style} data-action="${action}" ${data}>${label}</button>`;
+
+    const body = [
+        group(`Position — sector ${currentSector}, tier ${currentTier}/${TOTAL_TIERS}`, [
+            `<div class="dev-row">` +
+              btn('− Sector', 'dev-sector', 'data-delta="-1"') + btn('+ Sector', 'dev-sector', 'data-delta="1"') +
+              btn('− Tier', 'dev-tier', 'data-delta="-1"') + btn('+ Tier', 'dev-tier', 'data-delta="1"') +
+            `</div>`,
+            `<div class="dev-row">` + btn('Jump to the boss tier', 'dev-tier', `data-delta="${TOTAL_TIERS - currentTier}"`) + `</div>`
+        ]),
+        group('Fight a boss now', [
+            `<div class="dev-row">` + BOSS_POOL.map(b =>
+                btn(b.short, 'dev-boss', `data-boss="${b.id}"`, 'style="border-color:#8B0000; color:#ff6666;"')).join('') + `</div>`
+        ]),
+        group('Fight a node now', [
+            `<div class="dev-row">` +
+              btn('Raiders', 'dev-fight', 'data-type="RAIDERS" data-elite="0"') +
+              btn('Beasts', 'dev-fight', 'data-type="BEASTS" data-elite="0"') +
+              btn('Mech', 'dev-fight', 'data-type="MECH" data-elite="0"') +
+              btn('Elite', 'dev-fight', 'data-type="RAIDERS" data-elite="1"') +
+            `</div>`,
+            `<div class="dev-row">` + btn('Event', 'dev-node', 'data-kind="EVENT"') + btn('Camp', 'dev-node', 'data-kind="CAMP"') + `</div>`
+        ]),
+        group(`Supplies — ${scrap} scrap, ${bossSkulls} skulls`, [
+            `<div class="dev-row">` +
+              btn('+500 scrap', 'dev-give', 'data-kind="SCRAP"') +
+              btn('+10 materials', 'dev-give', 'data-kind="MATS"') +
+              btn('Fill bag', 'dev-give', 'data-kind="BAG"') +
+              btn('+1 skull', 'dev-give', 'data-kind="SKULL"') +
+            `</div>`
+        ]),
+        group('Squad', [
+            `<div class="dev-row">` +
+              btn('Full heal', 'dev-give', 'data-kind="HEAL"') +
+              btn('+1 level', 'dev-give', 'data-kind="LEVEL"') +
+              btn('+3 perks', 'dev-give', 'data-kind="PERKS"') +
+              btn('Grant relic', 'dev-give', 'data-kind="RELIC"') +
+            `</div>`,
+            `<div class="dev-row">` + btn('Refill regroups', 'dev-give', 'data-kind="REGROUP"') + `</div>`
+        ]),
+        group('Resolve the current fight', [
+            `<div class="dev-row">` +
+              btn(inFight ? 'Win it' : 'Win it (not in a fight)', 'dev-win', '', inFight ? 'style="border-color:#6B8E23; color:#9ec24e;"' : 'disabled') +
+              btn(inFight ? 'Lose it' : 'Lose it (not in a fight)', 'dev-lose', '', inFight ? 'style="border-color:#8B0000; color:#ff6666;"' : 'disabled') +
+            `</div>`
+        ]),
+        `<button class="return-btn" data-action="dev-exit">BACK TO THE MAP</button>`
+    ].join('');
+    document.getElementById('dev-body').innerHTML = body;
+}
+
+function devJump(deltaSector, deltaTier) {
+    currentSector = Math.max(1, currentSector + deltaSector);
+    currentTier = Math.min(TOTAL_TIERS, Math.max(1, currentTier + deltaTier));
+    noteDepth(); saveGameState(); renderDev();
+}
+
+// Steps forward to the next sector that fields the requested commander, so the fight arrives at
+// a difficulty that matches how deep the run already is.
+function devFightBoss(bossId) {
+    const idx = BOSS_POOL.findIndex(b => b.id === bossId);
+    if (idx < 0) return;
+    let s = currentSector;
+    while (((s - 1) % BOSS_POOL.length) !== idx) s++;
+    currentSector = s; currentTier = TOTAL_TIERS;
+    noteDepth(); saveGameState();
+    initiateCombat('BOSS', false);
+}
+
+function devGive(kind) {
+    if (kind === 'SCRAP') scrap += 500;
+    else if (kind === 'MATS') { materials.parts += 10; materials.chems += 10; materials.tech += 10; }
+    else if (kind === 'BAG') { inventory = []; const all = Object.keys(ITEM_DATA); while (inventory.length < metaUpgrades.invMax) inventory.push(all[inventory.length % all.length]); }
+    else if (kind === 'SKULL') { bossSkulls++; saveMeta(); }
+    else if (kind === 'HEAL') playerRoster.forEach(c => { c.hp = c.maxHp; c.stunnedTurns = 0; c.bleedingTurns = 0; });
+    else if (kind === 'LEVEL') playerRoster.forEach(c => awardXp(c, c.xpToNext - c.xp));
+    else if (kind === 'PERKS') playerRoster.forEach(c => { c.perkPoints += 3; });
+    else if (kind === 'RELIC') { const left = RELIC_POOL.filter(r => !activeRelics.some(a => a.id === r.id)); if (left.length) activeRelics.push(left[0]); }
+    else if (kind === 'REGROUP') { if (runStats) runStats.regroups = totalRegroups(); }
+    saveGameState(); renderDev();
+}
+
+function devResolve(win) {
+    if (!combatActive) return;
+    activeEntities.filter(e => win ? !e.isPlayer : e.isPlayer).forEach(e => { e.hp = 0; });
+    checkWinState();
+}
+
 function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`; document.getElementById('meta-lbl-scrap').innerText = `LVL ${metaUpgrades.startScrap / 50}`; document.getElementById('meta-lbl-level').innerText = `LVL ${metaUpgrades.startLevel - 1}`; document.getElementById('meta-lbl-inv').innerText = `LVL ${metaUpgrades.invMax - 4}`; document.getElementById('meta-lbl-regroup').innerText = `LVL ${metaUpgrades.extraRegroups || 0}`; }
 function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossSkulls -= 1; metaUpgrades.startScrap += 50; } else if (type === 'LEVEL' && bossSkulls >= 2) { bossSkulls -= 2; metaUpgrades.startLevel += 1; } else if (type === 'INV' && bossSkulls >= 3) { bossSkulls -= 3; metaUpgrades.invMax += 1; } else if (type === 'REGROUP' && bossSkulls >= 4) { bossSkulls -= 4; metaUpgrades.extraRegroups = (metaUpgrades.extraRegroups || 0) + 1; } saveMeta(); renderCitadel(); }
 
@@ -1003,6 +1111,13 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     return squad;
 }
 
+// Some backdrops carry a dark foreground band at the bottom - measured at 25% of bg_nest and
+// 27% of bg_foundry, against 0-3% for the older, landscape ones. Standing the squad at a fixed
+// height put them inside that band rather than on the visible ground, so each backdrop states
+// how far up its ground line sits. Anything unlisted keeps the original footing.
+const GROUND_LIFT = { 'bg_nest.webp': '21vh', 'bg_foundry.webp': '25vh' };
+const DEFAULT_LIFT = '12vh';
+
 const WEATHER_BANNERS = {
     TOXIC_SMOG:     ['weather-smog',  '⚠️ TOXIC SMOG: Passive Bio DMG to Active Units ⚠️'],
     SANDSTORM:      ['weather-sand',  '⚠️ SANDSTORM: Ranged Abilities deal -25% DMG ⚠️'],
@@ -1014,6 +1129,8 @@ const WEATHER_BANNERS = {
 // a boss arena applies is identical whichever commander is waiting - only the sign differs.
 function applyCombatScenery(bgFile, bannerText) {
     combatBgFile = bgFile;
+    const field = document.querySelector('.battlefield');
+    if (field) field.style.marginBottom = GROUND_LIFT[bgFile] || DEFAULT_LIFT;
     document.getElementById('combat-sky-layer').style.backgroundImage = `linear-gradient(to bottom, rgba(43, 10, 10, 0.4) 0%, rgba(0, 0, 0, 0.5) 100%), url('${bgFile}')`;
     const wBanner = document.getElementById('weather-banner'); const w = WEATHER_BANNERS[currentWeather];
     const text = bannerText || (w ? w[1] : '');
@@ -1476,9 +1593,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },
