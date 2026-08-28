@@ -176,6 +176,49 @@ module.exports = {
     ok('a boss with no offset gets none applied', grounded.sink === '0px');
     ok(`and stays on the squad baseline (${grounded.delta}px)`, Math.abs(grounded.delta) < 8);
 
+    // ---- each commander fights on its own ground ----
+    const arenaFor = async (sector) => {
+      await stagedFight(sector);
+      return page.evaluate(() => {
+        const sky = getComputedStyle(document.getElementById('combat-sky-layer')).backgroundImage;
+        const banner = document.getElementById('weather-banner');
+        return { bg: (sky.match(/([a-z0-9_]+\.webp)/) || [])[1],
+                 banner: banner.innerText,
+                 shown: getComputedStyle(banner).display !== 'none',
+                 weather: currentWeather,
+                 boss: activeEntities.find(e => !e.isPlayer).name };
+      });
+    };
+
+    const arenas = { 1: await arenaFor(1), 2: await arenaFor(2), 3: await arenaFor(3) };
+    ok('the Warlord keeps the thunderdome', arenas[1].bg === 'bg_thunderdome.webp');
+    ok('the Colossus fights in the foundry', arenas[2].bg === 'bg_foundry.webp');
+    ok('the Matriarch fights at her nest', arenas[3].bg === 'bg_nest.webp');
+    ok('every boss gets a distinct arena',
+      new Set([arenas[1].bg, arenas[2].bg, arenas[3].bg]).size === 3);
+
+    ok('each arena names itself in the banner',
+      /THUNDERDOME/.test(arenas[1].banner) && /FOUNDRY/.test(arenas[2].banner) && /CARRION/.test(arenas[3].banner));
+    ok('all three banners are shown', [1,2,3].every(k => arenas[k].shown));
+    ok('the wording changes but the effect does not',
+      [1,2,3].every(k => arenas[k].weather === 'BLOODLUST' && /\+20% DMG/.test(arenas[k].banner)));
+
+    // resuming a saved boss fight restores its arena rather than a default one
+    await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); currentSector = 3; currentTier = 8;
+      initiateCombat('BOSS', false); saveGameState();
+    });
+    await page.reload();
+    await page.waitForTimeout(700);
+    await page.click('.title-btn.btn-continue');
+    await page.waitForTimeout(900);
+    const resumed = await page.evaluate(() => ({
+      bg: (getComputedStyle(document.getElementById('combat-sky-layer')).backgroundImage.match(/([a-z0-9_]+\.webp)/) || [])[1],
+      banner: document.getElementById('weather-banner').innerText
+    }));
+    ok('a resumed boss fight keeps its arena', resumed.bg === 'bg_nest.webp');
+    ok('and its banner', /CARRION/.test(resumed.banner));
+
     // ---- the map says who is waiting ----
     const label = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); currentSector = 2; renderMap();

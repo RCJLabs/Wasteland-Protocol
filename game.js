@@ -4,7 +4,7 @@
 // foot of this file for the one deliberate export.
 
 const ASSET_LIST = [
-    "bg_title.webp", "bg_combat.webp", "bg_thunderdome.webp", "bg_refinery.webp", "bg_highway.webp", "bg_canyon.webp",
+    "bg_title.webp", "bg_combat.webp", "bg_thunderdome.webp", "bg_refinery.webp", "bg_highway.webp", "bg_canyon.webp", "bg_foundry.webp", "bg_nest.webp",
     "hero_bruiser.webp", "hero_medic.webp", "hero_scavenger.webp", "hero_pyro.webp", "hero_shotgunner.webp", "hero_sniper.webp", "hero_hound.webp",
     "enemy_dog.webp", "enemy_mutant.webp", "enemy_chem.webp", "enemy_raider.webp", "enemy_psycho.webp", "enemy_sniper.webp", "enemy_juggernaut.webp", "enemy_drone.webp", "enemy_turret.webp", "enemy_warrig.webp", "enemy_boss.webp", "enemy_boss_mech.webp", "enemy_boss_vulture.webp"
 ];
@@ -102,6 +102,8 @@ const BOSS_POOL = [
         range: 'melee', hpMult: 1.0, dmgMult: 1.0, speed: 9, armor: 15,
         resistances: { phys: 10, bio: 5, energy: 5 },
         blurb: 'A raider chieftain who fights alongside their pack.',
+        bg: 'bg_thunderdome.webp',
+        banner: '\uD83D\uDC80 THUNDERDOME BLOODLUST: All units deal +20% DMG \uD83D\uDC80',
         intents: [['ATTACK', 0.30], ['AOE', 0.20], ['HEAVY', 0.20], ['STATUS', 0.20], ['DEFEND', 0.10]],
         enrage: { cry: 'WARLORD ENRAGED - THE PACK ANSWERS!', dmgScale: 1.5,
                   summon: { name: 'War Hound', classType: 'BEAST', range: 'melee', hp: 30, dmg: 12, speed: 18,
@@ -114,6 +116,8 @@ const BOSS_POOL = [
         resistances: { phys: 18, bio: 100, energy: -15 },
         passive: 'PLATING',
         blurb: 'A walking battery. Immune to toxins, and it re-plates itself between salvoes.',
+        bg: 'bg_foundry.webp',
+        banner: '\uD83D\uDD25 FOUNDRY HEAT: All units deal +20% DMG \uD83D\uDD25',
         intents: [['AOE', 0.35], ['ATTACK', 0.30], ['DEFEND', 0.20], ['HEAVY', 0.15]],
         enrage: { cry: 'SIEGE PROTOCOL ENGAGED - ALL BATTERIES', dmgScale: 1.15, armorBonus: 20, forceAoe: true,
                   summon: { name: 'Sentry Drone', classType: 'DRONE', range: 'ranged', hp: 25, dmg: 8, speed: 18,
@@ -127,6 +131,8 @@ const BOSS_POOL = [
         resistances: { phys: -6, bio: 40, energy: 5 },
         dmgType: 'bio', passive: 'FEAST', sink: 16,
         blurb: 'Fast, diseased, and it grows stronger off every wound it opens.',
+        bg: 'bg_nest.webp',
+        banner: '\u2620\uFE0F CARRION REEK: All units deal +20% DMG \u2620\uFE0F',
         intents: [['STATUS', 0.35], ['HEAVY', 0.25], ['ATTACK', 0.25], ['AOE', 0.15]],
         enrage: { cry: 'THE MATRIARCH SHRIEKS - PLAGUE WIND!', dmgScale: 1.25, speedBonus: 4, plague: true }
     }
@@ -656,7 +662,7 @@ function resumeCombat(c) {
     activeIndex = Math.min(c.activeIndex || 0, turnQueue.length - 1);
     combatActive = true;
     switchScreen('screen-combat'); document.getElementById('log').innerHTML = '';
-    applyCombatScenery(c.bgFile || 'bg_combat.webp');
+    applyCombatScenery(c.bgFile || 'bg_combat.webp', currentNodeType === 'BOSS' ? bossForSector().banner : null);
     log("> COMBAT RESUMED.", "log-turn");
     processTurn();
 }
@@ -1004,13 +1010,16 @@ const WEATHER_BANNERS = {
     BLOODLUST:      ['weather-blood', '💀 THUNDERDOME BLOODLUST: All units deal +20% DMG 💀']
 };
 
-function applyCombatScenery(bgFile) {
+// bannerText only replaces the wording. The weather itself is unchanged, so the +20% damage
+// a boss arena applies is identical whichever commander is waiting - only the sign differs.
+function applyCombatScenery(bgFile, bannerText) {
     combatBgFile = bgFile;
     document.getElementById('combat-sky-layer').style.backgroundImage = `linear-gradient(to bottom, rgba(43, 10, 10, 0.4) 0%, rgba(0, 0, 0, 0.5) 100%), url('${bgFile}')`;
     const wBanner = document.getElementById('weather-banner'); const w = WEATHER_BANNERS[currentWeather];
+    const text = bannerText || (w ? w[1] : '');
     wBanner.className = w ? w[0] : '';
-    wBanner.innerText = w ? w[1] : '';
-    wBanner.style.display = w ? 'block' : 'none';
+    wBanner.innerText = text;
+    wBanner.style.display = text ? 'block' : 'none';
 }
 
 function initiateCombat(nodeType, isEliteNode) {
@@ -1022,12 +1031,12 @@ function initiateCombat(nodeType, isEliteNode) {
 
     let bgFile = 'bg_combat.webp'; currentWeather = 'CLEAR'; currentNodeType = nodeType; isCurrentNodeElite = isEliteNode;
     if (currentTier === 1 && currentSector === 1) { bgFile = 'bg_combat.webp'; } else {
-        if (nodeType === 'BOSS') { bgFile = 'bg_thunderdome.webp'; currentWeather = 'BLOODLUST'; }
+        if (nodeType === 'BOSS') { bgFile = bossForSector().bg || 'bg_thunderdome.webp'; currentWeather = 'BLOODLUST'; }
         else if (nodeType === 'MECH') { bgFile = 'bg_refinery.webp'; if (Math.random() < 0.4) currentWeather = 'TOXIC_SMOG'; }
         else if (nodeType === 'RAIDERS') { bgFile = 'bg_highway.webp'; if (Math.random() < 0.4) currentWeather = 'SHRAPNEL_WINDS'; }
         else if (nodeType === 'BEASTS') { bgFile = 'bg_canyon.webp'; if (Math.random() < 0.4) currentWeather = 'SANDSTORM'; }
     }
-    applyCombatScenery(bgFile);
+    applyCombatScenery(bgFile, nodeType === 'BOSS' ? bossForSector().banner : null);
 
     playerRoster.forEach(ent => { ent.stunnedTurns = 0; ent.bleedingTurns = 0; ent.armorTurns = 0; ent.armor = 0; ent.oiledTurns = 0; });
     // HP keeps the steep 1.5x-per-sector curve; damage climbs far more slowly so a deep fight
