@@ -125,7 +125,7 @@ const BOSS_POOL = [
         id: 'MATRIARCH', name: 'Carrion Matriarch', short: 'MATRIARCH', img: 'enemy_boss_vulture.webp', scale: 2.1,
         range: 'melee', hpMult: 0.85, dmgMult: 1.1, speed: 17, armor: 5,
         resistances: { phys: -6, bio: 40, energy: 5 },
-        dmgType: 'bio', passive: 'FEAST',
+        dmgType: 'bio', passive: 'FEAST', sink: 16,
         blurb: 'Fast, diseased, and it grows stronger off every wound it opens.',
         intents: [['STATUS', 0.35], ['HEAVY', 0.25], ['ATTACK', 0.25], ['AOE', 0.15]],
         enrage: { cry: 'THE MATRIARCH SHRIEKS - PLAGUE WIND!', dmgScale: 1.25, speedBonus: 4, plague: true }
@@ -946,6 +946,7 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
             intents: b.intents, bossPassive: b.passive || null, enrage: b.enrage
         };
         if (b.isHovering) boss.isHovering = true;
+        if (b.sink) boss.sink = b.sink;
         if (b.dmgType) boss.dmgType = b.dmgType;
         boss.intent = rollIntent(boss);
         return [boss];
@@ -1094,7 +1095,7 @@ function renderField() {
         let eliteGlow = ent.eliteType && !isDead ? 'filter: drop-shadow(0 0 15px #8B0000);' : '';
 
         const html = `
-            <div class="entity ${isAct} ${dCls} ${tCls}" id="${ent.id}" ${clk} style="--sprite-scale: ${ent.scale || 1};">
+            <div class="entity ${isAct} ${dCls} ${tCls}" id="${ent.id}" ${clk} style="--sprite-scale: ${ent.scale || 1}; --sprite-sink: ${ent.sink || 0}px;">
                 <div class="intent-icon" style="display:${ent.intent && !isDead && !ent.isPlayer ? 'flex' : 'none'}">${ent.intent ? ent.intent.icon : ''}</div>
                 <div style="width: 100%; position: relative; z-index: 10; transform: translateY(${ent.hpDrop || 0}px);">
                     <div class="hp-text"><span class="status-badge">${eff}</span> ${ent.hp}/${ent.maxHp}</div>

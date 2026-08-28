@@ -1,5 +1,5 @@
 body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0; padding: 0; display: flex; justify-content: center; height: 100dvh; align-items: center; overflow: hidden; }
-#engine { width: 100%; max-width: 900px; height: 100dvh; background: #000; position: relative; display: flex; flex-direction: column; }
+#engine { width: 100%; max-width: 900px; height: 100dvh; background: #000; position: relative; display: flex; flex-direction: column; overflow: hidden; }
 
 #screen-title { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; background: linear-gradient(rgba(10, 10, 10, 0.25), rgba(0, 0, 0, 0.88)), repeating-linear-gradient(45deg, rgba(17, 17, 17, 0.35) 0, rgba(17, 17, 17, 0.35) 2px, transparent 2px, transparent 6px), url('bg_title.webp'); background-size: cover, auto, cover; background-position: center; text-align: center; padding: 20px; }
 .title-header { font-size: clamp(30px, 8vw, 60px); color: #B8860B; font-weight: bold; text-transform: uppercase; letter-spacing: 4px; text-shadow: 3px 3px 0px #8B0000, 0 0 15px rgba(184, 134, 11, 0.5); margin-bottom: 10px; }
@@ -124,7 +124,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 
 .intent-icon { position: absolute; top: -25px; font-size: 14px; background: #111; border: 1px solid #444; border-radius: 50%; width: 22px; height: 22px; display: flex; justify-content: center; align-items: center; z-index: 20; box-shadow: 0 2px 4px #000; }
 
-.battlefield { display: flex; justify-content: center; gap: clamp(10px, 4vw, 48px); flex-grow: 1; align-items: flex-end; padding: 0 5px; box-sizing: border-box; margin-bottom: 12vh; }
+.battlefield { display: flex; justify-content: center; gap: clamp(18px, 9vw, 70px); flex-grow: 1; align-items: flex-end; padding: 0 22px 0 0; box-sizing: border-box; margin-bottom: 12vh; }
 .team { display: flex; align-items: flex-end; justify-content: center; min-width: 0; }
 /* Four-strong squads tighten up so oversized sprites stay inside the viewport. */
 .team.crowded .entity { width: clamp(42px, 11vw, 78px); }
@@ -152,7 +152,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .status-stun { background-color: rgba(184,134,11,0.7); color: #000; font-weight: bold; }
 .status-shield { background-color: rgba(107,142,35,0.7); color: #fff; }
 .status-oil { background-color: rgba(50,50,50,0.9); color: #B8860B; }
-.portrait { width: calc(100% * var(--sprite-scale, 1)); height: auto; max-height: 25vh; object-fit: contain; object-position: bottom; transition: all 0.2s; filter: drop-shadow(2px 4px 4px rgba(0,0,0,0.8)); }
+.portrait { width: calc(100% * var(--sprite-scale, 1)); height: auto; max-height: 25vh; object-fit: contain; object-position: bottom; margin-bottom: calc(-1 * var(--sprite-sink, 0px)); transition: all 0.2s; filter: drop-shadow(2px 4px 4px rgba(0,0,0,0.8)); }
 
 @keyframes hoverSprite { 0% { transform: translateY(0); } 50% { transform: translateY(-15px); } 100% { transform: translateY(0); } }
 .hovering { animation: hoverSprite 3s ease-in-out infinite; margin-bottom: 40px; }

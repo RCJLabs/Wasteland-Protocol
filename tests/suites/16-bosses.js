@@ -123,6 +123,59 @@ module.exports = {
     });
     ok('temporary armour expiring no longer strips innate armour', armour.after === armour.innate);
 
+    // ---- staging: the Matriarch stands in the foreground, feet planted ----
+    // Sprite geometry is only meaningful once the images have actually decoded; measuring
+    // earlier compares against a half-laid-out element.
+    // The enrage scenarios above leave queued turn timers behind, and those re-render the
+    // field underneath a measurement. Stand combat down, let them fire as no-ops, then set up
+    // the fight being measured and wait for its sprites to decode.
+    const stagedFight = async (sector) => {
+      await page.evaluate(() => { combatActive = false; });
+      await page.waitForTimeout(900);
+      await page.evaluate((se) => {
+        currentSlot = 1; confirmNewGame(1.0); currentSector = se; currentTier = 8;
+        playerRoster.forEach(c => { if (c.gridPos > 0) { c.maxHp = 400; c.hp = 400; } });
+        initiateCombat('BOSS', false);
+      }, sector);
+      await page.waitForFunction(
+        () => [...document.querySelectorAll('.portrait')].every(i => i.complete && i.naturalWidth > 0),
+        null, { timeout: 8000 });
+      await page.waitForTimeout(200);
+    };
+
+    await stagedFight(3);
+    const staging = await page.evaluate(() => {
+      const bossEl = document.querySelector('#enemy-team .portrait');
+      const boss = bossEl.getBoundingClientRect();
+      const hero = document.querySelector('#player-team .portrait').getBoundingClientRect();
+      const sink = getComputedStyle(bossEl).marginBottom;
+      const heroes = document.getElementById('player-team').getBoundingClientRect();
+      const foes = document.getElementById('enemy-team').getBoundingClientRect();
+      const field = document.querySelector('.battlefield').getBoundingClientRect();
+      return { sink, footDelta: Math.round(boss.bottom - hero.bottom),
+               lineGap: Math.round(foes.left - heroes.right),
+               leftClipped: heroes.left < field.left,
+               rightClipped: boss.right > window.innerWidth,
+               pageScroll: document.body.scrollWidth - window.innerWidth };
+    });
+    // The offset itself is exact; where it lands on screen is subject to fractional layout,
+    // so the geometry is checked loosely and the mechanism precisely.
+    ok('the Matriarch carries a downward offset', staging.sink === '-16px');
+    ok(`and stands forward of the squad (${staging.footDelta}px)`, staging.footDelta > 8);
+    ok('the two lines are not crowded together', staging.lineGap >= 30);
+    ok('neither side is clipped off screen', !staging.leftClipped && !staging.rightClipped);
+    ok('the field still does not scroll sideways', staging.pageScroll <= 0);
+
+    await stagedFight(2);
+    const grounded = await page.evaluate(() => {
+      const bossEl = document.querySelector('#enemy-team .portrait');
+      const boss = bossEl.getBoundingClientRect();
+      const hero = document.querySelector('#player-team .portrait').getBoundingClientRect();
+      return { sink: getComputedStyle(bossEl).marginBottom, delta: Math.round(boss.bottom - hero.bottom) };
+    });
+    ok('a boss with no offset gets none applied', grounded.sink === '0px');
+    ok(`and stays on the squad baseline (${grounded.delta}px)`, Math.abs(grounded.delta) < 8);
+
     // ---- the map says who is waiting ----
     const label = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); currentSector = 2; renderMap();
