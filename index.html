@@ -47,10 +47,13 @@
 
     <div id="screen-citadel">
         <div class="citadel-header">
-            <span>THE CITADEL (META-UPGRADES)</span>
+            <span>THE CITADEL</span>
             <span>SKULLS: <span id="citadel-skulls" class="skull-icon">0 💀</span></span>
         </div>
-        <div class="outpost-roster">
+        <div id="citadel-scene" class="citadel-scene"></div>
+        <div id="citadel-sheet" class="citadel-sheet" style="display:none;"></div>
+        <button class="citadel-view-toggle" data-action="citadel-view">📜 LEDGER VIEW</button>
+        <div class="outpost-roster" id="citadel-list" style="display:none;">
             <div class="upgrade-card" style="border-color: #4488ff;">
                 <div class="upgrade-header"><span>SCRAP SCAVENGER</span><span id="meta-lbl-scrap">LVL 0</span></div>
                 <div class="upgrade-stats">Start new expeditions with +50 initial Scrap per level.</div>

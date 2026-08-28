@@ -349,7 +349,7 @@ module.exports = {
     // A fifth upgrade card pushed RETURN TO TITLE below the fold, because the whole screen
     // scrolled rather than the list inside it. The way out has to stay on screen at any count.
     const cit = await page.evaluate(() => {
-      renderCitadel();
+      citadelView = 'list'; renderCitadel();
       const screen = document.getElementById('screen-citadel');
       const list = screen.querySelector('.outpost-roster');
       const back = screen.querySelector('.return-btn').getBoundingClientRect();
@@ -360,6 +360,7 @@ module.exports = {
                sideways: document.body.scrollWidth - window.innerWidth };
     });
     ok(`the Citadel carries ${cit.cards} upgrades`, cit.cards === 5);
+    await page.evaluate(() => { citadelView = 'scene'; });
     ok('the way out stays on screen', cit.backOnScreen);
     ok('the list scrolls rather than the screen', cit.listScrolls && !cit.screenScrolls);
     ok('and nothing scrolls sideways', cit.sideways <= 0);

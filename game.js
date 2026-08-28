@@ -660,6 +660,9 @@ const ACTIONS = {
     'new-game':         el => openContracts(parseFloat(el.dataset.diff)),
     'slot':             el => selectSlot(Number(el.dataset.slot), el.dataset.exists === '1'),
     'buy-meta':         el => buyMetaUpgrade(el.dataset.kind),
+    'citadel-spot':     el => { citadelSpot = citadelSpot === el.dataset.spot ? null : el.dataset.spot; renderCitadelScene(); },
+    'citadel-close':    () => { citadelSpot = null; renderCitadelScene(); },
+    'citadel-view':     () => { citadelView = citadelView === 'scene' ? 'list' : 'scene'; renderCitadel(); },
     'take-relic':       el => takeRelic(Number(el.dataset.index)),
     'toggle-contract':  el => toggleContract(el.dataset.id),
     'begin-expedition': () => beginExpedition(),
@@ -1519,15 +1522,144 @@ function devResolve(win) {
     checkWinState();
 }
 
-function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`; document.getElementById('meta-lbl-scrap').innerText = `LVL ${metaUpgrades.startScrap / 50}`; document.getElementById('meta-lbl-level').innerText = `LVL ${metaUpgrades.startLevel - 1}`; document.getElementById('meta-lbl-inv').innerText = `LVL ${metaUpgrades.invMax - 4}`; document.getElementById('meta-lbl-regroup').innerText = `LVL ${metaUpgrades.extraRegroups || 0}`;
+// ── The Citadel, drawn ──────────────────────────────────────────────────────────────────
+// The hub was a list of cards. It is a hillside now: every meta-upgrade is a structure that
+// visibly grows as it is bought, positioned as a tappable hotspot. The card list survives as
+// the ledger view - same element ids, same actions - one toggle away.
+let citadelView = 'scene'; let citadelSpot = null;
+
+const CITADEL_SPOTS = [
+    { kind: 'SCRAP',   name: 'SCRAP CRANE',     x: 16, y: 54, cost: 1,
+      level: () => (metaUpgrades.startScrap || 0) / 50,
+      effect: l => `Expeditions start with +${l * 50} Scrap.`,
+      pitch: 'Start new expeditions with +50 initial Scrap per level.' },
+    { kind: 'LEVEL',   name: 'BARRACKS',        x: 50, y: 42, cost: 2,
+      level: () => (metaUpgrades.startLevel || 1) - 1,
+      effect: l => `Operators start ${l ? `+${l} level${l > 1 ? 's' : ''} higher` : 'at level 1'}.`,
+      pitch: 'All operators permanently start +1 Level higher (grants early Perk point).' },
+    { kind: 'INV',     name: 'RIGGING BAY',     x: 84, y: 55, cost: 3,
+      level: () => (metaUpgrades.invMax || 4) - 4,
+      effect: l => `${4 + l} tactical inventory slots.`,
+      pitch: 'Increase maximum tactical inventory slots by +1.' },
+    { kind: 'REGROUP', name: 'FALLBACK BUNKER', x: 30, y: 76, cost: 4,
+      level: () => metaUpgrades.extraRegroups || 0,
+      effect: l => `${BASE_REGROUPS + l} regroups per expedition.`,
+      pitch: 'Carry +1 extra regroup into every expedition.' },
+    { kind: 'VAULT',   name: 'THE VAULT',       x: 68, y: 79, cost: 5, max: 1,
+      level: () => metaUpgrades.vault ? 1 : 0,
+      effect: () => vaultDescText(),
+      pitch: 'Your best relic survives the expedition and arms the next one.' }
+];
+
+function vaultDescText() {
     const kept = heirloomRelic();
-    document.getElementById('meta-lbl-vault').innerText = metaUpgrades.vault ? (kept ? '♦ ARMED' : 'EMPTY') : 'LOCKED';
-    document.getElementById('meta-vault-desc').innerText = !metaUpgrades.vault
+    return !metaUpgrades.vault
         ? 'Your best relic survives the expedition and arms the next one.'
         : kept ? `Holding ${kept.name} — the next expedition starts with it.`
                : 'Unlocked. The next expedition that finds a relic will bank one here.';
-    const vBtn = document.querySelector('[data-kind="VAULT"]');
-    if (vBtn) { vBtn.disabled = !!metaUpgrades.vault; vBtn.innerText = metaUpgrades.vault ? 'UNLOCKED' : 'UNLOCK [COST: 5 💀]'; } }
+}
+
+// Compact silhouette drawings, one per structure. `lvl` lights them up: windows, glints and
+// beacons appear as the structure is bought, so progress is visible from the hillside.
+function spotArt(kind, lvl) {
+    const lit = n => Math.min(4, Math.max(0, n));
+    const glow = (x, y, r = 2.6) => `<circle class="glow" cx="${x}" cy="${y}" r="${r}"></circle>`;
+    if (kind === 'SCRAP') {
+        let g = ''; for (let i = 0; i < lit(lvl); i++) g += glow(28 + i * 16, 84 - (i % 2) * 6);
+        return `<svg viewBox="0 0 100 100" aria-hidden="true">
+          <ellipse class="sil" cx="52" cy="88" rx="40" ry="10"></ellipse>
+          <rect class="sil" x="18" y="22" width="6" height="62"></rect>
+          <polygon class="sil" points="18,22 78,34 78,40 24,30"></polygon>
+          <rect class="sil" x="10" y="30" width="12" height="10"></rect>
+          <line class="wire" x1="72" y1="38" x2="72" y2="62"></line>
+          <polygon class="accent" points="68,62 76,62 72,70"></polygon>${g}</svg>`;
+    }
+    if (kind === 'LEVEL') {
+        let g = ''; for (let i = 0; i < lit(lvl); i++) g += `<rect class="glow" x="${26 + i * 14}" y="66" width="7" height="9"></rect>`;
+        return `<svg viewBox="0 0 100 100" aria-hidden="true">
+          <rect class="sil" x="14" y="56" width="72" height="30"></rect>
+          <polygon class="sil" points="10,56 90,56 80,42 20,42"></polygon>
+          <rect class="sil" x="46" y="34" width="4" height="10"></rect>
+          <polygon class="accent" points="50,34 62,37 50,40"></polygon>
+          <rect class="door" x="66" y="68" width="10" height="18"></rect>${g}</svg>`;
+    }
+    if (kind === 'INV') {
+        let g = ''; for (let i = 0; i < lit(lvl); i++) g += `<rect class="glow" x="${20 + (i % 2) * 13}" y="${72 - Math.floor(i / 2) * 13}" width="10" height="10"></rect>`;
+        return `<svg viewBox="0 0 100 100" aria-hidden="true">
+          <rect class="sil" x="12" y="46" width="76" height="40"></rect>
+          <polygon class="sil" points="12,46 88,46 88,38 12,38"></polygon>
+          <rect class="void" x="16" y="52" width="44" height="34"></rect>
+          <line class="wire" x1="16" y1="44" x2="84" y2="44"></line>
+          <rect class="accent" x="66" y="44" width="4" height="14"></rect>
+          <rect class="sil" x="62" y="58" width="12" height="8"></rect>${g}</svg>`;
+    }
+    if (kind === 'REGROUP') {
+        return `<svg viewBox="0 0 100 100" aria-hidden="true">
+          <path class="sil" d="M12,84 A38,34 0 0 1 88,84 Z"></path>
+          <rect class="void" x="44" y="66" width="12" height="18"></rect>
+          <rect class="sil" x="8" y="84" width="84" height="6"></rect>
+          ${lvl >= 1 ? glow(50, 60, 3) : ''}
+          ${lvl >= 2 ? `<line class="wire" x1="72" y1="56" x2="72" y2="34"></line>${glow(72, 32, 2)}` : ''}
+          ${lvl >= 3 ? glow(28, 66, 2) : ''}</svg>`;
+    }
+    if (kind === 'VAULT') {
+        const armed = metaUpgrades.vault && metaUpgrades.heirloom;
+        return `<svg viewBox="0 0 100 100" aria-hidden="true">
+          <polygon class="sil" points="2,90 98,90 84,52 18,56"></polygon>
+          <circle class="sil2" cx="50" cy="66" r="20"></circle>
+          <circle class="${armed ? 'glowring' : 'void'}" cx="50" cy="66" r="12"></circle>
+          <line class="wire" x1="50" y1="56" x2="50" y2="76"></line>
+          <line class="wire" x1="40" y1="66" x2="60" y2="66"></line>
+          ${!metaUpgrades.vault ? '<rect class="bar" x="34" y="50" width="4" height="32"></rect><rect class="bar" x="48" y="48" width="4" height="36"></rect><rect class="bar" x="62" y="50" width="4" height="32"></rect>' : ''}
+          ${armed ? glow(50, 66, 3.4) : ''}</svg>`;
+    }
+    return '<svg viewBox="0 0 100 100"></svg>';
+}
+
+function renderCitadelScene() {
+    const c = document.getElementById('citadel-scene');
+    if (!c) return;
+    let html = `<div class="cit-sky"></div><div class="cit-ridge"></div><div class="cit-ridge cit-ridge-2"></div>`;
+    CITADEL_SPOTS.forEach(sp => {
+        const lvl = sp.level();
+        const maxed = sp.max !== undefined && lvl >= sp.max;
+        const afford = !maxed && bossSkulls >= sp.cost;
+        const state = sp.kind === 'VAULT' ? (metaUpgrades.vault ? (metaUpgrades.heirloom ? 'ARMED' : 'EMPTY') : 'LOCKED') : `LVL ${lvl}`;
+        html += `<button class="cit-spot spot-${sp.kind} ${afford ? 'spot-afford' : ''} ${citadelSpot === sp.kind ? 'spot-open' : ''}"
+            style="left:${sp.x}%; top:${sp.y}%" data-action="citadel-spot" data-spot="${sp.kind}"
+            aria-label="${sp.name}, ${state}">${spotArt(sp.kind, lvl)}
+            <span class="cit-spot-name">${sp.name}</span><span class="cit-spot-lvl">${state}</span></button>`;
+    });
+    html += `<div class="cit-skulls" title="Skulls banked">💀 ${bossSkulls}</div>`;
+    c.innerHTML = html;
+
+    const sheet = document.getElementById('citadel-sheet');
+    const sp = CITADEL_SPOTS.find(x => x.kind === citadelSpot);
+    if (!sp) { sheet.style.display = 'none'; sheet.innerHTML = ''; return; }
+    const lvl = sp.level();
+    const maxed = sp.max !== undefined && lvl >= sp.max;
+    sheet.style.display = 'block';
+    sheet.innerHTML = `<div class="sheet-head"><span>${sp.name}</span><span>${sp.kind === 'VAULT' ? (metaUpgrades.vault ? '♦ UNLOCKED' : 'LOCKED') : `LVL ${lvl}`}</span></div>
+        <div class="sheet-effect">${typeof sp.effect === 'function' ? sp.effect(lvl) : ''}</div>
+        <div class="sheet-pitch">${sp.pitch}</div>
+        <div class="sheet-row">
+            <button class="upg-btn btn-meta" ${maxed || bossSkulls < sp.cost ? 'disabled' : ''} data-action="buy-meta" data-kind="${sp.kind}">${maxed ? 'BUILT' : `${sp.kind === 'VAULT' ? 'UNLOCK' : 'UPGRADE'} [${sp.cost} 💀]`}</button>
+            <button class="upg-btn" data-action="citadel-close">CLOSE</button>
+        </div>`;
+}
+
+function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`; document.getElementById('meta-lbl-scrap').innerText = `LVL ${metaUpgrades.startScrap / 50}`; document.getElementById('meta-lbl-level').innerText = `LVL ${metaUpgrades.startLevel - 1}`; document.getElementById('meta-lbl-inv').innerText = `LVL ${metaUpgrades.invMax - 4}`; document.getElementById('meta-lbl-regroup').innerText = `LVL ${metaUpgrades.extraRegroups || 0}`;
+    const kept = heirloomRelic();
+    document.getElementById('meta-lbl-vault').innerText = metaUpgrades.vault ? (kept ? '♦ ARMED' : 'EMPTY') : 'LOCKED';
+    document.getElementById('meta-vault-desc').innerText = vaultDescText();
+    const vBtn = document.querySelector('#citadel-list [data-kind="VAULT"]');
+    if (vBtn) { vBtn.disabled = !!metaUpgrades.vault; vBtn.innerText = metaUpgrades.vault ? 'UNLOCKED' : 'UNLOCK [COST: 5 💀]'; }
+    document.getElementById('citadel-scene').style.display = citadelView === 'scene' ? 'block' : 'none';
+    document.getElementById('citadel-list').style.display = citadelView === 'scene' ? 'none' : 'grid';
+    if (citadelView !== 'scene') { document.getElementById('citadel-sheet').style.display = 'none'; }
+    else renderCitadelScene();
+    const toggle = document.querySelector('.citadel-view-toggle');
+    if (toggle) toggle.innerText = citadelView === 'scene' ? '📜 LEDGER VIEW' : '🏔 SCENE VIEW'; }
 function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossSkulls -= 1; metaUpgrades.startScrap += 50; } else if (type === 'LEVEL' && bossSkulls >= 2) { bossSkulls -= 2; metaUpgrades.startLevel += 1; } else if (type === 'INV' && bossSkulls >= 3) { bossSkulls -= 3; metaUpgrades.invMax += 1; } else if (type === 'REGROUP' && bossSkulls >= 4) { bossSkulls -= 4; metaUpgrades.extraRegroups = (metaUpgrades.extraRegroups || 0) + 1; } else if (type === 'VAULT' && bossSkulls >= 5 && !metaUpgrades.vault) { bossSkulls -= 5; metaUpgrades.vault = 1; } saveMeta(); renderCitadel(); }
 
 function renderMap() {
@@ -2713,9 +2845,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
@@ -2724,6 +2856,8 @@ globalThis.WP = {
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },
     get globalSettings() { return globalSettings; }, set globalSettings(v) { globalSettings = v; },
     get bossSkulls() { return bossSkulls; }, set bossSkulls(v) { bossSkulls = v; },
+    get citadelView() { return citadelView; }, set citadelView(v) { citadelView = v; },
+    get citadelSpot() { return citadelSpot; }, set citadelSpot(v) { citadelSpot = v; },
     get metaUpgrades() { return metaUpgrades; }, set metaUpgrades(v) { metaUpgrades = v; },
     get scrap() { return scrap; }, set scrap(v) { scrap = v; },
     get currentTier() { return currentTier; }, set currentTier(v) { currentTier = v; },
