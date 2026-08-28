@@ -53,12 +53,13 @@ module.exports = {
       }, [score, scrap, sector]);
       await page.waitForTimeout(200);
       return page.evaluate(() => {
-        const vals = [...document.querySelectorAll('.stat-value')];
-        const bar = document.querySelector('.stat-bar').getBoundingClientRect();
+        // Scope to the map: the outpost has its own stat bar in the DOM at the same time.
+        const vals = [...document.querySelectorAll('#screen-map .stat-value')];
+        const bar = document.querySelector('#screen-map .stat-bar').getBoundingClientRect();
         const gear = document.getElementById('btn-global-settings').getBoundingClientRect();
         return {
           clipped: vals.filter(v => v.scrollWidth > v.clientWidth + 1).length,
-          labels: [...document.querySelectorAll('.stat-label')].map(l => l.innerText.trim()),
+          labels: [...document.querySelectorAll('#screen-map .stat-label')].map(l => l.innerText.trim()),
           overlapsGear: bar.right > gear.left,
           pageScroll: document.body.scrollWidth - window.innerWidth
         };
@@ -80,5 +81,66 @@ module.exports = {
     l = await layout(986540, 64200, 12);
     ok('it holds on a 320px screen', l.clipped === 0 && !l.overlapsGear && l.pageScroll <= 0);
     await page.setViewportSize({ width: 400, height: 800 });
+
+    // ---- the outpost header gets the same treatment ----
+    const outpost = async (scrapVal, mats) => {
+      await page.evaluate(([sp, m]) => {
+        currentSlot = 1; scrap = sp; materials = m; renderOutpost();
+      }, [scrapVal, mats]);
+      await page.waitForTimeout(200);
+      return page.evaluate(() => {
+        const gear = document.getElementById('btn-global-settings').getBoundingClientRect();
+        const title = document.querySelector('#screen-outpost .screen-title-bar').getBoundingClientRect();
+        const bar = document.querySelector('#screen-outpost .stat-bar').getBoundingClientRect();
+        const vals = [...document.querySelectorAll('#screen-outpost .stat-value')];
+        return {
+          cells: vals.length,
+          labels: [...document.querySelectorAll('#screen-outpost .stat-label')].map(l => l.innerText.trim().toLowerCase()),
+          values: vals.map(v => v.innerText),
+          titleClearsGear: title.right <= gear.left,
+          barClearsGear: bar.top >= gear.bottom - 2,
+          clipped: vals.filter(v => v.scrollWidth > v.clientWidth + 1).length,
+          pageScroll: document.body.scrollWidth - window.innerWidth
+        };
+      });
+    };
+
+    let o = await outpost(130, { parts: 7, chems: 3, tech: 12 });
+    ok('the outpost header carries four labelled cells', o.cells === 4);
+    ok('it shows scrap and all three materials',
+      ['scrap', 'parts', 'chems', 'tech'].every(n => o.labels.includes(n)));
+    ok('the values are the live totals', o.values.join(',') === '130,7,3,12');
+    ok('the title no longer sits under the settings gear', o.titleClearsGear);
+    ok('the stat bar clears the gear entirely', o.barClearsGear);
+
+    o = await outpost(486300, { parts: 240, chems: 1850, tech: 99 });
+    ok('outpost values compact rather than clip', o.clipped === 0 && o.values[0] === '486K');
+    ok('the outpost never scrolls sideways', o.pageScroll <= 0);
+
+    await page.setViewportSize({ width: 320, height: 700 });
+    o = await outpost(99999, { parts: 120, chems: 44, tech: 7 });
+    ok('the outpost header holds at 320px', o.clipped === 0 && o.pageScroll <= 0 && o.titleClearsGear);
+    await page.setViewportSize({ width: 400, height: 800 });
+
+    // materials are no longer duplicated inside the tabs
+    const dup = await page.evaluate(async () => {
+      const html = await (await fetch('index.html')).text();
+      return { wb: /mat-parts-wb/.test(html), cb: /mat-parts-cb/.test(html) };
+    });
+    ok('the duplicated per-tab material readouts are gone', !dup.wb && !dup.cb);
+
+    // and the tabs still work with those cards removed
+    const tabs = await page.evaluate(() => {
+      setOutpostTab('WORKBENCH');
+      const wb = getComputedStyle(document.getElementById('outpost-workbench-view')).display === 'flex'
+              && !!document.getElementById('btn-breakdown');
+      setOutpostTab('CYBER');
+      const cb = getComputedStyle(document.getElementById('outpost-cyber-view')).display === 'flex'
+              && document.getElementById('cybernetics-roster').children.length === 7;
+      setOutpostTab('ROSTER');
+      return { wb, cb };
+    });
+    ok('the workbench still works without its material card', tabs.wb);
+    ok('cybernetics still lists every hero', tabs.cb);
   }
 };

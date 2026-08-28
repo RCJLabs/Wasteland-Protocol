@@ -683,7 +683,7 @@ function advanceSector() { currentSector++; currentTier = 1; noteDepth(); saveGa
 function setOutpostTab(tab) { document.getElementById('tab-roster').className = `op-tab-btn ${tab === 'ROSTER' ? 'op-tab-active' : ''}`; document.getElementById('tab-workbench').className = `op-tab-btn ${tab === 'WORKBENCH' ? 'op-tab-active' : ''}`; document.getElementById('tab-cyber').className = `op-tab-btn ${tab === 'CYBER' ? 'op-tab-active' : ''}`; document.getElementById('outpost-roster-view').style.display = tab === 'ROSTER' ? 'flex' : 'none'; document.getElementById('outpost-workbench-view').style.display = tab === 'WORKBENCH' ? 'flex' : 'none'; document.getElementById('outpost-cyber-view').style.display = tab === 'CYBER' ? 'flex' : 'none'; renderOutpost(); }
 
 function renderOutpost() {
-    switchScreen('screen-outpost'); showOutpostNotice(''); document.getElementById('outpost-scrap').innerText = scrap; 
+    switchScreen('screen-outpost'); showOutpostNotice(''); document.getElementById('outpost-scrap').innerText = formatStat(scrap); 
     const c = document.getElementById('outpost-roster'); const cards = [];
     playerRoster.forEach(char => {
         let cost = 30 + (char.upgradeCount * 25); let canUpg = scrap >= cost; let isDead = char.hp <= 0; let isInj = char.hp < char.maxHp && char.hp > 0;
@@ -707,12 +707,14 @@ function renderOutpost() {
     });
 
     c.innerHTML = cards.join('');
-    document.getElementById('mat-parts-wb').innerText = `⚙️ PARTS: ${materials.parts}`; document.getElementById('mat-chems-wb').innerText = `🧪 CHEMS: ${materials.chems}`; document.getElementById('mat-tech-wb').innerText = `💻 TECH: ${materials.tech}`; document.getElementById('btn-breakdown').disabled = scrap < 25;
+    document.getElementById('mat-parts').innerText = formatStat(materials.parts);
+    document.getElementById('mat-chems').innerText = formatStat(materials.chems);
+    document.getElementById('mat-tech').innerText = formatStat(materials.tech);
+    document.getElementById('btn-breakdown').disabled = scrap < 25;
     let wbHtml = ''; let invFull = inventory.length >= metaUpgrades.invMax;
     wbHtml += `<button class="upg-btn" ${materials.chems < 2 || invFull ? 'disabled' : ''} data-action="craft" data-item="MED_STIM">CRAFT MED-STIM (2 🧪)</button>`; wbHtml += `<button class="upg-btn" ${materials.parts < 2 || invFull ? 'disabled' : ''} data-action="craft" data-item="SCRAP_BOMB">CRAFT SCRAP BOMB (2 ⚙️)</button>`; wbHtml += `<button class="upg-btn" ${materials.chems < 1 || materials.tech < 1 || invFull ? 'disabled' : ''} data-action="craft" data-item="ADRENALINE">CRAFT ADRENALINE (1 🧪, 1 💻)</button>`; wbHtml += `<button class="upg-btn" ${materials.tech < 2 || invFull ? 'disabled' : ''} data-action="craft" data-item="EMP_CHARGE">CRAFT EMP CHARGE (2 💻)</button>`;
     document.getElementById('crafting-grid').innerHTML = wbHtml;
 
-    document.getElementById('mat-parts-cb').innerText = `⚙️ PARTS: ${materials.parts}`; document.getElementById('mat-chems-cb').innerText = `🧪 CHEMS: ${materials.chems}`; document.getElementById('mat-tech-cb').innerText = `💻 TECH: ${materials.tech}`;
     const cybC = document.getElementById('cybernetics-roster'); const cybCards = [];
     playerRoster.forEach(char => {
         let augList = char.augments && char.augments.length > 0 ? char.augments.join(', ') : 'NONE'; let canPlating = materials.parts >= 3; let canOptics = materials.tech >= 2; let canPump = materials.chems >= 2;

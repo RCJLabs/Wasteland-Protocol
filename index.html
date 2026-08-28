@@ -120,9 +120,12 @@
     </div>
 
     <div id="screen-outpost">
-        <div class="map-header" style="padding-right: 30px;">
-            <span>OUTPOST COMMAND</span>
-            <span>SCRAP: <span id="outpost-scrap">0</span></span>
+        <div class="screen-title-bar">OUTPOST COMMAND</div>
+        <div class="stat-bar stat-bar-4">
+            <div class="stat stat-scrap"><span class="stat-label">Scrap</span><span class="stat-value" id="outpost-scrap">0</span></div>
+            <div class="stat stat-parts"><span class="stat-label">Parts</span><span class="stat-value" id="mat-parts">0</span></div>
+            <div class="stat stat-chems"><span class="stat-label">Chems</span><span class="stat-value" id="mat-chems">0</span></div>
+            <div class="stat stat-tech"><span class="stat-label">Tech</span><span class="stat-value" id="mat-tech">0</span></div>
         </div>
         
         <div class="op-tabs">
@@ -138,12 +141,7 @@
 
         <div id="outpost-workbench-view" style="display:none; flex-direction:column; gap:15px; flex-grow:1; overflow-y:auto;">
             <div class="upgrade-card">
-                <div class="upgrade-header">RAW MATERIALS</div>
-                <div class="upgrade-stats" style="font-size: 14px; color: #fff; padding: 10px 0;">
-                    <span id="mat-parts-wb">⚙️ PARTS: 0</span>
-                    <span id="mat-chems-wb">🧪 CHEMS: 0</span>
-                    <span id="mat-tech-wb">💻 TECH: 0</span>
-                </div>
+                <div class="upgrade-header">SALVAGE</div>
                 <div class="upgrade-btn-group" style="margin-top: 5px;">
                     <button class="upg-btn" id="btn-breakdown" data-action="breakdown">BREAKDOWN SCRAP (25 SCRAP)</button>
                 </div>
@@ -155,14 +153,6 @@
         </div>
 
         <div id="outpost-cyber-view" style="display:none; flex-direction:column; gap:15px; flex-grow:1; overflow-y:auto;">
-            <div class="upgrade-card" style="border-color: #4488ff;">
-                <div class="upgrade-header" style="color: #4488ff;">CLINIC STORAGE</div>
-                <div class="upgrade-stats" style="font-size: 14px; color: #fff; padding: 5px 0;">
-                    <span id="mat-parts-cb">⚙️ PARTS: 0</span>
-                    <span id="mat-chems-cb">🧪 CHEMS: 0</span>
-                    <span id="mat-tech-cb">💻 TECH: 0</span>
-                </div>
-            </div>
             <div id="cybernetics-roster" class="outpost-roster"></div>
         </div>
 

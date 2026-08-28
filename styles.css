@@ -211,3 +211,13 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
 .stat-value { font-size: clamp(14px, 4.6vw, 19px); font-weight: bold; line-height: 1.15; color: #B8860B; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stat-score .stat-value { color: #8fa0b5; }
 .stat-scrap .stat-value { color: #c9a227; }
+
+/* Screen name sits on its own line so the numbers below it get the full width, and so it
+   never has to share a row with the settings gear. */
+.screen-title-bar { color: #B8860B; font-weight: bold; font-size: clamp(15px, 4.6vw, 19px); letter-spacing: 1px; margin: 0 56px 8px 0; flex-shrink: 0; }
+.stat-bar-4 { grid-template-columns: repeat(4, 1fr); margin-right: 0; }
+.stat-bar-4 .stat { padding: 5px 6px 6px; }
+.stat-bar-4 .stat-value { font-size: clamp(13px, 4vw, 17px); }
+.stat-parts .stat-value { color: #a9a196; }
+.stat-chems .stat-value { color: #7fae5e; }
+.stat-tech .stat-value { color: #6aa6d8; }
