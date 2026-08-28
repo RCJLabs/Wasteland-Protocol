@@ -534,7 +534,171 @@ document.addEventListener('keydown', e => {
     dispatchAction(el);
 });
 
-function initAudio() { if (!audioCtx && globalSettings.sfx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { console.log('Web Audio API not supported.'); } } }
+// The whole audio design was four blips straight onto the destination node: click, shoot, hit,
+// heal, the same shotgun as the same pistol as the same set of teeth. Everything below is one
+// table of voices, a bus to mix them through, and a bed underneath so a fight has a room to
+// happen in.
+const SFX = {
+    click:    { wave: 'square',   from: 880, to: 880, dur: 0.06, gain: 0.03 },
+    // one per weapon class, so a shotgun does not sound like a rifle
+    blade:    { wave: 'square',   from: 1400, to: 300, dur: 0.09, gain: 0.05, noise: 0.35, filter: 2600 },
+    heavy:    { wave: 'triangle', from: 260,  to: 60,  dur: 0.22, gain: 0.11, noise: 0.30, filter: 700 },
+    pistol:   { wave: 'square',   from: 900,  to: 220, dur: 0.10, gain: 0.06, noise: 0.30, filter: 2200 },
+    rifle:    { wave: 'sawtooth', from: 750,  to: 150, dur: 0.14, gain: 0.07, noise: 0.25, filter: 1800 },
+    shotgun:  { wave: 'sawtooth', from: 420,  to: 70,  dur: 0.26, gain: 0.12, noise: 0.75, filter: 1100 },
+    flame:    { wave: 'sawtooth', from: 180,  to: 420, dur: 0.30, gain: 0.07, noise: 0.85, filter: 900 },
+    beast:    { wave: 'sawtooth', from: 520,  to: 90,  dur: 0.16, gain: 0.09, noise: 0.55, filter: 1500 },
+    // outcomes
+    hit:      { wave: 'triangle', from: 200,  to: 55,  dur: 0.12, gain: 0.09 },
+    heal:     { wave: 'sine',     from: 440,  to: 880, dur: 0.18, gain: 0.05 },
+    combo:    { wave: 'square',   from: 660,  to: 1320,dur: 0.20, gain: 0.06 },
+    enrage:   { wave: 'sawtooth', from: 90,   to: 40,  dur: 1.10, gain: 0.16, noise: 0.5, filter: 500, chord: [1, 1.5] },
+    // the things that are not a weapon class
+    blast:    { wave: 'sawtooth', from: 300,  to: 45,  dur: 0.40, gain: 0.13, noise: 0.9, filter: 800 },
+    emp:      { wave: 'square',   from: 1800, to: 120, dur: 0.35, gain: 0.07, noise: 0.2, filter: 3000 },
+    overdrive:{ wave: 'sawtooth', from: 220,  to: 900, dur: 0.55, gain: 0.12, noise: 0.3, filter: 2400, chord: [1, 1.25, 1.5] }
+};
+
+// Which voice an ability speaks with. Derived from the same ABILITIES table the deck and the
+// reach rules read, so a new ability cannot end up silent by omission.
+const CLASS_VOICE = { BRUISER: 'blade', MEDIC: 'pistol', SCAVENGER: 'rifle',
+    PYROMANIAC: 'flame', SHOTGUNNER: 'shotgun', SNIPER: 'rifle', HOUND: 'beast' };
+const MOVE_VOICE_OVERRIDE = { HEAVY_WRENCH: 'heavy', SCRAP_BLADE: 'blade', SLUG_SHOT: 'rifle',
+    MOLOTOV: 'flame', THERMITE: 'flame', ACID_FLASK: 'flame', SNAP: 'beast' };
+
+function voiceFor(move) {
+    if (MOVE_VOICE_OVERRIDE[move]) return MOVE_VOICE_OVERRIDE[move];
+    const owner = Object.keys(ABILITIES).find(c => ABILITIES[c].some(a => a.move === move));
+    return CLASS_VOICE[owner] || 'blade';
+}
+
+// A short bounded record of what was played. Nothing in the game reads it - it is here so the
+// headless suites can tell a shotgun from a rifle without listening to one.
+const SFX_LOG_MAX = 40;
+let sfxLog = [];
+
+let sfxBus = null, ambienceNodes = null, ambienceBiome = null;
+
+function initAudio() {
+    if (!audioCtx && globalSettings.sfx) {
+        try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+        catch (e) { console.log('Web Audio API not supported.'); }
+    }
+    if (audioCtx && !sfxBus) {
+        try { sfxBus = audioCtx.createGain(); sfxBus.gain.value = 1; sfxBus.connect(audioCtx.destination); }
+        catch (e) { sfxBus = null; }
+    }
+}
+
+// A short burst of filtered noise is what separates a shotgun from a tone at the same pitch.
+function noiseBurst(t, dur, level, cutoff) {
+    const frames = Math.max(1, Math.floor(audioCtx.sampleRate * dur));
+    const buf = audioCtx.createBuffer(1, frames, audioCtx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < frames; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / frames);
+    const src = audioCtx.createBufferSource(); src.buffer = buf;
+    const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = cutoff || 1500;
+    const g = audioCtx.createGain();
+    g.gain.setValueAtTime(level, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    src.connect(lp); lp.connect(g); g.connect(sfxBus);
+    src.start(t); src.stop(t + dur);
+}
+
+// weight 1 is the voice as written; a heavier hit is louder, lower and longer.
+function playSFX(type, weight = 1) {
+    const spec = SFX[type];
+    if (spec) { sfxLog.push({ type, weight: Math.round(weight * 100) / 100 }); if (sfxLog.length > SFX_LOG_MAX) sfxLog.shift(); }
+    if (!globalSettings.sfx || !audioCtx || !spec) return;
+    try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        if (!sfxBus) initAudio();
+        if (!sfxBus) return;
+        const t = audioCtx.currentTime;
+        const w = Math.max(0.5, Math.min(2.2, weight));
+        const dur = spec.dur * (0.85 + w * 0.15);
+        const drop = 1 / (0.8 + w * 0.2);
+        for (const mult of (spec.chord || [1])) {
+            const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
+            osc.type = spec.wave;
+            osc.frequency.setValueAtTime(Math.max(20, spec.from * mult * drop), t);
+            osc.frequency.exponentialRampToValueAtTime(Math.max(20, spec.to * mult * drop), t + dur);
+            gain.gain.setValueAtTime(Math.min(0.4, spec.gain * (0.7 + w * 0.3)), t);
+            gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+            osc.connect(gain); gain.connect(sfxBus);
+            osc.start(t); osc.stop(t + dur);
+        }
+        if (spec.noise) noiseBurst(t, dur, Math.min(0.35, spec.noise * spec.gain * (0.7 + w * 0.3)), spec.filter);
+    } catch (e) {}
+}
+
+// An impact is worth what it took off. A scratch and a boss's opening shell should not land
+// with the same thump.
+// A low bed under the fight, keyed to where it is happening. Quiet enough to sit behind the
+// blips, different enough that a foundry does not sound like a canyon.
+const AMBIENCE = {
+    'bg_canyon.webp':     { drone: 62,  cutoff: 320, hiss: 0.020, name: 'CANYON' },
+    'bg_highway.webp':    { drone: 78,  cutoff: 420, hiss: 0.026, name: 'HIGHWAY' },
+    'bg_refinery.webp':   { drone: 48,  cutoff: 260, hiss: 0.032, name: 'REFINERY' },
+    'bg_foundry.webp':    { drone: 40,  cutoff: 220, hiss: 0.036, name: 'FOUNDRY' },
+    'bg_nest.webp':       { drone: 92,  cutoff: 500, hiss: 0.030, name: 'NEST' },
+    'bg_thunderdome.webp':{ drone: 55,  cutoff: 360, hiss: 0.034, name: 'THUNDERDOME' },
+    'bg_combat.webp':     { drone: 70,  cutoff: 380, hiss: 0.022, name: 'WASTES' }
+};
+const DEFAULT_AMBIENCE = AMBIENCE['bg_combat.webp'];
+
+function ambienceFor(bg) { return AMBIENCE[bg] || DEFAULT_AMBIENCE; }
+
+function startAmbience(bg) {
+    stopAmbience();
+    if (!globalSettings.sfx) return;
+    initAudio();
+    if (!audioCtx || !sfxBus) return;
+    const spec = ambienceFor(bg);
+    try {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const t = audioCtx.currentTime;
+        const bed = audioCtx.createGain(); bed.gain.setValueAtTime(0, t);
+        bed.gain.linearRampToValueAtTime(0.5, t + 1.5);
+        bed.connect(sfxBus);
+
+        const osc = audioCtx.createOscillator(); osc.type = 'sine';
+        osc.frequency.value = spec.drone;
+        const oscGain = audioCtx.createGain(); oscGain.gain.value = 0.035;
+        osc.connect(oscGain); oscGain.connect(bed); osc.start(t);
+
+        // Two seconds of noise looped, filtered right down - wind rather than static.
+        const frames = Math.floor(audioCtx.sampleRate * 2);
+        const buf = audioCtx.createBuffer(1, frames, audioCtx.sampleRate);
+        const data = buf.getChannelData(0);
+        for (let i = 0; i < frames; i++) data[i] = Math.random() * 2 - 1;
+        const hiss = audioCtx.createBufferSource(); hiss.buffer = buf; hiss.loop = true;
+        const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = spec.cutoff;
+        const hissGain = audioCtx.createGain(); hissGain.gain.value = spec.hiss;
+        hiss.connect(lp); lp.connect(hissGain); hissGain.connect(bed); hiss.start(t);
+
+        ambienceNodes = { bed, osc, hiss };
+        ambienceBiome = spec.name;
+    } catch (e) { ambienceNodes = null; ambienceBiome = null; }
+}
+
+function stopAmbience() {
+    if (!ambienceNodes) { ambienceBiome = null; return; }
+    try {
+        const t = audioCtx.currentTime;
+        ambienceNodes.bed.gain.cancelScheduledValues(t);
+        ambienceNodes.bed.gain.setValueAtTime(ambienceNodes.bed.gain.value, t);
+        ambienceNodes.bed.gain.linearRampToValueAtTime(0.0001, t + 0.4);
+        ambienceNodes.osc.stop(t + 0.45);
+        ambienceNodes.hiss.stop(t + 0.45);
+    } catch (e) {}
+    ambienceNodes = null; ambienceBiome = null;
+}
+
+function playImpact(dmg, target, scale = 1) {
+    const share = target && target.maxHp ? dmg / target.maxHp : 0.1;
+    playSFX('hit', (0.6 + Math.min(1.6, share * 4)) * scale);
+}
 
 function triggerShake() {
     let el = document.getElementById('combat-sky-layer');
@@ -560,19 +724,6 @@ function triggerHitFlash(id) {
             img.classList.add('fx-flash');
         }
     }
-}
-
-function playSFX(type) {
-    if (!globalSettings.sfx || !audioCtx) return;
-    try {
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        const t = audioCtx.currentTime; const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
-        osc.connect(gain); gain.connect(audioCtx.destination);
-        if (type === 'click') { osc.type = 'square'; osc.frequency.setValueAtTime(880, t); gain.gain.setValueAtTime(0.03, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.06); osc.start(t); osc.stop(t + 0.06); }
-        else if (type === 'shoot') { osc.type = 'sawtooth'; osc.frequency.setValueAtTime(650, t); osc.frequency.exponentialRampToValueAtTime(120, t + 0.15); gain.gain.setValueAtTime(0.07, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.15); osc.start(t); osc.stop(t + 0.15); }
-        else if (type === 'hit') { osc.type = 'triangle'; osc.frequency.setValueAtTime(200, t); osc.frequency.exponentialRampToValueAtTime(55, t + 0.12); gain.gain.setValueAtTime(0.09, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12); osc.start(t); osc.stop(t + 0.12); }
-        else if (type === 'heal') { osc.type = 'sine'; osc.frequency.setValueAtTime(440, t); osc.frequency.exponentialRampToValueAtTime(880, t + 0.18); gain.gain.setValueAtTime(0.05, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18); osc.start(t); osc.stop(t + 0.18); }
-    } catch (e) {}
 }
 
 function spawnFCT(id, text, cls) {
@@ -671,10 +822,10 @@ function resolveConsumableItem(targetId) {
         target.stunnedTurns = 0; target.bleedingTurns = 0; target.hp = Math.min(target.maxHp, target.hp + 10);
         log(`> ${target.name} surges with Adrenaline (cleansed, +10 HP).`, "log-heal"); spawnFCT(target.id, "CLEANSED", "fct-status"); playSFX('heal');
     } else if (pendingAction === 'ITEM_BOMB') {
-        triggerShake(); log(`> ${actEnt.name} hurls a Scrap Bomb!`, "log-dmg"); playSFX('shoot');
+        triggerShake(); log(`> ${actEnt.name} hurls a Scrap Bomb!`, "log-dmg"); playSFX('blast');
         applyDamageHit(actEnt, target, 35, 'phys', null);
     } else if (pendingAction === 'ITEM_EMP') {
-        log(`> ${actEnt.name} detonates an EMP Charge!`, "log-dmg"); playSFX('shoot');
+        log(`> ${actEnt.name} detonates an EMP Charge!`, "log-dmg"); playSFX('emp');
         applyDamageHit(actEnt, target, 25, 'energy', null);
         if (target.hp > 0) { target.stunnedTurns = 1; log(`> ${target.name} systems disrupted!`, "log-status"); setTimeout(() => spawnFCT(target.id, "STUNNED", "fct-status"), 300 * globalSettings.combatSpeed); }
     }
@@ -888,7 +1039,7 @@ function initEngine() {
     renderTitleScreen(); 
 }
 
-function switchScreen(screenId) { document.querySelectorAll('#engine > div:not(.settings-icon):not(#screen-settings)').forEach(el => el.style.display = 'none'); document.getElementById(screenId).style.display = 'flex'; if (screenId === 'screen-map' || screenId === 'screen-outpost' || screenId === 'screen-citadel') { document.getElementById('btn-global-settings').style.display = 'block'; } else { document.getElementById('btn-global-settings').style.display = 'none'; } }
+function switchScreen(screenId) { if (screenId !== 'screen-combat') stopAmbience(); document.querySelectorAll('#engine > div:not(.settings-icon):not(#screen-settings)').forEach(el => el.style.display = 'none'); document.getElementById(screenId).style.display = 'flex'; if (screenId === 'screen-map' || screenId === 'screen-outpost' || screenId === 'screen-citadel') { document.getElementById('btn-global-settings').style.display = 'block'; } else { document.getElementById('btn-global-settings').style.display = 'none'; } }
 function openSettings() { disarmErase(); document.getElementById('screen-settings').style.display = 'flex'; }
 function closeSettings() { disarmErase(); document.getElementById('screen-settings').style.display = 'none'; }
 function toggleGameSpeed() { globalSettings.combatSpeed = globalSettings.combatSpeed === 1.0 ? 0.5 : 1.0; Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); }
@@ -1599,6 +1750,7 @@ const WEATHER_BANNERS = {
 // bannerText only replaces the wording. The weather itself is unchanged, so the +20% damage
 // a boss arena applies is identical whichever commander is waiting - only the sign differs.
 function applyCombatScenery(bgFile, bannerText) {
+    startAmbience(bgFile);
     combatBgFile = bgFile;
     const field = document.querySelector('.battlefield');
     if (field) field.style.marginBottom = GROUND_LIFT[bgFile] || DEFAULT_LIFT;
@@ -1825,7 +1977,7 @@ function resolveAction(targetId) {
     let dist = livingEnemies.findIndex(e => e.id === targetId);
 
     if (pendingAction === 'OVERDRIVE') {
-        momentum = 0; addMomentum(0); playSFX('shoot'); triggerGlitch();
+        momentum = 0; addMomentum(0); playSFX('overdrive'); triggerGlitch();
         log(`> ${actEnt.name} unleashed OVERDRIVE!`, "log-combo");
 
         if (actEnt.classType === 'BRUISER') { 
@@ -1906,9 +2058,9 @@ function resolveAction(targetId) {
         if (currentWeather === 'SANDSTORM' && isRanged(pendingAction)) { dmgMult *= 0.75; }
         if (currentWeather === 'BLOODLUST') { dmgMult *= 1.2; }
         
-        playSFX('shoot');
+        playSFX(voiceFor(pendingAction));
         if (isCombo) { 
-            log(`> COMBO ACTIVATED: ${comboType}`, "log-combo"); 
+            log(`> COMBO ACTIVATED: ${comboType}`, "log-combo"); playSFX('combo'); 
             setTimeout(() => spawnFCT(target.id, comboType, "fct-combo"), 200); 
             checkBountyProgress('COMBO'); addMomentum(25); triggerShake();
         }
@@ -1952,10 +2104,10 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     
     triggerHitFlash(target.id);
 
-    if (netDmg === 0 && resistValue >= 100) { logMsg += " (Immune)."; spawnFCT(target.id, "IMMUNE", "fct-status");
-    } else if (resistValue > 5) { logMsg += " (Resisted)."; spawnFCT(target.id, `-${netDmg}`, "fct-dmg");
-    } else if (resistValue < 0) { logMsg += " (Weakness!)."; logStyle = "log-dmg"; spawnFCT(target.id, `-${netDmg}!`, "fct-weak"); playSFX('hit');
-    } else { spawnFCT(target.id, `-${netDmg}`, "fct-dmg"); playSFX('hit'); }
+    if (netDmg === 0 && resistValue >= 100) { logMsg += " (Immune)."; spawnFCT(target.id, "IMMUNE", "fct-status"); playImpact(0, target, 0.5);
+    } else if (resistValue > 5) { logMsg += " (Resisted)."; spawnFCT(target.id, `-${netDmg}`, "fct-dmg"); playImpact(netDmg, target, 0.7);
+    } else if (resistValue < 0) { logMsg += " (Weakness!)."; logStyle = "log-dmg"; spawnFCT(target.id, `-${netDmg}!`, "fct-weak"); playImpact(netDmg, target, 1.25);
+    } else { spawnFCT(target.id, `-${netDmg}`, "fct-dmg"); playImpact(netDmg, target); }
     
     log(logMsg, logStyle);
 
@@ -1999,9 +2151,10 @@ function executeEnemyAi(enemy) {
     
     if (enemy.classType === 'BOSS' && enemy.phase === 1 && enemy.hp <= (enemy.maxHp / 2)) {
         enemy.phase = 2;
+        playSFX('enrage');
         const e = enemy.enrage || {};
         log(`> ${e.cry || 'THE COMMANDER ENRAGES!'}`, "log-dmg");
-        spawnFCT(enemy.id, "ENRAGED!", "fct-status"); playSFX('hit'); triggerShake();
+        spawnFCT(enemy.id, "ENRAGED!", "fct-status"); triggerShake();
 
         if (e.dmgScale) enemy.dmgBase = Math.floor(enemy.dmgBase * e.dmgScale);
         if (e.speedBonus) enemy.speed += e.speedBonus;
@@ -2059,7 +2212,7 @@ function executeEnemyAi(enemy) {
     }
 
     if (intent.type === 'AOE') {
-        playSFX('shoot'); triggerShake(); log(`> ${enemy.name} unleashed an area attack!`, "log-dmg");
+        playSFX('blast'); triggerShake(); log(`> ${enemy.name} unleashed an area attack!`, "log-dmg");
         let rawDmg = Math.floor(enemy.dmgBase * 0.7); 
         if (currentWeather === 'SANDSTORM') rawDmg = Math.floor(rawDmg * 0.75);
         if (currentWeather === 'BLOODLUST') rawDmg = Math.floor(rawDmg * 1.2);
@@ -2068,7 +2221,8 @@ function executeEnemyAi(enemy) {
     }
 
     if (target) {
-        playSFX('shoot');
+        playSFX(enemy.classType === 'BEAST' || enemy.classType === 'MUTANT' ? 'beast'
+              : enemy.range === 'ranged' ? 'rifle' : 'blade');
         let t = enemy.dmgType || 'phys'; 
         let rawDmg = enemy.dmgBase + Math.floor(Math.random() * 5);
         
@@ -2111,7 +2265,7 @@ function awardXp(char, amount) {
 function checkWinState() {
     renderField();
     const pA = activeEntities.some(e => e.isPlayer && e.hp > 0); const eA = activeEntities.some(e => !e.isPlayer && e.hp > 0);
-    if (!pA) { document.getElementById('command-deck').innerHTML = `<button data-action="squad-down">SQUAD DOWN</button>`; combatActive = false; } 
+    if (!pA) { document.getElementById('command-deck').innerHTML = `<button data-action="squad-down">SQUAD DOWN</button>`; combatActive = false; stopAmbience(); } 
     else if (!eA) { 
         if (currentNodeType === 'BOSS') { bossSkulls++; if (runStats) runStats.bosses++; saveMeta(); log(`> VICTORY! Warlord Skull acquired!`, "log-heal"); }
         if (isCurrentNodeElite) {
@@ -2145,7 +2299,7 @@ function checkWinState() {
         let matDrops = (1 + Math.floor(Math.random() * 2)) * scrapMult + (hasRelic('SALVAGE_RIG') ? 1 : 0);
         for(let i=0; i<matDrops; i++) { let m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)]; materials[m]++; log(`> Salvaged: 1 ${m.toUpperCase()}`, "log-heal"); }
 
-        document.getElementById('command-deck').innerHTML = `<button data-action="loot" data-amount="${s}">LOOT ${s}</button>`; combatActive = false; 
+        document.getElementById('command-deck').innerHTML = `<button data-action="loot" data-amount="${s}">LOOT ${s}</button>`; combatActive = false; stopAmbience(); 
     } 
     else { if (pendingAction === null) setTimeout(nextTurn, 800 * globalSettings.combatSpeed); }
 }
@@ -2169,11 +2323,14 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SECTOR_LAYOUT, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, OVERDRIVE_NAMES, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SECTOR_LAYOUT, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, OVERDRIVE_NAMES, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
+    get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
+    get ambienceBiome() { return ambienceBiome; },
+    get ambienceNodes() { return ambienceNodes; },
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },
     get globalSettings() { return globalSettings; }, set globalSettings(v) { globalSettings = v; },
     get bossSkulls() { return bossSkulls; }, set bossSkulls(v) { bossSkulls = v; },
