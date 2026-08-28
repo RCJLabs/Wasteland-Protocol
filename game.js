@@ -125,7 +125,7 @@ const BOSS_POOL = [
         id: 'MATRIARCH', name: 'Carrion Matriarch', short: 'MATRIARCH', img: 'enemy_boss_vulture.webp', scale: 2.1,
         range: 'melee', hpMult: 0.85, dmgMult: 1.1, speed: 17, armor: 5,
         resistances: { phys: -6, bio: 40, energy: 5 },
-        isHovering: true, dmgType: 'bio', passive: 'FEAST',
+        dmgType: 'bio', passive: 'FEAST',
         blurb: 'Fast, diseased, and it grows stronger off every wound it opens.',
         intents: [['STATUS', 0.35], ['HEAVY', 0.25], ['ATTACK', 0.25], ['AOE', 0.15]],
         enrage: { cry: 'THE MATRIARCH SHRIEKS - PLAGUE WIND!', dmgScale: 1.25, speedBonus: 4, plague: true }

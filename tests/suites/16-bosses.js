@@ -38,7 +38,8 @@ module.exports = {
     ok('it is immune to bio and weak to energy',
       built.COLOSSUS.res.bio >= 100 && built.COLOSSUS.res.energy < 0);
     ok('the Matriarch is the fast one', built.MATRIARCH.speed > built.WARLORD.speed + 5);
-    ok('it deals bio damage and flies', built.MATRIARCH.dmgType === 'bio' && built.MATRIARCH.hover);
+    ok('it deals bio damage', built.MATRIARCH.dmgType === 'bio');
+    ok('it stalks on the ground rather than hovering', !built.MATRIARCH.hover);
     ok('it is fragile to bullets', built.MATRIARCH.res.phys < 0);
     ok('each carries its own passive',
       built.COLOSSUS.passive === 'PLATING' && built.MATRIARCH.passive === 'FEAST' && !built.WARLORD.passive);
