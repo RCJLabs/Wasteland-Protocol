@@ -57,7 +57,9 @@ module.exports = {
     ok('a contract can be signed from it',
       await state(() => activeContracts.join()) === 'GLASS');
     await click('[data-action="begin-expedition"]');
-    ok('deploying starts a run at the chosen difficulty',
+    ok('deploying opens the muster', await shown('screen-muster') === 'flex');
+    await click('[data-action="muster-deploy"]');
+    ok('and the muster starts a run at the chosen difficulty',
       await shown('screen-map') === 'flex' && await state(() => difficultyMult) === 0.75);
     await state(() => { activeContracts = []; });
 

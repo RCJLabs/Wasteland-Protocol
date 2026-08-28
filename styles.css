@@ -376,3 +376,27 @@ button.reach-short { border-color: #7a5a20; }
 .sheet-row .upg-btn { flex: 1 1 0; }
 .citadel-view-toggle { flex-shrink: 0; margin-top: 8px; font-size: 10px; letter-spacing: 1px;
   padding: 8px; border-color: #4a4030; color: #8a8272; }
+
+/* The muster: who rolled what, who stands where, before the first node is taken. */
+#screen-muster { display: none; flex-direction: column; padding: 20px; height: 100%; box-sizing: border-box;
+  overflow: hidden; background: linear-gradient(rgba(10,12,8,0.95), rgba(0,0,0,0.98)); }
+.muster-head { display: flex; justify-content: flex-end; font-size: 11px; letter-spacing: 1px;
+  color: #B8860B; margin-bottom: 8px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+.muster-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.muster-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center;
+  border: 1px solid #33301f; padding: 8px 10px; opacity: 0.65; }
+.muster-row.muster-deployed { border-color: #6B8E23; opacity: 1; }
+.muster-who { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.muster-name { font-size: 13px; font-weight: bold; }
+.muster-class { font-size: 9px; letter-spacing: 1px; color: #8a8578; }
+.muster-quirk { font-size: 9px; letter-spacing: 1px; color: #ffaa00; }
+.muster-quirk-desc { flex-basis: 100%; font-size: 9.5px; color: #8a8578; }
+.muster-stats { grid-column: 1; font-size: 10px; color: #b9b4a6; font-variant-numeric: tabular-nums; }
+.muster-ctl { grid-column: 2; grid-row: 1 / 3; display: flex; flex-direction: column; gap: 5px; }
+.muster-rank { font-size: 10px; letter-spacing: 1px; padding: 7px 10px; min-width: 72px; }
+.rank-btn-1 { border-color: #c98b3a; color: #c98b3a; }
+.rank-btn-2 { border-color: #8a9a5b; color: #8a9a5b; }
+.rank-btn-3 { border-color: #6a8fb5; color: #6a8fb5; }
+.rank-btn-0 { border-color: #444; color: #666; }
+.muster-reroll { font-size: 12px; padding: 5px; border-color: #7a5c14; color: #d9a93d; }
+.muster-note { flex-shrink: 0; font-size: 10px; line-height: 1.5; color: #8a8578; margin: 10px 0; }

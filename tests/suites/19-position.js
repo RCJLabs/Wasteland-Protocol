@@ -12,7 +12,7 @@ module.exports = {
       window.__line = (classType, pos, foeCount = 4) => {
         currentSlot = 1; confirmNewGame(1.0); initiateCombat('RAIDERS', false);
         const hero = playerRoster.find(h => h.classType === classType);
-        hero.gridPos = pos; hero.maxHp = 9999; hero.hp = 9999; hero.dmgBase = 100; hero.stunnedTurns = 0;
+        hero.gridPos = pos; hero.maxHp = 9999; hero.hp = 9999; hero.dmgBase = 100; hero.stunnedTurns = 0; hero.quirk = null;
         Object.keys(hero.cooldowns).forEach(k => hero.cooldowns[k] = 0);
         const foes = [];
         for (let i = 0; i < foeCount; i++) {

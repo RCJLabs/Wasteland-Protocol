@@ -108,7 +108,7 @@ module.exports = {
         currentSlot = 1; confirmNewGame(1.0); initiateCombat('RAIDERS', false);
         activeRelics = (relics || []).map(id => RELIC_POOL.find(r => r.id === id));
         const hero = playerRoster.find(h => h.classType === cls);
-        hero.gridPos = 1; hero.maxHp = 9999; hero.hp = 9999; hero.dmgBase = 100; hero.stunnedTurns = 0;
+        hero.gridPos = 1; hero.maxHp = 9999; hero.hp = 9999; hero.dmgBase = 100; hero.stunnedTurns = 0; hero.quirk = null;
         Object.keys(hero.cooldowns).forEach(k => hero.cooldowns[k] = 0);
         const foe = activeEntities.find(e => !e.isPlayer);
         foe.maxHp = 1e6; foe.hp = 1e6; foe.armor = 0; foe.baseArmor = 0;

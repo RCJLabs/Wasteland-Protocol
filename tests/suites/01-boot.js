@@ -17,8 +17,12 @@ module.exports = {
     ok('picking a difficulty offers the contract board',
       (await page.$eval('#screen-contracts', e => getComputedStyle(e).display)) === 'flex');
     await page.click('[data-action="begin-expedition"]');
+    await page.waitForTimeout(400);
+    ok('deploying from it opens the muster',
+      (await page.$eval('#screen-muster', e => getComputedStyle(e).display)) === 'flex');
+    await page.click('[data-action="muster-deploy"]');
     await page.waitForTimeout(500);
-    ok('deploying from it reaches the map',
+    ok('and the muster deploys onto the map',
       (await page.$eval('#screen-map', e => getComputedStyle(e).display)) === 'flex');
 
     await page.click('.outpost-btn');

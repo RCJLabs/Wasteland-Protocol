@@ -74,13 +74,42 @@ let activeEvent = null; let pendingConsequences = []; let recentEvents = []; let
 let activePosSelector = null; let activePerkSelector = null; let currentWeather = 'CLEAR'; let currentNodeType = '';
 let isCurrentNodeElite = false;
 
+// Five stat quirks meant most runs contained most quirks and the draw decided nothing. The
+// pool is fifteen now, and the new ten interact with formation, combos and the economy - so
+// who rolled what is worth reading at muster, and worth a reroll token when it isn't.
 const QUIRK_POOL = [
-    { id: 'RECKLESS', name: 'RECKLESS (+5 DMG, -15 HP)', dmg: 5, hp: -15, spd: 0 },
-    { id: 'TWITCHY', name: 'TWITCHY (+3 SPD, -10 HP)', dmg: 0, hp: -10, spd: 3 },
-    { id: 'STURDY', name: 'STURDY (+20 HP, -2 SPD)', dmg: 0, hp: 20, spd: -2 },
-    { id: 'VAMPIRIC', name: 'VAMPIRIC (Heal 2 HP on Hit)', dmg: 0, hp: 0, spd: 0 },
-    { id: 'LETHARGIC', name: 'LETHARGIC (+8 DMG, -3 SPD)', dmg: 8, hp: 0, spd: -3 }
+    { id: 'RECKLESS',   name: 'RECKLESS',   desc: '+5 DMG, -15 HP', dmg: 5, hp: -15, spd: 0 },
+    { id: 'TWITCHY',    name: 'TWITCHY',    desc: '+3 SPD, -10 HP', dmg: 0, hp: -10, spd: 3 },
+    { id: 'STURDY',     name: 'STURDY',     desc: '+20 HP, -2 SPD', dmg: 0, hp: 20, spd: -2 },
+    { id: 'VAMPIRIC',   name: 'VAMPIRIC',   desc: 'Heals 2 on every hit they land', dmg: 0, hp: 0, spd: 0 },
+    { id: 'LETHARGIC',  name: 'LETHARGIC',  desc: '+8 DMG, -3 SPD', dmg: 8, hp: 0, spd: -3 },
+    { id: 'PACK_HUNTER',name: 'PACK HUNTER',desc: '+15% DMG with an ally in the next rank', dmg: 0, hp: 0, spd: 0 },
+    { id: 'LONER',      name: 'LONER',      desc: '+20% DMG with no ally in the next rank', dmg: 0, hp: 0, spd: 0 },
+    { id: 'SCRAP_RAT',  name: 'SCRAP RAT',  desc: '+1 material after fights they survive', dmg: 0, hp: 0, spd: 0 },
+    { id: 'FIRST_BLOOD',name: 'FIRST BLOOD',desc: '+30% DMG against unhurt targets', dmg: 0, hp: 0, spd: 0 },
+    { id: 'CLOSER',     name: 'CLOSER',     desc: '+25% DMG against targets below 30%', dmg: 0, hp: 0, spd: 0 },
+    { id: 'THICK_HIDE', name: 'THICK HIDE', desc: 'Every hit taken lands 3 lighter', dmg: 0, hp: 0, spd: 0 },
+    { id: 'SECOND_WIND',name: 'SECOND WIND',desc: 'Once per fight, survives a killing blow at 1 HP', dmg: 0, hp: 0, spd: 0 },
+    { id: 'SLOW_BLEEDER', name: 'SLOW BLEEDER', desc: 'Bleeding hurts them half as much', dmg: 0, hp: 0, spd: 0 },
+    { id: 'OVERCHARGED',name: 'OVERCHARGED',desc: '+10 momentum when they land a combo', dmg: 0, hp: 0, spd: 0 },
+    { id: 'DUELIST',    name: 'DUELIST',    desc: '+15% DMG against the enemy front', dmg: 0, hp: 0, spd: 0 }
 ];
+
+function hasQuirk(ent, id) { return !!(ent && ent.isPlayer && ent.quirk && ent.quirk.id === id); }
+
+// The formation- and target-reading quirks, resolved where the damage is figured.
+function quirkDmgMult(actEnt, target, dist) {
+    if (!actEnt || !actEnt.isPlayer || !actEnt.quirk) return 1;
+    let m = 1;
+    const neighbour = activeEntities.some(e => e.isPlayer && e.hp > 0 && e.id !== actEnt.id &&
+        Math.abs(e.gridPos - actEnt.gridPos) === 1);
+    if (hasQuirk(actEnt, 'PACK_HUNTER') && neighbour) m *= 1.15;
+    if (hasQuirk(actEnt, 'LONER') && !neighbour) m *= 1.2;
+    if (hasQuirk(actEnt, 'FIRST_BLOOD') && target && target.hp === target.maxHp) m *= 1.3;
+    if (hasQuirk(actEnt, 'CLOSER') && target && target.hp < target.maxHp * 0.3) m *= 1.25;
+    if (hasQuirk(actEnt, 'DUELIST') && dist === 0) m *= 1.15;
+    return m;
+}
 
 // Perks are repeatable. The percentage ones compound with each pick, which is the player's
 // only multiplicative axis against enemies that scale exponentially - see PERK note in
@@ -472,6 +501,7 @@ const CODEX = [
         'Two elite fights per sector, at different depths, never forced - there is always another road. An elite drops a relic.',
         'A commander drops a choice of three.',
         `A wipe spends a regroup - ${BASE_REGROUPS} to start, more from the Citadel - and the squad comes back with tuned weapons. Felling a commander refunds one. Out of regroups ends the run and banks the score.`,
+        `Before deploying, the muster shows every operator's quirk. ${MUSTER_REROLLS} reroll tokens per expedition swap the ones that do not fit the plan.`,
         'Depth is worth far more than any single haul: pushing one sector deeper always beats farming the one you are on.'
     ] },
     { id: 'CONTRACTS', title: 'CONTRACTS', body: () => [
@@ -666,6 +696,9 @@ const ACTIONS = {
     'take-relic':       el => takeRelic(Number(el.dataset.index)),
     'toggle-contract':  el => toggleContract(el.dataset.id),
     'begin-expedition': () => beginExpedition(),
+    'muster-rank':      el => musterRank(el.dataset.id),
+    'muster-reroll':    el => musterReroll(el.dataset.id),
+    'muster-deploy':    () => musterDeploy(),
     'codex':            () => renderCodex(),
     'erase-slot':       el => { Store.remove(BASE_SAVE_KEY + Number(el.dataset.slot)); renderTitleScreen(); },
     'dev-open':         () => renderDev(),
@@ -1341,9 +1374,82 @@ function toggleContract(id) {
     playSFX('click'); renderContracts();
 }
 
-function beginExpedition() { confirmNewGame(pendingDifficulty); }
+// Deploying now passes through the muster: the run is built (quirks rolled, map generated),
+// then shown - who rolled what, who stands where - before the first node is taken.
+function beginExpedition() { buildNewRun(pendingDifficulty); renderMuster(); }
 
-function confirmNewGame(diff) {
+let musterRerolls = 0;
+const MUSTER_REROLLS = 2;
+const RANK_CYCLE = { 0: 1, 1: 2, 2: 3, 3: 0 };
+
+function renderMuster() {
+    switchScreen('screen-muster');
+    document.getElementById('muster-rerolls').innerText = `⟳ ${musterRerolls} REROLLS LEFT`;
+    const body = document.getElementById('muster-body');
+    body.innerHTML = playerRoster.map(ch => {
+        const pos = ch.gridPos;
+        const posLbl = pos === 0 ? 'BENCH' : RANK_LABELS[pos];
+        return `<div class="muster-row ${pos > 0 ? 'muster-deployed' : ''}">
+            <div class="muster-who">
+                <span class="muster-name">${ch.name}</span>
+                <span class="muster-class">${ch.classType}</span>
+                <span class="muster-quirk" title="${ch.quirk ? ch.quirk.desc : ''}">${ch.quirk ? ch.quirk.name : ''}</span>
+                <span class="muster-quirk-desc">${ch.quirk ? ch.quirk.desc : ''}</span>
+            </div>
+            <div class="muster-stats">HP ${ch.maxHp} · DMG ${ch.dmgBase} · SPD ${ch.speed}</div>
+            <div class="muster-ctl">
+                <button class="muster-rank rank-btn-${pos}" data-action="muster-rank" data-id="${ch.id}">${posLbl}</button>
+                <button class="muster-reroll" ${musterRerolls <= 0 ? 'disabled' : ''} data-action="muster-reroll" data-id="${ch.id}">⟳</button>
+            </div>
+        </div>`;
+    }).join('');
+    const deployed = playerRoster.filter(c => c.gridPos > 0).length;
+    const cap = hasContract('SHORT_HANDED') ? 2 : 3;
+    document.getElementById('muster-note').innerText =
+        `${deployed}/${cap} deployed. Melee earns full damage in FRONT; ranged fights the same from anywhere. Enemy fire hunts the BACK.`;
+    document.getElementById('muster-deploy').disabled = deployed < 1 || deployed > cap;
+}
+
+function musterRank(charId) {
+    const ch = playerRoster.find(c => c.id === charId);
+    if (!ch) return;
+    const cap = hasContract('SHORT_HANDED') ? 2 : 3;
+    let next = RANK_CYCLE[ch.gridPos] ?? 0;
+    // Short Handed keeps the back rank empty for the whole expedition, the muster included.
+    while (next !== 0 && (
+        (hasContract('SHORT_HANDED') && next === 3) ||
+        playerRoster.some(c => c.id !== charId && c.gridPos === next))) {
+        next = RANK_CYCLE[next];
+    }
+    if (next !== 0 && playerRoster.filter(c => c.gridPos > 0 && c.id !== charId).length >= cap) next = 0;
+    ch.gridPos = next;
+    renderMuster();
+}
+
+function musterReroll(charId) {
+    if (musterRerolls <= 0) return;
+    const ch = playerRoster.find(c => c.id === charId);
+    if (!ch || !ch.quirk) return;
+    // Strip the old quirk's stats, roll a different one, apply it - health clamped to the new cap.
+    ch.maxHp -= ch.quirk.hp; ch.dmgBase -= ch.quirk.dmg; ch.speed -= ch.quirk.spd;
+    const pool = QUIRK_POOL.filter(q => q.id !== ch.quirk.id);
+    const q = pool[Math.floor(Math.random() * pool.length)];
+    ch.quirk = q; ch.maxHp += q.hp; ch.dmgBase += q.dmg; ch.speed += q.spd;
+    ch.hp = Math.min(ch.maxHp, Math.max(1, ch.hp + q.hp));
+    musterRerolls--; playSFX('click');
+    renderMuster();
+}
+
+function musterDeploy() {
+    const deployed = playerRoster.filter(c => c.gridPos > 0).length;
+    const cap = hasContract('SHORT_HANDED') ? 2 : 3;
+    if (deployed < 1 || deployed > cap) return;
+    saveGameState(); renderMap();
+}
+
+function confirmNewGame(diff) { buildNewRun(diff); renderMap(); }
+
+function buildNewRun(diff) {
     difficultyMult = diff; currentSector = 1; currentTier = 1; tuneUpBattles = 0; momentum = 0;
     scrap = metaUpgrades.startScrap || 0; inventory = hasContract('NO_CONSUMABLES') ? [] : ['MED_STIM']; materials = { parts: 0, chems: 0, tech: 0 }; 
     playerRoster = migrateTraits(JSON.parse(JSON.stringify(ROSTER_TEMPLATE)));
@@ -1363,7 +1469,8 @@ function confirmNewGame(diff) {
     // The back rank stays empty, and stays empty - the Outpost refuses to fill it below.
     if (hasContract('SHORT_HANDED')) playerRoster.forEach(p => { if (p.gridPos === 3) p.gridPos = 0; });
 
-    saveGameState(); renderMap(); 
+    musterRerolls = MUSTER_REROLLS;
+    saveGameState(); 
 }
 
 function continueGame() {
@@ -1747,7 +1854,7 @@ function renderOutpost() {
             : `LVL ${char.level} (${char.xp}/${char.xpToNext} XP)`;
         let traitLine = traitSummary(char);
         let traitsDisplay = traitLine ? `<div style="font-size:9px; color:#6B8E23; text-transform:uppercase; margin-top:2px;">${traitLine}</div>` : '';
-        let quirkDisplay = char.quirk ? `<div style="font-size:9px; color:#ffaa00; text-transform:uppercase; margin-top:2px;">[ ${char.quirk.name} ]</div>` : '';
+        let quirkDisplay = char.quirk ? `<div style="font-size:9px; color:#ffaa00; text-transform:uppercase; margin-top:2px;" title="${char.quirk.desc || ''}">[ ${char.quirk.name} ]</div>` : '';
 
         let posText = char.gridPos === 1 ? '[1] FRONTLINE' : char.gridPos === 2 ? '[2] MIDLINE' : char.gridPos === 3 ? '[3] BACKLINE' : '[X] BENCHED'; let posClass = `pos-btn-${char.gridPos}`; let btnGroupHtml = '';
 
@@ -2213,6 +2320,7 @@ function initiateCombat(nodeType, isEliteNode) {
     playerRoster.forEach(ent => { ent.stunnedTurns = 0; ent.bleedingTurns = 0; ent.armorTurns = 0; ent.armor = 0;
         ent.oiledTurns = 0; ent.corrodedTurns = 0; ent.markedTurns = 0; ent.guardTurns = 0; });
     momentumFocus = 0; pressExtra = false; pendingOverdrive = null;
+    playerRoster.forEach(ent => { ent.secondWindUsed = false; });
     // HP keeps the steep 1.5x-per-sector curve; damage climbs far more slowly so a deep fight
     // is dangerous rather than an unavoidable one-shot. Player power compounds through
     // repeatable percentage perks, which is what makes the curve climbable at all.
@@ -2396,7 +2504,8 @@ function applyTurnStartEffects(ent) {
     if (currentWeather === 'SHRAPNEL_WINDS' && Math.random() < 0.3) { let shrapDmg = Math.floor(5 * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - shrapDmg); log(`> Shrapnel struck ${ent.name} for ${shrapDmg} DMG!`, "log-dmg"); spawnFCT(ent.id, `-${shrapDmg}`, "fct-dmg"); chg = true; addMomentum(5); triggerHitFlash(ent.id); }
 
     if (ent.bleedingTurns > 0) { let b = Math.max(1, Math.floor(ent.maxHp * 0.08));
-        if (ent.isPlayer && hasRelic('FIELD_DRESSING')) b = Math.max(1, Math.floor(b / 2)); ent.hp = Math.max(0, ent.hp - b); log(`> ${ent.name} bleeds for ${b}.`, "log-dmg"); spawnFCT(ent.id, `-${b}`, "fct-dmg"); ent.bleedingTurns--; chg = true; if(ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); }
+        if (ent.isPlayer && hasRelic('FIELD_DRESSING')) b = Math.max(1, Math.floor(b / 2));
+        if (hasQuirk(ent, 'SLOW_BLEEDER')) b = Math.max(1, Math.floor(b / 2)); ent.hp = Math.max(0, ent.hp - b); log(`> ${ent.name} bleeds for ${b}.`, "log-dmg"); spawnFCT(ent.id, `-${b}`, "fct-dmg"); ent.bleedingTurns--; chg = true; if(ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); }
     // Expiring temporary armour used to zero the unit's innate plating too, so any armoured
     // enemy that braced permanently lost the armour it started with.
     if (ent.armorTurns > 0) { ent.armorTurns--; if (ent.armorTurns === 0) { ent.armor = ent.baseArmor || 0; } chg = true; }
@@ -2537,6 +2646,7 @@ function resolveAction(targetId) {
         if (pendingAction === 'RIP_AND_TEAR') { dmgMult *= 1.2; actEnt.cooldowns.rip_and_tear = 3; }
 
         if (momentumFocus > 0) { dmgMult *= 1.3; momentumFocus = 0; spawnFCT(actEnt.id, 'FOCUSED', 'fct-combo'); }
+        dmgMult *= quirkDmgMult(actEnt, target, dist);
         // Where the two of them are standing, before anything else is figured in.
         const reach = reachMult(pendingAction, actEnt, dist);
         if (reach < 1) { dmgMult *= reach; log(`> ${actEnt.name} is reaching (${Math.round(reach * 100)}% DMG).`, "log-status"); }
@@ -2568,6 +2678,7 @@ function resolveAction(targetId) {
         playSFX(voiceFor(pendingAction));
         if (isCombo) { 
             log(`> COMBO ACTIVATED: ${comboType}`, "log-combo"); playSFX('combo'); 
+            if (hasQuirk(actEnt, 'OVERCHARGED')) addMomentum(10);
             setTimeout(() => spawnFCT(target.id, comboType, "fct-combo"), 200); 
             checkBountyProgress('COMBO'); addMomentum(25); triggerShake();
         }
@@ -2605,8 +2716,15 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     if (hasRelic('CHEM_ETCHER') && !target.isPlayer && (target.corrodedTurns || 0) > 0) {
         calcDmg = Math.floor(calcDmg * 1.25);
     }
+    if (hasQuirk(target, 'THICK_HIDE')) calcDmg = Math.max(1, calcDmg - 3);
 
     let netDmg = Math.max(1, calcDmg - resistValue - armorCalc); if (resistValue >= 100) netDmg = 0; target.hp = Math.max(0, target.hp - netDmg);
+    // Second Wind: once per fight, a killing blow leaves them standing at 1.
+    if (target.hp <= 0 && hasQuirk(target, 'SECOND_WIND') && !target.secondWindUsed) {
+        target.secondWindUsed = true; target.hp = 1;
+        log(`> ${target.name} refuses to go down!`, 'log-heal');
+        spawnFCT(target.id, 'SECOND WIND', 'fct-heal'); playSFX('heal', 1.2);
+    }
     let logStyle = "log-dmg"; let logMsg = `> ${attacker.name} hits ${target.name} for ${netDmg}`;
     
     triggerHitFlash(target.id);
@@ -2798,6 +2916,10 @@ function checkWinState() {
             else { const b = emptyPoolScrap(); scrap += b; log(`> Nothing left in the pool. Salvaged ${b} Scrap instead.`, "log-heal"); }
         }
 
+        activeEntities.filter(e => hasQuirk(e, 'SCRAP_RAT') && e.hp > 0).forEach(e => {
+            const m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)];
+            materials[m]++; log(`> ${e.name} pockets 1 ${m.toUpperCase()}.`, 'log-heal');
+        });
         if (tuneUpBattles > 0) tuneUpBattles--; 
 
         let scrapMult = isCurrentNodeElite ? 2 : 1;
@@ -2845,9 +2967,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
@@ -2883,6 +3005,7 @@ globalThis.WP = {
     get runStats() { return runStats; }, set runStats(v) { runStats = v; },
     get activeContracts() { return activeContracts; }, set activeContracts(v) { activeContracts = v; },
     get pendingDifficulty() { return pendingDifficulty; }, set pendingDifficulty(v) { pendingDifficulty = v; },
+    get musterRerolls() { return musterRerolls; }, set musterRerolls(v) { musterRerolls = v; },
     get activeEvent() { return activeEvent; }, set activeEvent(v) { activeEvent = v; },
     get pendingConsequences() { return pendingConsequences; }, set pendingConsequences(v) { pendingConsequences = v; },
     get recentEvents() { return recentEvents; }, set recentEvents(v) { recentEvents = v; },

@@ -359,13 +359,15 @@ module.exports = {
     await page.click('[data-id="GLASS"]');
     await page.waitForTimeout(120);
     await page.click('[data-action="begin-expedition"]');
+    await page.waitForTimeout(300);
+    await page.click('[data-action="muster-deploy"]');
     await page.waitForTimeout(400);
     const deployed = await page.evaluate(() => ({
       map: getComputedStyle(document.getElementById('screen-map')).display,
       signed: [...activeContracts], banked: runStats.contractMult,
       diff: difficultyMult
     }));
-    ok('deploying starts the run', deployed.map === 'flex');
+    ok('deploying through the muster starts the run', deployed.map === 'flex');
     ok('under what was signed', deployed.signed.join() === 'GLASS' && Math.abs(deployed.banked - 1.3) < 0.01);
     ok('at the difficulty picked before it', deployed.diff === 1.3);
 
