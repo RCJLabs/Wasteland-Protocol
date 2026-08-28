@@ -456,10 +456,10 @@ const CODEX = [
         'The deck flags an ability whose pairing is already on the field, and aiming names it above the target.'
     ] },
     { id: 'MOMENTUM', title: 'MOMENTUM AND OVERDRIVE', body: () => [
-        'Momentum builds as the squad takes and deals damage.',
-        `At ${OVERDRIVE_AT}% any operator can spend it on their Overdrive - a class-specific attack that ends the fight or turns it.`,
-        `Overcharged Cell lowers that to ${OVERDRIVE_AT_CHARGED}%.`,
-        'Spending it empties the bar.'
+        'Momentum builds as the squad takes and deals damage, and it is a market, not a fuse.',
+        ...MOMENTUM_TACTICS.map(t => `${t.label} (${t.cost}%) — ${t.desc} Costs no action.`),
+        `At ${OVERDRIVE_AT}% any operator can spend the lot on an Overdrive instead. Overcharged Cell lowers that to ${OVERDRIVE_AT_CHARGED}%.`,
+        'Each class carries two Overdrives. The first full bar offers both; using one locks the class to it for the run.'
     ] },
     { id: 'RUN', title: 'THE EXPEDITION', body: () => [
         `${TOTAL_TIERS} tiers to a sector, laid out as branching routes. Taking a node commits you to the paths it connects to, and a commander waits at the top.`,
@@ -696,10 +696,11 @@ const ACTIONS = {
     'camp-choice':      el => resolveCamp(el.dataset.kind),
     'camp-finish':      () => finishCamp(),
 
-    'queue':            el => queueAction(el.dataset.move),
+    'queue':            el => queueAction(el.dataset.move, el.dataset.variant),
     'self':             el => executeSelfAction(el.dataset.move),
     'cancel':           () => cancelAction(),
     'skip-turn':        () => skipStunnedTurn(),
+    'tactic':           el => spendTactic(el.dataset.kind),
     'bag':              () => openInventoryMenu(),
     'target':           el => resolveAction(el.dataset.id),
     'use-item':         el => resolveConsumableItem(el.dataset.id),
@@ -1338,6 +1339,7 @@ function confirmNewGame(diff) {
     activeBounties = generateBounties(); runStats = newRunStats(); pendingRelicOffer = null;
     pendingConsequences = []; recentEvents = [];
     sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
+    odChoices = {}; pendingOverdrive = null; momentumFocus = 0; pressExtra = false;
     const kept = heirloomRelic();
     activeRelics = kept ? [kept] : [];
     
@@ -1387,7 +1389,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -1395,7 +1397,7 @@ function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify
 function migrateRelics(saved) {
     return (saved || []).map(r => RELIC_POOL.find(p => p.id === (r && r.id))).filter(Boolean);
 }
-function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = migrateAssetPaths(migrateTraits(d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)))); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; pendingConsequences = Array.isArray(d.pendingConsequences) ? d.pendingConsequences : []; recentEvents = Array.isArray(d.recentEvents) ? d.recentEvents : [];
+function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = migrateAssetPaths(migrateTraits(d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)))); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; odChoices = d.odChoices || {}; pendingConsequences = Array.isArray(d.pendingConsequences) ? d.pendingConsequences : []; recentEvents = Array.isArray(d.recentEvents) ? d.recentEvents : [];
         // A save from before routes existed gets a fresh map with its whole current tier open.
         sectorMap = (d.sectorMap && Array.isArray(d.sectorMap.nodes)) ? d.sectorMap : generateSectorMap();
         currentNodeId = d.currentNodeId || null;
@@ -1957,8 +1959,47 @@ function reachNote(move, attacker, dist) {
 }
 function isOutOfDepth(move, dist) { return isMelee(move) && dist >= FRONT_RANKS; }
 
-const OVERDRIVE_NAMES = { BRUISER: 'EARTHSHAKER', MEDIC: 'FIELD REVIVE', SCAVENGER: 'SCRAP STORM',
-    PYROMANIAC: 'HELLFIRE', SHOTGUNNER: 'BREACH CHARGE', SNIPER: 'HEADSHOT', HOUND: 'APEX PREDATOR' };
+// Momentum used to be a fuse: the bar filled, and at 100% there was exactly one thing to do
+// with it. It is a market now - three tactics at low prices, spendable on any operator's turn
+// without costing the action, with the full overdrive still waiting at the top.
+const MOMENTUM_TACTICS = [
+    { id: 'FOCUS', cost: 25, label: 'FOCUS',  desc: "The squad's next attack deals +30% damage." },
+    { id: 'STIM',  cost: 30, label: 'STIM',   desc: 'Cleanse and patch the worst-off operator for 20% health.' },
+    { id: 'PRESS', cost: 40, label: 'PRESS',  desc: 'The current operator acts twice this turn.' }
+];
+let momentumFocus = 0; let pressExtra = false;
+
+// Each class carries two overdrives. The first full bar of a run offers both; using one locks
+// the class to it for the rest of the expedition, so the choice is exercised, not configured.
+const OVERDRIVES = {
+    BRUISER: [
+        { id: 'EARTHSHAKER', name: 'EARTHSHAKER', desc: 'Hit everything for 1.5x and stun the line.' },
+        { id: 'SIEGEBREAKER', name: 'SIEGEBREAKER', desc: 'One target: 3.2x, armour stripped and corroded.' }],
+    MEDIC: [
+        { id: 'FIELD_REVIVE', name: 'FIELD REVIVE', desc: 'Revive or restore one operator to half health.' },
+        { id: 'TRIAGE_PROTOCOL', name: 'TRIAGE PROTOCOL', desc: 'Heal every standing operator 35% and cleanse the squad.' }],
+    SCAVENGER: [
+        { id: 'SCRAP_STORM', name: 'SCRAP STORM', desc: 'Hit everything for 1.2x energy.' },
+        { id: 'BOOBY_TRAP', name: 'BOOBY TRAP', desc: 'Hit everything for 0.6x energy, corrode and oil it all.' }],
+    PYROMANIAC: [
+        { id: 'HELLFIRE', name: 'HELLFIRE', desc: 'Hit everything for 2x energy, oiled and bleeding.' },
+        { id: 'BACKBURNER', name: 'BACKBURNER', desc: 'One target: 3.2x energy, burning for 3 turns.' }],
+    SHOTGUNNER: [
+        { id: 'BREACH_CHARGE', name: 'BREACH CHARGE', desc: 'One target: armour stripped, 3x damage.' },
+        { id: 'SCATTERSTORM', name: 'SCATTERSTORM', desc: 'Hit everything for 1.4x and stun the front.' }],
+    SNIPER: [
+        { id: 'HEADSHOT', name: 'HEADSHOT', desc: 'Execute one target outright (4x against a commander).' },
+        { id: 'OVERWATCH', name: 'OVERWATCH', desc: 'Hit everything for 1.2x and mark it all for 3 turns.' }],
+    HOUND: [
+        { id: 'APEX_PREDATOR', name: 'APEX PREDATOR', desc: 'Heal to full, savage one target for 2.5x bio.' },
+        { id: 'BLOOD_SCENT', name: 'BLOOD SCENT', desc: 'Hit everything for 1.5x bio and open bleeds.' }]
+};
+let odChoices = {}; let pendingOverdrive = null;
+
+function overdriveFor(classType) {
+    const pair = OVERDRIVES[classType] || [];
+    return pair.find(o => o.id === odChoices[classType]) || pair[0] || { id: 'ULTIMATE', name: 'ULTIMATE' };
+}
 
 // Anything else striking a marked target still gets the mark's smaller bonus and spends it.
 const MARK_BONUS = 1.5;
@@ -2027,6 +2068,7 @@ function initiateCombat(nodeType, isEliteNode) {
     // be cleared here or it rides into the next node.
     playerRoster.forEach(ent => { ent.stunnedTurns = 0; ent.bleedingTurns = 0; ent.armorTurns = 0; ent.armor = 0;
         ent.oiledTurns = 0; ent.corrodedTurns = 0; ent.markedTurns = 0; ent.guardTurns = 0; });
+    momentumFocus = 0; pressExtra = false; pendingOverdrive = null;
     // HP keeps the steep 1.5x-per-sector curve; damage climbs far more slowly so a deep fight
     // is dangerous rather than an unavoidable one-shot. Player power compounds through
     // repeatable percentage perks, which is what makes the curve climbable at all.
@@ -2140,8 +2182,24 @@ function renderCommandDeck() {
     let cds = aE.cooldowns; let deckHtml = '';
 
     if (momentum >= overdriveAt()) {
-        const odName = OVERDRIVE_NAMES[aE.classType] || 'ULTIMATE';
-        deckHtml += `<button class="title-btn btn-overdrive" data-action="queue" data-move="OVERDRIVE">OVERDRIVE: ${odName}</button>`;
+        const pair = OVERDRIVES[aE.classType] || [];
+        if (!odChoices[aE.classType] && pair.length === 2) {
+            // The first full bar of the run: both options on the table, and using one is choosing.
+            pair.forEach(o => {
+                deckHtml += `<button class="title-btn btn-overdrive" data-action="queue" data-move="OVERDRIVE" data-variant="${o.id}" title="${o.desc}">OVERDRIVE: ${o.name}</button>`;
+            });
+        } else {
+            const o = overdriveFor(aE.classType);
+            deckHtml += `<button class="title-btn btn-overdrive" data-action="queue" data-move="OVERDRIVE" data-variant="${o.id}" title="${o.desc}">OVERDRIVE: ${o.name}</button>`;
+        }
+    }
+
+    // The tactics row: cheap spends that do not cost the action. Rendered whenever any is
+    // affordable, so the price of holding for the overdrive is always visible.
+    if (!pendingAction && MOMENTUM_TACTICS.some(t => momentum >= t.cost)) {
+        deckHtml += `<div class="tactic-row">` + MOMENTUM_TACTICS.map(t =>
+            `<button class="tactic-btn" ${momentum < t.cost ? 'disabled' : ''} ${t.id === 'STIM' && !stimTarget() ? 'disabled' : ''} data-action="tactic" data-kind="${t.id}" title="${t.desc}">⚡${t.label} ${t.cost}</button>`
+        ).join('') + `</div>`;
     }
 
     // A pairing is only worth surfacing if the player can act on it now, so the button is flagged
@@ -2209,8 +2267,40 @@ function applyTurnStartEffects(ent) {
     if (chg) renderField();
 }
 
+function stimTarget() {
+    const hurt = activeEntities.filter(e => e.isPlayer && e.hp > 0 &&
+        (e.hp < e.maxHp || e.bleedingTurns > 0 || e.stunnedTurns > 0 || e.oiledTurns > 0));
+    return hurt.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0] || null;
+}
+
+function spendTactic(kind) {
+    const tactic = MOMENTUM_TACTICS.find(t => t.id === kind);
+    if (!tactic || !combatActive || momentum < tactic.cost) return;
+    const actor = turnQueue[activeIndex];
+    if (!actor || !actor.isPlayer) return;
+    if (kind === 'STIM' && !stimTarget()) return;
+    momentum -= tactic.cost; addMomentum(0);
+    if (kind === 'FOCUS') {
+        momentumFocus = 1;
+        log('> FOCUS: the next attack hits harder.', 'log-combo');
+        spawnFCT(actor.id, 'FOCUSED', 'fct-combo'); playSFX('click');
+    } else if (kind === 'STIM') {
+        const t = stimTarget() || actor;
+        t.bleedingTurns = 0; t.stunnedTurns = 0; t.oiledTurns = 0;
+        const heal = Math.max(1, Math.floor(t.maxHp * 0.2));
+        t.hp = Math.min(t.maxHp, t.hp + heal);
+        log(`> STIM: ${t.name} cleansed and patched for ${heal}.`, 'log-heal');
+        spawnFCT(t.id, `+${heal}`, 'fct-heal'); playSFX('heal');
+    } else if (kind === 'PRESS') {
+        pressExtra = true;
+        log(`> PRESS: ${actor.name} will act twice.`, 'log-combo');
+        spawnFCT(actor.id, 'PRESSING', 'fct-combo'); playSFX('combo');
+    }
+    renderField();
+}
+
 function skipStunnedTurn() { turnQueue[activeIndex].stunnedTurns--; renderField(); setTimeout(nextTurn, 500 * globalSettings.combatSpeed); }
-function queueAction(a) { pendingAction = a; renderField(); }
+function queueAction(a, variant) { pendingAction = a; if (a === 'OVERDRIVE') pendingOverdrive = variant || null; renderField(); }
 function cancelAction() { pendingAction = null; renderField(); }
 
 function resolveAction(targetId) {
@@ -2219,24 +2309,54 @@ function resolveAction(targetId) {
     let dist = livingEnemies.findIndex(e => e.id === targetId);
 
     if (pendingAction === 'OVERDRIVE') {
+        const cls = actEnt.classType;
+        const pair = OVERDRIVES[cls] || [];
+        const variant = pair.find(o => o.id === pendingOverdrive) || overdriveFor(cls);
+        // First use is the choice: the class fights the rest of the run with this one.
+        if (!odChoices[cls] && pair.some(o => o.id === variant.id)) odChoices[cls] = variant.id;
+        pendingOverdrive = null;
         momentum = 0; addMomentum(0); playSFX('overdrive'); triggerGlitch();
-        log(`> ${actEnt.name} unleashed OVERDRIVE!`, "log-combo");
+        log(`> ${actEnt.name} unleashed ${variant.name}!`, "log-combo");
+        const all = fn => { triggerShake(); livingEnemies.forEach(fn); };
 
-        if (actEnt.classType === 'BRUISER') { 
-            triggerShake(); livingEnemies.forEach(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.5, 'phys', null); e.stunnedTurns = 1; spawnFCT(e.id, "STUNNED", "fct-status"); });
-        } else if (actEnt.classType === 'MEDIC') { 
-            target.hp = Math.floor(target.maxHp * 0.5); target.stunnedTurns = 0; target.bleedingTurns = 0; 
+        if (variant.id === 'EARTHSHAKER') {
+            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.5, 'phys', null); e.stunnedTurns = 1; spawnFCT(e.id, "STUNNED", "fct-status"); });
+        } else if (variant.id === 'SIEGEBREAKER') {
+            target.armor = 0; target.armorTurns = 0; target.corrodedTurns = 3;
+            applyDamageHit(actEnt, target, actEnt.dmgBase * 3.2, 'phys', null);
+        } else if (variant.id === 'FIELD_REVIVE') {
+            target.hp = Math.max(target.hp, Math.floor(target.maxHp * 0.5)); target.stunnedTurns = 0; target.bleedingTurns = 0;
             spawnFCT(target.id, "REVIVED", "fct-heal"); playSFX('heal');
-        } else if (actEnt.classType === 'SCAVENGER') { 
-            triggerShake(); livingEnemies.forEach(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.2, 'energy', null); });
-        } else if (actEnt.classType === 'PYROMANIAC') { 
-            triggerShake(); livingEnemies.forEach(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 2.0, 'energy', null); e.oiledTurns = 3; e.bleedingTurns = 3; });
-        } else if (actEnt.classType === 'SHOTGUNNER') { 
+        } else if (variant.id === 'TRIAGE_PROTOCOL') {
+            activeEntities.filter(e => e.isPlayer && e.hp > 0).forEach(a => {
+                a.hp = Math.min(a.maxHp, a.hp + Math.floor(a.maxHp * 0.35));
+                a.bleedingTurns = 0; a.stunnedTurns = 0; a.oiledTurns = 0;
+                spawnFCT(a.id, "TRIAGED", "fct-heal");
+            });
+            playSFX('heal');
+        } else if (variant.id === 'SCRAP_STORM') {
+            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.2, 'energy', null); });
+        } else if (variant.id === 'BOOBY_TRAP') {
+            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 0.6, 'energy', null); e.corrodedTurns = 3; e.oiledTurns = 3; spawnFCT(e.id, "RIGGED", "fct-weak"); });
+        } else if (variant.id === 'HELLFIRE') {
+            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 2.0, 'energy', null); e.oiledTurns = 3; e.bleedingTurns = 3; });
+        } else if (variant.id === 'BACKBURNER') {
+            applyDamageHit(actEnt, target, actEnt.dmgBase * 3.2, 'energy', null);
+            if (target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns, 3); spawnFCT(target.id, "BURNING", "fct-weak"); }
+        } else if (variant.id === 'BREACH_CHARGE') {
             target.armor = 0; target.armorTurns = 0; applyDamageHit(actEnt, target, actEnt.dmgBase * 3.0, 'phys', null);
-        } else if (actEnt.classType === 'SNIPER') { 
+        } else if (variant.id === 'SCATTERSTORM') {
+            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.4, 'phys', null); });
+            const front = livingEnemies.find(e => e.hp > 0);
+            if (front) { front.stunnedTurns = 1; spawnFCT(front.id, "STUNNED", "fct-status"); }
+        } else if (variant.id === 'HEADSHOT') {
             let d = target.classType === 'BOSS' ? actEnt.dmgBase * 4.0 : target.maxHp; applyDamageHit(actEnt, target, d, 'phys', null);
-        } else if (actEnt.classType === 'HOUND') { 
+        } else if (variant.id === 'OVERWATCH') {
+            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.2, 'phys', null); if (e.hp > 0) { e.markedTurns = 3; spawnFCT(e.id, "MARKED", "fct-status"); } });
+        } else if (variant.id === 'APEX_PREDATOR') {
             actEnt.hp = actEnt.maxHp; applyDamageHit(actEnt, target, actEnt.dmgBase * 2.5, 'bio', null); target.bleedingTurns = 3;
+        } else if (variant.id === 'BLOOD_SCENT') {
+            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.5, 'bio', null); if (e.hp > 0) e.bleedingTurns = Math.max(e.bleedingTurns, 3); });
         }
         pendingAction = null; checkWinState(); return;
     }
@@ -2272,6 +2392,7 @@ function resolveAction(targetId) {
         if (pendingAction === 'SPOTTERS_MARK') { dmgMult = 0.4; actEnt.cooldowns.spotters_mark = 3; }
         if (pendingAction === 'RIP_AND_TEAR') { dmgMult *= 1.2; actEnt.cooldowns.rip_and_tear = 3; }
 
+        if (momentumFocus > 0) { dmgMult *= 1.3; momentumFocus = 0; spawnFCT(actEnt.id, 'FOCUSED', 'fct-combo'); }
         // Where the two of them are standing, before anything else is figured in.
         const reach = reachMult(pendingAction, actEnt, dist);
         if (reach < 1) { dmgMult *= reach; log(`> ${actEnt.name} is reaching (${Math.round(reach * 100)}% DMG).`, "log-status"); }
@@ -2543,6 +2664,12 @@ function checkWinState() {
 
         document.getElementById('command-deck').innerHTML = `<button data-action="loot" data-amount="${s}">LOOT ${s}</button>`; combatActive = false; stopAmbience(); 
     } 
+    else if (pressExtra && turnQueue[activeIndex] && turnQueue[activeIndex].isPlayer && turnQueue[activeIndex].hp > 0) {
+        // A pressed operator holds the floor: the queue stays put and the deck re-opens.
+        pressExtra = false;
+        log(`> ${turnQueue[activeIndex].name} presses the advantage.`, 'log-combo');
+        renderField();
+    }
     else { if (pendingAction === null) setTimeout(nextTurn, 800 * globalSettings.combatSpeed); }
 }
 
@@ -2565,9 +2692,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, executeSelfAction, resolveConsumableItem, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, OVERDRIVE_NAMES, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
@@ -2590,6 +2717,10 @@ globalThis.WP = {
     get tuneUpBattles() { return tuneUpBattles; }, set tuneUpBattles(v) { tuneUpBattles = v; },
     get activeBounties() { return activeBounties; }, set activeBounties(v) { activeBounties = v; },
     get momentum() { return momentum; }, set momentum(v) { momentum = v; },
+    get momentumFocus() { return momentumFocus; }, set momentumFocus(v) { momentumFocus = v; },
+    get pressExtra() { return pressExtra; }, set pressExtra(v) { pressExtra = v; },
+    get odChoices() { return odChoices; }, set odChoices(v) { odChoices = v; },
+    get pendingOverdrive() { return pendingOverdrive; }, set pendingOverdrive(v) { pendingOverdrive = v; },
     get activeRelics() { return activeRelics; }, set activeRelics(v) { activeRelics = v; },
     get pendingRelicOffer() { return pendingRelicOffer; }, set pendingRelicOffer(v) { pendingRelicOffer = v; },
     get combatBgFile() { return combatBgFile; }, set combatBgFile(v) { combatBgFile = v; },

@@ -386,7 +386,7 @@ module.exports = {
         window.__duel(c); pendingAction = null; renderField();
         rendered[c] = [...document.querySelectorAll('#command-deck [data-move]')].map(b => b.dataset.move);
       });
-      return { declared, rendered, overdrive: Object.keys(OVERDRIVE_NAMES) };
+      return { declared, rendered, overdrive: Object.keys(OVERDRIVES) };
     });
     ok('every class in the table renders exactly what it declares',
       Object.keys(fromTable.declared).every(c => fromTable.declared[c].join() === fromTable.rendered[c].join()));
