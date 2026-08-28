@@ -60,13 +60,13 @@ let audioCtx = null;
 let currentSlot = 1;
 let globalSettings = { combatSpeed: 1.0, sfx: true };
 
-let bossSkulls = 0; let metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0 };
+let bossSkulls = 0; let metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0, vault: 0, heirloom: null };
 let scrap = 0; let currentTier = 1; let currentSector = 1; let difficultyMult = 1.0; 
 let inventory = []; let materials = { parts: 0, chems: 0, tech: 0 }; 
 let tuneUpBattles = 0; 
 let activeBounties = []; 
 let momentum = 0;
-let activeRelics = [];
+let activeRelics = []; let pendingRelicOffer = null;
 
 let combatBgFile = 'bg_combat.webp'; let pendingCombat = null;
 let runStats = null;
@@ -142,19 +142,70 @@ const BOSS_POOL = [
 // ten times over.
 function bossForSector(sector = currentSector) { return BOSS_POOL[(Math.max(1, sector) - 1) % BOSS_POOL.length]; }
 
+// Four relics and one elite node per sector meant the whole pool was owned by sector four and
+// every elite fight after that dropped nothing. Fourteen now, in two tiers: commons are the
+// steady multipliers, rares hook into the systems the squad actually plays around.
 const RELIC_POOL = [
-    { id: 'THERMAL_CORE', name: "Thermal Core", desc: "Energy attacks deal +30% DMG." },
-    { id: 'KINETIC_MESH', name: "Kinetic Mesh", desc: "Frontline position takes -25% Physical DMG." },
-    { id: 'BLOOD_VIAL', name: "Blood Vial", desc: "Bio attacks heal attacker for 5 HP." },
-    { id: 'SCRAP_MAGNET', name: "Scrap Magnet", desc: "Gain +15 Scrap after every combat." }
+    { id: 'SCRAP_MAGNET',      tier: 'COMMON', name: "Scrap Magnet",      desc: "Gain +15 Scrap after every combat." },
+    { id: 'THERMAL_CORE',      tier: 'COMMON', name: "Thermal Core",      desc: "Energy attacks deal +30% DMG." },
+    { id: 'BLOOD_VIAL',        tier: 'COMMON', name: "Blood Vial",        desc: "Bio attacks heal the attacker 5 HP." },
+    { id: 'KINETIC_MESH',      tier: 'COMMON', name: "Kinetic Mesh",      desc: "The front rank takes -25% Physical DMG." },
+    { id: 'WHETSTONE',         tier: 'COMMON', name: "Whetstone",         desc: "Melee abilities deal +20% DMG." },
+    { id: 'RANGEFINDER',       tier: 'COMMON', name: "Rangefinder",       desc: "Ranged abilities deal +15% DMG." },
+    { id: 'FIELD_DRESSING',    tier: 'COMMON', name: "Field Dressing",    desc: "Bleeding on your squad deals half damage." },
+    { id: 'SALVAGE_RIG',       tier: 'COMMON', name: "Salvage Rig",       desc: "Salvage one extra material after every combat." },
+    { id: 'VULTURES_INSTINCT', tier: 'RARE',   name: "Vulture's Instinct", desc: "Combos deal +25% DMG." },
+    { id: 'CHEM_ETCHER',       tier: 'RARE',   name: "Chem Etcher",       desc: "Corroded targets take +25% DMG from everything." },
+    { id: 'AMMO_HOIST',        tier: 'RARE',   name: "Ammo Hoist",        desc: "Ability cooldowns are one turn shorter." },
+    { id: 'BULWARK_PLATING',   tier: 'RARE',   name: "Bulwark Plating",   desc: "A covered hit lands for 35% instead of 60%." },
+    { id: 'SIGNAL_JAMMER',     tier: 'RARE',   name: "Signal Jammer",     desc: "Enemies never flank your line." },
+    { id: 'OVERCHARGED_CELL',  tier: 'RARE',   name: "Overcharged Cell",  desc: "Overdrive charges at 80% momentum." }
 ];
+// A run deep enough to own the whole pool still gets paid for the fight, on the same curve as
+// every other reward - a flat figure would be worth nothing by the depth it starts appearing at.
+const EMPTY_POOL_SCRAP = 150;
+function emptyPoolScrap() { return Math.floor(EMPTY_POOL_SCRAP * sectorRewardMult()); }
+const OVERDRIVE_AT = 100;
+const OVERDRIVE_AT_CHARGED = 80;
 
+function hasRelic(id) { return activeRelics.some(r => r.id === id); }
+function overdriveAt() { return hasRelic('OVERCHARGED_CELL') ? OVERDRIVE_AT_CHARGED : OVERDRIVE_AT; }
+function unownedRelics(tier) {
+    return RELIC_POOL.filter(r => !hasRelic(r.id) && (!tier || r.tier === tier));
+}
+
+// An elite drops one, leaning common; a rare is the thing worth hoping for rather than the norm.
+function rollRelic(rareChance = 0.3) {
+    const wantRare = Math.random() < rareChance;
+    const first = unownedRelics(wantRare ? 'RARE' : 'COMMON');
+    const pool = first.length ? first : unownedRelics();
+    if (!pool.length) return null;
+    return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// A commander is worth a real decision, so it offers three rather than handing over one.
+function rollRelicOffer(count = 3) {
+    const rares = unownedRelics('RARE'), commons = unownedRelics('COMMON');
+    const shuffle = a => [...a].sort(() => Math.random() - 0.5);
+    const offer = [...shuffle(rares).slice(0, 1), ...shuffle(commons)];
+    const seen = new Set(); const out = [];
+    for (const r of [...offer, ...shuffle(rares)]) {
+        if (seen.has(r.id)) continue; seen.add(r.id); out.push(r);
+        if (out.length === count) break;
+    }
+    return out;
+}
+
+// Read bottom-up: the last row is tier 1, the first row is the boss. The only elite sat at
+// tier 9, one row below the commander, so a sector offered exactly one elite fight and it came
+// right at the end. A second one mid-sector gives a run two chances at a relic - and makes the
+// board's 'defeat 2 elite squads' contract possible, which it was not before.
 const SECTOR_LAYOUT = [
     [{type:'BOSS', elite:false}], 
     [{type:'RAIDERS', elite:true}, {type:'BEASTS', elite:false}], 
     [{type:'MECH', elite:false}, {type:'RAIDERS', elite:false}],   
     [{type:'EVENT', elite:false}, {type:'RAIDERS', elite:false}], 
-    [{type:'MECH', elite:false}, {type:'BEASTS', elite:false}], 
+    [{type:'MECH', elite:true}, {type:'BEASTS', elite:false}], 
     [{type:'CAMP', elite:false}, {type:'BEASTS', elite:false}, {type:'RAIDERS', elite:false}], 
     [{type:'MECH', elite:false}, {type:'RAIDERS', elite:false}],   
     [{type:'EVENT', elite:false}, {type:'CAMP', elite:false}], 
@@ -209,6 +260,7 @@ const ACTIONS = {
     'new-game':         el => confirmNewGame(parseFloat(el.dataset.diff)),
     'slot':             el => selectSlot(Number(el.dataset.slot), el.dataset.exists === '1'),
     'buy-meta':         el => buyMetaUpgrade(el.dataset.kind),
+    'take-relic':       el => takeRelic(Number(el.dataset.index)),
     'erase-slot':       el => { Store.remove(BASE_SAVE_KEY + Number(el.dataset.slot)); renderTitleScreen(); },
     'dev-open':         () => renderDev(),
     'dev-exit':         () => renderMap(),
@@ -336,7 +388,7 @@ function addMomentum(amt) {
     momentum = Math.max(0, Math.min(100, momentum + amt));
     const fill = document.getElementById('momentum-fill'); const txt = document.getElementById('momentum-txt');
     if (fill) fill.style.width = momentum + '%';
-    if (txt) txt.innerText = momentum >= 100 ? 'MOMENTUM: FULL — OVERDRIVE READY' : `MOMENTUM: ${momentum}%`;
+    if (txt) txt.innerText = momentum >= overdriveAt() ? 'MOMENTUM: FULL — OVERDRIVE READY' : `MOMENTUM: ${momentum}%`;
 }
 
 const BOUNTY_POOL = [
@@ -494,9 +546,27 @@ function endRun() {
     const isBest = score > bestScore;
     if (isBest) bestScore = score;
     if (runStats.deepestSector > bestSector) bestSector = runStats.deepestSector;
+    stashHeirloom();
     saveMeta();
     Store.remove(BASE_SAVE_KEY + currentSlot);
     renderRunOver(score, isBest);
+}
+
+// The Vault keeps one relic across the wipe. Which one is not left to chance or to whichever
+// happened to drop first: it takes the best you were holding, rares before commons, and among
+// equals the one you found first - so chasing a rare is worth doing on a run you expect to lose.
+function heirloomFrom(relics) {
+    if (!relics || relics.length === 0) return null;
+    return relics.find(r => r.tier === 'RARE') || relics[0];
+}
+function stashHeirloom() {
+    if (!metaUpgrades.vault) return;
+    const keep = heirloomFrom(activeRelics);
+    metaUpgrades.heirloom = keep ? keep.id : null;
+}
+function heirloomRelic() {
+    if (!metaUpgrades.vault || !metaUpgrades.heirloom) return null;
+    return RELIC_POOL.find(r => r.id === metaUpgrades.heirloom) || null;
 }
 
 function renderRunOver(score, isBest) {
@@ -521,7 +591,32 @@ function renderRunOver(score, isBest) {
         `<button class="event-btn" data-action="title">RETURN TO TITLE</button>`;
 }
 
-function collectLoot(amount) { scrap += amount; if (runStats) { runStats.scrapEarned += amount; runStats.nodes++; } currentTier++; noteDepth(); momentum = 0; addMomentum(0); activeEntities = []; turnQueue = []; pendingCombat = null; saveGameState(); renderMap(); }
+function collectLoot(amount) {
+    scrap += amount; if (runStats) { runStats.scrapEarned += amount; runStats.nodes++; }
+    currentTier++; noteDepth(); momentum = 0; addMomentum(0);
+    activeEntities = []; turnQueue = []; pendingCombat = null; saveGameState();
+    // A commander's reward is a decision, so it interrupts the return to the map rather than
+    // being resolved silently behind it.
+    if (pendingRelicOffer && pendingRelicOffer.length) { renderRelicOffer(); return; }
+    renderMap();
+}
+
+function renderRelicOffer() {
+    switchScreen('screen-relic');
+    const c = document.getElementById('relic-choices');
+    c.innerHTML = pendingRelicOffer.map((r, i) =>
+        `<button class="relic-card relic-${r.tier.toLowerCase()}" data-action="take-relic" data-index="${i}">
+            <span class="relic-card-tier">${r.tier}</span>
+            <span class="relic-card-name">♦ ${r.name}</span>
+            <span class="relic-card-desc">${r.desc}</span>
+        </button>`).join('');
+}
+
+function takeRelic(index) {
+    const pick = pendingRelicOffer && pendingRelicOffer[index];
+    if (pick && !hasRelic(pick.id)) activeRelics.push(pick);
+    pendingRelicOffer = null; saveGameState(); renderMap();
+}
 
 let bestScore = 0; let bestSector = 0;
 
@@ -561,6 +656,8 @@ function loadMeta() {
             metaUpgrades.startScrap = Math.max(metaUpgrades.startScrap, d.metaUpgrades.startScrap || 0);
             metaUpgrades.startLevel = Math.max(metaUpgrades.startLevel, d.metaUpgrades.startLevel || 1);
             metaUpgrades.invMax = Math.max(metaUpgrades.invMax, d.metaUpgrades.invMax || 4);
+            metaUpgrades.vault = Math.max(metaUpgrades.vault || 0, d.metaUpgrades.vault || 0);
+            metaUpgrades.heirloom = d.metaUpgrades.heirloom || metaUpgrades.heirloom || null;
         }
     }
     saveMeta();
@@ -649,7 +746,9 @@ function confirmNewGame(diff) {
     difficultyMult = diff; currentSector = 1; currentTier = 1; tuneUpBattles = 0; momentum = 0;
     scrap = metaUpgrades.startScrap || 0; inventory = ['MED_STIM']; materials = { parts: 0, chems: 0, tech: 0 }; 
     playerRoster = migrateTraits(JSON.parse(JSON.stringify(ROSTER_TEMPLATE)));
-    activeBounties = generateBounties(); activeRelics = []; runStats = newRunStats();
+    activeBounties = generateBounties(); runStats = newRunStats(); pendingRelicOffer = null;
+    const kept = heirloomRelic();
+    activeRelics = kept ? [kept] : [];
     
     playerRoster.forEach(p => { 
         let q = QUIRK_POOL[Math.floor(Math.random() * QUIRK_POOL.length)];
@@ -660,7 +759,12 @@ function confirmNewGame(diff) {
     saveGameState(); renderMap(); 
 }
 
-function continueGame() { loadGameState(); addMomentum(0); if (pendingCombat) resumeCombat(pendingCombat); else renderMap(); }
+function continueGame() {
+    loadGameState(); addMomentum(0);
+    if (pendingCombat) return resumeCombat(pendingCombat);
+    if (pendingRelicOffer && pendingRelicOffer.length) return renderRelicOffer();
+    renderMap();
+}
 
 // Rebuilds a fight from its snapshot. Player entries are looked up in playerRoster by id so
 // damage keeps landing on the live roster objects rather than on detached copies.
@@ -689,8 +793,15 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, activeRelics, runStats, combat: buildCombatSnapshot() })); }
-function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = migrateAssetPaths(migrateTraits(d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)))); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; activeRelics = d.activeRelics || []; pendingCombat = d.combat || null;
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
+
+// A relic written to a save before the pool was tiered carries the old wording and no tier, so
+// it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
+// is dropped rather than left as a relic that does nothing.
+function migrateRelics(saved) {
+    return (saved || []).map(r => RELIC_POOL.find(p => p.id === (r && r.id))).filter(Boolean);
+}
+function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = migrateAssetPaths(migrateTraits(d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)))); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; activeRelics = migrateRelics(d.activeRelics); pendingRelicOffer = migrateRelics((d.relicOffer || []).map(id => ({ id }))); if (!pendingRelicOffer.length) pendingRelicOffer = null; pendingCombat = d.combat || null;
         if (pendingCombat) {
             migrateAssetPaths(pendingCombat.enemies);
             if (typeof pendingCombat.bgFile === 'string') pendingCombat.bgFile = pendingCombat.bgFile.replace(/\.png$/, '.webp');
@@ -784,7 +895,8 @@ function devGive(kind) {
     else if (kind === 'HEAL') playerRoster.forEach(c => { c.hp = c.maxHp; c.stunnedTurns = 0; c.bleedingTurns = 0; });
     else if (kind === 'LEVEL') playerRoster.forEach(c => awardXp(c, c.xpToNext - c.xp));
     else if (kind === 'PERKS') playerRoster.forEach(c => { c.perkPoints += 3; });
-    else if (kind === 'RELIC') { const left = RELIC_POOL.filter(r => !activeRelics.some(a => a.id === r.id)); if (left.length) activeRelics.push(left[0]); }
+    else if (kind === 'RELIC') { const left = unownedRelics(); if (left.length) activeRelics.push(left[0]); }
+    else if (kind === 'OFFER') { pendingRelicOffer = rollRelicOffer(); renderRelicOffer(); return; }
     else if (kind === 'REGROUP') { if (runStats) runStats.regroups = totalRegroups(); }
     saveGameState(); renderDev();
 }
@@ -795,8 +907,16 @@ function devResolve(win) {
     checkWinState();
 }
 
-function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`; document.getElementById('meta-lbl-scrap').innerText = `LVL ${metaUpgrades.startScrap / 50}`; document.getElementById('meta-lbl-level').innerText = `LVL ${metaUpgrades.startLevel - 1}`; document.getElementById('meta-lbl-inv').innerText = `LVL ${metaUpgrades.invMax - 4}`; document.getElementById('meta-lbl-regroup').innerText = `LVL ${metaUpgrades.extraRegroups || 0}`; }
-function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossSkulls -= 1; metaUpgrades.startScrap += 50; } else if (type === 'LEVEL' && bossSkulls >= 2) { bossSkulls -= 2; metaUpgrades.startLevel += 1; } else if (type === 'INV' && bossSkulls >= 3) { bossSkulls -= 3; metaUpgrades.invMax += 1; } else if (type === 'REGROUP' && bossSkulls >= 4) { bossSkulls -= 4; metaUpgrades.extraRegroups = (metaUpgrades.extraRegroups || 0) + 1; } saveMeta(); renderCitadel(); }
+function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`; document.getElementById('meta-lbl-scrap').innerText = `LVL ${metaUpgrades.startScrap / 50}`; document.getElementById('meta-lbl-level').innerText = `LVL ${metaUpgrades.startLevel - 1}`; document.getElementById('meta-lbl-inv').innerText = `LVL ${metaUpgrades.invMax - 4}`; document.getElementById('meta-lbl-regroup').innerText = `LVL ${metaUpgrades.extraRegroups || 0}`;
+    const kept = heirloomRelic();
+    document.getElementById('meta-lbl-vault').innerText = metaUpgrades.vault ? (kept ? '♦ ARMED' : 'EMPTY') : 'LOCKED';
+    document.getElementById('meta-vault-desc').innerText = !metaUpgrades.vault
+        ? 'Your best relic survives the expedition and arms the next one.'
+        : kept ? `Holding ${kept.name} — the next expedition starts with it.`
+               : 'Unlocked. The next expedition that finds a relic will bank one here.';
+    const vBtn = document.querySelector('[data-kind="VAULT"]');
+    if (vBtn) { vBtn.disabled = !!metaUpgrades.vault; vBtn.innerText = metaUpgrades.vault ? 'UNLOCKED' : 'UNLOCK [COST: 5 💀]'; } }
+function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossSkulls -= 1; metaUpgrades.startScrap += 50; } else if (type === 'LEVEL' && bossSkulls >= 2) { bossSkulls -= 2; metaUpgrades.startLevel += 1; } else if (type === 'INV' && bossSkulls >= 3) { bossSkulls -= 3; metaUpgrades.invMax += 1; } else if (type === 'REGROUP' && bossSkulls >= 4) { bossSkulls -= 4; metaUpgrades.extraRegroups = (metaUpgrades.extraRegroups || 0) + 1; } else if (type === 'VAULT' && bossSkulls >= 5 && !metaUpgrades.vault) { bossSkulls -= 5; metaUpgrades.vault = 1; } saveMeta(); renderCitadel(); }
 
 function renderMap() {
     switchScreen('screen-map'); 
@@ -1011,7 +1131,7 @@ function rollIntent(enemy) {
         if (rand < 0.3) return { type: 'DEFEND', icon: '🛡️' };
         // A fast unit will go round the front rank rather than through it. Telegraphed a turn
         // ahead like every other intent, so the squad gets to answer it.
-        if (rand < 0.45 && enemy.speed >= 14) return intentFor('FLANK', enemy);
+        if (rand < 0.45 && enemy.speed >= 14 && !hasRelic('SIGNAL_JAMMER')) return intentFor('FLANK', enemy);
         return { type: 'ATTACK', icon: '⚔️' };
     }
 }
@@ -1361,7 +1481,7 @@ function renderCommandDeck() {
 
     let cds = aE.cooldowns; let deckHtml = '';
 
-    if (momentum >= 100) {
+    if (momentum >= overdriveAt()) {
         const odName = OVERDRIVE_NAMES[aE.classType] || 'ULTIMATE';
         deckHtml += `<button class="title-btn btn-overdrive" data-action="queue" data-move="OVERDRIVE">OVERDRIVE: ${odName}</button>`;
     }
@@ -1406,12 +1526,17 @@ function processTurn() {
 }
 
 function applyTurnStartEffects(ent) {
-    let chg = false; if (ent.isPlayer && ent.cooldowns) { for (let s in ent.cooldowns) { if (ent.cooldowns[s] > 0) { ent.cooldowns[s]--; chg = true; } } }
+    let chg = false;
+    if (ent.isPlayer && ent.cooldowns) {
+        const step = hasRelic('AMMO_HOIST') ? 2 : 1;
+        for (let s in ent.cooldowns) { if (ent.cooldowns[s] > 0) { ent.cooldowns[s] = Math.max(0, ent.cooldowns[s] - step); chg = true; } }
+    }
     
     if (currentWeather === 'TOXIC_SMOG') { let sDmg = Math.floor(2 * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - sDmg); log(`> ${ent.name} choked by Smog for ${sDmg} DMG.`, "log-dmg"); spawnFCT(ent.id, `-${sDmg}`, "fct-status"); chg = true; addMomentum(5); triggerHitFlash(ent.id); }
     if (currentWeather === 'SHRAPNEL_WINDS' && Math.random() < 0.3) { let shrapDmg = Math.floor(5 * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - shrapDmg); log(`> Shrapnel struck ${ent.name} for ${shrapDmg} DMG!`, "log-dmg"); spawnFCT(ent.id, `-${shrapDmg}`, "fct-dmg"); chg = true; addMomentum(5); triggerHitFlash(ent.id); }
 
-    if (ent.bleedingTurns > 0) { let b = Math.max(1, Math.floor(ent.maxHp * 0.08)); ent.hp = Math.max(0, ent.hp - b); log(`> ${ent.name} bleeds for ${b}.`, "log-dmg"); spawnFCT(ent.id, `-${b}`, "fct-dmg"); ent.bleedingTurns--; chg = true; if(ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); }
+    if (ent.bleedingTurns > 0) { let b = Math.max(1, Math.floor(ent.maxHp * 0.08));
+        if (ent.isPlayer && hasRelic('FIELD_DRESSING')) b = Math.max(1, Math.floor(b / 2)); ent.hp = Math.max(0, ent.hp - b); log(`> ${ent.name} bleeds for ${b}.`, "log-dmg"); spawnFCT(ent.id, `-${b}`, "fct-dmg"); ent.bleedingTurns--; chg = true; if(ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); }
     // Expiring temporary armour used to zero the unit's innate plating too, so any armoured
     // enemy that braced permanently lost the armour it started with.
     if (ent.armorTurns > 0) { ent.armorTurns--; if (ent.armorTurns === 0) { ent.armor = ent.baseArmor || 0; } chg = true; }
@@ -1506,7 +1631,10 @@ function resolveAction(targetId) {
             isCombo = true; comboType = 'MARKED!';
         }
 
-        if (activeRelics.some(r => r.id === 'THERMAL_CORE') && atkType === 'energy') { dmgMult *= 1.3; }
+        if (hasRelic('THERMAL_CORE') && atkType === 'energy') { dmgMult *= 1.3; }
+        if (hasRelic('WHETSTONE') && isMelee(pendingAction)) { dmgMult *= 1.2; }
+        if (hasRelic('RANGEFINDER') && isRanged(pendingAction)) { dmgMult *= 1.15; }
+        if (hasRelic('VULTURES_INSTINCT') && isCombo) { dmgMult *= 1.25; }
 
         // A sandstorm blinds anything fired across the field. This used to be a second hand-kept
         // list that had drifted - a thrown molotov was somehow unaffected - and now reads the
@@ -1528,7 +1656,7 @@ function resolveAction(targetId) {
              spawnFCT(actEnt.id, "+2", "fct-heal");
         }
 
-        if (activeRelics.some(r => r.id === 'BLOOD_VIAL') && atkType === 'bio' && actEnt.hp < actEnt.maxHp) {
+        if (hasRelic('BLOOD_VIAL') && atkType === 'bio' && actEnt.hp < actEnt.maxHp) {
             actEnt.hp = Math.min(actEnt.maxHp, actEnt.hp + 5);
             spawnFCT(actEnt.id, "+5", "fct-heal");
         }
@@ -1548,8 +1676,11 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     let armorCalc = (abilityStr === 'FERAL_BITE' || (target.corrodedTurns || 0) > 0) ? 0 : target.armor;
     if (target.oiledTurns > 0 && atkType === 'energy') resistValue -= 15; 
     
-    if (activeRelics.some(r => r.id === 'KINETIC_MESH') && target.isPlayer && target.gridPos === 1 && atkType === 'phys') {
+    if (hasRelic('KINETIC_MESH') && target.isPlayer && target.gridPos === 1 && atkType === 'phys') {
         calcDmg = Math.floor(calcDmg * 0.75);
+    }
+    if (hasRelic('CHEM_ETCHER') && !target.isPlayer && (target.corrodedTurns || 0) > 0) {
+        calcDmg = Math.floor(calcDmg * 1.25);
     }
 
     let netDmg = Math.max(1, calcDmg - resistValue - armorCalc); if (resistValue >= 100) netDmg = 0; target.hp = Math.max(0, target.hp - netDmg);
@@ -1679,7 +1810,7 @@ function executeEnemyAi(enemy) {
         
         if (intent.type === 'HEAVY') { rawDmg = Math.floor(rawDmg * 1.5); triggerShake(); }
         if (intercepted) {
-            rawDmg = Math.floor(rawDmg * 0.6);
+            rawDmg = Math.floor(rawDmg * (hasRelic('BULWARK_PLATING') ? 0.35 : 0.6));
             log(`> ${target.name} steps in front of ${intercepted.name}.`, "log-status");
             spawnFCT(target.id, "COVERED", "fct-heal");
         }
@@ -1721,19 +1852,23 @@ function checkWinState() {
         if (currentNodeType === 'BOSS') { bossSkulls++; if (runStats) runStats.bosses++; saveMeta(); log(`> VICTORY! Warlord Skull acquired!`, "log-heal"); }
         if (isCurrentNodeElite) {
             checkBountyProgress('ELITE'); if (runStats) runStats.elites++;
-            let availableRelics = RELIC_POOL.filter(r => !activeRelics.some(ar => ar.id === r.id));
-            if (availableRelics.length > 0) {
-                let rDrop = availableRelics[Math.floor(Math.random() * availableRelics.length)];
-                activeRelics.push(rDrop);
-                log(`> RELIC ACQUIRED: ${rDrop.name}!`, "log-combo");
-            }
+            const rDrop = rollRelic();
+            if (rDrop) { activeRelics.push(rDrop); log(`> RELIC ACQUIRED: ${rDrop.name}!`, "log-combo"); }
+            else { const b = emptyPoolScrap(); scrap += b; log(`> No relic left to find. Salvaged ${b} Scrap instead.`, "log-heal"); }
+        }
+        // A commander is worth a decision rather than a die roll, so it hands over three to
+        // choose between. The choice is staged and shown once the loot has been collected.
+        if (currentNodeType === 'BOSS') {
+            const offer = rollRelicOffer();
+            if (offer.length) pendingRelicOffer = offer;
+            else { const b = emptyPoolScrap(); scrap += b; log(`> Nothing left in the pool. Salvaged ${b} Scrap instead.`, "log-heal"); }
         }
 
         if (tuneUpBattles > 0) tuneUpBattles--; 
 
         let scrapMult = isCurrentNodeElite ? 2 : 1;
         let s = Math.floor((Math.floor(Math.random() * 30) + (currentTier * 20)) * scrapMult * sectorRewardMult()); 
-        if (activeRelics.some(r => r.id === 'SCRAP_MAGNET')) s += 15;
+        if (hasRelic('SCRAP_MAGNET')) s += 15;
         
         // Deployed survivors earn full XP; the bench trains at half rate so reserves stay
         // rotatable instead of falling permanently behind. Downed units earn nothing.
@@ -1743,7 +1878,7 @@ function checkWinState() {
             else if (char.gridPos === 0) awardXp(char, Math.floor(base * RESERVE_XP_RATE));
         });
 
-        let matDrops = (1 + Math.floor(Math.random() * 2)) * scrapMult;
+        let matDrops = (1 + Math.floor(Math.random() * 2)) * scrapMult + (hasRelic('SALVAGE_RIG') ? 1 : 0);
         for(let i=0; i<matDrops; i++) { let m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)]; materials[m]++; log(`> Salvaged: 1 ${m.toUpperCase()}`, "log-heal"); }
 
         document.getElementById('command-deck').innerHTML = `<button data-action="loot" data-amount="${s}">LOOT ${s}</button>`; combatActive = false; 
@@ -1770,9 +1905,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, initiateEvent, initiateCamp, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, OVERDRIVE_NAMES, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, SECTOR_LAYOUT, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, OVERDRIVE_NAMES, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },
@@ -1789,6 +1924,7 @@ globalThis.WP = {
     get activeBounties() { return activeBounties; }, set activeBounties(v) { activeBounties = v; },
     get momentum() { return momentum; }, set momentum(v) { momentum = v; },
     get activeRelics() { return activeRelics; }, set activeRelics(v) { activeRelics = v; },
+    get pendingRelicOffer() { return pendingRelicOffer; }, set pendingRelicOffer(v) { pendingRelicOffer = v; },
     get combatBgFile() { return combatBgFile; }, set combatBgFile(v) { combatBgFile = v; },
     get pendingCombat() { return pendingCombat; }, set pendingCombat(v) { pendingCombat = v; },
     get runStats() { return runStats; }, set runStats(v) { runStats = v; },
