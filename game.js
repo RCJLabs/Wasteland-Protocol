@@ -201,6 +201,92 @@ function quirkDmgMult(actEnt, target, dist) {
     return m;
 }
 
+// ── Bonds ───────────────────────────────────────────────────────────────────────────────
+// Two operators who fight together accumulate a bond, per run. Level I pays +5% damage
+// while both stand; at II, once per fight one steps in front of a killing blow aimed at
+// the other; at III the pair shares an overdrive discount. Rotating the squad resets
+// nothing but costs the pairs their momentum - the tension the muster is built on.
+const BOND_LEVELS = [4, 10, 18];   // fights together for I / II / III
+const BOND_NAMES = {
+    'BRUISER|MEDIC':        'Meat and Mender',
+    'BRUISER|SCAVENGER':    'Crowbar and Lockpick',
+    'BRUISER|PYROMANIAC':   'Anvil and Ember',
+    'BRUISER|SHOTGUNNER':   'Door and Doorbell',
+    'BRUISER|SNIPER':       'Hammer and Whisper',
+    'BRUISER|HOUND':        'Bear and Stray',
+    'MEDIC|SCAVENGER':      'Salvage and Sutures',
+    'MEDIC|PYROMANIAC':     'Burn Ward',
+    'MEDIC|SHOTGUNNER':     'Trauma Team',
+    'MEDIC|SNIPER':         'Steady Hands',
+    'HOUND|MEDIC':          'Stray',
+    'PYROMANIAC|SCAVENGER': 'Acid and Accelerant',
+    'SCAVENGER|SHOTGUNNER': 'Scrap and Slug',
+    'SCAVENGER|SNIPER':     'Magpie and Hawk',
+    'HOUND|SCAVENGER':      'Scent of Rust',
+    'PYROMANIAC|SHOTGUNNER':'Muzzle Flash',
+    'PYROMANIAC|SNIPER':    'Signal Fire',
+    'HOUND|PYROMANIAC':     'Singed Fur',
+    'SHOTGUNNER|SNIPER':    'Close and Far',
+    'HOUND|SHOTGUNNER':     'Point and Flush',
+    'HOUND|SNIPER':         'Spotter and Fang'
+};
+
+let bonds = {};                  // pair key -> fights survived together, this run
+let bondSavesUsed = new Set();   // pair keys whose step-in is spent this fight
+
+function bondKey(aId, bId) { return [aId, bId].sort().join('|'); }
+function bondName(a, b) { return BOND_NAMES[[a.classType, b.classType].sort().join('|')] || 'Comrades'; }
+function bondCount(aId, bId) { return bonds[bondKey(aId, bId)] || 0; }
+function bondLevel(aId, bId) {
+    const c = bondCount(aId, bId);
+    return c >= BOND_LEVELS[2] ? 3 : c >= BOND_LEVELS[1] ? 2 : c >= BOND_LEVELS[0] ? 1 : 0;
+}
+function bondDmgMult(ent) {
+    if (!ent || !ent.isPlayer) return 1;
+    return activeEntities.some(e => e.isPlayer && e.hp > 0 && e.id !== ent.id && bondLevel(ent.id, e.id) >= 1)
+        ? 1.05 : 1;
+}
+// Who steps in front of a killing blow aimed at t: the strongest standing level-II+ partner
+// whose pair has not already spent its save this fight.
+function bondSavior(t) {
+    if (!t || !t.isPlayer) return null;
+    const c = activeEntities
+        .filter(e => e.isPlayer && e.hp > 0 && e.id !== t.id && bondLevel(t.id, e.id) >= 2
+            && !bondSavesUsed.has(bondKey(t.id, e.id)))
+        .sort((a, b) => bondCount(t.id, b.id) - bondCount(t.id, a.id));
+    return c[0] || null;
+}
+function bondOverdriveDiscount() {
+    const ps = activeEntities.filter(e => e.isPlayer && e.hp > 0);
+    for (let i = 0; i < ps.length; i++)
+        for (let j = i + 1; j < ps.length; j++)
+            if (bondLevel(ps[i].id, ps[j].id) >= 3) return 10;
+    return 0;
+}
+// Called on victory: every deployed pair fought together, the fallen included - the fight
+// still counts for the pair that carried them out.
+function recordBonds() {
+    const fought = playerRoster.filter(c => c.gridPos > 0);
+    for (let i = 0; i < fought.length; i++)
+        for (let j = i + 1; j < fought.length; j++) {
+            const a = fought[i], b = fought[j];
+            const before = bondLevel(a.id, b.id);
+            bonds[bondKey(a.id, b.id)] = bondCount(a.id, b.id) + 1;
+            const after = bondLevel(a.id, b.id);
+            if (after > before)
+                log(`> Bond deepened: ${a.name} & ${b.name} are "${bondName(a, b)}" ${['', 'I', 'II', 'III'][after]}.`, 'log-heal');
+        }
+}
+// The strongest ties an operator holds, for the roster cards.
+function bondLineFor(char) {
+    return playerRoster
+        .filter(o => o.id !== char.id && bondLevel(char.id, o.id) >= 1)
+        .sort((a, b) => bondCount(char.id, b.id) - bondCount(char.id, a.id))
+        .slice(0, 2)
+        .map(o => `${bondName(char, o)} ${['', 'I', 'II', 'III'][bondLevel(char.id, o.id)]} (${o.name})`)
+        .join(' · ');
+}
+
 // Perks are repeatable. The percentage ones compound with each pick, which is the player's
 // only multiplicative axis against enemies that scale exponentially - see PERK note in
 // initiateCombat.
@@ -288,7 +374,7 @@ const OVERDRIVE_AT = 100;
 const OVERDRIVE_AT_CHARGED = 80;
 
 function hasRelic(id) { return activeRelics.some(r => r.id === id); }
-function overdriveAt() { return hasRelic('OVERCHARGED_CELL') ? OVERDRIVE_AT_CHARGED : OVERDRIVE_AT; }
+function overdriveAt() { return (hasRelic('OVERCHARGED_CELL') ? OVERDRIVE_AT_CHARGED : OVERDRIVE_AT) - bondOverdriveDiscount(); }
 function unownedRelics(tier) {
     return RELIC_POOL.filter(r => !hasRelic(r.id) && (!tier || r.tier === tier));
 }
@@ -607,6 +693,12 @@ const CODEX = [
         'Elites sometimes carry a piece; a commander always does.',
         ...GEAR_POOL.filter(g => g.slot === 'mod').map(g => `${g.name} (${g.cls}) — ${g.desc}`),
         ...GEAR_POOL.filter(g => g.slot === 'trinket').map(g => `${g.name} — ${g.desc}`)
+    ] },
+    { id: 'BONDS', title: 'BONDS', body: () => [
+        `Two operators who fight together accumulate a bond, named for the pair and levelled by fights survived side by side: I at ${BOND_LEVELS[0]}, II at ${BOND_LEVELS[1]}, III at ${BOND_LEVELS[2]}.`,
+        'Level I pays +5% damage while a bonded partner stands. At II, once per fight, a partner steps in front of a killing blow. At III the pair drops the overdrive threshold by 10 while both stand.',
+        'Bonds last the run and follow the pair, not the slot - rotate the squad and the old ties wait on the bench.',
+        ...Object.entries(BOND_NAMES).map(([k, v]) => `${v} — ${k.replace('|', ' & ')}`)
     ] },
     { id: 'ARMORY', title: 'THE ARMORY', body: () => [
         'A trader node on the route map, on most maps but not all. Stock rolls fresh per visit and prices ride the sector reward curve.',
@@ -1530,8 +1622,15 @@ function renderMuster() {
     }).join('');
     const deployed = playerRoster.filter(c => c.gridPos > 0).length;
     const cap = hasContract('SHORT_HANDED') ? 2 : 3;
+    // Every deployed pair is a bond waiting to happen; the muster names them up front so
+    // keeping a pair together is a choice, not an accident.
+    const picked = playerRoster.filter(c => c.gridPos > 0);
+    const pairNames = [];
+    for (let i = 0; i < picked.length; i++)
+        for (let j = i + 1; j < picked.length; j++) pairNames.push(bondName(picked[i], picked[j]));
     document.getElementById('muster-note').innerText =
-        `${deployed}/${cap} deployed. Melee earns full damage in FRONT; ranged fights the same from anywhere. Enemy fire hunts the BACK.`;
+        `${deployed}/${cap} deployed. Melee earns full damage in FRONT; ranged fights the same from anywhere. Enemy fire hunts the BACK.` +
+        (pairNames.length ? ` Bonds this draft would forge: ${pairNames.join(', ')}.` : '');
     document.getElementById('muster-deploy').disabled = deployed < 1 || deployed > cap;
 }
 
@@ -1581,6 +1680,7 @@ function buildNewRun(diff) {
     activeBounties = generateBounties(); runStats = newRunStats(); pendingRelicOffer = null;
     pendingConsequences = []; recentEvents = []; gearStash = []; pendingPerkOffers = [];
     activeShop = null; regroupInsured = false; shopRerollPick = false;
+    bonds = {}; bondSavesUsed = new Set();
     playerRoster.forEach(c => { c.weaponMod = null; c.trinket = null; });
     sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
     odChoices = {}; pendingOverdrive = null; momentumFocus = 0; pressExtra = false;
@@ -1616,6 +1716,7 @@ function resumeCombat(c) {
     let players = (c.playerIds || []).map(id => playerRoster.find(p => p.id === id)).filter(Boolean);
     activeEntities = [...players, ...(c.enemies || [])];
     turnQueue = (c.queueIds || []).map(id => activeEntities.find(e => e.id === id)).filter(Boolean);
+    bondSavesUsed = new Set(c.bondSaves || []);
     pendingCombat = null;
     if (turnQueue.length === 0) { renderMap(); return; }
     activeIndex = Math.min(c.activeIndex || 0, turnQueue.length - 1);
@@ -1632,11 +1733,12 @@ function buildCombatSnapshot() {
         activeIndex,
         playerIds: activeEntities.filter(e => e.isPlayer).map(e => e.id),
         enemies: activeEntities.filter(e => !e.isPlayer),
-        queueIds: turnQueue.map(e => e.id)
+        queueIds: turnQueue.map(e => e.id),
+        bondSaves: [...bondSavesUsed]
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, bonds, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -1652,6 +1754,7 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         if (activeShop) activeShop.stock = activeShop.stock.filter(it =>
             (it.kind !== 'GEAR' || gearById(it.id)) && (it.kind !== 'RELIC' || RELIC_POOL.some(r => r.id === it.id)));
         regroupInsured = !!d.regroupInsured; shopRerollPick = false;
+        bonds = (d.bonds && typeof d.bonds === 'object') ? d.bonds : {};
         // Gear fields on a roster saved before gear existed, and any id that no longer exists,
         // resolve to empty slots rather than phantom equipment.
         playerRoster.forEach(c => {
@@ -2001,6 +2104,8 @@ function renderOutpost() {
         let traitLine = traitSummary(char);
         let traitsDisplay = traitLine ? `<div style="font-size:9px; color:#6B8E23; text-transform:uppercase; margin-top:2px;">${traitLine}</div>` : '';
         let quirkDisplay = char.quirk ? `<div style="font-size:9px; color:#ffaa00; text-transform:uppercase; margin-top:2px;" title="${char.quirk.desc || ''}">[ ${char.quirk.name} ]</div>` : '';
+        let bondLine = bondLineFor(char);
+        let bondDisplay = bondLine ? `<div class="bond-line" title="Bonds deepen with every fight this pair survives together.">⚯ ${bondLine}</div>` : '';
 
         const modG = gearById(char.weaponMod), trkG = gearById(char.trinket);
         let gearHtml = '';
@@ -2024,7 +2129,7 @@ function renderOutpost() {
         else if (activePerkSelector === char.id) { btnGroupHtml = PERK_POOL.map(p => `<button class="upg-btn sub-menu-btn perk-btn" data-action="assign-perk" data-id="${char.id}" data-perk="${p.id}">${p.label}</button>`).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
         else { btnGroupHtml = `<button class="upg-btn ${posClass}" data-action="pos-menu" data-id="${char.id}">${posText}</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="HP" data-cost="${cost}">+10 HP</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="DMG" data-cost="${cost}">+3 DMG</button> ${medHtml}`; }
 
-        cards.push(`<div class="upgrade-card" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay}${traitsDisplay} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> <div class="upgrade-btn-group">${btnGroupHtml}</div> <div class="upgrade-btn-group gear-row">${gearHtml}</div> </div>`);
+        cards.push(`<div class="upgrade-card" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay}${traitsDisplay}${bondDisplay} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> <div class="upgrade-btn-group">${btnGroupHtml}</div> <div class="upgrade-btn-group gear-row">${gearHtml}</div> </div>`);
     });
 
     c.innerHTML = cards.join('');
@@ -2695,6 +2800,7 @@ function initiateCombat(nodeType, isEliteNode) {
         ent.oiledTurns = 0; ent.corrodedTurns = 0; ent.markedTurns = 0; ent.guardTurns = 0; });
     momentumFocus = 0; pressExtra = false; pendingOverdrive = null;
     playerRoster.forEach(ent => { ent.secondWindUsed = false; });
+    bondSavesUsed = new Set();
     // HP keeps the steep 1.5x-per-sector curve; damage climbs far more slowly so a deep fight
     // is dangerous rather than an unavoidable one-shot. Player power compounds through
     // repeatable percentage perks, which is what makes the curve climbable at all.
@@ -3032,6 +3138,7 @@ function resolveAction(targetId) {
 
         if (momentumFocus > 0) { dmgMult *= 1.3; momentumFocus = 0; spawnFCT(actEnt.id, 'FOCUSED', 'fct-combo'); }
         dmgMult *= quirkDmgMult(actEnt, target, dist);
+        dmgMult *= bondDmgMult(actEnt);
         if (hasTrait(actEnt, 'GRUDGE') && actEnt.hp < actEnt.maxHp / 2) dmgMult *= 1.15;
         if (hasTrait(actEnt, 'CALLED_SHOT') && (target.markedTurns || 0) > 0) dmgMult *= 1.25;
         if (hasTrait(actEnt, 'SHRAPNEL_LOAD') && pendingAction === 'PIPE_RIFLE' && target.armor > 0) dmgMult *= 1.2;
@@ -3139,22 +3246,37 @@ function resolveAction(targetId) {
 }
 
 function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
-    if (target.hp <= 0) return; let resistValue = target.resistances[atkType] || 0;
-    // Corrosion eats plating outright - the counter to a unit that re-plates itself each turn.
-    let armorCalc = (abilityStr === 'FERAL_BITE' || (target.corrodedTurns || 0) > 0) ? 0 : target.armor;
-    if (target.oiledTurns > 0 && atkType === 'energy') resistValue -= 15; 
-    
-    if (hasRelic('KINETIC_MESH') && target.isPlayer && target.gridPos === 1 && atkType === 'phys') {
-        calcDmg = Math.floor(calcDmg * 0.75);
+    if (target.hp <= 0) return;
+    // Mitigation is figured per victim, so a bond partner who steps in takes the blow through
+    // their own armor and resists rather than the original target's.
+    const figure = t => {
+        let rv = t.resistances[atkType] || 0;
+        // Corrosion eats plating outright - the counter to a unit that re-plates itself each turn.
+        let ac = (abilityStr === 'FERAL_BITE' || (t.corrodedTurns || 0) > 0) ? 0 : t.armor;
+        if (t.oiledTurns > 0 && atkType === 'energy') rv -= 15;
+        let cd = calcDmg;
+        if (hasRelic('KINETIC_MESH') && t.isPlayer && t.gridPos === 1 && atkType === 'phys') cd = Math.floor(cd * 0.75);
+        if (hasRelic('CHEM_ETCHER') && !t.isPlayer && (t.corrodedTurns || 0) > 0) cd = Math.floor(cd * 1.25);
+        if (hasQuirk(t, 'THICK_HIDE')) cd = Math.max(1, cd - 3);
+        if ((abilityStr === 'SLUG_SHOT' && hasTrait(attacker, 'BREACHING_ROUNDS')) ||
+            (abilityStr === 'QUICK_SHOT' && hasTrait(attacker, 'PIERCING_ROUNDS'))) ac = 0;
+        let n = Math.max(1, cd - rv - ac); if (rv >= 100) n = 0;
+        return { n, rv };
+    };
+    let { n: netDmg, rv: resistValue } = figure(target);
+    // Bond II: once per pair per fight, a killing blow lands on the partner instead.
+    if (netDmg >= target.hp && target.isPlayer) {
+        const savior = bondSavior(target);
+        if (savior) {
+            bondSavesUsed.add(bondKey(target.id, savior.id));
+            if (runStats) runStats.bondSaves = (runStats.bondSaves || 0) + 1;
+            log(`> ${savior.name} steps in front of the blow meant for ${target.name}!`, 'log-status');
+            spawnFCT(savior.id, 'STEPS IN', 'fct-status');
+            target = savior;
+            ({ n: netDmg, rv: resistValue } = figure(target));
+        }
     }
-    if (hasRelic('CHEM_ETCHER') && !target.isPlayer && (target.corrodedTurns || 0) > 0) {
-        calcDmg = Math.floor(calcDmg * 1.25);
-    }
-    if (hasQuirk(target, 'THICK_HIDE')) calcDmg = Math.max(1, calcDmg - 3);
-    if ((abilityStr === 'SLUG_SHOT' && hasTrait(attacker, 'BREACHING_ROUNDS')) ||
-        (abilityStr === 'QUICK_SHOT' && hasTrait(attacker, 'PIERCING_ROUNDS'))) armorCalc = 0;
-
-    let netDmg = Math.max(1, calcDmg - resistValue - armorCalc); if (resistValue >= 100) netDmg = 0; target.hp = Math.max(0, target.hp - netDmg);
+    target.hp = Math.max(0, target.hp - netDmg);
     // Second Wind: once per fight, a killing blow leaves them standing at 1.
     if (target.hp <= 0 && hasQuirk(target, 'SECOND_WIND') && !target.secondWindUsed) {
         target.secondWindUsed = true; target.hp = 1;
@@ -3371,7 +3493,8 @@ function checkWinState() {
             const m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)];
             materials[m]++; log(`> ${e.name} pockets 1 ${m.toUpperCase()}.`, 'log-heal');
         });
-        if (tuneUpBattles > 0) tuneUpBattles--; 
+        if (tuneUpBattles > 0) tuneUpBattles--;
+        recordBonds();
 
         let scrapMult = isCurrentNodeElite ? 2 : 1;
         let s = Math.floor((Math.floor(Math.random() * 30) + (currentTier * 20)) * scrapMult * sectorRewardMult()); 
@@ -3418,7 +3541,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
@@ -3451,6 +3574,8 @@ globalThis.WP = {
     get pendingOverdrive() { return pendingOverdrive; }, set pendingOverdrive(v) { pendingOverdrive = v; },
     get activeRelics() { return activeRelics; }, set activeRelics(v) { activeRelics = v; },
     get activeShop() { return activeShop; }, set activeShop(v) { activeShop = v; },
+    get bonds() { return bonds; }, set bonds(v) { bonds = v; },
+    get bondSavesUsed() { return bondSavesUsed; }, set bondSavesUsed(v) { bondSavesUsed = v; },
     get regroupInsured() { return regroupInsured; }, set regroupInsured(v) { regroupInsured = v; },
     get shopRerollPick() { return shopRerollPick; }, set shopRerollPick(v) { shopRerollPick = v; },
     get pendingRelicOffer() { return pendingRelicOffer; }, set pendingRelicOffer(v) { pendingRelicOffer = v; },

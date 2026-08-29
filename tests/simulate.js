@@ -31,6 +31,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
                  wipes: 0, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0,
+                 maxBond: 0, bondSaves: 0,
                  endedBy: 'cap', score: 0, contractMult: 1 };
 
   activeContracts = [...contracts];
@@ -266,6 +267,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
   stat.relics = activeRelics.map(r => r.id);
   stat.score = computeScore(runStats);
   stat.regroupsLeft = regroupsLeft();
+  stat.maxBond = Object.values(bonds).length ? Math.max(...Object.values(bonds)) : 0;
+  stat.bondSaves = runStats.bondSaves || 0;
   return stat;
 };
 
@@ -360,6 +363,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
   line('promotions per run', `${mean(nums('promotions')).toFixed(1)} (${mean(nums('sigsTaken')).toFixed(1)} signatures)`);
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   line('armories visited per run', `${mean(nums('shops')).toFixed(1)} (${Math.round(mean(nums('shopScrap')))} scrap spent)`);
+  line('deepest bond per run', `${mean(nums('maxBond')).toFixed(1)} fights (${mean(nums('bondSaves')).toFixed(1)} step-ins)`);
   line('items crafted per run', (results.reduce((a, r) => a + r.crafted, 0) / n).toFixed(1));
 
   console.log('\n── RELICS ' + '─'.repeat(48));
