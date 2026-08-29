@@ -426,6 +426,51 @@ function rollNodeFaction(tier, rng) {
 // different depths, never forced (every parent of an elite has another child to offer);
 // at least one camp and one event; every node leads somewhere; every route reaches the
 // commander. The bounty board's 'defeat 2 elites' contract depends on the elite count.
+// ── The seeded generation channel ───────────────────────────────────────────────────────
+// A run can carry a seed. Everything the wasteland GENERATES - maps, fronts, quirk draws,
+// the bounty slate - draws from streams derived from that seed, one stream per purpose, so
+// two players on the same seed walk the same wasteland however differently they play it.
+// Combat stays on Math.random: the fights are live. So do rerolls - those are yours.
+function mulberry32(a) {
+    return function() {
+        a |= 0; a = a + 0x6D2B79F5 | 0;
+        let t = Math.imul(a ^ a >>> 15, 1 | a);
+        t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+        return ((t ^ t >>> 14) >>> 0) / 4294967296;
+    };
+}
+function seedFromString(s) {
+    let h = 2166136261;
+    for (let i = 0; i < String(s).length; i++) { h ^= String(s).charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+}
+let runSeed = null;   // null = a free run on live dice
+// One derived stream per purpose and sector, so no purpose can desync another by
+// drawing more, and sector 4 is the same sector 4 however the first three went.
+function seededRng(purpose) {
+    return runSeed ? mulberry32(seedFromString(`${runSeed}|${purpose}`)) : Math.random;
+}
+function dailySeed(d = new Date()) { return `DAILY-${d.toISOString().slice(0, 10)}`; }
+
+// Best score per seed, kept outside the run save so the daily has a line to beat.
+const SEED_BEST_KEY = 'wp_seed_best';
+function seedBests() {
+    const v = Store.getJSON(SEED_BEST_KEY);
+    return (v && v !== CORRUPT) ? v : {};
+}
+function noteSeedBest(seed, score) {
+    if (!seed) return null;
+    const all = seedBests();
+    const prev = all[seed] || 0;
+    if (score > prev) {
+        all[seed] = score;
+        const keys = Object.keys(all);
+        if (keys.length > 20) keys.sort().slice(0, keys.length - 20).forEach(k => delete all[k]);
+        Store.set(SEED_BEST_KEY, JSON.stringify(all));
+    }
+    return prev;
+}
+
 // ── Sector fronts ───────────────────────────────────────────────────────────────────────
 // Every sector rolls a front: a condition that tilts what the generator builds, what the
 // weather does, what falls as loot, and what the boss brings. "Sector 3 was a blood moon"
@@ -729,6 +774,11 @@ const CODEX = [
         ...GEAR_POOL.filter(g => g.slot === 'mod').map(g => `${g.name} (${g.cls}) — ${g.desc}`),
         ...GEAR_POOL.filter(g => g.slot === 'trinket').map(g => `${g.name} — ${g.desc}`)
     ] },
+    { id: 'PROTOCOL', title: 'THE DAILY PROTOCOL', body: () => [
+        'A seed typed on the contract board fixes everything the wasteland generates: the maps, the fronts, the quirk draws, the opening bounty slate. The fighting stays live, and rerolls are yours.',
+        "TODAY'S PROTOCOL derives the seed from the date - the same wasteland for everyone who deploys on it that day, scored on its own best line.",
+        'Any phrase works as a seed. Trade one with a rival and cut the same roads.'
+    ] },
     { id: 'FRONTS', title: 'SECTOR FRONTS', body: () => [
         'Every sector rolls a front, announced as you enter and worn on the map header. A front tilts what the roads hold, what the weather does, what falls as loot, and what the boss brings.',
         ...FRONTS.map(f => `${f.name} — ${f.desc}`)
@@ -963,6 +1013,7 @@ const ACTIONS = {
     'shop-reroll':      el => shopRerollQuirk(el.dataset.id),
     'shop-reroll-cancel': () => { shopRerollPick = false; renderShop(); },
     'shop-finish':      () => finishShop(),
+    'seed-daily':       () => { document.getElementById('seed-input').value = dailySeed(); },
     'node-combat':      el => { enterNode(el.dataset.node); initiateCombat(el.dataset.type, el.dataset.elite === '1'); },
 
     'outpost-tab':      el => setOutpostTab(el.dataset.tab),
@@ -1240,17 +1291,19 @@ const BOUNTY_POOL = [
     { type: 'KILL',  label: n => `DEFEAT ${n} HOSTILES`,    range: [6, 12], reward: 8 }
 ];
 
-function rollBounty(exclude) {
+function rollBounty(exclude, rng = Math.random) {
     let choices = BOUNTY_POOL.filter(b => !exclude.includes(b.type));
     if (choices.length === 0) choices = BOUNTY_POOL;
-    let pick = choices[Math.floor(Math.random() * choices.length)];
-    let target = pick.range[0] + Math.floor(Math.random() * (pick.range[1] - pick.range[0] + 1));
+    let pick = choices[Math.floor(rng() * choices.length)];
+    let target = pick.range[0] + Math.floor(rng() * (pick.range[1] - pick.range[0] + 1));
     return { type: pick.type, desc: pick.label(target), current: 0, target, reward: pick.reward * target * currentSector, claimed: false };
 }
 
-function generateBounties() {
+// The opening slate is seeded (a daily is the same board for everyone); the replacements
+// that rotate in mid-run depend on play, so they stay on live dice.
+function generateBounties(rng = Math.random) {
     let out = [];
-    for (let i = 0; i < 3; i++) out.push(rollBounty(out.map(b => b.type)));
+    for (let i = 0; i < 3; i++) out.push(rollBounty(out.map(b => b.type), rng));
     return out;
 }
 
@@ -1396,10 +1449,11 @@ function endRun() {
     const isBest = score > bestScore;
     if (isBest) bestScore = score;
     if (runStats.deepestSector > bestSector) bestSector = runStats.deepestSector;
+    const seedPrev = noteSeedBest(runSeed, score);
     stashHeirloom();
     saveMeta();
     Store.remove(BASE_SAVE_KEY + currentSlot);
-    renderRunOver(score, isBest);
+    renderRunOver(score, isBest, seedPrev);
 }
 
 // The Vault keeps one relic across the wipe. Which one is not left to chance or to whichever
@@ -1419,7 +1473,7 @@ function heirloomRelic() {
     return RELIC_POOL.find(r => r.id === metaUpgrades.heirloom) || null;
 }
 
-function renderRunOver(score, isBest) {
+function renderRunOver(score, isBest, seedPrev = null) {
     switchScreen('screen-runover');
     document.getElementById('runover-title').innerText = 'RUN OVER';
     document.getElementById('runover-desc').innerText = 'The wasteland claimed them. What they salvaged reaches the Citadel.';
@@ -1439,6 +1493,11 @@ function renderRunOver(score, isBest) {
     if (st.contractMult && st.contractMult > 1) {
         lines.push(['CONTRACT BONUS', `x${st.contractMult.toFixed(2)}`]);
         lines.push(['SIGNED FOR', (st.contracts || []).join(', ')]);
+    }
+    // A seeded run scores on its own line: the seed, and the best anyone here has cut on it.
+    if (runSeed) {
+        lines.push(['PROTOCOL SEED', runSeed]);
+        lines.push(['SEED BEST', score > (seedPrev || 0) ? '★ NEW SEED BEST ★' : `${(seedBests()[runSeed] || 0).toLocaleString()} PTS`]);
     }
     document.getElementById('runover-lines').innerHTML = lines.map(l => `<div class="runover-line"><span>${l[0]}</span><span>${l[1]}</span></div>`).join('');
     document.getElementById('runover-choices').innerHTML =
@@ -1622,6 +1681,11 @@ function renderContracts() {
     const m = contractMult();
     document.getElementById('contract-mult').innerText =
         `SCORE x${m.toFixed(2)}${activeContracts.length ? ` — ${contractNames().join(', ')}` : ''}`;
+    // The daily is the same wasteland for everyone who types it today, scored on its own line.
+    const daily = dailySeed();
+    const best = seedBests()[daily];
+    document.getElementById('seed-note').innerText =
+        `${daily} — ${best ? `your best ${best.toLocaleString()} PTS` : 'not yet attempted'}. Seeds fix the map, fronts, quirks and bounty slate; the fighting stays live.`;
 }
 
 function toggleContract(id) {
@@ -1632,7 +1696,11 @@ function toggleContract(id) {
 
 // Deploying now passes through the muster: the run is built (quirks rolled, map generated),
 // then shown - who rolled what, who stands where - before the first node is taken.
-function beginExpedition() { buildNewRun(pendingDifficulty); renderMuster(); }
+function beginExpedition() {
+    const typed = (document.getElementById('seed-input') ? document.getElementById('seed-input').value : '').trim().toUpperCase();
+    runSeed = typed || null;
+    buildNewRun(pendingDifficulty); renderMuster();
+}
 
 let musterRerolls = 0;
 const MUSTER_REROLLS = 2;
@@ -1716,19 +1784,20 @@ function buildNewRun(diff) {
     difficultyMult = diff; currentSector = 1; currentTier = 1; tuneUpBattles = 0; momentum = 0;
     scrap = metaUpgrades.startScrap || 0; inventory = hasContract('NO_CONSUMABLES') ? [] : ['MED_STIM']; materials = { parts: 0, chems: 0, tech: 0 }; 
     playerRoster = migrateTraits(JSON.parse(JSON.stringify(ROSTER_TEMPLATE)));
-    activeBounties = generateBounties(); runStats = newRunStats(); pendingRelicOffer = null;
+    activeBounties = generateBounties(seededRng('bounties')); runStats = newRunStats(); pendingRelicOffer = null;
     pendingConsequences = []; recentEvents = []; gearStash = []; pendingPerkOffers = [];
     activeShop = null; regroupInsured = false; shopRerollPick = false;
     bonds = {}; bondSavesUsed = new Set();
     playerRoster.forEach(c => { c.weaponMod = null; c.trinket = null; });
-    sectorFront = rollFront(); frontBannerPending = true;
-    sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
+    sectorFront = rollFront(seededRng('front:1')); frontBannerPending = true;
+    sectorMap = generateSectorMap(seededRng('map:1')); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
     odChoices = {}; pendingOverdrive = null; momentumFocus = 0; pressExtra = false;
     const kept = heirloomRelic();
     activeRelics = kept ? [kept] : [];
-    
-    playerRoster.forEach(p => { 
-        let q = QUIRK_POOL[Math.floor(Math.random() * QUIRK_POOL.length)];
+
+    const qRng = seededRng('quirks');
+    playerRoster.forEach(p => {
+        let q = QUIRK_POOL[Math.floor(qRng() * QUIRK_POOL.length)];
         p.quirk = q; p.maxHp += q.hp; p.hp = p.maxHp; p.dmgBase += q.dmg; p.speed += q.spd;
         p.level = metaUpgrades.startLevel; p.perkPoints = metaUpgrades.startLevel - 1; p.xpToNext = Math.floor(100 * Math.pow(XP_CURVE, metaUpgrades.startLevel - 1)); 
         if (hasContract('GLASS')) { p.maxHp = Math.max(1, Math.floor(p.maxHp * 0.75)); p.hp = p.maxHp; }
@@ -1778,7 +1847,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, bonds, sectorFront, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, bonds, sectorFront, runSeed, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -1798,6 +1867,7 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         // A save from before fronts existed finishes its current sector without one.
         sectorFront = frontById(d.sectorFront) ? d.sectorFront : null;
         frontBannerPending = false;
+        runSeed = (typeof d.runSeed === 'string' && d.runSeed) ? d.runSeed : null;
         // Gear fields on a roster saved before gear existed, and any id that no longer exists,
         // resolve to empty slots rather than phantom equipment.
         playerRoster.forEach(c => {
@@ -2141,8 +2211,8 @@ function renderMap() {
 
 function advanceSector() {
     currentSector++; currentTier = 1;
-    sectorFront = rollFront(); frontBannerPending = true;
-    sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
+    sectorFront = rollFront(seededRng('front:' + currentSector)); frontBannerPending = true;
+    sectorMap = generateSectorMap(seededRng('map:' + currentSector)); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
     noteDepth(); saveGameState();
     resolveConsequence();
 }
@@ -3631,7 +3701,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
@@ -3667,6 +3737,7 @@ globalThis.WP = {
     get bonds() { return bonds; }, set bonds(v) { bonds = v; },
     get bondSavesUsed() { return bondSavesUsed; }, set bondSavesUsed(v) { bondSavesUsed = v; },
     get sectorFront() { return sectorFront; }, set sectorFront(v) { sectorFront = v; },
+    get runSeed() { return runSeed; }, set runSeed(v) { runSeed = v; },
     get frontBannerPending() { return frontBannerPending; }, set frontBannerPending(v) { frontBannerPending = v; },
     get regroupInsured() { return regroupInsured; }, set regroupInsured(v) { regroupInsured = v; },
     get shopRerollPick() { return shopRerollPick; }, set shopRerollPick(v) { shopRerollPick = v; },

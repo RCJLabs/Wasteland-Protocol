@@ -404,6 +404,17 @@ button.reach-short { border-color: #7a5a20; }
 .muster-reroll { font-size: 12px; padding: 5px; border-color: #7a5c14; color: #d9a93d; }
 .muster-note { flex-shrink: 0; font-size: 10px; line-height: 1.5; color: #8a8578; margin: 10px 0; }
 
+/* The seed panel on the contract board: type a wasteland, or take today's. */
+.seed-panel { flex-shrink: 0; border: 1px dashed #3a4a5a; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.seed-row { display: flex; gap: 6px; }
+.seed-input { flex: 1; min-width: 0; background: #0a0a08; border: 1px solid #444; color: #d5cfc0;
+    font-family: monospace; font-size: 11px; padding: 8px; letter-spacing: 1px; text-transform: uppercase; }
+.seed-input:focus { outline: none; border-color: #7ab0d0; }
+.seed-daily-btn { flex-shrink: 0; background: #111; border: 1px solid #7ab0d0; color: #7ab0d0;
+    font-family: monospace; font-size: 10px; padding: 8px; cursor: pointer; text-transform: uppercase; }
+.seed-daily-btn:hover { background: #7ab0d0; color: #000; }
+.seed-note { font-size: 9px; color: #8a8578; line-height: 1.5; }
+
 /* The sector front: a badge that rides the map header, and a splash on sector entry. */
 #front-badge { display: flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0;
     border: 1px solid #6b3a3a; background: #140808; color: #c96a5a; font-size: 11px;
