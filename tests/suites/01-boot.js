@@ -28,9 +28,6 @@ module.exports = {
     await page.click('.outpost-btn');
     await page.waitForTimeout(400);
     ok('outpost opens', (await page.$eval('#screen-outpost', e => getComputedStyle(e).display)) === 'flex');
-    // The camp fronts the outpost; the tabs live one toggle deeper, in the ledger.
-    await page.click('#outpost-view-toggle');
-    await page.waitForTimeout(200);
     for (const tab of ['WORKBENCH', 'CYBERNETICS', 'SQUAD ROSTER']) {
       await page.click(`.op-tab-btn:has-text("${tab}")`);
       await page.waitForTimeout(150);

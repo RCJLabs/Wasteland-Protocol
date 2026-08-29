@@ -214,7 +214,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .fx-flash { animation: fxFlash 0.3s ease-out both !important; }
 
 .dashboard { height: 35vh; max-height: 250px; background: #050505; border: 2px solid #333; display: grid; grid-template-columns: 1fr 1fr; box-sizing: border-box; margin: 5px; }
-#command-deck { border-right: 2px solid #333; padding: 10px; display: flex; flex-direction: column; justify-content: flex-start; gap: 8px; overflow-y: auto;}
+#command-deck { border-right: 2px solid #333; padding: 10px; display: flex; flex-direction: column; justify-content: flex-start; gap: 8px; overflow-y: auto; min-width: 0; }
 #log { padding: 10px; overflow-y: auto; font-size: clamp(10px, 3vw, 12px); color: #555; display: flex; flex-direction: column; }
 .log-turn { color: #aaa; margin-top: 5px; } .log-heal { color: #6B8E23; } .log-dmg { color: #8B0000; } .log-status { color: #B8860B; } .log-combo { color: #ff44ff; font-weight: bold; }
 button { background: #111; color: #ccc; border: 1px solid #444; padding: clamp(10px, 3vh, 15px); font-family: monospace; font-size: clamp(10px, 3vw, 13px); cursor: pointer; text-transform: uppercase; transition: 0.2s; flex-shrink:0;}
@@ -341,10 +341,17 @@ button.reach-short { border-color: #7a5a20; }
 #screen-codex .return-btn { flex-shrink: 0; margin-top: 12px; }
 
 /* The momentum market: cheap spends that never cost the action. */
-.tactic-row { display: flex; gap: 6px; }
-.tactic-btn { flex: 1 1 0; font-size: 10px; letter-spacing: 1px; padding: 8px 4px;
-  border-color: #7a5c14; color: #d9a93d; }
+.tactic-row { display: flex; gap: 6px; min-width: 0; }
+/* min-width:0 is load-bearing on both the deck and these buttons. A grid item and a flex
+   item both default to min-width:auto, which refuses to shrink below their own text - so
+   the third tactic pushed past the deck's edge and got clipped on a narrow phone. The
+   name and cost are two deliberate lines rather than an accidental wrap. */
+.tactic-btn { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center;
+  gap: 2px; padding: 7px 2px; border-color: #7a5c14; color: #d9a93d; overflow: hidden; }
+.tactic-name { font-size: 9.5px; letter-spacing: 0.5px; }
+.tactic-cost { font-size: 9px; letter-spacing: 0; color: #b8912f; }
 .tactic-btn:disabled { border-color: #222; }
+.tactic-btn:disabled .tactic-cost { color: #555; }
 
 /* ── The Citadel, drawn ─────────────────────────────────────────────────────────────────
    A hillside at dusk: every meta-upgrade is a structure on it, and buying levels visibly
@@ -465,35 +472,6 @@ button.reach-short { border-color: #7a5a20; }
   .entity.dead.dying .portrait { transform: rotate(78deg) translateY(12%) translateX(5%); }
   .front-banner-show { animation: none !important; opacity: 1; }
 }
-
-/* The camp: the squad's own sprites around a fire, state readable in the bodies. */
-#outpost-scene { position: relative; flex: 1 1 auto; min-height: 340px; overflow: hidden; border: 1px solid #33301f; }
-.camp-bg { position: absolute; inset: 0; background: url('bg_canyon.webp') center 30% / cover; filter: brightness(0.45) saturate(0.7); }
-.camp-glow { position: absolute; left: 50%; top: 62%; width: 220px; height: 160px; transform: translate(-50%, -50%);
-  background: radial-gradient(ellipse, rgba(255, 150, 60, 0.35), transparent 65%); pointer-events: none; }
-.camp-fire { position: absolute; left: 50%; top: 60%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
-.camp-op { position: absolute; transform: translate(-50%, -100%); background: none; border: none; cursor: pointer;
-  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; min-width: 48px; min-height: 56px; }
-.camp-op img { height: 64px; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.7)); }
-.camp-op.op-injured img { filter: saturate(0.25) brightness(0.75) drop-shadow(0 4px 6px rgba(0, 0, 0, 0.7));
-  transform: rotate(6deg) translateY(3px); }
-.camp-op.op-benched { opacity: 0.75; }
-.camp-op.op-benched img { height: 52px; }
-.camp-name { font-size: 8px; letter-spacing: 1px; color: #d5cfc0; text-transform: uppercase;
-  background: rgba(0, 0, 0, 0.55); padding: 1px 4px; white-space: nowrap; }
-.camp-name-dead { color: #8a8578; }
-.camp-cairn { position: absolute; transform: translate(-50%, -100%); background: none; border: none; cursor: pointer;
-  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; min-width: 44px; min-height: 44px; }
-.camp-cairn svg { width: 34px; height: 26px; }
-.camp-station { position: absolute; transform: translate(-50%, -50%); background: rgba(5, 5, 5, 0.45);
-  border: 1px solid #4a4030; cursor: pointer; display: flex; flex-direction: column; align-items: center;
-  gap: 2px; padding: 6px; min-width: 56px; min-height: 52px; }
-.camp-station:hover { border-color: #B8860B; }
-.camp-station svg { width: 40px; height: 30px; }
-#outpost-ledger { display: none; flex-direction: column; gap: 15px; flex: 1 1 auto; min-height: 0; }
-.medbay-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0;
-  border-bottom: 1px dashed #33301f; font-size: 11px; color: #d5cfc0; }
-.camp-sheet-close { width: 100%; margin-top: 8px; border-color: #888; color: #999; }
 
 /* A cursed card is unmistakable: violet heat and a warning where the tier goes. */
 .relic-cursed { border-color: #8a3fbf; color: #c98aff; box-shadow: 0 0 12px rgba(138, 63, 191, 0.35) inset; }

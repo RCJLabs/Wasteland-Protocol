@@ -97,7 +97,7 @@ module.exports = {
     ok('tapping a classic benches it instead', musterUi.after === 'SCRAP_BLADE' && musterUi.rechipped === 'SCRAP_BLADE');
 
     const card = await page.evaluate(() => {
-      outpostView = 'list'; renderOutpost();
+      renderOutpost();
       return document.getElementById('outpost-roster').innerHTML.includes('Wall of the Waste');
     });
     ok('the title sits on the outpost card', card);

@@ -1105,13 +1105,6 @@ const ACTIONS = {
     'shop-reroll-cancel': () => { shopRerollPick = false; renderShop(); },
     'shop-finish':      () => finishShop(),
     'seed-daily':       () => { document.getElementById('seed-input').value = dailySeed(); },
-    'outpost-view':     () => { outpostView = outpostView === 'scene' ? 'list' : 'scene'; renderOutpost(); },
-    'outpost-op':       el => { outpostSheet = { kind: 'op', id: el.dataset.id }; renderOutpost(); },
-    'outpost-station':  el => {
-        if (el.dataset.spot === 'MEDBAY') { outpostSheet = { kind: 'MEDBAY' }; renderOutpost(); }
-        else { outpostView = 'list'; outpostSheet = null; setOutpostTab(el.dataset.spot === 'CYBER' ? 'CYBER' : 'WORKBENCH'); }
-    },
-    'outpost-sheet-close': () => { outpostSheet = null; activeGearSelector = null; activePosSelector = null; activePerkSelector = null; renderOutpost(); },
     'chronicle':        () => renderChronicle(),
     'ascension-cycle':  () => { ascension = (ascension + 1) % (unlockedProtocols() + 1); renderContracts(); },
     'loadout-bench':    el => {
@@ -2563,97 +2556,6 @@ function renderOutpost() {
     document.getElementById('inv-count').innerText = `${inventory.length}/${metaUpgrades.invMax}`; const invC = document.getElementById('outpost-inventory'); const invCells = [];
     for (let i = 0; i < metaUpgrades.invMax; i++) { let item = inventory[i]; if (item) { let label = item === 'MED_STIM' ? '💉 Med-Stim' : item === 'SCRAP_BOMB' ? '💣 Scrap Bomb' : item === 'ADRENALINE' ? '⚡ Adrenaline' : '🔋 EMP Charge'; invCells.push(`<button class="inv-slot" data-action="sell-item" data-index="${i}">${label} [SELL]</button>`); } else { invCells.push(`<button class="inv-slot" disabled>[ EMPTY SLOT ]</button>`); } }
     invC.innerHTML = invCells.join('');
-
-    // Both layers stay rendered - the camp is the face, the ledger is the books - and the
-    // toggle only decides which one the player is looking at.
-    renderOutpostScene();
-    document.getElementById('outpost-scene').style.display = outpostView === 'scene' ? 'block' : 'none';
-    document.getElementById('outpost-ledger').style.display = outpostView === 'scene' ? 'none' : 'flex';
-    if (outpostView !== 'scene') { outpostSheet = null; }
-    renderOutpostSheet();
-    document.getElementById('outpost-view-toggle').innerText = outpostView === 'scene' ? '📜 LEDGER VIEW' : '🏕 CAMP VIEW';
-}
-
-// ── The Outpost as a camp ───────────────────────────────────────────────────────────────
-// The screen visited most now shows the people: the squad's own sprites around a fire on an
-// existing backdrop, state readable in the bodies - the hurt slumped and drained, the dead a
-// cairn by the fire, the bench sitting apart. Tap an operator for their full card; the
-// workbench and cyber rig are stations that jump to the ledger's pages.
-let outpostView = 'scene';
-let outpostSheet = null;   // { kind: 'op', id } | { kind: 'MEDBAY' }
-
-const CAMP_SPOTS = {
-    deployed: [[22, 56], [50, 48], [78, 56]],
-    bench: [[10, 82], [34, 87], [62, 87], [88, 82]],
-    cairn: [[40, 68], [58, 68], [30, 71], [68, 71], [48, 73], [22, 69], [76, 73]]
-};
-
-function campFireSvg() {
-    return `<svg class="camp-fire" viewBox="0 0 60 60" aria-hidden="true">
-        <ellipse cx="30" cy="52" rx="16" ry="4" fill="#000" opacity="0.5"/>
-        <path d="M18 50 L26 46 L34 50 L42 46" stroke="#4a3520" stroke-width="4" stroke-linecap="round" fill="none"/>
-        <path d="M30 18 C24 28 22 34 24 42 C26 48 34 48 36 42 C38 34 34 30 30 18Z" fill="#d96a2b"/>
-        <path d="M30 26 C27 32 26 36 27 41 C28 45 32 45 33 41 C34 36 32 32 30 26Z" fill="#ffb347"/>
-    </svg>`;
-}
-
-function campStationSvg(kind) {
-    if (kind === 'WORKBENCH') return `<svg viewBox="0 0 40 30" aria-hidden="true"><rect x="4" y="14" width="32" height="4" fill="#6b5a3a"/><rect x="7" y="18" width="4" height="10" fill="#4a3f2a"/><rect x="29" y="18" width="4" height="10" fill="#4a3f2a"/><rect x="12" y="8" width="10" height="6" fill="#8a8578"/><circle cx="28" cy="11" r="3" fill="#B8860B"/></svg>`;
-    if (kind === 'MEDBAY') return `<svg viewBox="0 0 40 30" aria-hidden="true"><path d="M4 28 L20 8 L36 28 Z" fill="#3a4a3a"/><rect x="17" y="14" width="6" height="2" fill="#d5cfc0"/><rect x="19" y="12" width="2" height="6" fill="#d5cfc0"/></svg>`;
-    return `<svg viewBox="0 0 40 30" aria-hidden="true"><rect x="8" y="6" width="24" height="16" rx="2" fill="#1a2a3a" stroke="#4488ff" stroke-width="1.5"/><path d="M12 12 L18 12 M12 16 L22 16" stroke="#4488ff" stroke-width="1.5"/><rect x="14" y="22" width="12" height="4" fill="#2a3a4a"/></svg>`;
-}
-
-function campCairnSvg() {
-    return `<svg viewBox="0 0 30 22" aria-hidden="true"><ellipse cx="15" cy="19" rx="11" ry="2.5" fill="#000" opacity="0.4"/><circle cx="10" cy="16" r="4" fill="#555"/><circle cx="19" cy="16" r="4.5" fill="#666"/><circle cx="14" cy="11" r="4" fill="#777"/><rect x="13.2" y="2" width="1.6" height="7" fill="#4a3f2a"/><rect x="10.5" y="4" width="7" height="1.6" fill="#4a3f2a"/></svg>`;
-}
-
-function renderOutpostScene() {
-    const scene = document.getElementById('outpost-scene');
-    let benchIdx = 0, cairnIdx = 0;
-    const ops = playerRoster.map(char => {
-        if (char.hp <= 0) {
-            const [x, y] = CAMP_SPOTS.cairn[cairnIdx++ % CAMP_SPOTS.cairn.length];
-            return `<button class="camp-cairn" style="left:${x}%; top:${y}%" data-action="outpost-op" data-id="${char.id}" title="${char.name} is down. The medbay can bring them back.">
-                ${campCairnSvg()}<span class="camp-name camp-name-dead">${char.name}</span></button>`;
-        }
-        const deployed = char.gridPos > 0;
-        const [x, y] = deployed
-            ? CAMP_SPOTS.deployed[(char.gridPos - 1) % CAMP_SPOTS.deployed.length]
-            : CAMP_SPOTS.bench[benchIdx++ % CAMP_SPOTS.bench.length];
-        const hurt = char.hp < char.maxHp * 0.5;
-        const cls = `camp-op ${hurt ? 'op-injured' : ''} ${deployed ? '' : 'op-benched'}`;
-        return `<button class="${cls}" style="left:${x}%; top:${y}%" data-action="outpost-op" data-id="${char.id}" title="${char.name} — ${char.hp}/${char.maxHp} HP">
-            <img src="${char.img}" alt=""><span class="camp-name">${char.name}</span></button>`;
-    });
-    const stations = [
-        ['WORKBENCH', 8, 30, 'Workbench'], ['MEDBAY', 50, 22, 'Medbay'], ['CYBER', 88, 30, 'Cyber Rig']
-    ].map(([kind, x, y, label]) =>
-        `<button class="camp-station" style="left:${x}%; top:${y}%" data-action="outpost-station" data-spot="${kind}">
-            ${campStationSvg(kind)}<span class="camp-name">${label}</span></button>`);
-    scene.innerHTML = `<div class="camp-bg"></div><div class="camp-glow"></div>${campFireSvg()}${stations.join('')}${ops.join('')}`;
-}
-
-function renderOutpostSheet() {
-    const el = document.getElementById('outpost-sheet');
-    if (!outpostSheet) { el.style.display = 'none'; el.innerHTML = ''; return; }
-    let body = '';
-    if (outpostSheet.kind === 'op') {
-        const char = playerRoster.find(c => c.id === outpostSheet.id);
-        if (!char) { outpostSheet = null; el.style.display = 'none'; return; }
-        body = operatorCardHtml(char);
-    } else {
-        // The medbay tent: everyone who needs it, and what it costs.
-        const rows = playerRoster.filter(c => c.hp < c.maxHp).map(c => {
-            const dead = c.hp <= 0;
-            return `<div class="medbay-row"><span>${c.name} — ${dead ? 'DOWN' : `${c.hp}/${c.maxHp} HP`}</span>
-                ${dead
-                    ? `<button class="upg-btn revive-btn" ${scrap < 50 ? 'disabled' : ''} data-action="medbay" data-id="${c.id}" data-mode="REVIVE">DEFIB (50)</button>`
-                    : `<button class="upg-btn med-btn" ${scrap < 10 ? 'disabled' : ''} data-action="medbay" data-id="${c.id}" data-mode="HEAL">TRIAGE (10)</button>`}</div>`;
-        });
-        body = `<div class="upgrade-card"><div class="upgrade-header">MEDBAY</div>${rows.join('') || '<div class="gear-none">Nobody needs the tent tonight.</div>'}</div>`;
-    }
-    el.innerHTML = `${body}<button class="upg-btn camp-sheet-close" data-action="outpost-sheet-close">CLOSE</button>`;
-    el.style.display = 'block';
 }
 
 function breakdownScrap() { if (scrap < 25) return; scrap -= 25; let m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)]; materials[m]++; saveGameState(); renderOutpost(); }
@@ -3511,7 +3413,7 @@ function renderCommandDeck() {
     // affordable, so the price of holding for the overdrive is always visible.
     if (!pendingAction && MOMENTUM_TACTICS.some(t => momentum >= tacticCost(t))) {
         deckHtml += `<div class="tactic-row">` + MOMENTUM_TACTICS.map(t =>
-            `<button class="tactic-btn" ${momentum < tacticCost(t) ? 'disabled' : ''} ${t.id === 'STIM' && !stimTarget() ? 'disabled' : ''} data-action="tactic" data-kind="${t.id}" title="${t.desc}">⚡${t.label} ${tacticCost(t)}</button>`
+            `<button class="tactic-btn" ${momentum < tacticCost(t) ? 'disabled' : ''} ${t.id === 'STIM' && !stimTarget() ? 'disabled' : ''} data-action="tactic" data-kind="${t.id}" title="${t.desc}"><span class="tactic-name">${t.label}</span><span class="tactic-cost">⚡${tacticCost(t)}</span></button>`
         ).join('') + `</div>`;
     }
 
@@ -4205,7 +4107,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, renderOutpostScene, renderOutpostSheet, CAMP_SPOTS, motionOff, flashClass, pulseIntent, playAttackAnim, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
@@ -4242,11 +4144,9 @@ globalThis.WP = {
     get bondSavesUsed() { return bondSavesUsed; }, set bondSavesUsed(v) { bondSavesUsed = v; },
     get sectorFront() { return sectorFront; }, set sectorFront(v) { sectorFront = v; },
     get runSeed() { return runSeed; }, set runSeed(v) { runSeed = v; },
-    get outpostView() { return outpostView; }, set outpostView(v) { outpostView = v; },
     get mastery() { return mastery; }, set mastery(v) { mastery = v; },
     get ascension() { return ascension; }, set ascension(v) { ascension = v; },
     get bestSector() { return bestSector; }, set bestSector(v) { bestSector = v; },
-    get outpostSheet() { return outpostSheet; }, set outpostSheet(v) { outpostSheet = v; },
     get frontBannerPending() { return frontBannerPending; }, set frontBannerPending(v) { frontBannerPending = v; },
     get regroupInsured() { return regroupInsured; }, set regroupInsured(v) { regroupInsured = v; },
     get shopRerollPick() { return shopRerollPick; }, set shopRerollPick(v) { shopRerollPick = v; },

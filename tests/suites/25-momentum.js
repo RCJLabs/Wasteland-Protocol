@@ -51,6 +51,37 @@ module.exports = {
     ok('a full bar buys everything with a use', row.flush.shown === 3 &&
       row.flush.enabled.includes('FOCUS') && row.flush.enabled.includes('PRESS'));
 
+    // The third tactic used to be pushed off the deck's edge on a narrow phone: a grid item
+    // and a flex item both default to min-width:auto, so neither would shrink. Measured at
+    // the narrowest phone width the game is played at, every button must be fully inside.
+    const fits = await page.evaluate(async () => {
+      const measure = () => {
+        window.__fight('BRUISER', 100);
+        const deck = document.getElementById('command-deck').getBoundingClientRect();
+        const btns = [...document.querySelectorAll('.tactic-btn')].map(b => b.getBoundingClientRect());
+        return {
+          overflow: Math.max(...btns.map(b => Math.round(b.right - deck.right))),
+          leftOf: Math.round(btns[0].left - deck.left),
+          narrowest: Math.round(Math.min(...btns.map(b => b.width))),
+          labels: [...document.querySelectorAll('.tactic-btn')].every(b =>
+            b.querySelector('.tactic-name') && b.querySelector('.tactic-cost')),
+          readable: [...document.querySelectorAll('.tactic-name')].every(s => s.scrollWidth <= s.clientWidth + 1)
+        };
+      };
+      const engine = document.getElementById('engine');
+      const before = engine.style.width;
+      engine.style.width = '360px';   // the narrow phone the report came from
+      const narrow = measure();
+      engine.style.width = before;
+      const wide = measure();
+      return { narrow, wide };
+    });
+    ok(`all three tactics sit inside the deck at 360px (worst edge ${fits.narrow.overflow}px)`,
+      fits.narrow.overflow <= 0 && fits.narrow.leftOf >= 0 && fits.narrow.narrowest > 30);
+    ok('and at full width', fits.wide.overflow <= 0 && fits.wide.leftOf >= 0);
+    ok('each naming its tactic and its price, unclipped',
+      fits.narrow.labels && fits.narrow.readable && fits.wide.readable);
+
     // ---- FOCUS: the next attack hits harder, once ----
     const focus = await page.evaluate(() => {
       const swing = (focused) => {
