@@ -887,18 +887,80 @@ const SECTOR_HP_SCALE = 1.25;
 const SECTOR_DMG_SCALE = 1.28;   // eased from 1.32: measured, lethality still wins the long game
 const XP_CURVE = 1.35;         // was 1.5 - levels kept stalling, starving the perk economy
 
+// ── Faces ───────────────────────────────────────────────────────────────────────────────
+// The wasteland was full of people who had never met you. You could pay the tinker, stiff the
+// fixer and rob the scavenger, and the next one through the door was a stranger with no opinion
+// about any of it. These four remember. Standing is a single signed number per run: what you
+// did last time is the only thing that decides what they offer this time.
+const CAST = {
+    ORRIN:  { name: 'Orrin',      epithet: 'the Tinker',    note: 'A hooded cyborg who mends what the road breaks.' },
+    VELA:   { name: 'Vela',       epithet: 'the Fixer',     note: 'Lends to anyone. Collects from everyone.' },
+    KESS:   { name: 'Kess',       epithet: 'the Scavenger', note: 'Was bleeding out against a wheel rim when you found them.' },
+    MAGPIE: { name: 'The Magpie', epithet: 'the Dealer',    note: 'Trades relics face down, and never blinks.' }
+};
+// Bands rather than a raw number: the player is told where they stand, not shown a score.
+// The words have to fit all four of them. "Owes you" is true of the scavenger you saved and
+// false of the tinker you keep buying from; trust is what both of those actually bought.
+const STANDING_BANDS = [
+    { at: -2, key: 'BAD_BLOOD', label: 'BAD BLOOD',     cls: 'cast-bad'  },
+    { at: -1, key: 'WARY',      label: 'WARY OF YOU',   cls: 'cast-bad'  },
+    { at:  0, key: 'NEUTRAL',   label: 'REMEMBERS YOU', cls: 'cast-idle' },
+    { at:  1, key: 'WARM',      label: 'WARM TO YOU',   cls: 'cast-good' },
+    { at:  2, key: 'TRUSTS',    label: 'TRUSTS YOU',    cls: 'cast-good' }
+];
+let castState = {};      // per run: { ORRIN: { met, standing } }
+let firedEvents = [];    // follow-ups that have already come due, so a thread resolves once
+
+function castOf(id) { return castState[id] || (castState[id] = { met: 0, standing: 0 }); }
+function castStanding(id) { return (castState[id] || {}).standing || 0; }
+function hasMetCast(id) { return ((castState[id] || {}).met || 0) > 0; }
+function meetCast(id) {
+    const c = castOf(id); c.met++;
+    // The moment the system first means anything is the second time a face turns up, so that is
+    // where it gets explained rather than at the first, where there is nothing to explain.
+    if (c.met === 2) firePrompt('FACES');
+    return c;
+}
+// Standing is clamped: one generous choice should not buy a permanent discount, and one bad
+// one should not put a character out of reach for the rest of a run.
+function noteCast(id, delta) {
+    if (!CAST[id]) return 0;
+    const c = castOf(id);
+    c.standing = Math.max(-3, Math.min(3, c.standing + delta));
+    return c.standing;
+}
+// The deepest band the standing has reached. Below the lowest band it stays at the lowest.
+function standingBand(id) {
+    const n = castStanding(id);
+    let out = STANDING_BANDS[0];
+    for (const b of STANDING_BANDS) if (n >= b.at) out = b;
+    return out;
+}
+function castName(id) { return CAST[id] ? `${CAST[id].name}, ${CAST[id].epithet}` : ''; }
+// A debt already on the books. She will not lend into it, and the follow-ups read it too.
+function owesVela() { return pendingConsequences.some(c => c.kind === 'DEBT'); }
+// Everyone the run has actually met, worst standing first - the run-over screen reads this.
+function facesMet() {
+    return Object.keys(CAST).filter(hasMetCast)
+        .sort((a, b) => castStanding(a) - castStanding(b))
+        .map(id => ({ id, name: CAST[id].name, standing: castStanding(id), band: standingBand(id) }));
+}
+
 // Some choices should not settle on the screen that offered them. An event can book a
 // consequence a sector or two out; it comes due when the run reaches that depth, whether or not
 // the player still remembers agreeing to it.
 const CONSEQUENCE_POOL = {
     DEBT: {
-        title: "THE COLLECTOR FINDS YOU",
+        title: "VELA FINDS YOU", cast: 'VELA',
         resolve: (c) => {
             const owed = c.amount || 0;
-            if (scrap >= owed) { scrap -= owed; return `You settle up. ${owed} Scrap changes hands and the crew moves on.`; }
+            // The one place standing is not bought with a choice on a screen - it is whether the
+            // squad had the scrap when she came looking.
+            if (scrap >= owed) { scrap -= owed; noteCast('VELA', 2); return `You settle up. ${owed} Scrap changes hands and Vela writes it down as paid.`; }
             const short = owed - scrap; scrap = 0;
             deployed().forEach(u => { u.hp = Math.max(1, u.hp - Math.floor(u.maxHp * 0.15)); });
-            return `You are ${short} Scrap short. They take what you have, and a payment in bruises.`;
+            noteCast('VELA', -3);
+            return `You are ${short} Scrap short. She takes what you have, and a payment in bruises, and she does not write it down as paid.`;
         }
     },
     AMBUSH: {
@@ -910,12 +972,12 @@ const CONSEQUENCE_POOL = {
         }
     },
     SURVIVOR: {
-        title: "A DEBT REPAID",
+        title: "A DEBT REPAID", cast: 'KESS',
         resolve: () => {
             deployed().forEach(u => { u.hp = u.maxHp; });
             const m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)];
-            materials[m] += 2; scrap += 60;
-            return `The scavenger you patched up finds your camp with a full kit. Everyone is treated, and they leave 60 Scrap and 2 ${m}.`;
+            materials[m] += 2; scrap += 60; noteCast('KESS', 1);
+            return `Kess finds your camp with a full kit and a working leg. Everyone is treated, and they leave 60 Scrap and 2 ${m}.`;
         }
     }
 };
@@ -923,7 +985,7 @@ const CONSEQUENCE_POOL = {
 function deployed() { return playerRoster.filter(p => p.gridPos > 0 && p.hp > 0); }
 
 // Booked against a sector rather than a node count, so it reads the same to the player as the
-// event that promised it: "two sectors from now".
+// event that promised it: "one sector on".
 function bookConsequence(kind, inSectors, extra = {}) {
     pendingConsequences.push({ kind, dueSector: currentSector + inSectors, ...extra });
 }
@@ -941,7 +1003,11 @@ function resolveConsequence() {
     switchScreen('screen-event');
     document.getElementById('event-title').innerText = spec.title;
     document.getElementById('event-desc').innerText = '';
+    if (spec.cast) meetCast(spec.cast);
     const text = spec.resolve(c);
+    // After resolve, so the badge shows where the debt actually left you rather than where it
+    // stood a moment before she counted it.
+    renderCastTag(spec.cast);
     document.getElementById('event-choices').innerHTML =
         `<div style="color:#B8860B; font-weight:bold; margin-bottom:15px;">> ${text}</div>` +
         `<button class="event-btn" style="border-color:#4488ff; color:#4488ff;" data-action="consequence-ack">CONTINUE EXPEDITION</button>`;
@@ -1000,6 +1066,7 @@ const CODEX = [
         'A commander drops a choice of three.',
         `A wipe spends a regroup - ${BASE_REGROUPS} to start, more from the Citadel - and the squad comes back with tuned weapons. Felling a commander refunds one. Out of regroups ends the run and banks the score.`,
         `No fight but a commander's has to be finished. Withdrawing forfeits the node - no scrap, no relic, no experience - for a wound of ${Math.round(WITHDRAW.wound * 100)}% health on everyone, eased to ${Math.round(WITHDRAW.floor * 100)}% by a full momentum bar, which it spends. Nobody dies of it, and the ${WITHDRAW.pursuers} toughest survivors follow you to the next fight.`,
+        `Some of the people out here come back. ${Object.keys(CAST).length} of them remember what you did last time - pay them, save them, rob them - and what they offer next changes with it. Standing lasts one expedition and starts over on the next.`,
         `Before deploying, the muster shows every operator's quirk. ${MUSTER_REROLLS} reroll tokens per expedition swap the ones that do not fit the plan.`,
         'Depth is worth far more than any single haul: pushing one sector deeper always beats farming the one you are on.'
     ] },
@@ -1111,10 +1178,34 @@ function contractNames() {
 const EVENT_POOL = [
     { title: "WRECKED CARAVAN", desc: "You stumble upon a destroyed merchant rig. The engine block is sparking dangerously, but the cargo hold is partially intact.", choices: [ { label: "Salvage Cargo (+30 Scrap)", canAfford: () => true, execute: () => { scrap += 30; playSFX('heal'); return "Salvaged 30 Scrap from the wreckage."; } }, { label: "Gut the Engine (+1 Tech, +2 Parts, -15 HP to random unit)", canAfford: () => true, execute: () => { materials.tech += 1; materials.parts += 2; let active = playerRoster.filter(p => p.gridPos > 0 && p.hp > 0); let target = active[Math.floor(Math.random() * active.length)]; target.hp = Math.max(1, target.hp - 15); playSFX('hit'); triggerHitFlash(target.id); return `Extracted parts, but an electrical surge shocked ${target.name} for 15 DMG.`; } }, { label: "Leave it", canAfford: () => true, execute: () => { return "You move on safely without risking the sparks."; } } ] },
     { title: "THE CHEM OASIS", desc: "A glowing pool of bio-luminescent fluid sits in a blast crater. It smells like synthetic ozone and iron.", choices: [ { label: "Extract Fluid (+2 Chems)", canAfford: () => true, execute: () => { materials.chems += 2; playSFX('heal'); return "Carefully extracted 2 Chems from the pool."; } }, { label: "Bathe Wounds (Heal All Deployed for 25 HP)", canAfford: () => true, execute: () => { playerRoster.forEach(p => { if(p.gridPos > 0 && p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + 25); }); playSFX('heal'); return "The fluid burned, but the wounds sealed rapidly."; } } ] },
-    { title: "WANDERING TINKER", desc: "A hooded cyborg sits by a campfire. They gesture toward a pile of tactical gear and hold out a mechanical hand.", choices: [ { label: "Trade Scrap for Bomb (Cost: 40 Scrap)", canAfford: () => scrap >= 40 && canCarry(), execute: () => { scrap -= 40; inventory.push('SCRAP_BOMB'); checkBountyProgress('CRAFT'); playSFX('click'); return "Acquired 1 Scrap Bomb."; } }, { label: "Trade Parts for Tech (Cost: 2 Parts)", canAfford: () => materials.parts >= 2, execute: () => { materials.parts -= 2; materials.tech += 1; playSFX('click'); return "Traded 2 Parts for 1 Tech."; } }, { label: "Decline", canAfford: () => true, execute: () => { return "You nod respectfully and continue walking."; } } ] },
+    { title: "WANDERING TINKER", cast: 'ORRIN',
+      desc: () => hasMetCast('ORRIN') && castOf('ORRIN').met > 1
+        ? "A different fire, the same mechanical hand. Orrin has your measure now and lays the good stock out first."
+        : "A hooded cyborg sits by a campfire. They gesture toward a pile of tactical gear and hold out a mechanical hand.",
+      choices: () => {
+        // Trade with him twice and the price comes down. That is the whole of the relationship.
+        const bombPrice = castStanding('ORRIN') >= 2 ? 25 : 40;
+        const list = [
+          { label: `Trade Scrap for Bomb (Cost: ${bombPrice} Scrap)`, canAfford: () => scrap >= bombPrice && canCarry(),
+            execute: () => { scrap -= bombPrice; inventory.push('SCRAP_BOMB'); checkBountyProgress('CRAFT'); noteCast('ORRIN', 1); playSFX('click');
+              return `Acquired 1 Scrap Bomb for ${bombPrice} Scrap.`; } },
+          { label: "Trade Parts for Tech (Cost: 2 Parts)", canAfford: () => materials.parts >= 2,
+            execute: () => { materials.parts -= 2; materials.tech += 1; noteCast('ORRIN', 1); playSFX('click');
+              return "Traded 2 Parts for 1 Tech."; } }
+        ];
+        if (castStanding('ORRIN') >= 2) list.push(
+          { label: "Let him look at your weapons (free, +4 DMG for 3 battles)", canAfford: () => true,
+            execute: () => { tuneUpBattles = 3; playSFX('heal');
+              return "He waves the payment away and works down the line, one weapon at a time."; } });
+        list.push({ label: "Decline", canAfford: () => true, execute: () => "You nod respectfully and continue walking." });
+        return list;
+      } },
     { title: "RADIATION STORM", desc: "The geiger counter screams. A violent wall of radioactive dust is rapidly approaching your position.", choices: [ { label: "Sprint Through (-10 HP to All Deployed)", canAfford: () => true, execute: () => { playerRoster.forEach(p => { if(p.gridPos > 0 && p.hp > 0) p.hp = Math.max(1, p.hp - 10); }); playSFX('hit'); triggerShake(); return "The squad powered through, but took heavy radiation burns."; } }, { label: "Deploy EMP Shield (-1 EMP Charge)", canAfford: () => inventory.includes('EMP_CHARGE'), execute: () => { inventory.splice(inventory.indexOf('EMP_CHARGE'), 1); playSFX('heal'); return "The EMP Charge detonated, creating a localized magnetic shield against the storm."; } } ] },
 
-    { title: "THE COLLECTOR'S TABLE", desc: "A relic dealer in a lead apron has laid a velvet cloth over a tailgate. 'One of yours, face down. Two of mine, blind. Everyone walks away richer or angrier.'",
+    { title: "THE COLLECTOR'S TABLE", cast: 'MAGPIE',
+      desc: () => castOf('MAGPIE').met > 1
+        ? "The same velvet cloth, the same tailgate, and The Magpie already has two face down before you sit."
+        : "A relic dealer in a lead apron has laid a velvet cloth over a tailgate. 'One of yours, face down. Two of mine, blind. Everyone walks away richer or angrier.'",
       choices: [
         { label: "Trade a held relic for two blind draws", canAfford: () => activeRelics.length >= 1 && unownedRelics().length >= 2,
           execute: () => {
@@ -1128,23 +1219,38 @@ const EVENT_POOL = [
                 const p = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
                 activeRelics.push(p); draws.push(p.name);
             }
-            announceSets(); playSFX('overdrive');
+            announceSets(); noteCast('MAGPIE', 1); playSFX('overdrive');
             return `${given.name} slides across the cloth, face down. Back come ${draws.join(' and ')}.`;
           } },
         { label: "Keep what you carry", canAfford: () => true,
           execute: () => "The dealer folds the cloth. 'Attachment. It gets them all killed.'" }
       ] },
 
-    { title: "THE DEBT COLLECTOR", desc: "A fixer in a rebreather deals cards on the hood of a burnt-out truck. She does not look up. 'Everyone out here needs something. I need to be paid back.'",
-      choices: [
-        { label: "Borrow 200 Scrap (owe 400 in two sectors)", canAfford: () => true,
-          execute: () => { scrap += 200; bookConsequence('DEBT', 2, { amount: 400 }); playSFX('click');
-            return "She counts out 200 Scrap without looking at you. 'Two sectors. Four hundred.'"; } },
-        { label: "Sell her a favour instead (+80 Scrap, -1 Tech)", canAfford: () => materials.tech >= 1,
-          execute: () => { materials.tech -= 1; scrap += 80; playSFX('click');
-            return "She takes the component, turns it over once, and pays you 80 Scrap for it."; } },
-        { label: "Walk away", canAfford: () => true, execute: () => "She deals another hand. 'Smart. Most of them aren't.'" }
-      ] },
+    { title: "THE DEBT COLLECTOR", cast: 'VELA',
+      desc: () => owesVela()
+        ? "Vela is dealing the same hand at a different truck. She lets you stand there a while before she says anything. 'You still owe me.'"
+        : castOf('VELA').met > 1
+          ? "Vela deals herself a hand and nods at the crate opposite. Whatever you settled last time, she wrote it down."
+          : "A fixer in a rebreather deals cards on the hood of a burnt-out truck. She does not look up. 'Everyone out here needs something. I need to be paid back.'",
+      choices: () => {
+        // She will not lend twice into the same debt, and she lends cheaper to someone who paid.
+        const owing = owesVela();
+        const owed = castStanding('VELA') >= 1 ? 320 : 400;
+        const list = [];
+        if (!owing) list.push(
+          { label: `Borrow 200 Scrap (owe ${owed} one sector on)`, canAfford: () => true,
+            execute: () => { scrap += 200; bookConsequence('DEBT', DEBT_TERM, { amount: owed }); playSFX('click');
+              return `She counts out 200 Scrap without looking at you. 'One sector. ${owed}.'`; } });
+        else list.push(
+          { label: "Ask for more (she refuses)", canAfford: () => false,
+            execute: () => "She does not deal you in twice." });
+        list.push(
+          { label: "Sell her a favour instead (+80 Scrap, -1 Tech)", canAfford: () => materials.tech >= 1,
+            execute: () => { materials.tech -= 1; scrap += 80; noteCast('VELA', 1); playSFX('click');
+              return "She takes the component, turns it over once, and pays you 80 Scrap for it."; } },
+          { label: "Walk away", canAfford: () => true, execute: () => "She deals another hand. 'Smart. Most of them aren't.'" });
+        return list;
+      } },
 
     { title: "THE BURIED CACHE", desc: "A sealed military container, half out of the sand, seals intact. Nothing has touched it. Nothing at all, for a very long time.",
       choices: [
@@ -1158,16 +1264,20 @@ const EVENT_POOL = [
         { label: "Leave it buried", canAfford: () => true, execute: () => "You mark it on nobody's map and keep walking." }
       ] },
 
-    { title: "THE SURVIVOR", desc: "A scavenger is propped against a wheel rim, one leg opened to the bone. They have a rifle across their lap and no rounds left for it.",
+    { title: "THE SURVIVOR", cast: 'KESS',
+      desc: () => castOf('KESS').met > 1
+        ? "Kess is upright this time, and walking, and there is someone else propped against the rim beside them. 'Your turn to watch me decide.'"
+        : "A scavenger is propped against a wheel rim, one leg opened to the bone. They have a rifle across their lap and no rounds left for it.",
       choices: [
         { label: "Patch them up (-2 Chems)", canAfford: () => materials.chems >= 2,
-          execute: () => { materials.chems -= 2; bookConsequence('SURVIVOR', 2); playSFX('heal');
+          execute: () => { materials.chems -= 2; bookConsequence('SURVIVOR', 2); noteCast('KESS', 2); playSFX('heal');
             return "You seal the leg and leave them water. They ask for your route. 'I pay what I owe.'"; } },
         { label: "Take the rifle (+50 Scrap)", canAfford: () => true,
-          execute: () => { scrap += 50; playSFX('click');
+          execute: () => { scrap += 50; noteCast('KESS', -2); playSFX('click');
             return "The rifle is worth 50 Scrap to the right buyer. They watch you take it and say nothing."; } },
         { label: "Leave them the water and go", canAfford: () => true,
-          execute: () => "You set the canteen down within reach and move on." }
+          execute: () => { noteCast('KESS', 1);
+            return "You set the canteen down within reach and move on."; } }
       ] },
 
     { title: "THE SIGNAL TOWER", desc: "A relay mast still has power, blinking against the dust. From the top you could see the next stretch of road before it sees you.",
@@ -1243,6 +1353,112 @@ const EVENT_POOL = [
           execute: () => { materials.parts += 1;
             return "Whoever set this will find ash. You keep one salvaged Part out of the fire."; } }
       ] }
+];
+
+// ── Threads ─────────────────────────────────────────────────────────────────────────────
+// None of these are in the general draw. Each exists only because of something the player
+// already did, each names the door it came through in `when`, and each comes due once - a
+// thread that repeats is a coincidence, not a thread. `pickEvent` offers them ahead of the
+// ordinary pool, so a run that has earned one gets it at the next event node.
+//
+// N08 hook: three of these are the natural place for a recruit to arrive out of a well-resolved
+// event. When the recruit generator and the roster slots exist, the offer attaches here - to
+// KESS ON THE ROAD first, which is already the survivor turning up whole.
+const FOLLOWUPS = [
+    { title: "ORRIN'S WORKSHOP", cast: 'ORRIN',
+      when: () => castStanding('ORRIN') >= 2,
+      desc: () => "Under a collapsed overpass Orrin has a bench, a generator and a light. 'You keep buying. I keep moving. Easier if I stop for one of us.'",
+      choices: () => [
+        { label: "Take the piece he set aside (free gear)", canAfford: () => !!rollGear(),
+          execute: () => { const g = rollGear(); if (!g) return "The bench is bare by the time you reach it.";
+            gearStash.push(g); playSFX('heal');
+            return `He puts ${gearById(g).name} in your hand and refuses the scrap. 'Bring it back broken.'`; } },
+        { label: "Have him strip your spares (+2 Parts, +2 Tech)", canAfford: () => true,
+          execute: () => { materials.parts += 2; materials.tech += 2; playSFX('click');
+            return "He works through the squad's dead weight and hands back what is worth carrying."; } },
+        { label: "Leave him to it", canAfford: () => true,
+          execute: () => { return "'Next fire, then.' The light stays on behind you for a long while."; } }
+      ] },
+
+    { title: "VELA SENDS MEN", cast: 'VELA',
+      when: () => castStanding('VELA') <= -2,
+      desc: () => "Four of them across the road, and none of them are Vela. The one in front holds up a folded card with a number written on it in her hand.",
+      choices: () => [
+        { label: "Pay it and be done (-300 Scrap)", canAfford: () => scrap >= 300,
+          execute: () => { scrap -= 300; noteCast('VELA', 3); playSFX('click');
+            return "Three hundred, counted twice, and the card is torn in half in front of you. The slate is clean."; } },
+        { label: "Hand over a relic instead", canAfford: () => activeRelics.length > 0,
+          execute: () => { if (!activeRelics.length) return "You have nothing on you worth the number on the card.";
+            const g = activeRelics.splice(Math.floor(Math.random() * activeRelics.length), 1)[0];
+            announceSets(); noteCast('VELA', 2); playSFX('click');
+            return `${g.name} goes into a canvas bag. 'She'll take it. She takes most things.'`; } },
+        { label: "Take the beating", canAfford: () => true,
+          execute: () => { deployed().forEach(u => { u.hp = Math.max(1, u.hp - Math.floor(u.maxHp * 0.25)); });
+            playSFX('hit'); triggerShake();
+            return "It is short, thorough and entirely professional. Nobody dies. Everybody remembers."; } }
+      ] },
+
+    { title: "VELA'S LEDGER", cast: 'VELA',
+      when: () => castStanding('VELA') >= 2 && !owesVela(),
+      desc: () => "Vela has a folding table this time, and a chair for you. 'You pay. That is rarer than you think. So here is the rate nobody else gets.'",
+      choices: () => [
+        { label: "Borrow 400 Scrap (owe 480 one sector on)", canAfford: () => true,
+          execute: () => { scrap += 400; bookConsequence('DEBT', DEBT_TERM, { amount: 480 }); playSFX('click');
+            return "Four hundred, at a rate she does not write down where anyone can see it."; } },
+        { label: "Sell her the squad's junk (+180 Scrap, -2 Parts)", canAfford: () => materials.parts >= 2,
+          execute: () => { materials.parts -= 2; scrap += 180; playSFX('click');
+            return "She pays over the odds and does not pretend otherwise."; } },
+        { label: "Nothing today", canAfford: () => true,
+          execute: () => "She folds the table up. 'The chair stays out for you.'" }
+      ] },
+
+    { title: "KESS ON THE ROAD", cast: 'KESS',
+      when: () => castStanding('KESS') >= 2,
+      desc: () => "Kess is walking the same road you are, upright, armed, and carrying more kit than one person needs. 'Told you I pay what I owe.'",
+      choices: () => [
+        { label: "Let them work on the squad (heal everyone to full)", canAfford: () => deployed().length > 0,
+          execute: () => { deployed().forEach(u => { u.hp = u.maxHp; }); playSFX('heal');
+            return "They empty half the kit into your people and repack the rest without being asked."; } },
+        { label: "Ask what is ahead (next fight opens at 50 momentum)", canAfford: () => true,
+          execute: () => { momentum = Math.max(momentum, 50); addMomentum(0); playSFX('click');
+            return "They draw the next stretch of road in the dirt, including the parts nobody walks."; } },
+        { label: "Send them somewhere safer", canAfford: () => true,
+          execute: () => { scrap += 120; noteCast('KESS', 1); playSFX('click');
+            return "They argue, lose, and leave you 120 Scrap on the way out. 'Then take this instead.'"; } }
+      ] },
+
+    { title: "WORD GETS AROUND", cast: 'KESS',
+      when: () => castStanding('KESS') <= -2,
+      desc: () => "The rifle you sold is leaning against a crate, and the people around the crate already know your squad by description.",
+      choices: () => [
+        { label: "Buy the story back (-140 Scrap)", canAfford: () => scrap >= 140,
+          execute: () => { scrap -= 140; noteCast('KESS', 3); playSFX('click');
+            return "Money is a poor apology and an excellent one. The description stops travelling."; } },
+        { label: "Let it stand", canAfford: () => true,
+          execute: () => { bookConsequence('AMBUSH', 1); playSFX('click');
+            return "You walk through and nobody stops you. Somebody leaves ahead of you at a run."; } }
+      ] },
+
+    { title: "THE MAGPIE'S BACK SHELF", cast: 'MAGPIE',
+      when: () => castStanding('MAGPIE') >= 1 && unownedRelics().length > 0,
+      desc: () => "No cloth this time. The Magpie sets one thing on the tailgate face up. 'You play blind well enough that I'll show you this one.'",
+      choices: () => {
+        // Named rather than blind: the reward for playing their game is being allowed to see.
+        const on = rollRelic(0.6);
+        return [
+          { label: on ? `Buy ${on.name} (-260 Scrap)` : 'The shelf is empty', canAfford: () => !!on && scrap >= 260,
+            execute: () => { if (!on) return "The shelf is empty."; scrap -= 260; activeRelics.push(on); announceSets(); noteCast('MAGPIE', 1); playSFX('overdrive');
+              return `${on.name} changes hands in daylight, which The Magpie clearly finds distasteful.`; } },
+          { label: on ? `Trade a relic for ${on.name}` : 'Nothing to trade', canAfford: () => !!on && activeRelics.length > 0,
+            execute: () => { if (!on) return "Nothing on the shelf.";
+              if (!activeRelics.length) return "The Magpie looks at your empty hands and puts it back under the tailgate.";
+              const given = activeRelics.splice(Math.floor(Math.random() * activeRelics.length), 1)[0];
+              activeRelics.push(on); announceSets(); noteCast('MAGPIE', 1); playSFX('overdrive');
+              return `${given.name} for ${on.name}, straight across, and no cloth over either of them.`; } },
+          { label: "Walk on", canAfford: () => true,
+            execute: () => "The thing goes back under the tailgate before you have finished turning." }
+        ];
+      } }
 ];
 
 const ROSTER_TEMPLATE = [
@@ -1963,6 +2179,10 @@ function renderRunOver(score, isBest, seedPrev = null) {
         ['SKULLS BANKED', `\uD83D\uDC80 ${bossSkulls}`]
     ];
     if (st.withdrawals > 0) lines.splice(2, 0, ['FIGHTS ABANDONED', st.withdrawals]);
+    // Who the run met and how it left them. A name with nothing after it is a stranger you
+    // happened to pass; the rest is the thread the expedition actually carried.
+    const faces = facesMet();
+    if (faces.length) lines.push(['FACES MET', faces.map(f => `${f.name} (${f.band.label.toLowerCase()})`).join(', ')]);
     // A score is only comparable if it says what it was earned under.
     if (st.contractMult && st.contractMult > 1) {
         lines.push(['CONTRACT BONUS', `x${st.contractMult.toFixed(2)}`]);
@@ -2367,6 +2587,8 @@ function buildNewRun(diff) {
     playerRoster = migrateTraits(JSON.parse(JSON.stringify(ROSTER_TEMPLATE)));
     activeBounties = generateBounties(seededRng('bounties')); runStats = newRunStats(); pendingRelicOffer = null;
     pendingConsequences = []; recentEvents = []; gearStash = []; pendingPerkOffers = [];
+    // Nobody out here carries a grudge between expeditions. Every run starts among strangers.
+    castState = {}; firedEvents = [];
     activeShop = null; regroupInsured = false; shopRerollPick = false;
     bossSalt = 'w' + Math.floor(Math.random() * 1e9);
     pursuit = null; withdrawArmed = false;
@@ -2433,7 +2655,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, bonds, sectorFront, runSeed, ascension, bossSalt, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, bonds, sectorFront, runSeed, ascension, bossSalt, pendingConsequences, recentEvents, castState, firedEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -2464,6 +2686,10 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
             if (c.weaponMod === undefined) c.weaponMod = null;
             if (c.trinket === undefined) c.trinket = null;
         }); pendingConsequences = Array.isArray(d.pendingConsequences) ? d.pendingConsequences : []; recentEvents = Array.isArray(d.recentEvents) ? d.recentEvents : [];
+        // A save written before the cast existed has no standings, which is the same thing as
+        // having met nobody - the run carries on among strangers rather than breaking.
+        castState = (d.castState && typeof d.castState === 'object') ? d.castState : {};
+        firedEvents = Array.isArray(d.firedEvents) ? d.firedEvents : [];
         // A save from before routes existed gets a fresh map with its whole current tier open.
         sectorMap = (d.sectorMap && Array.isArray(d.sectorMap.nodes)) ? d.sectorMap : generateSectorMap();
         currentNodeId = d.currentNodeId || null;
@@ -3045,24 +3271,78 @@ function medBay(charId, action) {
 // Fourteen events repeat far less than four did, but a uniform roll still hands the same one
 // back two nodes running. The last few are held out of the draw so the map keeps changing.
 const EVENT_MEMORY = 4;
+// An event with a face in it does not read the same the second time, and what it offers should
+// not either. Both are allowed to be functions of the run so far; everything that reads an
+// event goes through these two rather than touching .desc and .choices directly.
+function eventDesc(ev) { return typeof ev.desc === 'function' ? ev.desc() : ev.desc; }
+function choicesFor(ev) { return typeof ev.choices === 'function' ? ev.choices() : ev.choices; }
+
+// Somebody you have already met is likelier to turn up again than a stranger is. Measured: on a
+// flat draw across fourteen events each face appeared about half a run, so nobody ever came back
+// twice and every thread that needed two meetings was unreachable content - three of six never
+// fired across thirty expeditions. The weight applies only once a face is known, so a first
+// sector still meets strangers at the ordinary rate.
+const FACE_RETURN_WEIGHT = 3;
+// How long Vela's money is yours. It was two sectors, which on a run whose median depth is two
+// meant most loans never came due at all: 200 scrap up front and no collection, and weighting
+// her to come back made that the most generous thing in the pool. One sector is a loan.
+const DEBT_TERM = 1;
+function eventWeight(e) { return (e.cast && hasMetCast(e.cast)) ? FACE_RETURN_WEIGHT : 1; }
+
 function pickEvent() {
+    // A thread the run has already started outranks a stranger. Follow-ups are not in the
+    // general draw at all - they exist only because of something the player already did, and
+    // each comes due once.
+    const owed = FOLLOWUPS.filter(f => !firedEvents.includes(f.title) && f.when());
+    if (owed.length) {
+        const pick = owed[Math.floor(Math.random() * owed.length)];
+        firedEvents = [...firedEvents, pick.title];
+        recentEvents = [pick.title, ...recentEvents].slice(0, EVENT_MEMORY);
+        return pick;
+    }
     const fresh = EVENT_POOL.filter(e => !recentEvents.includes(e.title));
     const pool = fresh.length ? fresh : EVENT_POOL;
-    const pick = pool[Math.floor(Math.random() * pool.length)];
+    const total = pool.reduce((n, e) => n + eventWeight(e), 0);
+    let roll = Math.random() * total;
+    let pick = pool[pool.length - 1];
+    for (const e of pool) { roll -= eventWeight(e); if (roll < 0) { pick = e; break; } }
     recentEvents = [pick.title, ...recentEvents].slice(0, EVENT_MEMORY);
     return pick;
 }
 
+// The choice list is fixed at render and read back by index when one is pressed, so a list that
+// depends on standing cannot shift underneath the button the player is looking at.
+let activeChoices = [];
+
 function initiateEvent() {
     switchScreen('screen-event'); activeEvent = pickEvent();
-    document.getElementById('event-title').innerText = activeEvent.title; document.getElementById('event-desc').innerText = activeEvent.desc;
-    let cHtml = ''; activeEvent.choices.forEach((c, idx) => { let canAfford = c.canAfford(); cHtml += `<button class="event-btn" ${!canAfford ? 'disabled' : ''} data-action="event-choice" data-index="${idx}">${c.label}</button>`; });
+    if (activeEvent.cast) meetCast(activeEvent.cast);
+    activeChoices = choicesFor(activeEvent);
+    document.getElementById('event-title').innerText = activeEvent.title;
+    document.getElementById('event-desc').innerText = eventDesc(activeEvent);
+    renderCastTag(activeEvent.cast);
+    let cHtml = ''; activeChoices.forEach((c, idx) => { let canAfford = c.canAfford(); cHtml += `<button class="event-btn" ${!canAfford ? 'disabled' : ''} data-action="event-choice" data-index="${idx}">${c.label}</button>`; });
     document.getElementById('event-choices').innerHTML = cHtml;
 }
 
+// Who this is, and what they think of you - shown only once there is something to think about,
+// so a first meeting reads as a first meeting.
+function renderCastTag(id) {
+    const el = document.getElementById('event-cast');
+    if (!el) return;
+    const c = CAST[id];
+    if (!c) { el.innerHTML = ''; el.style.display = 'none'; return; }
+    const band = standingBand(id);
+    const again = (castOf(id).met || 0) > 1;
+    el.style.display = 'flex';
+    el.innerHTML = `<span class="cast-name">${c.name.toUpperCase()} \u00B7 ${c.epithet.toUpperCase()}</span>` +
+        (again ? `<span class="cast-band ${band.cls}">${band.label}</span>` : `<span class="cast-band cast-new">FIRST MEETING</span>`);
+}
+
 function resolveEvent(idx) {
-    let resultText = activeEvent.choices[idx].execute();
+    let resultText = activeChoices[idx].execute();
     document.getElementById('event-choices').innerHTML = `<div style="color:#6B8E23; font-weight:bold; margin-bottom:15px;">> ${resultText}</div><button class="event-btn" style="border-color:#4488ff; color:#4488ff;" data-action="event-finish">CONTINUE EXPEDITION</button>`;
+    renderCastTag(activeEvent.cast);
 }
 function finishEvent() { currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap(); }
 
@@ -3432,6 +3712,7 @@ const PROMPTS = [
     { id: 'COMBO',     title: 'A COMBO IS LIVE', body: 'That glowing ability finishes a status something is already carrying. Combos hit far harder and build momentum - lead with the status, then cash it in.' },
     { id: 'INTENT',    title: 'THEY TELEGRAPH',  body: 'The icon over each hostile is what it intends to do next turn. A heavy blow, an area attack, a flank around your line - all of it is announced a turn early, so all of it has an answer.' },
     { id: 'SIGNATURE', title: 'EVERY HOSTILE HAS A TRICK', body: 'The tag under a hostile names what it does - plate that must be broken, a shot it is lining up, a pack that grows stronger together. Tap any hostile when you are not aiming to read its full file.' },
+    { id: 'FACES',     title: 'THEY REMEMBER YOU', body: 'You have met this one before, and the tag above them says what they made of it. Paying, sparing and trading raise their standing; robbing them lowers it. What they offer next - and what turns up further down the road because of them - follows from that. It lasts one expedition.' },
     { id: 'WITHDRAW',  title: 'YOU CAN LEAVE',   body: 'A fight going badly is not a fight you have to finish. WITHDRAW forfeits this node entirely, wounds everyone on the way out, and the survivors follow you to the next one - but the squad lives. Momentum spent on the way out makes the parting wound lighter.' },
     { id: 'MOMENTUM',  title: 'MOMENTUM IS A MARKET', body: 'Fighting fills the bar. Tactics cost momentum but never cost your action: sharpen the next hit, patch the worst-off operator, or take a second turn on the spot.' },
     { id: 'OVERDRIVE', title: 'OVERDRIVE IS READY', body: 'A full bar buys one devastating move from the operator taking their turn. The first time a class uses one you choose which of its two it fights with for the rest of the expedition.' },
@@ -5347,7 +5628,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
@@ -5412,6 +5693,9 @@ globalThis.WP = {
     get activeEvent() { return activeEvent; }, set activeEvent(v) { activeEvent = v; },
     get pendingConsequences() { return pendingConsequences; }, set pendingConsequences(v) { pendingConsequences = v; },
     get recentEvents() { return recentEvents; }, set recentEvents(v) { recentEvents = v; },
+    get castState() { return castState; }, set castState(v) { castState = v; },
+    get firedEvents() { return firedEvents; }, set firedEvents(v) { firedEvents = v; },
+    get activeChoices() { return activeChoices; }, set activeChoices(v) { activeChoices = v; },
     get activePosSelector() { return activePosSelector; }, set activePosSelector(v) { activePosSelector = v; },
     get activePerkSelector() { return activePerkSelector; }, set activePerkSelector(v) { activePerkSelector = v; },
     get currentWeather() { return currentWeather; }, set currentWeather(v) { currentWeather = v; },

@@ -232,7 +232,7 @@ module.exports = {
     const table = await page.evaluate(() => {
       activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const ev = EVENT_POOL.find(e => e.title === "THE COLLECTOR'S TABLE");
-      const gamble = ev.choices[0];
+      const gamble = choicesFor(ev)[0];
       activeRelics = [];
       const refused = !gamble.canAfford();
       activeRelics = [RELIC_POOL.find(r => r.id === 'SCRAP_MAGNET')];

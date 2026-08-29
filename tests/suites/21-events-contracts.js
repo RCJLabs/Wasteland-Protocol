@@ -7,15 +7,23 @@ module.exports = {
     await page.waitForTimeout(600);
 
     // ---- the event pool ----
-    const pool = await page.evaluate(() => ({
-      count: EVENT_POOL.length,
-      titles: new Set(EVENT_POOL.map(e => e.title)).size,
-      malformed: EVENT_POOL.filter(e => !e.title || !e.desc || !Array.isArray(e.choices) || e.choices.length < 2).map(e => e.title),
-      choicesWithoutGuards: EVENT_POOL.flatMap(e => e.choices.filter(c => typeof c.canAfford !== 'function' || typeof c.execute !== 'function').map(() => e.title)),
-      unlabelled: EVENT_POOL.flatMap(e => e.choices.filter(c => !c.label).map(() => e.title))
-    }));
+    // An event's description and choice list may each be a literal or a function of the run so
+    // far, so both are asked for rather than read off the object. The contract underneath is the
+    // same one it always was, and it now covers the follow-up encounters too.
+    const pool = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0);
+      const all = [...EVENT_POOL, ...FOLLOWUPS];
+      return {
+        count: EVENT_POOL.length, all: all.length,
+        titles: new Set(all.map(e => e.title)).size,
+        malformed: all.filter(e => !e.title || typeof eventDesc(e) !== 'string' || !eventDesc(e).length
+                                || !Array.isArray(choicesFor(e)) || choicesFor(e).length < 2).map(e => e.title),
+        choicesWithoutGuards: all.flatMap(e => choicesFor(e).filter(c => typeof c.canAfford !== 'function' || typeof c.execute !== 'function').map(() => e.title)),
+        unlabelled: all.flatMap(e => choicesFor(e).filter(c => !c.label).map(() => e.title))
+      };
+    });
     ok(`the pool holds ${pool.count} events, not four`, pool.count >= 12);
-    ok('each with its own title', pool.titles === pool.count);
+    ok('each with its own title', pool.titles === pool.all);
     ok('each with a description and at least two choices', pool.malformed.length === 0);
     ok('every choice can say whether it is affordable and what it does', pool.choicesWithoutGuards.length === 0);
     ok('and every choice is labelled', pool.unlabelled.length === 0);
@@ -25,7 +33,7 @@ module.exports = {
     const exercised = await page.evaluate(() => {
       const failures = [];
       let ran = 0, affordable = 0;
-      EVENT_POOL.forEach(ev => ev.choices.forEach((c, i) => {
+      EVENT_POOL.forEach(ev => choicesFor(ev).forEach((c, i) => {
         currentSlot = 1; activeContracts = []; confirmNewGame(1.0); sectorFront = null;
         scrap = 500; materials = { parts: 5, chems: 5, tech: 5 };
         inventory = ['MED_STIM']; currentSector = 2; pendingConsequences = [];
@@ -60,11 +68,12 @@ module.exports = {
 
     // ---- some choices book something that comes due later ----
     const booking = await page.evaluate(() => {
-      const src = EVENT_POOL.map(e => ({ title: e.title, books: e.choices.filter(c => String(c.execute).includes('bookConsequence')).length }));
+      const all = [...EVENT_POOL, ...FOLLOWUPS];
+      const src = all.map(e => ({ title: e.title, books: choicesFor(e).filter(c => String(c.execute).includes('bookConsequence')).length }));
       return { kinds: Object.keys(CONSEQUENCE_POOL),
                events: src.filter(e => e.books > 0).map(e => e.title),
                allKindsUsed: Object.keys(CONSEQUENCE_POOL).every(k =>
-                 EVENT_POOL.some(e => e.choices.some(c => String(c.execute).includes(`'${k}'`)))) };
+                 all.some(e => choicesFor(e).some(c => String(c.execute).includes(`'${k}'`)))) };
     });
     ok(`there are ${booking.kinds.length} kinds of deferred outcome`, booking.kinds.length >= 3);
     ok(`and ${booking.events.length} events that book one`, booking.events.length >= 3);
@@ -234,14 +243,14 @@ module.exports = {
     const dry = await page.evaluate(() => {
       activeContracts = ['NO_CONSUMABLES']; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       scrap = 500; materials = { parts: 9, chems: 9, tech: 9 };
-      const offered = EVENT_POOL.flatMap(e => e.choices
+      const offered = EVENT_POOL.flatMap(e => choicesFor(e)
         .filter(c => String(c.execute).includes('inventory.push'))
         .map(c => ({ title: e.title, can: c.canAfford() })));
       craftItem('MED_STIM');
       const crafted = inventory.length;
       activeContracts = []; confirmNewGame(1.0); sectorFront = null;
       scrap = 500; materials = { parts: 9, chems: 9, tech: 9 };
-      const offeredNormally = EVENT_POOL.flatMap(e => e.choices
+      const offeredNormally = EVENT_POOL.flatMap(e => choicesFor(e)
         .filter(c => String(c.execute).includes('inventory.push'))
         .map(c => c.canAfford()));
       return { offered, crafted, offeredNormally };

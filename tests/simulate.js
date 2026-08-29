@@ -32,7 +32,7 @@ const WITHDRAW_POLICY = flag('withdraw', 'on') !== 'off';
 const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
   const stat = { sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
-                 wipes: 0, withdrawals: 0, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
+                 wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
@@ -233,7 +233,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
     if (node.type === 'EVENT') {
       stat.events++;
       const ev = pickEvent();
-      const options = ev.choices.filter(c => c.canAfford());
+      // An event's choice list can depend on standing now, so it is asked for rather than read.
+      if (ev.cast) meetCast(ev.cast);
+      const options = choicesFor(ev).filter(c => c.canAfford());
+      if (ev.cast) stat.facesMet[ev.cast] = (stat.facesMet[ev.cast] || 0) + 1;
+      if (FOLLOWUPS.some(f => f.title === ev.title)) stat.threads.push(ev.title);
       if (options.length) options[Math.floor(Math.random() * options.length)].execute();
       currentTier++; stat.nodes++; noteDepth(); runStats.nodes++;
       continue;
@@ -298,6 +302,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
     if (boardNow !== boardBefore) { stat.bountiesDone++; boardBefore = boardNow; }
   }
 
+  stat.standings = Object.fromEntries(facesMet().map(f => [f.id, f.standing]));
   stat.sector = runStats.deepestSector; stat.tier = runStats.deepestTier;
   stat.relics = activeRelics.map(r => r.id);
   stat.score = computeScore(runStats);
@@ -409,6 +414,15 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
   results.forEach(r => (r.frontsSeen || []).forEach(f => { if (f) fronts[f] = (fronts[f] || 0) + 1; }));
   line('fronts weathered', Object.entries(fronts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ') || 'none');
   line('items crafted per run', (results.reduce((a, r) => a + r.crafted, 0) / n).toFixed(1));
+  const faces = {};
+  results.forEach(r => Object.entries(r.facesMet || {}).forEach(([k, v]) => { faces[k] = (faces[k] || 0) + v; }));
+  line('faces met', Object.entries(faces).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ') || 'none');
+  const threads = {};
+  results.forEach(r => (r.threads || []).forEach(t => { threads[t] = (threads[t] || 0) + 1; }));
+  line('threads picked up', Object.entries(threads).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ') || 'none');
+  const stand = {};
+  results.forEach(r => Object.entries(r.standings || {}).forEach(([k, v]) => { (stand[k] = stand[k] || []).push(v); }));
+  line('standing at run end', Object.entries(stand).map(([k, v]) => `${k} ${(v.reduce((a, b) => a + b, 0) / v.length).toFixed(1)}`).join(', ') || 'none');
 
   console.log('\n── RELICS ' + '─'.repeat(48));
   const relics = {};

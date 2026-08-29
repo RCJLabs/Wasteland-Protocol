@@ -84,6 +84,15 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .event-box { background: #050505; border: 2px solid #B8860B; padding: 25px; width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; text-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.8); }
 .event-title { color: #B8860B; font-size: 22px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; border-bottom: 1px solid #333; padding-bottom: 10px; }
 .event-desc { color: #ccc; font-size: 14px; line-height: 1.6; margin-bottom: 15px; }
+/* Who this is and what they make of you, above their own words. The standing carries a word as
+   well as a colour, for the same reason the status marks do. */
+.event-cast { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 12px; }
+.event-cast .cast-name { color: #B8860B; font-size: calc(11px * var(--text-scale, 1)); letter-spacing: 1.5px; }
+.event-cast .cast-band { font-size: calc(10px * var(--text-scale, 1)); letter-spacing: 1px; padding: 3px 8px; border: 1px solid; }
+.cast-band.cast-good { color: #6B8E23; border-color: #4a6b19; background: rgba(40,60,10,0.35); }
+.cast-band.cast-bad  { color: #ff6b6b; border-color: #8B0000; background: rgba(70,10,10,0.35); }
+.cast-band.cast-idle { color: #9a9a9a; border-color: #4a4a4a; background: rgba(255,255,255,0.03); }
+.cast-band.cast-new  { color: #7fa7d4; border-color: #35506b; background: rgba(15,30,50,0.4); }
 .event-choices { display: flex; flex-direction: column; gap: 10px; }
 .event-btn { background: #111; color: #fff; border: 1px solid #444; padding: 12px; font-family: monospace; font-size: 13px; cursor: pointer; transition: 0.2s; text-transform: uppercase; }
 .event-btn:hover:not(:disabled) { background: #B8860B; color: #000; border-color: #B8860B; }
