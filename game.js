@@ -385,7 +385,7 @@ function generateSectorMap(rng = Math.random) {
 
     const swapOne = (type, tierLo, tierHi) => {
         const pool = nodes.filter(n => !n.elite && n.type !== 'BOSS' && n.type !== 'CAMP' && n.type !== 'EVENT'
-            && n.tier > 1 && n.tier >= tierLo && n.tier <= tierHi);
+            && n.type !== 'SHOP' && n.tier > 1 && n.tier >= tierLo && n.tier <= tierHi);
         if (pool.length) pool[Math.floor(rng() * pool.length)].type = type;
     };
     swapOne('CAMP', 4, 7);
@@ -393,6 +393,9 @@ function generateSectorMap(rng = Math.random) {
     swapOne('EVENT', 2, 8);
     if (rng() < 0.35) swapOne('EVENT', 2, 8);
     if (rng() < 0.35) swapOne('EVENT', 2, 8);
+    // The Armory is uncommon on purpose: a shop on most maps but not all, so finding one on
+    // the route ahead is a reason to steer, not a fixture to tick off.
+    if (rng() < 0.65) swapOne('SHOP', 3, 9);
 
     // The forecast is a contract: the weather a node shows is the weather its fight gets.
     nodes.forEach(n => {
@@ -605,6 +608,11 @@ const CODEX = [
         ...GEAR_POOL.filter(g => g.slot === 'mod').map(g => `${g.name} (${g.cls}) — ${g.desc}`),
         ...GEAR_POOL.filter(g => g.slot === 'trinket').map(g => `${g.name} — ${g.desc}`)
     ] },
+    { id: 'ARMORY', title: 'THE ARMORY', body: () => [
+        'A trader node on the route map, on most maps but not all. Stock rolls fresh per visit and prices ride the sector reward curve.',
+        'On the shelf: one gear piece, one relic at a steep markup, med-stims, Quirk Therapy (reroll one operator\'s quirk), and the Regroup Bond.',
+        'The Regroup Bond prepays your next regroup: when the squad breaks, the bond is spent instead of half your scrap.'
+    ] },
     { id: 'CONTRACTS', title: 'CONTRACTS', body: () => [
         'Optional conditions taken before deploying. Each makes the run harder and every point it earns worth more.',
         ...CONTRACT_POOL.map(c => `${c.name} +${Math.round(c.bonus * 100)}% — ${c.desc}`)
@@ -810,7 +818,7 @@ const ACTIONS = {
     'dev-tier':         el => devJump(0, Number(el.dataset.delta)),
     'dev-boss':         el => devFightBoss(el.dataset.boss),
     'dev-fight':        el => { currentTier = Math.min(currentTier, TOTAL_TIERS); initiateCombat(el.dataset.type, el.dataset.elite === '1'); },
-    'dev-node':         el => { el.dataset.kind === 'EVENT' ? initiateEvent() : initiateCamp(); },
+    'dev-node':         el => { el.dataset.kind === 'EVENT' ? initiateEvent() : el.dataset.kind === 'SHOP' ? initiateShop() : initiateCamp(); },
     'dev-give':         el => devGive(el.dataset.kind),
     'dev-win':          () => devResolve(true),
     'dev-lose':         () => devResolve(false),
@@ -819,6 +827,11 @@ const ACTIONS = {
 
     'node-event':       el => { enterNode(el.dataset.node); initiateEvent(); },
     'node-camp':        el => { enterNode(el.dataset.node); initiateCamp(); },
+    'node-shop':        el => { enterNode(el.dataset.node); initiateShop(); },
+    'shop-buy':         el => buyShopItem(Number(el.dataset.index)),
+    'shop-reroll':      el => shopRerollQuirk(el.dataset.id),
+    'shop-reroll-cancel': () => { shopRerollPick = false; renderShop(); },
+    'shop-finish':      () => finishShop(),
     'node-combat':      el => { enterNode(el.dataset.node); initiateCombat(el.dataset.type, el.dataset.elite === '1'); },
 
     'outpost-tab':      el => setOutpostTab(el.dataset.tab),
@@ -1204,7 +1217,9 @@ function regroupSquad() {
     if (regroupsLeft() <= 0) { endRun(); return; }
     runStats.regroups--;
     playerRoster.forEach(p => { p.hp = p.maxHp; p.stunnedTurns = 0; p.bleedingTurns = 0; p.armorTurns = 0; p.armor = 0; p.oiledTurns = 0; });
-    scrap = Math.floor(scrap / 2);
+    // A Regroup Bond from the Armory prepays exactly one of these.
+    if (regroupInsured) regroupInsured = false;
+    else scrap = Math.floor(scrap / 2);
     // The fallback costs half the scrap, but the squad walks back in with tuned weapons -
     // a wipe should sting, not start a death spiral.
     tuneUpBattles = Math.max(tuneUpBattles, 3);
@@ -1224,12 +1239,13 @@ function renderSquadBroken() {
     const left = regroupsLeft();
     switchScreen('screen-runover');
     document.getElementById('runover-title').innerText = 'SQUAD BROKEN';
-    document.getElementById('runover-desc').innerText =
-        `The squad is down but the expedition holds. Regrouping costs half your scrap and pushes you back to the start of Sector ${currentSector}.`;
+    document.getElementById('runover-desc').innerText = regroupInsured
+        ? `The squad is down but the expedition holds. The Regroup Bond covers this one — no scrap lost, back to the start of Sector ${currentSector}.`
+        : `The squad is down but the expedition holds. Regrouping costs half your scrap and pushes you back to the start of Sector ${currentSector}.`;
     document.getElementById('runover-score').innerText = `${left} REGROUP${left === 1 ? '' : 'S'} LEFT`;
     document.getElementById('runover-best').innerText = `RUN SCORE SO FAR: ${computeScore(runStats).toLocaleString()} PTS`;
     document.getElementById('runover-lines').innerHTML = [
-        ['SCRAP ON HAND', `${scrap} \u2192 ${Math.floor(scrap / 2)}`],
+        ['SCRAP ON HAND', regroupInsured ? `${scrap} (BOND COVERS IT)` : `${scrap} \u2192 ${Math.floor(scrap / 2)}`],
         ['DEPTH REACHED', `SECTOR ${runStats.deepestSector} \u00B7 TIER ${runStats.deepestTier}`],
         ['SKULLS BANKED', `\uD83D\uDC80 ${bossSkulls}`]
     ].map(l => `<div class="runover-line"><span>${l[0]}</span><span>${l[1]}</span></div>`).join('');
@@ -1564,6 +1580,7 @@ function buildNewRun(diff) {
     playerRoster = migrateTraits(JSON.parse(JSON.stringify(ROSTER_TEMPLATE)));
     activeBounties = generateBounties(); runStats = newRunStats(); pendingRelicOffer = null;
     pendingConsequences = []; recentEvents = []; gearStash = []; pendingPerkOffers = [];
+    activeShop = null; regroupInsured = false; shopRerollPick = false;
     playerRoster.forEach(c => { c.weaponMod = null; c.trinket = null; });
     sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
     odChoices = {}; pendingOverdrive = null; momentumFocus = 0; pressExtra = false;
@@ -1588,6 +1605,7 @@ function continueGame() {
     if (pendingCombat) return resumeCombat(pendingCombat);
     if (pendingRelicOffer && pendingRelicOffer.length) return renderRelicOffer();
     if (pendingPerkOffers.length) return renderPerkOffer();
+    if (activeShop) return renderShop();
     renderMap();
 }
 
@@ -1618,7 +1636,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -1629,6 +1647,11 @@ function migrateRelics(saved) {
 function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = migrateAssetPaths(migrateTraits(d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)))); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; odChoices = d.odChoices || {};
         gearStash = (Array.isArray(d.gearStash) ? d.gearStash : []).filter(id => gearById(id));
         pendingPerkOffers = Array.isArray(d.pendingPerkOffers) ? d.pendingPerkOffers : [];
+        // A shop mid-haggle survives the reload; stock lines whose ids no longer exist are culled.
+        activeShop = (d.activeShop && Array.isArray(d.activeShop.stock)) ? d.activeShop : null;
+        if (activeShop) activeShop.stock = activeShop.stock.filter(it =>
+            (it.kind !== 'GEAR' || gearById(it.id)) && (it.kind !== 'RELIC' || RELIC_POOL.some(r => r.id === it.id)));
+        regroupInsured = !!d.regroupInsured; shopRerollPick = false;
         // Gear fields on a roster saved before gear existed, and any id that no longer exists,
         // resolve to empty slots rather than phantom equipment.
         playerRoster.forEach(c => {
@@ -1679,7 +1702,7 @@ function renderDev() {
               btn('Mech', 'dev-fight', 'data-type="MECH" data-elite="0"') +
               btn('Elite', 'dev-fight', 'data-type="RAIDERS" data-elite="1"') +
             `</div>`,
-            `<div class="dev-row">` + btn('Event', 'dev-node', 'data-kind="EVENT"') + btn('Camp', 'dev-node', 'data-kind="CAMP"') + `</div>`
+            `<div class="dev-row">` + btn('Event', 'dev-node', 'data-kind="EVENT"') + btn('Camp', 'dev-node', 'data-kind="CAMP"') + btn('Shop', 'dev-node', 'data-kind="SHOP"') + `</div>`
         ]),
         group(`Supplies — ${scrap} scrap, ${bossSkulls} skulls`, [
             `<div class="dev-row">` +
@@ -1940,10 +1963,12 @@ function renderMap() {
         else if (n.type === 'MECH') icon = '⚙️';
         else if (n.type === 'EVENT') { icon = '❓'; lbl = 'UNKNOWN'; }
         else if (n.type === 'CAMP') icon = '⛺';
+        else if (n.type === 'SHOP') { icon = '◇'; lbl = 'ARMORY'; }
         const status = cleared.has(n.id) ? 'cleared' : avail.has(n.id) ? 'active' : 'locked';
         const cutoff = (status === 'locked' && !reach.has(n.id)) ? 'node-cutoff' : '';
-        const eCls = n.elite ? 'elite-node' : n.type === 'EVENT' ? 'event-node' : n.type === 'CAMP' ? 'camp-node' : '';
+        const eCls = n.elite ? 'elite-node' : n.type === 'EVENT' ? 'event-node' : n.type === 'CAMP' ? 'camp-node' : n.type === 'SHOP' ? 'shop-node' : '';
         const act = n.type === 'EVENT' ? `data-action="node-event"` : n.type === 'CAMP' ? `data-action="node-camp"`
+                  : n.type === 'SHOP' ? `data-action="node-shop"`
                   : `data-action="node-combat" data-type="${n.type}" data-elite="${n.elite ? 1 : 0}"`;
         const wx = WEATHER_DOTS[n.weather] || '';
         m += `<button class="map-node node-${status} ${cutoff} ${eCls} ${(n.type === 'BOSS' && status === 'active') ? 'boss-node' : ''}" style="left:${MAP_COL_X[n.col]}%; top:${(TOTAL_TIERS - n.tier) * MAP_ROW_H + (MAP_ROW_H - 75) / 2}px" ${status === 'active' ? '' : 'disabled'} ${act} data-node="${n.id}"><span class="node-icon">${icon}</span><span class="node-lbl">${lbl}${n.elite ? ' (ELITE)' : ''}</span>${wx ? `<span class="node-weather ${wx}" title="Forecast: ${n.weather.replace('_', ' ')}"></span>` : ''}</button>`;
@@ -2233,6 +2258,116 @@ function resolveCamp(type) {
     }
 }
 function finishCamp() { currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap(); }
+
+// ── The Armory ──────────────────────────────────────────────────────────────────────────
+// Scrap had three rote uses; a shop gives it competing ones, and gives the route graph a
+// destination worth a detour. Prices ride the same 1.4^sector curve the rewards do, so a
+// piece costs the same share of a fight's loot at any depth.
+let activeShop = null;        // { nodeId, stock } while a trader holds the current node
+let regroupInsured = false;   // one prepaid regroup: the next one takes no scrap
+let shopRerollPick = false;   // the quirk-therapy row is waiting on an operator pick
+
+const shopPrice = base => Math.floor(base * sectorRewardMult());
+
+function rollShopStock() {
+    const stock = [];
+    const gearId = rollGear();
+    if (gearId) stock.push({ kind: 'GEAR', id: gearId, price: shopPrice(140), sold: false });
+    const relics = unownedRelics();
+    if (relics.length) {
+        const r = relics[Math.floor(Math.random() * relics.length)];
+        stock.push({ kind: 'RELIC', id: r.id, price: shopPrice(r.tier === 'RARE' ? 320 : 240), sold: false });
+    }
+    stock.push({ kind: 'STIM', price: shopPrice(35), sold: false });
+    stock.push({ kind: 'STIM', price: shopPrice(35), sold: false });
+    stock.push({ kind: 'REROLL', price: shopPrice(60), sold: false });
+    stock.push({ kind: 'INSURANCE', price: shopPrice(90), sold: false });
+    return stock;
+}
+
+function initiateShop() {
+    // Stock is rolled once per node and persisted, so a reload mid-haggle resumes the same shelf.
+    if (!activeShop || activeShop.nodeId !== currentNodeId)
+        activeShop = { nodeId: currentNodeId, stock: rollShopStock() };
+    shopRerollPick = false;
+    saveGameState();
+    renderShop();
+}
+
+function shopItemLabel(it) {
+    if (it.kind === 'GEAR') {
+        const g = gearById(it.id);
+        return { name: `${g.slot === 'mod' ? '⚙' : '◈'} ${g.name}`, desc: `${g.slot === 'mod' ? g.cls + ' mod — ' : ''}${g.desc}` };
+    }
+    if (it.kind === 'RELIC') {
+        const r = RELIC_POOL.find(x => x.id === it.id);
+        return { name: `◆ ${r.name}`, desc: `${r.tier} relic at trader markup — ${r.desc}` };
+    }
+    if (it.kind === 'STIM') return { name: '💉 Med-Stim', desc: 'A combat heal in the pocket.' };
+    if (it.kind === 'REROLL') return { name: '↻ Quirk Therapy', desc: "Reroll one operator's quirk. No refunds on who they become." };
+    if (it.kind === 'INSURANCE') return { name: '❖ Regroup Bond', desc: 'The next regroup takes none of your scrap.' };
+    return { name: it.kind, desc: '' };
+}
+
+function renderShop() {
+    if (!activeShop) { renderMap(); return; }
+    switchScreen('screen-shop');
+    document.getElementById('shop-scrap').innerText = `SCRAP ON HAND: ${formatStat(scrap)}`;
+    const rows = activeShop.stock.map((it, i) => {
+        const L = shopItemLabel(it);
+        let btn;
+        if (it.sold) btn = `<span class="shop-tag">SOLD</span>`;
+        else if (it.kind === 'INSURANCE' && regroupInsured) btn = `<span class="shop-tag">INSURED</span>`;
+        else if (it.kind === 'STIM' && !canCarry()) btn = `<span class="shop-tag">BAG FULL</span>`;
+        else btn = `<button class="shop-buy" data-action="shop-buy" data-index="${i}" ${scrap < it.price ? 'disabled' : ''}>◇ ${it.price}</button>`;
+        return `<div class="shop-row"><div class="shop-info"><span class="shop-name">${L.name}</span><span class="shop-desc">${L.desc}</span></div>${btn}</div>`;
+    });
+    let pick = '';
+    if (shopRerollPick) {
+        pick = `<div class="shop-pick"><div class="shop-pick-title">WHO SITS DOWN?</div>` +
+            playerRoster.filter(c => c.hp > 0 && c.quirk).map(c =>
+                `<button class="shop-pick-btn" data-action="shop-reroll" data-id="${c.id}">${c.name} — ${c.quirk.name}</button>`).join('') +
+            `<button class="shop-pick-btn shop-pick-cancel" data-action="shop-reroll-cancel">NEVER MIND</button></div>`;
+    }
+    document.getElementById('shop-stock').innerHTML = rows.join('') + pick;
+    document.getElementById('shop-leave').style.display = shopRerollPick ? 'none' : 'block';
+}
+
+function buyShopItem(index) {
+    const it = activeShop && activeShop.stock[index];
+    if (!it || it.sold || scrap < it.price) return;
+    if (it.kind === 'REROLL') { shopRerollPick = true; renderShop(); return; }
+    if (it.kind === 'GEAR') gearStash.push(it.id);
+    else if (it.kind === 'RELIC') {
+        const r = RELIC_POOL.find(x => x.id === it.id);
+        if (!r || hasRelic(r.id)) return;
+        activeRelics.push(r);
+    }
+    else if (it.kind === 'STIM') { if (!canCarry()) return; inventory.push('MED_STIM'); }
+    else if (it.kind === 'INSURANCE') { if (regroupInsured) return; regroupInsured = true; }
+    else return;
+    scrap -= it.price; it.sold = true;
+    playSFX('click'); saveGameState(); renderShop();
+}
+
+function shopRerollQuirk(charId) {
+    const it = activeShop && activeShop.stock.find(s => s.kind === 'REROLL' && !s.sold);
+    const ch = playerRoster.find(c => c.id === charId);
+    if (!it || !ch || !ch.quirk || scrap < it.price) { shopRerollPick = false; renderShop(); return; }
+    // Same strip-and-reapply the muster uses: old stats off, a different quirk on, HP clamped.
+    ch.maxHp -= ch.quirk.hp; ch.dmgBase -= ch.quirk.dmg; ch.speed -= ch.quirk.spd;
+    const pool = QUIRK_POOL.filter(q => q.id !== ch.quirk.id);
+    const q = pool[Math.floor(Math.random() * pool.length)];
+    ch.quirk = q; ch.maxHp += q.hp; ch.dmgBase += q.dmg; ch.speed += q.spd;
+    ch.hp = Math.min(ch.hp, ch.maxHp);
+    scrap -= it.price; it.sold = true; shopRerollPick = false;
+    playSFX('heal'); saveGameState(); renderShop();
+}
+
+function finishShop() {
+    activeShop = null; shopRerollPick = false;
+    currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap();
+}
 
 const INTENT_ICONS = { AOE: '🧨', HEAVY: '💥', STATUS: '☣️', DEFEND: '🛡️', ATTACK: '⚔️', FLANK: '🌀' };
 
@@ -3283,7 +3418,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
@@ -3315,6 +3450,9 @@ globalThis.WP = {
     get odChoices() { return odChoices; }, set odChoices(v) { odChoices = v; },
     get pendingOverdrive() { return pendingOverdrive; }, set pendingOverdrive(v) { pendingOverdrive = v; },
     get activeRelics() { return activeRelics; }, set activeRelics(v) { activeRelics = v; },
+    get activeShop() { return activeShop; }, set activeShop(v) { activeShop = v; },
+    get regroupInsured() { return regroupInsured; }, set regroupInsured(v) { regroupInsured = v; },
+    get shopRerollPick() { return shopRerollPick; }, set shopRerollPick(v) { shopRerollPick = v; },
     get pendingRelicOffer() { return pendingRelicOffer; }, set pendingRelicOffer(v) { pendingRelicOffer = v; },
     get combatBgFile() { return combatBgFile; }, set combatBgFile(v) { combatBgFile = v; },
     get pendingCombat() { return pendingCombat; }, set pendingCombat(v) { pendingCombat = v; },

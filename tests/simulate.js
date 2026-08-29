@@ -30,7 +30,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
-                 promotions: 0, sigsTaken: 0, gearEquipped: 0,
+                 promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0,
                  endedBy: 'cap', score: 0, contractMult: 1 };
 
   activeContracts = [...contracts];
@@ -213,6 +213,22 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
       currentTier++; stat.nodes++; noteDepth(); runStats.nodes++;
       continue;
     }
+    if (node.type === 'SHOP') {
+      stat.shops++;
+      initiateShop();
+      // Buys the way a player would: gear first, tempo second, the bond and the marked-up
+      // relic only when flush. The keep argument is scrap held back for triage.
+      const buy = (kind, keep) => {
+        const i = activeShop.stock.findIndex(s => s.kind === kind && !s.sold);
+        if (i >= 0 && scrap >= activeShop.stock[i].price + keep) {
+          const before = scrap; buyShopItem(i); stat.shopScrap += before - scrap;
+        }
+      };
+      buy('GEAR', 60); buy('STIM', 40); buy('STIM', 40); buy('INSURANCE', 150); buy('RELIC', 400);
+      finishShop();
+      stat.nodes++;
+      continue;
+    }
 
     currentNodeType = node.type; isCurrentNodeElite = !!node.elite;
     const won = fight(node.type, !!node.elite);
@@ -343,6 +359,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
   line('items used per run', Object.entries(items).map(([k, v]) => `${k} ${(v / n).toFixed(1)}`).join(', ') || 'none');
   line('promotions per run', `${mean(nums('promotions')).toFixed(1)} (${mean(nums('sigsTaken')).toFixed(1)} signatures)`);
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
+  line('armories visited per run', `${mean(nums('shops')).toFixed(1)} (${Math.round(mean(nums('shopScrap')))} scrap spent)`);
   line('items crafted per run', (results.reduce((a, r) => a + r.crafted, 0) / n).toFixed(1));
 
   console.log('\n── RELICS ' + '─'.repeat(48));
