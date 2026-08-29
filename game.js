@@ -6,12 +6,17 @@
 // Art that is commissioned but not yet drawn. Anything listed here is kept out of the
 // preloader and the service worker cache so neither chases a file that does not exist, and
 // the portrait fallback covers it on the field. Empty is the healthy state.
-const PENDING_ART = [];
+const PENDING_ART = [
+    "enemy_choir_acolyte.webp", "enemy_choir_censer.webp", "enemy_choir_reliquary.webp", "enemy_choir_hierophant.webp",
+    "enemy_carrion_rat.webp", "enemy_carrion_moth.webp", "enemy_carrion_worm.webp", "enemy_carrion_brood.webp"
+];
 const ASSET_LIST = [
     "bg_title.webp", "bg_combat.webp", "bg_thunderdome.webp", "bg_refinery.webp", "bg_highway.webp", "bg_canyon.webp", "bg_foundry.webp", "bg_nest.webp",
     "hero_bruiser.webp", "hero_medic.webp", "hero_scavenger.webp", "hero_pyro.webp", "hero_shotgunner.webp", "hero_sniper.webp", "hero_hound.webp",
     "enemy_dog.webp", "enemy_hound_bulldog.webp", "enemy_mutant.webp", "enemy_chem.webp", "enemy_raider.webp", "enemy_psycho.webp", "enemy_sniper.webp", "enemy_juggernaut.webp", "enemy_drone.webp", "enemy_turret.webp", "enemy_warrig.webp", "enemy_boss.webp", "enemy_boss_mech.webp", "enemy_boss_vulture.webp",
-    "enemy_boss_vatborn.webp", "enemy_boss_marshal.webp", "enemy_boss_stormcaller.webp", "enemy_boss_bastion.webp"
+    "enemy_boss_vatborn.webp", "enemy_boss_marshal.webp", "enemy_boss_stormcaller.webp", "enemy_boss_bastion.webp",
+    "enemy_choir_acolyte.webp", "enemy_choir_censer.webp", "enemy_choir_reliquary.webp", "enemy_choir_hierophant.webp",
+    "enemy_carrion_rat.webp", "enemy_carrion_moth.webp", "enemy_carrion_worm.webp", "enemy_carrion_brood.webp"
 ];
 // The title art is fetched immediately; everything else waits until the menu is up so the
 // first screen is not stuck behind the whole art set.
@@ -574,12 +579,33 @@ const WEATHER_DOTS = { TOXIC_SMOG: 'wx-smog', SANDSTORM: 'wx-sand', SHRAPNEL_WIN
 
 let sectorMap = null; let currentNodeId = null; let clearedNodeIds = []; let forecastWeather = null;
 
+// The factions the roads can draw from. These used to be enumerated by hand in five places -
+// the weather forecast, two map validators, the node whitelist and the backdrop switch - so a
+// fourth could not be added without finding all five of them first.
+const FACTIONS = {
+    RAIDERS: { bg: 'bg_highway.webp',  weather: 'SHRAPNEL_WINDS', allies: ['MECH', 'BEASTS'] },
+    BEASTS:  { bg: 'bg_canyon.webp',   weather: 'SANDSTORM',      allies: [] },
+    MECH:    { bg: 'bg_refinery.webp', weather: 'TOXIC_SMOG',     allies: [] },
+    // Irradiated cultists: the first enemies in the game that spend a turn on each other
+    // rather than on you. Standing next to one is what makes the rest dangerous.
+    CHOIR:   { bg: 'bg_refinery.webp', weather: 'TOXIC_SMOG',     allies: ['BEASTS'], minSector: 2 },
+    // A swarm. Each one is trivial and the pile is not, and the answer is to spread damage
+    // across it rather than pick them off one at a time.
+    CARRION: { bg: 'bg_canyon.webp',   weather: 'SANDSTORM',      allies: [],         minSector: 2, swarm: 2, heavyCap: 2 }
+};
+const FIGHT_NODES = Object.keys(FACTIONS);
+function factionsAt(sector) { return FIGHT_NODES.filter(f => (FACTIONS[f].minSector || 1) <= sector); }
+
 function rollNodeFaction(tier, rng) {
     const biased = frontFactionBias(tier, rng);
     if (biased) return biased;
     if (tier < 3) return rng() < 0.55 ? 'RAIDERS' : 'BEASTS';
+    // The Choir and the Carrion are not what the wasteland shows you first: sector 1 stays the
+    // three factions a new squad has tools for, and the roads widen from sector 2.
+    const open = factionsAt(currentSector || 1);
     const r = rng();
-    return r < 0.4 ? 'RAIDERS' : r < 0.7 ? 'BEASTS' : 'MECH';
+    if (open.length <= 3) return r < 0.4 ? 'RAIDERS' : r < 0.7 ? 'BEASTS' : 'MECH';
+    return r < 0.26 ? 'RAIDERS' : r < 0.50 ? 'BEASTS' : r < 0.70 ? 'MECH' : r < 0.86 ? 'CHOIR' : 'CARRION';
 }
 
 // What the generator promises, and validateSectorMap checks: exactly two elite fights at
@@ -659,20 +685,34 @@ const FRONTS = [
     { id: 'IRRADIATED',       name: 'Irradiated',       icon: '☢',
       desc: 'Smog hangs over most roads, and the boss fights under it. Chems fall in pairs.' },
     { id: 'QUIET_ROADS',      name: 'Quiet Roads',      icon: '~',
-      desc: 'Fewer fights, more strange encounters, leaner XP - and a boss hoarding double scrap.' }
+      desc: 'Fewer fights, more strange encounters, leaner XP - and a boss hoarding double scrap.' },
+    { id: 'THE_CHOIR',        name: 'The Choir',        icon: '\u2670', minSector: 2,
+      desc: 'Something is being sung out there. Cultists on half the roads, and the smog follows them.' },
+    { id: 'CARRION_BLOOM',    name: 'Carrion Bloom',    icon: '\u2042', minSector: 2,
+      desc: 'Something large died, and everything came. Swarms on half the roads, and they come in numbers.' }
 ];
 let sectorFront = null;        // rolled per sector; null on saves from before fronts existed
 let frontBannerPending = false;
 
 function frontById(id) { return FRONTS.find(f => f.id === id) || null; }
 function currentFront() { return frontById(sectorFront); }
-function rollFront(rng = Math.random) { return FRONTS[Math.floor(rng() * FRONTS.length)].id; }
+function rollFront(rng = Math.random, sector = currentSector) {
+    // Two of the fronts promise a faction the roads only carry from sector 2, so they are not
+    // in the deck before then - a front whose whole description is a lie is worse than no front.
+    const deck = FRONTS.filter(f => (f.minSector || 1) <= Math.max(1, sector || 1));
+    return deck[Math.floor(rng() * deck.length)].id;
+}
 // The generation tilt: half of everything on the roads is the front's own faction. The
 // machines stay out of the first two tiers, same as the base table.
 function frontFactionBias(tier, rng) {
-    const bias = { RAIDER_WARBAND: 'RAIDERS', MACHINE_UPRISING: 'MECH', BLOOD_MOON: 'BEASTS' }[sectorFront];
-    if (bias && !(tier < 3 && bias === 'MECH') && rng() < 0.5) return bias;
-    return null;
+    const bias = { RAIDER_WARBAND: 'RAIDERS', MACHINE_UPRISING: 'MECH', BLOOD_MOON: 'BEASTS',
+                   THE_CHOIR: 'CHOIR', CARRION_BLOOM: 'CARRION' }[sectorFront];
+    if (!bias) return null;
+    // The shallow tiers stay on the stock a new squad has answers for, and a faction the
+    // sector cannot field yet is never biased toward.
+    if (tier < 3 && bias !== 'RAIDERS' && bias !== 'BEASTS') return null;
+    if (!factionsAt(currentSector || 1).includes(bias)) return null;
+    return rng() < 0.5 ? bias : null;
 }
 
 function generateSectorMap(rng = Math.random) {
@@ -739,10 +779,10 @@ function generateSectorMap(rng = Math.random) {
     // The forecast is a contract: the weather a node shows is the weather its fight gets.
     nodes.forEach(n => {
         if (n.type === 'BOSS') n.weather = 'BLOODLUST';
-        else if (['RAIDERS', 'BEASTS', 'MECH'].includes(n.type)) {
+        else if (FIGHT_NODES.includes(n.type)) {
             if (currentSector === 1 && n.tier === 1) n.weather = 'CLEAR';
             else if (sectorFront === 'IRRADIATED' && rng() < 0.7) n.weather = 'TOXIC_SMOG';
-            else if (rng() < 0.4) n.weather = { MECH: 'TOXIC_SMOG', RAIDERS: 'SHRAPNEL_WINDS', BEASTS: 'SANDSTORM' }[n.type];
+            else if (rng() < 0.4) n.weather = FACTIONS[n.type].weather;
         }
     });
 
@@ -776,7 +816,7 @@ function validateSectorMap(map) {
     }
     if (!nodes.some(n => n.type === 'CAMP')) return false;
     if (!nodes.some(n => n.type === 'EVENT')) return false;
-    if (tierOf(1).some(n => n.elite || !['RAIDERS', 'BEASTS', 'MECH'].includes(n.type))) return false;
+    if (tierOf(1).some(n => n.elite || !FIGHT_NODES.includes(n.type))) return false;
     return true;
 }
 
@@ -810,7 +850,7 @@ function enterNode(id) {
     if (!node) { forecastWeather = null; return null; }
     currentNodeId = node.id;
     if (!clearedNodeIds.includes(node.id)) clearedNodeIds.push(node.id);
-    forecastWeather = ['RAIDERS', 'BEASTS', 'MECH', 'BOSS'].includes(node.type) ? (node.weather || 'CLEAR') : null;
+    forecastWeather = (FIGHT_NODES.includes(node.type) || node.type === 'BOSS') ? (node.weather || 'CLEAR') : null;
     return node;
 }
 const SECTOR_TIER_BONUS = 3;
@@ -824,7 +864,8 @@ const HEAVY_RAMP = { rare: 11, common: 14 };
 const TIER_HP_GROWTH = 0.2;
 const TIER_DMG_GROWTH = 0.10;
 const BASE_REGROUPS = 2;       // second chances per run, before a defeat ends it
-const FACTION_ALLIES = { RAIDERS: ['MECH', 'BEASTS'], BEASTS: [], MECH: [] };
+// Who turns up alongside whom, read off the faction table so the two stay in step.
+const FACTION_ALLIES = Object.fromEntries(Object.entries(FACTIONS).map(([k, v]) => [k, v.allies]));
 // Difficulty still climbs hard, but through lethality rather than bullet sponges: health
 // tracks player damage growth so a fight stays ~10 rounds at any depth, while damage
 // outpaces player health so a run reliably ends somewhere around sector 10.
@@ -1991,7 +2032,9 @@ function armPortraitFallback() {
         if (!el || el.tagName !== 'IMG' || !el.classList.contains('portrait')) return;
         if (el.dataset.fellBack) return;
         el.dataset.fellBack = '1';
-        el.src = PORTRAIT_FALLBACK;
+        // A unit whose art is commissioned but not drawn yet names the piece to stand in for
+        // it, so a rat does not fall back to a warlord portrait.
+        el.src = el.dataset.stand || PORTRAIT_FALLBACK;
     }, true);
 }
 
@@ -2227,7 +2270,7 @@ function buildNewRun(diff) {
     bossSalt = 'w' + Math.floor(Math.random() * 1e9);
     bonds = {}; bondSavesUsed = new Set();
     playerRoster.forEach(c => { c.weaponMod = null; c.trinket = null; });
-    sectorFront = rollFront(seededRng('front:1')); frontBannerPending = true;
+    sectorFront = rollFront(seededRng('front:1'), 1); frontBannerPending = true;
     sectorMap = generateSectorMap(seededRng('map:1')); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
     odChoices = {}; pendingOverdrive = null; momentumFocus = 0; pressExtra = false;
     const kept = heirloomRelic();
@@ -2655,7 +2698,7 @@ function renderMap() {
 
 function advanceSector() {
     currentSector++; currentTier = 1;
-    sectorFront = rollFront(seededRng('front:' + currentSector)); frontBannerPending = true;
+    sectorFront = rollFront(seededRng('front:' + currentSector), currentSector); frontBannerPending = true;
     sectorMap = generateSectorMap(seededRng('map:' + currentSector)); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
     noteDepth(); saveGameState();
     resolveConsequence();
@@ -3075,8 +3118,34 @@ const ENEMY_SIGS = {
     OVERWATCH:  { name: 'Overwatch',    kind: 'action',  icon: '\u{1F3AF}', weight: 0.35, cd: 3,
                   desc: 'Locks the field down: the next two operators to act are shot as they move.' },
     AEGIS:      { name: 'Aegis Field',  kind: 'action',  icon: '\u{1F4E1}', weight: 0.30, cd: 3,
-                  desc: 'Projects plating onto every other enemy for 2 turns.' }
+                  desc: 'Projects plating onto every other enemy for 2 turns.' },
+    // The Choir. Every one of these spends the turn on an ally rather than on the squad, which
+    // is the point of the faction: the dangerous unit is usually not the one singing.
+    LITANY:     { name: 'Litany',       kind: 'action',  icon: '\u{1F4FF}', weight: 0.45, cd: 2,
+                  desc: 'Sings over another hostile: it deals 35% more for 2 turns.' },
+    RAD_WASH:   { name: 'Rad Wash',     kind: 'action',  icon: '\u2622', weight: 0.40, cd: 2,
+                  desc: 'Douses the front two operators, corroding their armour for 2 turns.' },
+    MARTYR:     { name: 'Martyrdom',    kind: 'death',
+                  desc: 'Dies loudly: every other Choir hostile heals 30% of its health.' },
+    RESURGENCE: { name: 'Resurgence',   kind: 'action',  icon: '\u{1F54A}', weight: 0.55, cd: 99,
+                  desc: 'Raises one fallen Choir hostile at half health. Once each.' },
+    // The Carrion. A pile that is only dangerous as a pile.
+    TEEMING:    { name: 'Teeming',      kind: 'passive',
+                  desc: 'While three or more Carrion still stand, each takes 45% damage. Thin the swarm to break it.' },
+    BURROW:     { name: 'Burrow',       kind: 'action',  icon: '\u{1F573}', weight: 0.35, cd: 3,
+                  desc: 'Goes under for a turn, untouchable, then comes up under the front rank.' },
+    BROOD:      { name: 'Brood',        kind: 'action',  icon: '\u{1F95A}', weight: 0.40, cd: 2,
+                  desc: 'Lays another Carrion Rat. Keeps laying until it is killed.' }
 };
+// How many of the swarm are still up. Three is the line: at three the pile protects itself,
+// at two it is just fast, fragile things. Everything Carrion counts toward the floor, but only
+// the small ones get the reduction - so the Brood Mother is a full-damage target who is
+// nonetheless holding the swarm's cover up by standing there.
+const TEEMING_FLOOR = 3;
+function carrionStanding() {
+    return activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.classType === 'VERMIN').length;
+}
+
 function sigOf(ent) { return (ent && !ent.isPlayer && ent.sig) ? (ENEMY_SIGS[ent.sig] || null) : null; }
 function hasSig(ent, id) { return !!(ent && !ent.isPlayer && ent.sig === id); }
 
@@ -3090,6 +3159,9 @@ function enemyDmgMult(enemy) {
     if (hasSig(enemy, 'FRENZY') && enemy.maxHp > 0) {
         m *= 1 + 0.6 * (1 - Math.max(0, enemy.hp) / enemy.maxHp);
     }
+    // Sung over by the Choir. The buff sits on the target rather than the singer, so killing
+    // the Acolyte does not take it back - it just stops the next one.
+    if ((enemy.blessedTurns || 0) > 0) m *= 1 + (enemy.blessed || 0.35);
     return m;
 }
 
@@ -3162,6 +3234,7 @@ function forecastFor(enemy) {
     const intent = enemy.intent || { type: 'ATTACK' };
     const live = activeEntities.filter(e => e.isPlayer && e.hp > 0);
     if (!live.length) return null;
+    if (enemy.burrowed > 0) return { kind: 'BURROW', enemy };
     if (intent.type === 'DEFEND' || intent.type === 'SIG') return { kind: intent.type, enemy };
     const atk = enemy.dmgType || 'phys';
     let raw = Math.floor(enemy.dmgBase * enemyDmgMult(enemy));
@@ -3411,6 +3484,20 @@ const ENEMY_POOL = {
     { name: "Drone", sig: 'ROTOR_LIFT', minTier: 4, isHeavy: false, classType: "DRONE", range: 'ranged', isHovering: true, maxHp: 25, speed: 18, armor: 5, dmgBase: 8, img: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 100, energy: -10 } }, 
     { name: "Turret", sig: 'OVERWATCH', minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
     { name: "War Rig", sig: 'AEGIS', minTier: 14, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
+    ],
+    // Two factions built to be answered rather than out-damaged. `stand` names the portrait to
+    // show until the real one is drawn - see PENDING_ART.
+    'CHOIR': [
+    { name: "Acolyte", sig: 'LITANY', minTier: 4, isHeavy: false, classType: "CULTIST", range: 'melee', maxHp: 45, speed: 12, armor: 0, dmgBase: 12, img: "enemy_choir_acolyte.webp", stand: "enemy_chem.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 40, energy: -10 } },
+    { name: "Censer Bearer", sig: 'RAD_WASH', minTier: 6, isHeavy: false, classType: "CULTIST", range: 'ranged', maxHp: 55, speed: 10, armor: 4, dmgBase: 14, img: "enemy_choir_censer.webp", stand: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 55, energy: -10 } },
+    { name: "Reliquary", sig: 'MARTYR', minTier: 10, isHeavy: true, classType: "CULTIST", range: 'melee', maxHp: 85, speed: 7, armor: 6, dmgBase: 16, img: "enemy_choir_reliquary.webp", stand: "enemy_mutant.webp", scale: 1.4, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 60, energy: -15 } },
+    { name: "Hierophant", unique: true, sig: 'RESURGENCE', minTier: 13, isHeavy: true, classType: "CULTIST", range: 'ranged', maxHp: 75, speed: 13, armor: 4, dmgBase: 20, img: "enemy_choir_hierophant.webp", stand: "enemy_psycho.webp", scale: 1.3, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 70, energy: -5 } }
+    ],
+    'CARRION': [
+    { name: "Carrion Rat", sig: 'TEEMING', minTier: 3, isHeavy: false, classType: "VERMIN", range: 'melee', maxHp: 22, speed: 20, armor: 0, dmgBase: 9, img: "enemy_carrion_rat.webp", stand: "enemy_dog.webp", scale: 0.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -5, bio: 25, energy: 0 } },
+    { name: "Blight Moth", sig: 'TEEMING', minTier: 5, isHeavy: false, classType: "VERMIN", range: 'ranged', isHovering: true, maxHp: 26, speed: 22, armor: 0, dmgBase: 11, img: "enemy_carrion_moth.webp", stand: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -5, bio: 30, energy: -10 } },
+    { name: "Gorge Worm", sig: 'BURROW', minTier: 9, isHeavy: true, classType: "VERMIN", range: 'melee', maxHp: 70, speed: 9, armor: 2, dmgBase: 22, img: "enemy_carrion_worm.webp", stand: "enemy_mutant.webp", scale: 1.4, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 35, energy: -10 } },
+    { name: "Brood Mother", unique: true, sig: 'BROOD', minTier: 12, isHeavy: true, classType: "VERMIN", range: 'ranged', maxHp: 95, speed: 8, armor: 4, dmgBase: 15, img: "enemy_carrion_brood.webp", stand: "enemy_juggernaut.webp", scale: 1.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 45, energy: -15 } }
     ]
 };
 
@@ -3451,6 +3538,7 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
                 stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
                 resistances: { ...spec.resistances }, sig: spec.sig || null, sigCd: 0, ...(extra || {}) };
             if (u.sig === 'RIOT_PLATE') u.plate = Math.floor(u.maxHp * 0.5);
+            if (spec.stand) u.stand = spec.stand;
             u.intent = rollIntent(u);
             retinue.push(u);
             return u;
@@ -3474,7 +3562,14 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
         let weighted = [];
         // Heavies used to jump from weight 1 to weight 5 the moment they unlocked - most of a
         // sector's deaths clustered exactly there. They ramp in now: rare, then common, then usual.
-        valid.forEach(e => { let weight = !e.isHeavy ? 5 : effTier < HEAVY_RAMP.rare ? 1 : effTier < HEAVY_RAMP.common ? 3 : 5; for (let j = 0; j < weight; j++) weighted.push(e); });
+        const cap = (FACTIONS[type] && FACTIONS[type].heavyCap) || 99;
+        valid.forEach(e => {
+            let weight = !e.isHeavy ? 5 : effTier < HEAVY_RAMP.rare ? 1 : effTier < HEAVY_RAMP.common ? 3 : 5;
+            // A swarm made mostly of its own big units is not a swarm, so a faction can hold
+            // its heavies down however deep the run gets.
+            if (e.isHeavy) weight = Math.min(weight, cap);
+            for (let j = 0; j < weight; j++) weighted.push(e);
+        });
         return weighted;
     }
 
@@ -3487,12 +3582,22 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     let sZ = effTier >= 9 ? (Math.random() < 0.25 ? 4 : 3)
            : effTier >= 4 ? (Math.random() < 0.5 ? 3 : 2)
            : 2;
+    // A swarm that turns up two-strong is not a swarm. The row is fitted to what it holds, so
+    // a wide field is a rendering problem the layout already solves rather than a hard cap.
+    sZ += (FACTIONS[nodeType] && FACTIONS[nodeType].swarm) || 0;
     let squad = [];
     for (let i = 0; i < sZ; i++) {
         // Above mid-game, squads can pick up an attached specialist from another faction.
         let usePool = homePool;
         if (allies.length && effTier >= 6 && i > 0 && Math.random() < 0.25) usePool = poolFor(allies[Math.floor(Math.random() * allies.length)]);
-        let t = JSON.parse(JSON.stringify(usePool[Math.floor(Math.random() * usePool.length)])); 
+        // Some units compound with themselves - one that lays more of itself, one that raises
+        // the fallen - and a second is not twice the fight, it is a different one.
+        let pick = usePool[Math.floor(Math.random() * usePool.length)];
+        if (pick.unique && squad.some(s => s.name === pick.name)) {
+            const rest = usePool.filter(e => !e.unique || !squad.some(s => s.name === e.name));
+            if (rest.length) pick = rest[Math.floor(Math.random() * rest.length)];
+        }
+        let t = JSON.parse(JSON.stringify(pick)); 
         let hp = Math.floor(t.maxHp * mult); t.hp = hp; t.maxHp = hp; t.dmgBase = Math.floor(t.dmgBase * dmgMult); t.baseArmor = t.armor || 0;
         t.sigCd = 0;
         // Riot Plate is a second bar that only soaks: sized off the unit so it scales with the
@@ -3734,9 +3839,10 @@ function initiateCombat(nodeType, isEliteNode) {
     let bgFile = 'bg_combat.webp'; currentWeather = 'CLEAR'; currentNodeType = nodeType; isCurrentNodeElite = isEliteNode;
     if (currentTier === 1 && currentSector === 1) { bgFile = 'bg_combat.webp'; } else {
         if (nodeType === 'BOSS') { bgFile = bossForSector().bg || 'bg_thunderdome.webp'; currentWeather = 'BLOODLUST'; }
-        else if (nodeType === 'MECH') { bgFile = 'bg_refinery.webp'; if (Math.random() < 0.4) currentWeather = 'TOXIC_SMOG'; }
-        else if (nodeType === 'RAIDERS') { bgFile = 'bg_highway.webp'; if (Math.random() < 0.4) currentWeather = 'SHRAPNEL_WINDS'; }
-        else if (nodeType === 'BEASTS') { bgFile = 'bg_canyon.webp'; if (Math.random() < 0.4) currentWeather = 'SANDSTORM'; }
+        else if (FACTIONS[nodeType]) {
+            bgFile = FACTIONS[nodeType].bg;
+            if (Math.random() < 0.4) currentWeather = FACTIONS[nodeType].weather;
+        }
     }
     // A fight entered from the map keeps the promise its node made; a fight staged directly
     // (dev tools, suites) still rolls as before.
@@ -3771,7 +3877,8 @@ function initiateCombat(nodeType, isEliteNode) {
     if (sectorFront === 'RAIDER_WARBAND' && isEliteNode && nodeType === 'RAIDERS')
         activeEntities.filter(e => !e.isPlayer).forEach(e => { e.dmgBase = Math.ceil(e.dmgBase * 1.25); });
     if (nodeType === 'BOSS') {
-        const addFaction = { RAIDER_WARBAND: 'RAIDERS', MACHINE_UPRISING: 'MECH', BLOOD_MOON: 'BEASTS' }[sectorFront];
+        const addFaction = { RAIDER_WARBAND: 'RAIDERS', MACHINE_UPRISING: 'MECH', BLOOD_MOON: 'BEASTS',
+                             THE_CHOIR: 'CHOIR', CARRION_BLOOM: 'CARRION' }[sectorFront];
         if (addFaction) {
             const escort = generateEnemies(addFaction, mult, false, dmgMult)[0];
             escort.id = 'front_escort';
@@ -3818,6 +3925,14 @@ function renderQueue() {
 // and an emoji-presentation one ignores our colours entirely.
 const DMG_TYPES = [['phys', 'P'], ['bio', 'B'], ['energy', 'E']];
 
+// Art that is commissioned but not drawn yet is never requested. Rendering the missing file
+// and letting the error handler swap it afterwards blanks the sprite on every rebuild - and
+// renderField rebuilds on every frame of a turn - so the stand-in is chosen up front. The
+// error handler stays as the net for art that is genuinely broken rather than merely pending.
+function portraitFor(ent) {
+    return (ent && ent.stand && PENDING_ART.includes(ent.img)) ? ent.stand : ent.img;
+}
+
 function resistBadges(ent) {
     if (ent.isPlayer || !ent.resistances) return '';
     const marks = DMG_TYPES.map(([type, glyph]) => {
@@ -3832,7 +3947,7 @@ function resistBadges(ent) {
 
 function renderField() {
     renderQueue();
-    window.__threatCache = (combatActive && !pendingAction) ? threatBoard() : {}; const pTeam = document.getElementById('player-team'); const eTeam = document.getElementById('enemy-team'); pTeam.innerHTML = ''; eTeam.innerHTML = ''; const pCells = [], eCells = [], eLoad = [];
+    window.__threatCache = (combatActive && !pendingAction) ? threatBoard() : {}; const pTeam = document.getElementById('player-team'); const eTeam = document.getElementById('enemy-team'); pTeam.innerHTML = ''; eTeam.innerHTML = ''; const pCells = [], eCells = [], eLoad = []; const sigsShown = new Set();
     activeEntities.forEach(ent => {
         let isDead = ent.hp <= 0; const isAct = (!isDead && turnQueue.length > 0 && turnQueue[activeIndex]?.id === ent.id) ? 'active' : '';
         // The first render after death plays the fall; every render after shows the settled corpse.
@@ -3845,7 +3960,7 @@ function renderField() {
         if (pendingAction) {
             if (pendingAction === 'OVERDRIVE' && turnQueue[activeIndex].classType === 'MEDIC' && ent.isPlayer) {
                 tCls = 'targetable-ally'; clk = targetable(`data-action="target" data-id="${ent.id}"`);
-            } else if (!isDead) {
+            } else if (!isDead && !ent.burrowed) {
                 if ((pendingAction === 'CAUTERIZE' || pendingAction === 'REPOSITION' || pendingAction === 'STIM_DART') && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="target" data-id="${ent.id}"`); }
                 else if (['ITEM_MED', 'ITEM_BOMB', 'ITEM_ADRENALINE', 'ITEM_EMP'].includes(pendingAction)) {
                     if (pendingAction === 'ITEM_MED' && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="use-item" data-id="${ent.id}"`); }
@@ -3878,10 +3993,11 @@ function renderField() {
         // passive is as much a rule of the fight as a signature is, so it rides the card the
         // same way - and the pump shows the dose it is on.
         let sigTag = '';
+        let tagText = '', tagTitle = '', tagSpent = false;
         const bossPas = (!ent.isPlayer && !isDead && !sigOf(ent) && ent.bossPassive) ? BOSS_PASSIVES[ent.bossPassive] : null;
         if (bossPas) {
             const dose = ent.venom ? ` ${ent.venomStacks || 0}/${ent.venom.max}` : '';
-            sigTag = `<div class="sig-tag" title="${bossPas.desc}">${bossPas.name.toUpperCase()}${dose}</div>`;
+            tagText = `${bossPas.name.toUpperCase()}${dose}`; tagTitle = bossPas.desc;
         }
         if (!ent.isPlayer && !isDead && sigOf(ent)) {
             const s = sigOf(ent);
@@ -3889,7 +4005,20 @@ function renderField() {
             if (ent.sig === 'RIOT_PLATE') state = (ent.plate || 0) > 0 ? ` ${ent.plate}` : ' BROKEN';
             if (ent.sig === 'OVERWATCH' && (ent.overwatch || 0) > 0) state = ' \u2022 LIVE';
             if (ent.sig === 'RANGING' && ent.lockOn) state = ' \u2022 LOCKED';
-            sigTag = `<div class="sig-tag${(ent.sig === 'RIOT_PLATE' && !(ent.plate > 0)) ? ' sig-spent' : ''}" title="${s.desc}">${s.name.toUpperCase()}${state}</div>`;
+            if (ent.sig === 'BURROW' && ent.burrowed > 0) state = ' \u2022 UNDER';
+            if (ent.sig === 'TEEMING') state = carrionStanding() >= TEEMING_FLOOR ? ' \u2022 THICK' : ' \u2022 THINNED';
+            tagText = `${s.name.toUpperCase()}${state}`; tagTitle = s.desc;
+            tagSpent = ent.sig === 'RIOT_PLATE' && !(ent.plate > 0);
+        }
+        // A swarm of six that all read TEEMING . THICK says the same thing six times, in six
+        // slots too narrow to hold it. An identical tag is printed once; anything carrying its
+        // own state - a plate count, a live overwatch - differs in its text and so still shows.
+        // The repeats still occupy their space rather than vanishing, or the cards in a row end
+        // up different heights and the whole line goes ragged around them.
+        if (tagText) {
+            const echo = !ent.isPlayer && sigsShown.has(tagText);
+            if (!ent.isPlayer) sigsShown.add(tagText);
+            sigTag = `<div class="sig-tag${tagSpent ? ' sig-spent' : ''}${echo ? ' sig-echo' : ''}"${echo ? ' aria-hidden="true"' : ` title="${tagTitle}"`}>${tagText}</div>`;
         }
         // Not aiming at anything? Then a tap on a hostile opens its file rather than doing nothing.
         if (!pendingAction && !ent.isPlayer && !isDead) {
@@ -3924,7 +4053,7 @@ function renderField() {
                     <div class="hp-text">${ent.hp}/${ent.maxHp}</div>
                     <div class="hp-container"><div class="hp-fill ${ent.isPlayer ? 'player-hp' : 'enemy-hp'}" style="width: ${(ent.hp / ent.maxHp) * 100}%"></div></div>
                     ${isDead ? '' : resistBadges(ent)}
-                </div><img class="portrait ${hoverCls}" src="${ent.img}" style="${eliteGlow}">
+                </div><img class="portrait ${hoverCls}" src="${portraitFor(ent)}"${ent.stand ? ` data-stand="${ent.stand}"` : ''} style="${eliteGlow}">
             </div>`;
         if (ent.isPlayer) pCells.push(html); else { eCells.push(html); eLoad.push(Math.max(1, ent.scale || 1)); }
     });
@@ -4045,6 +4174,7 @@ function applyTurnStartEffects(ent) {
     if (ent.oiledTurns > 0) { ent.oiledTurns--; chg = true; }
     if (ent.corrodedTurns > 0) { ent.corrodedTurns--; chg = true; }
     if (ent.markedTurns > 0) { ent.markedTurns--; chg = true; }
+    if (ent.blessedTurns > 0) { ent.blessedTurns--; if (ent.blessedTurns === 0) ent.blessed = 0; chg = true; }
     if (chg) renderField();
 }
 
@@ -4125,7 +4255,7 @@ function resolveAction(targetId) {
     // The covering shot can drop the operator who was about to act; their turn ends with them.
     if (!combatActive || !turnQueue[activeIndex] || turnQueue[activeIndex].hp <= 0) { pendingAction = null; checkWinState(); return; }
     let actEnt = turnQueue[activeIndex]; let target = activeEntities.find(e => e.id === targetId);
-    let livingEnemies = activeEntities.filter(e => !e.isPlayer && e.hp > 0);
+    let livingEnemies = activeEntities.filter(e => !e.isPlayer && e.hp > 0 && !e.burrowed);
     let dist = livingEnemies.findIndex(e => e.id === targetId);
 
     if (pendingAction === 'OVERDRIVE') {
@@ -4400,6 +4530,10 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     if (hasQuirk(t, 'THICK_HIDE')) cd = Math.max(1, cd - 3);
     // Every dose the Vatborn takes is another split seam: it hits harder and it takes more.
     if (t.venomStacks > 0) cd = Math.floor(cd * (1 + (t.venom ? t.venom.taken : 0.12) * t.venomStacks));
+    // Teeming: a Carrion is only hard to kill while the rest of the pile is standing. Picking
+    // them off one at a time is the slow way through; anything that thins several at once
+    // breaks the whole swarm open at the same moment.
+    if (hasSig(t, 'TEEMING') && carrionStanding() >= TEEMING_FLOOR) cd = Math.max(1, Math.floor(cd * 0.45));
     // Riot Plate: bolted armour soaks half of everything until the plate itself is spent.
     if (hasSig(t, 'RIOT_PLATE') && (t.plate || 0) > 0) cd = Math.max(1, Math.floor(cd * 0.5));
     // A ward holds until its generator falls; a lieutenant's cover is worth heavy plate.
@@ -4454,6 +4588,18 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
         });
         log(`> ${target.name} bursts. The squad is choking on the cloud.`, 'log-dmg');
         playSFX('blast');
+    }
+    if (target.hp <= 0 && hasSig(target, 'MARTYR') && !target.martyred) {
+        target.martyred = true;
+        const flock = activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.classType === 'CULTIST');
+        flock.forEach(e => {
+            const back = Math.max(1, Math.floor(e.maxHp * 0.3));
+            e.hp = Math.min(e.maxHp, e.hp + back);
+            spawnFCT(e.id, `+${back}`, 'fct-heal');
+        });
+        log(flock.length ? `> ${target.name} breaks open, and the Choir takes it up.`
+                         : `> ${target.name} breaks open over an empty road.`, 'log-status');
+        playSFX('heal');
     }
     // Second Wind: once per fight, a killing blow leaves them standing at 1.
     if (target.hp <= 0 && hasQuirk(target, 'SECOND_WIND') && !target.secondWindUsed) {
@@ -4549,6 +4695,21 @@ function venomDose(enemy, quiet) {
 function executeEnemyAi(enemy) {
     if (!combatActive) return;
     if (enemy.sigCd > 0) enemy.sigCd--;
+
+    // Under the ground since its last turn. It comes up in the front rank and hits on arrival,
+    // so the turn it spent hidden is paid back in one blow.
+    if (enemy.burrowed > 0) {
+        enemy.burrowed = 0;
+        const live = activeEntities.filter(e => e.isPlayer && e.hp > 0);
+        const front = [...live].sort((a, b) => a.gridPos - b.gridPos)[0];
+        log(`> ${enemy.name} comes up out of the ground!`, 'log-dmg');
+        spawnFCT(enemy.id, 'SURFACED', 'fct-status'); triggerShake(); playSFX('heavy');
+        if (front) {
+            playAttackAnim(enemy, front, null);
+            applyDamageHit(enemy, front, Math.floor(enemy.dmgBase * 1.6 * enemyDmgMult(enemy)), enemy.dmgType || 'phys', 'BASIC');
+        }
+        enemy.intent = rollIntent(enemy); checkWinState(); return;
+    }
     // Whatever the forecast promised, the Stormcaller will not let it stand.
     if (enemy.stormTurn && ++enemy.stormClock >= enemy.stormTurn) {
         enemy.stormClock = 0;
@@ -4704,6 +4865,77 @@ function executeEnemyAi(enemy) {
             log(`> ${enemy.name} locks the field down.`, 'log-status');
             spawnFCT(enemy.id, 'OVERWATCH', 'fct-status');
             playSFX('heal');
+        }
+
+        else if (enemy.sig === 'LITANY') {
+            // Sings over whoever hits hardest, not whoever is nearest - so the Acolyte makes
+            // the worst thing on the field worse.
+            const flock = activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.id !== enemy.id && !(e.blessedTurns > 0));
+            const sung = flock.sort((a, b) => (b.dmgBase || 0) - (a.dmgBase || 0))[0];
+            if (sung) {
+                sung.blessed = 0.35; sung.blessedTurns = 2;
+                log(`> ${enemy.name} sings over ${sung.name}.`, 'log-status');
+                spawnFCT(sung.id, 'BLESSED', 'fct-heal'); playSFX('heal');
+            } else {
+                log(`> ${enemy.name} sings over nothing in particular.`, 'log-status');
+            }
+        }
+
+        else if (enemy.sig === 'RAD_WASH') {
+            // Corrosion zeroes armour outright, so this is aimed at whoever is holding the line.
+            const front = [...validTargets].sort((a, b) => a.gridPos - b.gridPos).slice(0, 2);
+            front.forEach(t => { t.corrodedTurns = Math.max(t.corrodedTurns || 0, 2); spawnFCT(t.id, 'CORRODED', 'fct-weak'); });
+            log(front.length ? `> ${enemy.name} washes the front rank down.` : `> ${enemy.name} pours it on empty ground.`, 'log-status');
+            playSFX('flame');
+        }
+
+        else if (enemy.sig === 'RESURGENCE') {
+            // One raising each, and only ever its own - a fallen operator stays fallen.
+            const fallen = activeEntities.find(e => !e.isPlayer && e.hp <= 0 && e.classType === 'CULTIST');
+            if (fallen) {
+                fallen.hp = Math.max(1, Math.floor(fallen.maxHp * 0.5));
+                fallen.deathPlayed = false; fallen.bloomed = false;
+                fallen.stunnedTurns = 0; fallen.bleedingTurns = 0;
+                if (!turnQueue.some(e => e.id === fallen.id)) turnQueue.push(fallen);
+                fallen.intent = rollIntent(fallen);
+                log(`> ${enemy.name} calls ${fallen.name} back up.`, 'log-dmg');
+                spawnFCT(fallen.id, 'RISEN', 'fct-heal'); playSFX('enrage'); triggerShake();
+            } else {
+                log(`> ${enemy.name} calls, and nothing answers.`, 'log-status');
+            }
+        }
+
+        else if (enemy.sig === 'BURROW') {
+            // A turn of nothing, then it comes up where it hurts. It will not go under if that
+            // would leave the squad with nothing on the field to shoot at - a turn spent
+            // aiming at empty ground is not a mechanic, it is a pause.
+            const others = activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.id !== enemy.id && !e.burrowed);
+            if (others.length > 0) {
+                enemy.burrowed = 1;
+                log(`> ${enemy.name} goes under the ground.`, 'log-status');
+                spawnFCT(enemy.id, 'BURROWED', 'fct-status'); playSFX('heavy');
+            } else {
+                log(`> ${enemy.name} scrapes at the ground and thinks better of it.`, 'log-status');
+            }
+        }
+
+        else if (enemy.sig === 'BROOD') {
+            const crowd = activeEntities.filter(e => !e.isPlayer && e.hp > 0).length;
+            const rat = ENEMY_POOL.CARRION.find(e => e.name === 'Carrion Rat');
+            if (crowd < 6 && rat) {
+                const m = 1 + ((currentTier - 1) * 0.4);
+                const born = JSON.parse(JSON.stringify(rat));
+                born.id = `brood_${Date.now()}_${Math.floor(Math.random() * 999)}`;
+                born.hp = born.maxHp = Math.max(6, Math.floor(rat.maxHp * m * difficultyMult));
+                born.dmgBase = Math.max(3, Math.floor(rat.dmgBase * m * difficultyMult));
+                born.baseArmor = born.armor || 0; born.sigCd = 0;
+                born.intent = rollIntent(born);
+                activeEntities.push(born); turnQueue.push(born);
+                log(`> ${enemy.name} lays another.`, 'log-dmg');
+                playSFX('beast');
+            } else {
+                log(`> ${enemy.name} strains, and nothing comes.`, 'log-status');
+            }
         }
 
         else if (enemy.sig === 'AEGIS') {
@@ -4899,9 +5131,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },

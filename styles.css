@@ -151,6 +151,10 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .team { display: flex; align-items: flex-end; justify-content: center; min-width: 0; }
 /* Four-strong squads tighten up so oversized sprites stay inside the viewport. */
 .team.crowded .entity { width: clamp(42px, 11vw, 78px); }
+/* Sprites overlap on purpose, but the readouts ride on top of them - so a six-strong swarm
+   painted every card over its neighbour. A crowded hostile line stands its units apart; the
+   squad never exceeds four and reads fine as it is. */
+#enemy-team.crowded .entity { margin: 0; }
 .team.crowded .portrait { width: calc(100% * min(var(--sprite-scale, 1), 1.45) * var(--row-fit, 1)); }
 /* A commander and its retinue share the line. They stand beside each other rather than
    stacked, the retinue reads in front, and fitEnemyRow narrows the whole row to the width it
@@ -554,6 +558,9 @@ button.reach-short { border-color: #7a5a20; }
 .sig-tag { font-size: 7.5px; line-height: 1.25; letter-spacing: .5px; text-transform: uppercase;
   text-align: center; color: #d98a5a; border: 1px solid #6b3a22; background: rgba(20,8,4,0.78);
   padding: 1px 2px; margin-bottom: 2px; overflow-wrap: anywhere; }
+/* A repeat of a tag already printed in this line. Held in the layout so every card in the row
+   is the same height, but not painted twice. */
+.sig-tag.sig-echo { visibility: hidden; }
 .sig-tag.sig-spent { color: #7a7266; border-color: #3a352c; text-decoration: line-through; }
 
 /* The dossier: what a hostile does, what it resists, and what it has cost you. Opened by

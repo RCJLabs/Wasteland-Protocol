@@ -16,14 +16,16 @@ module.exports = {
         named: r.every(e => e.name && e.faction && e.resistances),
         sigsOnStock: r.filter(e => !e.boss).every(e => e.sig && ENEMY_SIGS[e.sig]),
         factions: [...new Set(r.map(e => e.faction))].sort().join(),
+        expected: [...Object.keys(ENEMY_POOL), 'COMMAND'].sort().join(),
         found: !!bestiaryRecord('Juggernaut'), missing: bestiaryRecord('Nobody')
       };
     });
     ok(`every hostile has a file (${roster.total} = ${roster.stock} stock + ${roster.bosses} warlords)`,
-      roster.total === roster.stock + roster.bosses && roster.stock === 10 && roster.bosses === 7);
+      roster.total === roster.stock + roster.bosses && roster.stock >= 10 && roster.bosses === 7);
     ok('each named, factioned and with resistances', roster.named);
     ok('every ordinary type carries a real signature', roster.sigsOnStock);
-    ok(`filed under the factions that exist (${roster.factions})`, roster.factions === 'BEASTS,COMMAND,MECH,RAIDERS');
+    // Read off the pools, so a new faction files itself rather than needing this line edited.
+    ok(`filed under the factions that exist (${roster.factions})`, roster.factions === roster.expected);
     ok('lookup finds a real one and refuses an invented one', roster.found && roster.missing === null);
 
     // ---- an affix is a modifier on a type, not a type of its own ----
@@ -198,10 +200,11 @@ module.exports = {
                  && /Met 2, killed 1/.test(known);
       const lines = CODEX.find(e => e.id === 'BESTIARY').body().length;
       bestiary = {}; saveMeta();
-      return { hidden, shown, lines };
+      // One line per hostile plus the book's own heading, derived rather than restated.
+      return { hidden, shown, lines, expected: bestiaryRoster().length + 1 };
     });
     ok('the manual redacts what you have never met', codex.hidden);
     ok('and fills the entry in once you have', codex.shown);
-    ok(`the book has a line for every hostile (${codex.lines - 1})`, codex.lines === 18);
+    ok(`the book has a line for every hostile (${codex.lines - 1})`, codex.lines === codex.expected);
   }
 };

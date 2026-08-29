@@ -303,7 +303,9 @@ module.exports = {
     // ---- a portrait that has not been drawn yet falls back rather than breaking ----
     const art = await page.evaluate(async () => {
       const src = await (await fetch('game.js')).text();
-      const armed = /armPortraitFallback\(\)/.test(src) && src.includes("el.src = PORTRAIT_FALLBACK");
+      // Behaviour, not the exact line: the handler now prefers a per-unit stand-in and falls
+      // through to PORTRAIT_FALLBACK, so matching its source text was only ever a proxy.
+      const armed = /armPortraitFallback\(\)/.test(src) && /PORTRAIT_FALLBACK/.test(src);
       const inline = /onerror=/.test(src);
       const img = document.createElement('img');
       img.className = 'portrait'; img.src = 'enemy_boss_does_not_exist.webp';

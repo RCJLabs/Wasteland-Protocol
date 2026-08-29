@@ -27,10 +27,12 @@ module.exports = {
         unique: new Set(Object.values(seen)).size
       };
     });
-    ok(`ten signatures, each named and described`, table.total === 10 && table.described);
+    ok(`${table.total} signatures, each named and described`, table.total >= 10 && table.described);
     ok('every telegraphed one has an icon, a weight and a cooldown', table.actionsIconed);
+    // Three kinds, all of them stocked: a roster that drifted to all-passive or all-telegraphed
+    // would be a worse game, and that is the thing worth holding rather than the exact split.
     ok(`a mix of passive, action and death (${JSON.stringify(table.kinds)})`,
-      table.kinds.action === 5 && table.kinds.passive === 4 && table.kinds.death === 1);
+      table.kinds.action >= 5 && table.kinds.passive >= 4 && table.kinds.death >= 1);
     ok(`all ${table.types} enemy types carry one, none shared`,
       table.unsigned.length === 0 && table.unique === table.types);
 

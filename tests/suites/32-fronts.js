@@ -14,7 +14,8 @@ module.exports = {
       described: FRONTS.every(f => f.name && f.desc && f.icon),
       rolled: Array.from({ length: 40 }, () => rollFront()).every(id => FRONTS.some(f => f.id === id))
     }));
-    ok(`there are ${table.count} fronts, each named and described`, table.count === 5 && table.ids === 5 && table.described);
+    ok(`there are ${table.count} fronts, each named and described`,
+      table.count >= 5 && table.ids === table.count && table.described);
     ok('rollFront only deals from the table', table.rolled);
 
     // ---- every sector rolls one ----

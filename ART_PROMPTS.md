@@ -7,7 +7,7 @@ Save every portrait as **WebP**, trimmed tight to its alpha with the long side a
 the repo root. Anything listed in `PENDING_ART` at the top of `game.js` is commissioned but
 not yet drawn: the preloader and the service worker skip it, and a delegated error handler
 shows the stand-in Warlord portrait in its place, so the game stays playable while art is
-outstanding. The list is currently empty.
+outstanding.
 
 ## Shared style brief
 
@@ -65,6 +65,73 @@ commander should read as roughly twice the bulk of a regular raider.
 > girders, a heavy shuttered viewport for a face, gun batteries folded against its flanks, a
 > shimmering hexagonal energy shield haloing the front of the hull. Squat, immovable, far
 > wider than tall - a building that walks. Accent colour: amber shield glow against grey steel.
+
+---
+
+## Commissioned, not yet drawn
+
+Eight hostiles across two new factions. All eight are playable now on stand-in art (named in
+`stand` on each `ENEMY_POOL` entry), so nothing is broken while these are outstanding — the
+stand-in is chosen at render time rather than after a failed load, so the missing files are
+never requested at all.
+
+Ordinary hostiles are smaller in frame than a commander: a rat should read as knee-high next
+to an operator, an Acolyte as a person. Match the weight of `enemy_raider.webp` and
+`enemy_chem.webp` rather than the boss portraits.
+
+### The Choir
+Irradiated cultists who fight for each other rather than for themselves. Shared look: rag
+vestments over scavenged hazmat, exposed radiation burns, green-glass lenses, hand-daubed
+symbols. Accent colour throughout: sickly radium green.
+
+- **`enemy_choir_acolyte.webp` — Acolyte** *(sings over another hostile, making it hit harder)*
+  > A gaunt cultist in patched radiation robes, hood back, arms raised mid-chant, mouth open,
+  > throat and hands blistered with burns. A cracked dosimeter hangs at the belt. Rapt, not
+  > threatening.
+
+- **`enemy_choir_censer.webp` — Censer Bearer** *(douses the front rank, stripping armour)*
+  > A cultist swinging a long-chained censer that trails luminous green vapour, face wrapped in
+  > stained cloth over a half-mask, one arm sleeved in a lead gauntlet. Body turned away from
+  > its own smoke.
+
+- **`enemy_choir_reliquary.webp` — Reliquary** *(heals the whole Choir by dying)*
+  > A heavy cultist bent under a lead-shielded reliquary case strapped to the back, its seams
+  > leaking green light, chest and shoulders wrapped in layered scavenged shielding. Slow and
+  > overburdened, carrying something that wants out.
+
+- **`enemy_choir_hierophant.webp` — Hierophant** *(raises a fallen cultist)*
+  > The tallest of them: a cultist in a long mantle of stitched hazmat panels, a crown of
+  > fuel-rod stubs, one hand outstretched palm-down as if calling something up from the ground.
+  > Face lost behind a green-glass respirator plate.
+
+### The Carrion
+A swarm drawn to something large that died. Shared look: wet chitin and matted fur, too many
+limbs, a colour palette of bile and dried blood. Accent colour: sallow yellow-green.
+
+- **`enemy_carrion_rat.webp` — Carrion Rat** *(trivial alone, a problem in numbers)*
+  > A dog-sized scavenger rat, hairless in patches, ribs showing, jaw hanging open too wide,
+  > tail like bare wire. Low to the ground, mid-scurry. Small in frame — knee-high.
+
+- **`enemy_carrion_moth.webp` — Blight Moth** *(fast, airborne)*
+  > A hand-span-wide moth blown up to dog size, dust-shedding wings marked like a skull,
+  > feathered antennae, spindly legs tucked, caught mid-hover. Backlit so the wings read as
+  > translucent.
+
+- **`enemy_carrion_worm.webp` — Gorge Worm** *(burrows, then comes up under the front rank)*
+  > A thick segmented worm heaving up out of broken ground, front third raised, mouth a ring of
+  > inward-facing hooks, body slick and banded. Show the hole it came out of as part of the
+  > silhouette, not as scenery.
+
+- **`enemy_carrion_brood.webp` — Brood Mother** *(keeps laying more Carrion until killed)*
+  > A bloated, half-immobile mass of a creature, swollen abdomen dragging, small vestigial legs,
+  > a cluster of glistening egg sacs along one flank, head far too small for the body. Grotesque
+  > rather than fearsome — the thing you kill first.
+
+### Optional, lower priority
+The Choir currently fights on the refinery backdrop and the Carrion on the canyon, both
+borrowed from other factions. Dedicated grounds — `bg_congregation.webp` (a flooded reactor
+hall lit green) and `bg_carrionfield.webp` (a vast ribcage half-buried in dust) — would give
+each faction its own place, but nothing is wrong without them.
 
 ---
 
