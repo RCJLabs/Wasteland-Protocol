@@ -106,8 +106,12 @@ module.exports = {
       const escort = front => {
         activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
         // tier 1 / sector 1 skips the scenery-and-weather branch entirely, so stage the
-        // warlord where a real one lives.
-        currentSector = 2; currentTier = 6;
+        // warlord where a real one lives. Some commanders now arrive with a retinue of their
+        // own, which would drown out the one rider the front is supposed to add - so measure
+        // this against one that comes alone.
+        let s = 2;
+        while (s <= 200 && (() => { const b = bossForSector(s); return b.escort || b.ward; })()) s++;
+        currentSector = s; currentTier = 6;
         sectorFront = front; forecastWeather = null;
         Math.random = seeded(7);
         initiateCombat('BOSS', false);

@@ -20,7 +20,7 @@ module.exports = {
       };
     });
     ok(`every hostile has a file (${roster.total} = ${roster.stock} stock + ${roster.bosses} warlords)`,
-      roster.total === roster.stock + roster.bosses && roster.stock === 10 && roster.bosses === 3);
+      roster.total === roster.stock + roster.bosses && roster.stock === 10 && roster.bosses === 7);
     ok('each named, factioned and with resistances', roster.named);
     ok('every ordinary type carries a real signature', roster.sigsOnStock);
     ok(`filed under the factions that exist (${roster.factions})`, roster.factions === 'BEASTS,COMMAND,MECH,RAIDERS');
@@ -202,6 +202,6 @@ module.exports = {
     });
     ok('the manual redacts what you have never met', codex.hidden);
     ok('and fills the entry in once you have', codex.shown);
-    ok(`the book has a line for every hostile (${codex.lines - 1})`, codex.lines === 14);
+    ok(`the book has a line for every hostile (${codex.lines - 1})`, codex.lines === 18);
   }
 };

@@ -53,9 +53,8 @@ module.exports = {
     ok('tier cannot exceed the sector length', jump.capT === jump.tiers);
 
     // ---- straight to any boss, at a sensible depth and on its own ground ----
-    for (const [id, name, bg] of [['WARLORD','Warlord','bg_thunderdome.webp'],
-                                  ['COLOSSUS','Siege Colossus','bg_foundry.webp'],
-                                  ['MATRIARCH','Carrion Matriarch','bg_nest.webp']]) {
+    const bossJumps = await page.evaluate(() => BOSS_POOL.map(b => [b.id, b.name, b.bg]));
+    for (const [id, name, bg] of bossJumps) {
       const r = await page.evaluate((bid) => {
         currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 1; currentTier = 1;
         devFightBoss(bid);
@@ -107,11 +106,19 @@ module.exports = {
     // ---- ground placement: units stand on art, not on the dark band ----
     const lifts = await page.evaluate(() => {
       const out = {};
-      for (const [sector, label] of [[1,'thunderdome'],[2,'foundry'],[3,'nest']]) {
-        currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = sector; currentTier = 8;
+      // Commanders share arenas and the rotation is shuffled per run, so reach each arena
+      // through a commander that actually fights on it.
+      const stageArena = file => {
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+        const b = BOSS_POOL.find(x => x.bg === file);
+        let s = 1; while (s <= 200 && bossForSector(s).id !== b.id) s++;
+        currentSector = s; currentTier = 8;
         initiateCombat('BOSS', false);
-        out[label] = { bg: combatBgFile, margin: document.querySelector('.battlefield').style.marginBottom };
-      }
+        return { bg: combatBgFile, margin: document.querySelector('.battlefield').style.marginBottom };
+      };
+      out.thunderdome = stageArena('bg_thunderdome.webp');
+      out.foundry = stageArena('bg_foundry.webp');
+      out.nest = stageArena('bg_nest.webp');
       currentSector = 1; currentTier = 3; initiateCombat('BEASTS', false);
       out.canyon = { bg: combatBgFile, margin: document.querySelector('.battlefield').style.marginBottom };
       return out;
@@ -122,7 +129,10 @@ module.exports = {
       lifts.thunderdome.margin === '12vh' && lifts.canyon.margin === '12vh');
 
     const onGround = await page.evaluate(async () => {
-      currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 3; currentTier = 8;
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      const nest = BOSS_POOL.find(x => x.bg === 'bg_nest.webp');
+      let s = 1; while (s <= 200 && bossForSector(s).id !== nest.id) s++;
+      currentSector = s; currentTier = 8;
       initiateCombat('BOSS', false);
       await new Promise(r => setTimeout(r, 400));
       const sky = document.getElementById('combat-sky-layer').getBoundingClientRect();

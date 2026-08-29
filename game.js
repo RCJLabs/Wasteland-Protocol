@@ -3,17 +3,21 @@
 // data-action attributes, never by calling a global. See the inspection surface at the
 // foot of this file for the one deliberate export.
 
+const PENDING_ART = [
+    "enemy_boss_vatborn.webp", "enemy_boss_marshal.webp", "enemy_boss_stormcaller.webp", "enemy_boss_bastion.webp"
+];
 const ASSET_LIST = [
     "bg_title.webp", "bg_combat.webp", "bg_thunderdome.webp", "bg_refinery.webp", "bg_highway.webp", "bg_canyon.webp", "bg_foundry.webp", "bg_nest.webp",
     "hero_bruiser.webp", "hero_medic.webp", "hero_scavenger.webp", "hero_pyro.webp", "hero_shotgunner.webp", "hero_sniper.webp", "hero_hound.webp",
-    "enemy_dog.webp", "enemy_mutant.webp", "enemy_chem.webp", "enemy_raider.webp", "enemy_psycho.webp", "enemy_sniper.webp", "enemy_juggernaut.webp", "enemy_drone.webp", "enemy_turret.webp", "enemy_warrig.webp", "enemy_boss.webp", "enemy_boss_mech.webp", "enemy_boss_vulture.webp"
+    "enemy_dog.webp", "enemy_mutant.webp", "enemy_chem.webp", "enemy_raider.webp", "enemy_psycho.webp", "enemy_sniper.webp", "enemy_juggernaut.webp", "enemy_drone.webp", "enemy_turret.webp", "enemy_warrig.webp", "enemy_boss.webp", "enemy_boss_mech.webp", "enemy_boss_vulture.webp",
+    "enemy_boss_vatborn.webp", "enemy_boss_marshal.webp", "enemy_boss_stormcaller.webp", "enemy_boss_bastion.webp"
 ];
 // The title art is fetched immediately; everything else waits until the menu is up so the
 // first screen is not stuck behind the whole art set.
 function preloadAssets() {
     const TITLE = 'bg_title.webp';
     new Image().src = TITLE;
-    const rest = ASSET_LIST.filter(a => a !== TITLE);
+    const rest = ASSET_LIST.filter(a => a !== TITLE && !PENDING_ART.includes(a));
     const defer = window.requestIdleCallback || (fn => setTimeout(fn, 400));
     defer(() => rest.forEach(src => { let img = new Image(); img.src = src; }));
 }
@@ -340,12 +344,98 @@ const BOSS_POOL = [
         banner: '\u2620\uFE0F CARRION REEK: All units deal +20% DMG \u2620\uFE0F',
         intents: [['STATUS', 0.35], ['HEAVY', 0.25], ['ATTACK', 0.25], ['AOE', 0.15]],
         enrage: { cry: 'THE MATRIARCH SHRIEKS - PLAGUE WIND!', dmgScale: 1.25, speedBonus: 4, plague: true }
+    },
+    // Four more, so a deep run stops meeting the same three in the same order. Each carries a
+    // mechanic rather than a different set of intent weights: something the squad has to answer
+    // rather than simply out-damage.
+    {
+        id: 'VATBORN', name: 'The Vatborn', short: 'VATBORN', img: 'enemy_boss_vatborn.webp', scale: 2.2,
+        range: 'melee', hpMult: 1.15, dmgMult: 0.95, speed: 8, armor: 8,
+        resistances: { phys: 5, bio: 60, energy: -10 },
+        dmgType: 'bio',
+        blurb: 'A thing grown in a tank, and it does not die so much as divide.',
+        bg: 'bg_nest.webp',
+        banner: '\u{1F9EA} VAT REEK: All units deal +20% DMG \u{1F9EA}',
+        intents: [['ATTACK', 0.35], ['HEAVY', 0.25], ['STATUS', 0.25], ['AOE', 0.15]],
+        // Splitting divides what is left rather than adding to it: the same pool of health, in
+        // three places at once, hitting from three places at once.
+        enrage: { cry: 'THE VATBORN COMES APART - AND KEEPS COMING!', speedBonus: 3,
+                  split: { name: 'Vat-Spawn', img: 'enemy_mutant.webp', scale: 1.3, count: 2, share: 0.4 } }
+    },
+    {
+        id: 'MARSHAL', name: 'The Marshal', short: 'MARSHAL', img: 'enemy_boss_marshal.webp', scale: 2.2,
+        range: 'ranged', hpMult: 1.0, dmgMult: 1.15, speed: 11, armor: 10,
+        resistances: { phys: 8, bio: 0, energy: 8 },
+        blurb: 'Never rides alone. While Bulldog stands, the Marshal is barely worth shooting at.',
+        bg: 'bg_thunderdome.webp',
+        banner: '\u{1F6E1} MARSHAL\u2019S COLUMN: All units deal +20% DMG \u{1F6E1}',
+        intents: [['ATTACK', 0.40], ['STATUS', 0.25], ['HEAVY', 0.20], ['DEFEND', 0.15]],
+        // The lieutenant is the fight: kill Bulldog or spend the whole fight chipping plate.
+        escort: { name: 'Bulldog', classType: 'RAIDER', range: 'melee', hp: 70, dmg: 20, speed: 12,
+                  img: 'enemy_juggernaut.webp', scale: 1.6, armor: 5, sig: 'RIOT_PLATE',
+                  resistances: { phys: 10, bio: 0, energy: -5 } },
+        escortArmor: 22,
+        enrage: { cry: 'THE MARSHAL CALLS THE COLUMN IN!', dmgScale: 1.3, speedBonus: 3 }
+    },
+    {
+        id: 'STORMCALLER', name: 'The Stormcaller', short: 'STORM', img: 'enemy_boss_stormcaller.webp', scale: 2.3,
+        range: 'ranged', hpMult: 1.05, dmgMult: 0.9, speed: 13, armor: 12,
+        resistances: { phys: 0, bio: 10, energy: 25 },
+        dmgType: 'energy',
+        blurb: 'Fights with the sky. Whatever the forecast said, it will not stay true.',
+        bg: 'bg_thunderdome.webp',
+        banner: '\u26A1 THE SKY TURNS: All units deal +20% DMG \u26A1',
+        intents: [['AOE', 0.30], ['ATTACK', 0.30], ['STATUS', 0.25], ['HEAVY', 0.15]],
+        // Every third turn the weather changes under everyone, squad and warlord alike.
+        stormTurn: 3,
+        enrage: { cry: 'THE STORMCALLER OPENS THE SKY!', dmgScale: 1.2, speedBonus: 2 }
+    },
+    {
+        id: 'BASTION', name: 'The Bastion', short: 'BASTION', img: 'enemy_boss_bastion.webp', scale: 2.5,
+        range: 'ranged', hpMult: 1.45, dmgMult: 0.85, speed: 4, armor: 25,
+        resistances: { phys: 20, bio: 100, energy: -10 },
+        blurb: 'A fortress on legs behind a shield it did not build. Kill the generator first.',
+        bg: 'bg_foundry.webp',
+        banner: '\u{1F6A7} BASTION WARD: All units deal +20% DMG \u{1F6A7}',
+        intents: [['DEFEND', 0.30], ['AOE', 0.30], ['ATTACK', 0.25], ['HEAVY', 0.15]],
+        // Warded to near-invulnerability until the generator standing beside it is destroyed.
+        ward: { name: 'Ward Generator', classType: 'MECH', range: 'ranged', hp: 55, dmg: 6, speed: 3,
+                img: 'enemy_turret.webp', scale: 0.9, armor: 6,
+                resistances: { phys: 5, bio: 100, energy: -20 } },
+        wardSoak: 0.12,
+        enrage: { cry: 'BASTION WARD COLLAPSING - FULL BATTERIES!', dmgScale: 1.35, forceAoe: true }
     }
 ];
 
 // Rotates by sector so a run meets a different commander each time rather than the same one
 // ten times over.
-function bossForSector(sector = currentSector) { return BOSS_POOL[(Math.max(1, sector) - 1) % BOSS_POOL.length]; }
+// The rotation used to be sector modulo three: every warlord seen by sector 3, then the same
+// order forever. Each run now walks a shuffled order, reshuffling per cycle and never opening
+// a cycle with the commander that closed the last one - so no warlord is met twice running.
+// Seeded, so a daily protocol deals everyone the same sequence.
+let bossSalt = 'w0';
+function bossOrder(cycle) {
+    // Seeded directly rather than through seededRng, which falls back to Math.random when no
+    // daily seed is set - the order has to be stable across every call in a run, or the map
+    // would advertise one warlord and the fight would deliver another.
+    const rng = mulberry32(seedFromString(`boss:${runSeed || bossSalt}:${cycle}`));
+    const idx = BOSS_POOL.map((_, i) => i);
+    for (let i = idx.length - 1; i > 0; i--) {
+        const j = Math.floor(rng() * (i + 1));
+        [idx[i], idx[j]] = [idx[j], idx[i]];
+    }
+    if (cycle > 0) {
+        const prev = bossOrder(cycle - 1);
+        const last = prev[prev.length - 1];
+        if (idx[0] === last && idx.length > 1) { [idx[0], idx[1]] = [idx[1], idx[0]]; }
+    }
+    return idx;
+}
+function bossForSector(sector = currentSector) {
+    const i = Math.max(1, sector) - 1;
+    const n = BOSS_POOL.length;
+    return BOSS_POOL[bossOrder(Math.floor(i / n))[i % n]];
+}
 
 // Four relics and one elite node per sector meant the whole pool was owned by sector four and
 // every elite fight after that dropped nothing. Fourteen now, in two tiers: commons are the
@@ -1858,7 +1948,21 @@ function migrateOldSaves() {
     if (oldSettings && !Store.get(SETTINGS_KEY)) { Store.set(SETTINGS_KEY, oldSettings); }
 }
 
+// Art for a new warlord may not have landed yet, and a broken portrait is worse than a
+// stand-in. Delegated rather than inline, because no inline handler survives in this codebase.
+const PORTRAIT_FALLBACK = 'enemy_boss.webp';
+function armPortraitFallback() {
+    document.addEventListener('error', e => {
+        const el = e.target;
+        if (!el || el.tagName !== 'IMG' || !el.classList.contains('portrait')) return;
+        if (el.dataset.fellBack) return;
+        el.dataset.fellBack = '1';
+        el.src = PORTRAIT_FALLBACK;
+    }, true);
+}
+
 function initEngine() { 
+    armPortraitFallback();
     preloadAssets();
     Store.probe();
     migrateOldSaves();
@@ -2086,6 +2190,7 @@ function buildNewRun(diff) {
     activeBounties = generateBounties(seededRng('bounties')); runStats = newRunStats(); pendingRelicOffer = null;
     pendingConsequences = []; recentEvents = []; gearStash = []; pendingPerkOffers = [];
     activeShop = null; regroupInsured = false; shopRerollPick = false;
+    bossSalt = 'w' + Math.floor(Math.random() * 1e9);
     bonds = {}; bondSavesUsed = new Set();
     playerRoster.forEach(c => { c.weaponMod = null; c.trinket = null; });
     sectorFront = rollFront(seededRng('front:1')); frontBannerPending = true;
@@ -2149,7 +2254,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, bonds, sectorFront, runSeed, ascension, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, bonds, sectorFront, runSeed, ascension, bossSalt, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -2171,6 +2276,7 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         frontBannerPending = false;
         runSeed = (typeof d.runSeed === 'string' && d.runSeed) ? d.runSeed : null;
         ascension = Number.isInteger(d.ascension) ? Math.max(0, Math.min(d.ascension, PROTOCOLS.length)) : 0;
+        bossSalt = (typeof d.bossSalt === 'string' && d.bossSalt) ? d.bossSalt : 'w0';
         // Gear fields on a roster saved before gear existed, and any id that no longer exists,
         // resolve to empty slots rather than phantom equipment.
         playerRoster.forEach(c => {
@@ -2263,10 +2369,10 @@ function devJump(deltaSector, deltaTier) {
 // Steps forward to the next sector that fields the requested commander, so the fight arrives at
 // a difficulty that matches how deep the run already is.
 function devFightBoss(bossId) {
-    const idx = BOSS_POOL.findIndex(b => b.id === bossId);
-    if (idx < 0) return;
-    let s = currentSector;
-    while (((s - 1) % BOSS_POOL.length) !== idx) s++;
+    if (!BOSS_POOL.some(b => b.id === bossId)) return;
+    // The rotation is a seeded shuffle now, not a modulo, so walk it rather than compute it.
+    let s = currentSector, guard = 0;
+    while (bossForSector(s).id !== bossId && guard++ < 500) s++;
     currentSector = s; currentTier = TOTAL_TIERS;
     noteDepth(); saveGameState();
     initiateCombat('BOSS', false);
@@ -3286,8 +3392,27 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
         if (b.isHovering) boss.isHovering = true;
         if (b.sink) boss.sink = b.sink;
         if (b.dmgType) boss.dmgType = b.dmgType;
+        if (b.stormTurn) { boss.stormTurn = b.stormTurn; boss.stormClock = 0; }
         boss.intent = rollIntent(boss);
-        return [boss];
+
+        // A warlord that does not arrive alone brings its own: a lieutenant it hides behind, or
+        // a generator holding its ward up. Both are the fight's actual first problem.
+        const retinue = [];
+        const raise = (spec, id, extra) => {
+            const u = { id, name: spec.name, classType: spec.classType, range: spec.range,
+                maxHp: Math.floor(spec.hp * mult), hp: Math.floor(spec.hp * mult),
+                speed: spec.speed, armor: spec.armor || 0, baseArmor: spec.armor || 0, isPlayer: false,
+                dmgBase: Math.floor(spec.dmg * dmgMult), img: spec.img, scale: spec.scale, hpDrop: 0,
+                stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
+                resistances: { ...spec.resistances }, sig: spec.sig || null, sigCd: 0, ...(extra || {}) };
+            if (u.sig === 'RIOT_PLATE') u.plate = Math.floor(u.maxHp * 0.5);
+            u.intent = rollIntent(u);
+            retinue.push(u);
+            return u;
+        };
+        if (b.escort) { boss.escortId = 'boss_escort'; boss.escortArmor = b.escortArmor || 20; raise(b.escort, 'boss_escort'); }
+        if (b.ward) { boss.wardId = 'boss_ward'; boss.wardSoak = b.wardSoak || 0.15; raise(b.ward, 'boss_ward'); }
+        return [boss, ...retinue];
     }
     
     // Later sectors unlock tougher stock progressively rather than all at once: the old gate
@@ -4203,6 +4328,9 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     if (hasQuirk(t, 'THICK_HIDE')) cd = Math.max(1, cd - 3);
     // Riot Plate: bolted armour soaks half of everything until the plate itself is spent.
     if (hasSig(t, 'RIOT_PLATE') && (t.plate || 0) > 0) cd = Math.max(1, Math.floor(cd * 0.5));
+    // A ward holds until its generator falls; a lieutenant's cover is worth heavy plate.
+    if (t.wardId && activeEntities.some(e => e.id === t.wardId && e.hp > 0)) cd = Math.max(1, Math.floor(cd * (t.wardSoak || 0.15)));
+    if (t.escortId && activeEntities.some(e => e.id === t.escortId && e.hp > 0)) ac += (t.escortArmor || 20);
     if ((abilityStr === 'SLUG_SHOT' && hasTrait(attacker, 'BREACHING_ROUNDS')) ||
         (abilityStr === 'QUICK_SHOT' && hasTrait(attacker, 'PIERCING_ROUNDS'))) ac = 0;
     let n = Math.max(1, cd - rv - ac); if (rv >= 100) n = 0;
@@ -4329,6 +4457,16 @@ function pickTarget(enemy, candidates, intent) {
 function executeEnemyAi(enemy) {
     if (!combatActive) return;
     if (enemy.sigCd > 0) enemy.sigCd--;
+    // Whatever the forecast promised, the Stormcaller will not let it stand.
+    if (enemy.stormTurn && ++enemy.stormClock >= enemy.stormTurn) {
+        enemy.stormClock = 0;
+        const skies = ['TOXIC_SMOG', 'SANDSTORM', 'SHRAPNEL_WINDS', 'BLOODLUST'].filter(w => w !== currentWeather);
+        currentWeather = skies[Math.floor(Math.random() * skies.length)];
+        log(`> ${enemy.name} turns the sky over: ${currentWeather.replace(/_/g, ' ')}.`, 'log-status');
+        spawnFCT(enemy.id, 'THE SKY TURNS', 'fct-status');
+        applyCombatScenery(combatBgFile, null);
+        playSFX('enrage'); triggerShake(); renderField();
+    }
     
     if (enemy.classType === 'BOSS' && enemy.phase === 1 && enemy.hp <= enemy.maxHp * (ascension >= 2 ? 0.6 : 0.5)) {
         enemy.phase = 2;
@@ -4349,6 +4487,29 @@ function executeEnemyAi(enemy) {
                 spawnFCT(t.id, "PLAGUE", "fct-status");
             });
             log(`> The squad is choking on rot.`, "log-status");
+        }
+
+        if (e.split) {
+            // The same pool of health, in three places at once. Whatever the Vatborn had left is
+            // shared out - killing it is now killing all of it.
+            const share = Math.max(1, Math.floor(enemy.hp * (e.split.share || 0.4)));
+            enemy.hp = Math.max(1, enemy.hp - share * e.split.count);
+            enemy.maxHp = Math.max(enemy.hp, Math.floor(enemy.maxHp * 0.5));
+            enemy.armor = 0; enemy.baseArmor = 0;
+            for (let i = 0; i < (e.split.count || 2); i++) {
+                const half = {
+                    id: `split_${Date.now()}_${i}`, name: e.split.name, classType: enemy.classType,
+                    range: enemy.range, maxHp: share, hp: share, speed: enemy.speed,
+                    armor: 0, baseArmor: 0, isPlayer: false,
+                    dmgBase: Math.max(1, Math.floor(enemy.dmgBase * 0.7)),
+                    img: e.split.img, scale: e.split.scale, hpDrop: 0,
+                    stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
+                    resistances: { ...enemy.resistances }, dmgType: enemy.dmgType || 'phys', sig: null, sigCd: 0
+                };
+                half.intent = rollIntent(half);
+                activeEntities.push(half); turnQueue.push(half);
+            }
+            log(`> ${enemy.name} splits into ${e.split.count} and keeps coming.`, 'log-dmg');
         }
 
         if (e.summon) {
@@ -4629,7 +4790,7 @@ if ('serviceWorker' in navigator) {
             await navigator.serviceWorker.register('sw.js');
             const reg = await navigator.serviceWorker.ready;
             // Hand the worker the art set so offline play does not depend on the HTTP cache.
-            if (reg.active) reg.active.postMessage({ type: 'CACHE_ART', urls: ASSET_LIST });
+            if (reg.active) reg.active.postMessage({ type: 'CACHE_ART', urls: ASSET_LIST.filter(a => !PENDING_ART.includes(a)) });
         } catch (e) { /* offline play is a bonus, never a requirement */ }
     });
 }
@@ -4640,9 +4801,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, sigOf, hasSig, enemyDmgMult, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
@@ -4679,6 +4840,7 @@ globalThis.WP = {
     get runSeed() { return runSeed; }, set runSeed(v) { runSeed = v; },
     get mastery() { return mastery; }, set mastery(v) { mastery = v; },
     get bestiary() { return bestiary; }, set bestiary(v) { bestiary = v; },
+    get bossSalt() { return bossSalt; }, set bossSalt(v) { bossSalt = v; },
     get seenPrompts() { return seenPrompts; }, set seenPrompts(v) { seenPrompts = v; },
     get promptQueue() { return promptQueue; }, set promptQueue(v) { promptQueue = v; },
     get hitLog() { return hitLog; }, set hitLog(v) { hitLog = v; },
