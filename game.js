@@ -511,6 +511,20 @@ function noteSeedBest(seed, score) {
     return prev;
 }
 
+// ── Ascension protocols ─────────────────────────────────────────────────────────────────
+// The ladder after the game is beaten in the ordinary sense: named tiers unlocked by real
+// depth milestones, each stacking a permanent twist, with a score multiplier above what
+// contracts give. Level N applies every twist up to N.
+const PROTOCOLS = [
+    { name: 'PROTOCOL: IRONSIDE', gate: 3, mult: 1.15, desc: 'Every elite arrives affixed.' },
+    { name: 'PROTOCOL: BLOODRITE', gate: 5, mult: 1.3, desc: 'Warlords enrage at 60% health.' },
+    { name: 'PROTOCOL: BLACKOUT', gate: 8, mult: 1.5, desc: 'Heavy hitters hide their intent.' }
+];
+let ascension = 0;   // the chosen rung, 0..unlockedProtocols(), persisted with the run
+function unlockedProtocols() { return PROTOCOLS.filter(p => bestSector >= p.gate).length; }
+function protocolMult() { return ascension > 0 ? PROTOCOLS[Math.min(ascension, PROTOCOLS.length) - 1].mult : 1; }
+function protocolName() { return ascension > 0 ? PROTOCOLS[Math.min(ascension, PROTOCOLS.length) - 1].name : null; }
+
 // ── Sector fronts ───────────────────────────────────────────────────────────────────────
 // Every sector rolls a front: a condition that tilts what the generator builds, what the
 // weather does, what falls as loot, and what the boss brings. "Sector 3 was a blood moon"
@@ -814,6 +828,10 @@ const CODEX = [
         ...GEAR_POOL.filter(g => g.slot === 'mod').map(g => `${g.name} (${g.cls}) — ${g.desc}`),
         ...GEAR_POOL.filter(g => g.slot === 'trinket').map(g => `${g.name} — ${g.desc}`)
     ] },
+    { id: 'ASCENSION', title: 'ASCENSION PROTOCOLS', body: () => [
+        'The ladder after the game is beaten in the ordinary sense: named protocols unlocked by your deepest sector ever, chosen on the contract board, each rung stacking every twist below it - with a score multiplier above what contracts give.',
+        ...PROTOCOLS.map(p => `${p.name} (Sector ${p.gate}) — ${p.desc} Score x${p.mult.toFixed(2)}.`)
+    ] },
     { id: 'DOSSIERS', title: 'DOSSIERS', body: () => [
         `Every point of XP an operator earns also goes on their class's dossier, across every run. Ranks come at ${MASTERY_RANKS[1].toLocaleString()}, ${MASTERY_RANKS[2].toLocaleString()} and ${MASTERY_RANKS[3].toLocaleString()} lifetime XP - and they unlock options, never raw power.`,
         'Rank I: a title on the card. Rank II: a class quirk joins that class\'s draw pool. Rank III: a fourth ability, with the muster picking which three of the four deploy.',
@@ -1095,6 +1113,7 @@ const ACTIONS = {
     },
     'outpost-sheet-close': () => { outpostSheet = null; activeGearSelector = null; activePosSelector = null; activePerkSelector = null; renderOutpost(); },
     'chronicle':        () => renderChronicle(),
+    'ascension-cycle':  () => { ascension = (ascension + 1) % (unlockedProtocols() + 1); renderContracts(); },
     'loadout-bench':    el => {
         const ch = playerRoster.find(c => c.id === el.dataset.id);
         if (ch && masteryRank(ch.classType) >= 3) { ch.benchedMove = el.dataset.move; renderMuster(); }
@@ -1719,6 +1738,9 @@ function renderRunOver(score, isBest, seedPrev = null) {
         lines.push(['PROTOCOL SEED', runSeed]);
         lines.push(['SEED BEST', score > (seedPrev || 0) ? '★ NEW SEED BEST ★' : `${(seedBests()[runSeed] || 0).toLocaleString()} PTS`]);
     }
+    if (st.ascension > 0 && st.protocolMult > 1) {
+        lines.push(['ASCENSION', `${PROTOCOLS[Math.min(st.ascension, PROTOCOLS.length) - 1].name} · x${st.protocolMult.toFixed(2)}`]);
+    }
     document.getElementById('runover-lines').innerHTML = lines.map(l => `<div class="runover-line"><span>${l[0]}</span><span>${l[1]}</span></div>`).join('');
     document.getElementById('runover-choices').innerHTML =
         `<button class="event-btn" style="border-color:#4488ff; color:#4488ff;" data-action="citadel">CITADEL (\uD83D\uDC80 ${bossSkulls})</button>` +
@@ -1759,7 +1781,7 @@ let bestScore = 0; let bestSector = 0;
 
 function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, mastery })); }
 
-function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames() }; }
+function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
 
 // Endless scoring: depth is worth far more than any single haul, so pushing one sector
 // deeper always beats farming the one you are on.
@@ -1770,7 +1792,7 @@ function computeScore(st) {
          + st.bosses * 900 + st.elites * 250 + st.kills * 15 + Math.floor(st.scrapEarned / 2);
     // The multiplier is stored on the run rather than read live, so a score already banked is
     // not re-scored by whatever the next expedition signs up for.
-    return Math.floor(base * (st.contractMult || 1));
+    return Math.floor(base * (st.contractMult || 1) * (st.protocolMult || 1));
 }
 
 function noteDepth() {
@@ -1910,6 +1932,23 @@ function renderContracts() {
     const best = seedBests()[daily];
     document.getElementById('seed-note').innerText =
         `${daily} — ${best ? `your best ${best.toLocaleString()} PTS` : 'not yet attempted'}. Seeds fix the map, fronts, quirks and bounty slate; the fighting stays live.`;
+    // The ascension rung: the ladder above the contracts, gated by real depth.
+    const unlocked = unlockedProtocols();
+    if (ascension > unlocked) ascension = unlocked;
+    const btn = document.getElementById('ascension-btn');
+    const note = document.getElementById('ascension-note');
+    if (unlocked === 0) {
+        btn.style.display = 'none';
+        note.innerText = `Ascension opens at Sector ${PROTOCOLS[0].gate}. Deepest so far: ${bestSector || 1}.`;
+    } else {
+        btn.style.display = 'block';
+        btn.innerText = ascension > 0 ? `▲ ${protocolName()} · SCORE x${protocolMult().toFixed(2)}` : '▲ ASCENSION: OFF';
+        const next = PROTOCOLS[unlocked];
+        note.innerText = (ascension > 0
+            ? PROTOCOLS.slice(0, ascension).map(p => p.desc).join(' ')
+            : `${unlocked} protocol${unlocked > 1 ? 's' : ''} earned. Each rung stacks every twist below it.`)
+            + (next ? ` Next rung unlocks at Sector ${next.gate}.` : '');
+    }
 }
 
 function toggleContract(id) {
@@ -2086,7 +2125,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, bonds, sectorFront, runSeed, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, bonds, sectorFront, runSeed, ascension, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -2107,6 +2146,7 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         sectorFront = frontById(d.sectorFront) ? d.sectorFront : null;
         frontBannerPending = false;
         runSeed = (typeof d.runSeed === 'string' && d.runSeed) ? d.runSeed : null;
+        ascension = Number.isInteger(d.ascension) ? Math.max(0, Math.min(d.ascension, PROTOCOLS.length)) : 0;
         // Gear fields on a roster saved before gear existed, and any id that no longer exists,
         // resolve to empty slots rather than phantom equipment.
         playerRoster.forEach(c => {
@@ -3064,7 +3104,7 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
         let t = JSON.parse(JSON.stringify(usePool[Math.floor(Math.random() * usePool.length)])); 
         let hp = Math.floor(t.maxHp * mult); t.hp = hp; t.maxHp = hp; t.dmgBase = Math.floor(t.dmgBase * dmgMult); t.baseArmor = t.armor || 0;
         
-        if (isEliteNode && Math.random() < 0.6) {
+        if (isEliteNode && (ascension >= 1 || Math.random() < 0.6)) {
             let affixes = ['FRENZIED', 'ARMORED', 'VAMPIRIC'];
             t.eliteType = affixes[Math.floor(Math.random() * affixes.length)]; t.name = `*${t.eliteType}* ${t.name}`;
             if (t.eliteType === 'FRENZIED') { t.dmgBase = Math.floor(t.dmgBase * 1.4); t.speed += 4; }
@@ -3425,7 +3465,7 @@ function renderField() {
 
         const html = `
             <div class="entity ${isAct} ${dCls} ${tCls} ${hint ? 'has-combo' : ''} ${farTag ? 'out-of-reach' : ''} ${guarding ? 'covering' : ''}" id="${ent.id}" ${clk} style="--sprite-scale: ${ent.scale || 1}; --sprite-sink: ${ent.sink || 0}px;">
-                <div class="intent-icon" style="display:${ent.intent && !isDead && !ent.isPlayer ? 'flex' : 'none'}">${ent.intent ? ent.intent.icon : ''}</div>
+                <div class="intent-icon" style="display:${ent.intent && !isDead && !ent.isPlayer ? 'flex' : 'none'}">${ent.intent ? (ascension >= 3 && ent.intent.type === 'HEAVY' ? '?' : ent.intent.icon) : ''}</div>
                 ${hint ? `<div class="combo-flag">${hint}</div>` : ''}
                 ${farTag ? `<div class="reach-flag">FAR</div>` : ''}
                 ${guarding ? `<div class="guard-flag">COVERING</div>` : ''}
@@ -3939,7 +3979,7 @@ function pickTarget(enemy, candidates, intent) {
 function executeEnemyAi(enemy) {
     if (!combatActive) return;
     
-    if (enemy.classType === 'BOSS' && enemy.phase === 1 && enemy.hp <= (enemy.maxHp / 2)) {
+    if (enemy.classType === 'BOSS' && enemy.phase === 1 && enemy.hp <= enemy.maxHp * (ascension >= 2 ? 0.6 : 0.5)) {
         enemy.phase = 2;
         playSFX('enrage');
         const e = enemy.enrage || {};
@@ -4165,7 +4205,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, renderOutpostScene, renderOutpostSheet, CAMP_SPOTS, motionOff, flashClass, pulseIntent, playAttackAnim, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, renderOutpostScene, renderOutpostSheet, CAMP_SPOTS, motionOff, flashClass, pulseIntent, playAttackAnim, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
@@ -4204,6 +4244,8 @@ globalThis.WP = {
     get runSeed() { return runSeed; }, set runSeed(v) { runSeed = v; },
     get outpostView() { return outpostView; }, set outpostView(v) { outpostView = v; },
     get mastery() { return mastery; }, set mastery(v) { mastery = v; },
+    get ascension() { return ascension; }, set ascension(v) { ascension = v; },
+    get bestSector() { return bestSector; }, set bestSector(v) { bestSector = v; },
     get outpostSheet() { return outpostSheet; }, set outpostSheet(v) { outpostSheet = v; },
     get frontBannerPending() { return frontBannerPending; }, set frontBannerPending(v) { frontBannerPending = v; },
     get regroupInsured() { return regroupInsured; }, set regroupInsured(v) { regroupInsured = v; },

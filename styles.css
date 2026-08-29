@@ -510,6 +510,9 @@ button.reach-short { border-color: #7a5a20; }
     font-family: monospace; font-size: 10px; padding: 8px; cursor: pointer; text-transform: uppercase; }
 .seed-daily-btn:hover { background: #7ab0d0; color: #000; }
 .seed-note { font-size: 9px; color: #8a8578; line-height: 1.5; }
+.ascension-btn { background: #140a14; border: 1px solid #8a3fbf; color: #c98aff; font-family: monospace;
+  font-size: 10px; padding: 8px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; }
+.ascension-btn:hover { background: #8a3fbf; color: #000; }
 
 /* The sector front: a badge that rides the map header, and a splash on sector entry. */
 #front-badge { display: flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0;
