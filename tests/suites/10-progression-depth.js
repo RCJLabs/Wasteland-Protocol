@@ -80,20 +80,33 @@ module.exports = {
 
     // Heavies used to jump from weight 1 to weight 5 the moment tier 6 arrived, and the
     // simulator showed a sector's deaths clustering exactly there. They ramp in now.
+    // Sampled by effTier off HEAVY_RAMP's own bands rather than fixed sector-1 tiers: raising
+    // the heavy gates to clear sector 1 once left this test measuring a stretch of the curve
+    // where no heavy existed, so the ramp read as flat because the pool was empty.
     const ramp = await page.evaluate(() => {
-      const shareAt = (tier) => {
-        currentSector = 1; currentTier = tier;
+      const shareAt = (eff) => {
+        const d = unlockDepth(eff);
+        currentSector = d.sector; currentTier = d.tier;
         let heavy = 0, total = 0;
         for (let i = 0; i < 300; i++) {
           generateEnemies('BEASTS', 1, false, 1).forEach(e => { total++; if (e.isHeavy) heavy++; });
         }
-        return heavy / total;
+        return { share: heavy / total, at: `S${d.sector} T${d.tier}` };
       };
-      return { early: shareAt(5), mid: shareAt(7), late: shareAt(9) };
+      const shallowest = Math.min(...ENEMY_POOL.BEASTS.filter(e => e.isHeavy).map(e => e.minTier));
+      return { gate: shallowest, bands: HEAVY_RAMP,
+               early: shareAt(HEAVY_RAMP.rare - 1),
+               mid: shareAt(HEAVY_RAMP.common - 1),
+               late: shareAt(HEAVY_RAMP.common + 1) };
     });
-    ok(`heavies are rare at tier 5 (${(ramp.early * 100).toFixed(0)}%)`, ramp.early < 0.25);
-    ok(`common by tier 7 (${(ramp.mid * 100).toFixed(0)}%)`, ramp.mid > ramp.early);
-    ok(`and usual by tier 9 (${(ramp.late * 100).toFixed(0)}%)`, ramp.late > ramp.mid);
+    ok(`the ramp has somewhere to act (shallowest heavy gates at ${ramp.gate}, rare band ends at ${ramp.bands.rare})`,
+      ramp.gate < ramp.bands.rare);
+    ok(`heavies are rare where they first appear (${ramp.early.at}, ${(ramp.early.share * 100).toFixed(0)}%)`,
+      ramp.early.share > 0 && ramp.early.share < 0.25);
+    ok(`common a band later (${ramp.mid.at}, ${(ramp.mid.share * 100).toFixed(0)}%)`,
+      ramp.mid.share > ramp.early.share);
+    ok(`and usual past the last band (${ramp.late.at}, ${(ramp.late.share * 100).toFixed(0)}%)`,
+      ramp.late.share > ramp.mid.share);
 
     // ---- 05: resistances are visible on the unit ----
     await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 2; currentTier = 6; initiateCombat('MECH', false); });

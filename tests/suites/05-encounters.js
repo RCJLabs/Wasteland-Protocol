@@ -34,6 +34,44 @@ module.exports = {
     ok('early fights are single-faction', r.early.mixed === 0);
     ok('deep fights mix factions', r.deep.mixed > 0.15);
 
+    // ---- the opening sector is a teaching sector ----
+    // Heavies used to unlock inside sector 1 - Chem Fiends from tier 6, War Rigs from tier 8 -
+    // which put a 360 HP unit two tiers ahead of a 280 HP commander, on a squad that had never
+    // seen one. minTier is measured in effTier, so anything above TOTAL_TIERS cannot reach
+    // sector 1 at all.
+    const opening = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      const seen = new Set(); const perFaction = {};
+      for (let tier = 1; tier <= TOTAL_TIERS; tier++) {
+        currentSector = 1; currentTier = tier;
+        const mult = 1 + (tier - 1) * TIER_HP_GROWTH;
+        for (const type of ['RAIDERS', 'BEASTS', 'MECH']) {
+          const f = perFaction[type] = perFaction[type] || new Set();
+          for (let i = 0; i < 120; i++)
+            generateEnemies(type, mult, false, 1).forEach(e => { seen.add(e.name); f.add(e.name); });
+        }
+      }
+      // The deepest ordinary unit sector 1 can field, against the commander waiting at its top.
+      currentSector = 1; currentTier = TOTAL_TIERS;
+      const topMult = 1 + (TOTAL_TIERS - 1) * TIER_HP_GROWTH;
+      let toughest = 0, toughestName = '';
+      for (const type of ['RAIDERS', 'BEASTS', 'MECH'])
+        for (let i = 0; i < 200; i++)
+          generateEnemies(type, topMult, false, 1).forEach(e => {
+            if (e.maxHp > toughest) { toughest = e.maxHp; toughestName = e.name; }
+          });
+      const bosses = BOSS_POOL.map(b => Math.floor(100 * b.hpMult * topMult));
+      return { seen: [...seen], toughest, toughestName, weakestBoss: Math.min(...bosses),
+               variety: Object.fromEntries(Object.entries(perFaction).map(([k, v]) => [k, v.size])) };
+    });
+    const heavies = ['War Rig', 'Juggernaut', 'Chem Fiend'];
+    ok(`sector 1 never fields a heavy the squad cannot answer (${heavies.join(', ')})`,
+      heavies.every(h => !opening.seen.includes(h)));
+    ok(`and its toughest ordinary unit still yields to the commander (${opening.toughestName} ${opening.toughest} vs ${opening.weakestBoss} HP)`,
+      opening.toughest < opening.weakestBoss);
+    ok(`every faction still fields a mix there (${JSON.stringify(opening.variety)})`,
+      Object.values(opening.variety).every(n => n >= 2));
+
     await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 2; currentTier = 9;
       initiateCombat('RAIDERS', false);

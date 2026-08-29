@@ -36,6 +36,39 @@ module.exports = {
     ok(`every named passive is spelled out (${passives.held.join(', ')})`, passives.described);
     ok('and the warlord\u2019s file prints it rather than an empty block', passives.inFile);
 
+    // ---- the opening is dealt gently, without locking anything out ----
+    // A flat shuffle made a first-ever commander as likely to be the Bastion - warded to 12%
+    // behind a generator - as the Warlord. The first cycle is sorted by threat now, with
+    // enough jitter that it stays a bias rather than a gate.
+    const shaped = await page.evaluate(() => {
+      const rated = BOSS_POOL.every(b => [1, 2, 3].includes(b.threat));
+      const mix = {};
+      for (let run = 0; run < 1200; run++) {
+        runSeed = null; bossSalt = `shape${run}`;
+        for (let s = 1; s <= BOSS_POOL.length; s++) {
+          const t = bossForSector(s).threat;
+          (mix[s] = mix[s] || { 1: 0, 2: 0, 3: 0 })[t]++;
+        }
+      }
+      bossSalt = 'w0';
+      const pct = (s, t) => 100 * mix[s][t] / (mix[s][1] + mix[s][2] + mix[s][3]);
+      // What an unbiased draw would give, as the yardstick for "flat".
+      const flat = t => 100 * BOSS_POOL.filter(b => b.threat === t).length / BOSS_POOL.length;
+      return { rated,
+               s1light: pct(1, 1), s1heavy: pct(1, 3),
+               s4: [pct(4, 1), pct(4, 2), pct(4, 3)], flat: [flat(1), flat(2), flat(3)],
+               lastHeavy: pct(BOSS_POOL.length, 3) };
+    });
+    ok('every commander is rated for how much work it is', shaped.rated);
+    ok(`the opening sector leans light (${shaped.s1light.toFixed(0)}% against ${shaped.flat[0].toFixed(0)}% flat)`,
+      shaped.s1light > shaped.flat[0] * 1.6);
+    ok(`but a heavy one can still open a run (${shaped.s1heavy.toFixed(1)}%)`,
+      shaped.s1heavy > 0 && shaped.s1heavy < shaped.flat[2] / 2);
+    ok(`and by mid-run the draw is flat again (${shaped.s4.map(n => n.toFixed(0) + '%').join(' / ')})`,
+      shaped.s4.every((n, i) => Math.abs(n - shaped.flat[i]) < 8));
+    ok(`the end of a cycle is where the heavy ones land (${shaped.lastHeavy.toFixed(0)}%)`,
+      shaped.lastHeavy > shaped.flat[2] * 1.5);
+
     // ---- the rotation: stable within a run, and never twice running ----
     const rotation = await page.evaluate(() => {
       activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;

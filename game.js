@@ -317,7 +317,7 @@ const BOSS_PASSIVES = {
 // what they do passively, and what happens when you break them past half health.
 const BOSS_POOL = [
     {
-        id: 'WARLORD', name: 'Warlord', short: 'WARLORD', img: 'enemy_boss.webp', scale: 2.2,
+        id: 'WARLORD', threat: 1, name: 'Warlord', short: 'WARLORD', img: 'enemy_boss.webp', scale: 2.2,
         range: 'melee', hpMult: 1.0, dmgMult: 1.0, speed: 9, armor: 15,
         resistances: { phys: 10, bio: 5, energy: 5 },
         blurb: 'A raider chieftain who fights alongside their pack.',
@@ -330,7 +330,7 @@ const BOSS_POOL = [
                   summonCount: 2 }
     },
     {
-        id: 'COLOSSUS', name: 'Siege Colossus', short: 'COLOSSUS', img: 'enemy_boss_mech.webp', scale: 2.4,
+        id: 'COLOSSUS', threat: 2, name: 'Siege Colossus', short: 'COLOSSUS', img: 'enemy_boss_mech.webp', scale: 2.4,
         range: 'ranged', hpMult: 1.3, dmgMult: 0.8, speed: 5, armor: 30,
         resistances: { phys: 18, bio: 100, energy: -15 },
         passive: 'PLATING',
@@ -345,7 +345,7 @@ const BOSS_POOL = [
                   summonCount: 2 }
     },
     {
-        id: 'MATRIARCH', name: 'Carrion Matriarch', short: 'MATRIARCH', img: 'enemy_boss_vulture.webp', scale: 2.1,
+        id: 'MATRIARCH', threat: 1, name: 'Carrion Matriarch', short: 'MATRIARCH', img: 'enemy_boss_vulture.webp', scale: 2.1,
         range: 'melee', hpMult: 0.85, dmgMult: 1.1, speed: 17, armor: 5,
         resistances: { phys: -6, bio: 40, energy: 5 },
         dmgType: 'bio', passive: 'FEAST', sink: 16,
@@ -359,7 +359,7 @@ const BOSS_POOL = [
     // mechanic rather than a different set of intent weights: something the squad has to answer
     // rather than simply out-damage.
     {
-        id: 'VATBORN', name: 'The Vatborn', short: 'VATBORN', img: 'enemy_boss_vatborn.webp', scale: 2.2,
+        id: 'VATBORN', threat: 2, name: 'The Vatborn', short: 'VATBORN', img: 'enemy_boss_vatborn.webp', scale: 2.2,
         range: 'melee', hpMult: 1.15, dmgMult: 0.82, speed: 8, armor: 16,
         resistances: { phys: 5, bio: 60, energy: -10 },
         dmgType: 'bio', passive: 'VENOM',
@@ -376,7 +376,7 @@ const BOSS_POOL = [
                   backbreaker: { mult: 1.5, stun: 1 } }
     },
     {
-        id: 'MARSHAL', name: 'The Marshal', short: 'MARSHAL', img: 'enemy_boss_marshal.webp', scale: 2.2,
+        id: 'MARSHAL', threat: 3, name: 'The Marshal', short: 'MARSHAL', img: 'enemy_boss_marshal.webp', scale: 2.2,
         range: 'ranged', hpMult: 1.0, dmgMult: 1.15, speed: 11, armor: 10,
         resistances: { phys: 8, bio: 0, energy: 8 },
         blurb: 'Never walks the line alone. While the hound Bulldog stands, the Marshal is barely worth shooting at.',
@@ -391,7 +391,7 @@ const BOSS_POOL = [
         enrage: { cry: 'THE MARSHAL CALLS THE COLUMN IN!', dmgScale: 1.3, speedBonus: 3 }
     },
     {
-        id: 'STORMCALLER', name: 'The Stormcaller', short: 'STORM', img: 'enemy_boss_stormcaller.webp', scale: 2.3,
+        id: 'STORMCALLER', threat: 2, name: 'The Stormcaller', short: 'STORM', img: 'enemy_boss_stormcaller.webp', scale: 2.3,
         range: 'ranged', hpMult: 1.05, dmgMult: 0.9, speed: 13, armor: 12,
         resistances: { phys: 0, bio: 10, energy: 25 },
         dmgType: 'energy',
@@ -404,7 +404,7 @@ const BOSS_POOL = [
         enrage: { cry: 'THE STORMCALLER OPENS THE SKY!', dmgScale: 1.2, speedBonus: 2 }
     },
     {
-        id: 'BASTION', name: 'The Bastion', short: 'BASTION', img: 'enemy_boss_bastion.webp', scale: 2.25,
+        id: 'BASTION', threat: 3, name: 'The Bastion', short: 'BASTION', img: 'enemy_boss_bastion.webp', scale: 2.25,
         range: 'ranged', hpMult: 1.45, dmgMult: 0.85, speed: 4, armor: 25,
         resistances: { phys: 20, bio: 100, energy: -10 },
         blurb: 'A fortress on legs behind a shield it did not build. Kill the generator first.',
@@ -427,6 +427,15 @@ const BOSS_POOL = [
 // a cycle with the commander that closed the last one - so no warlord is met twice running.
 // Seeded, so a daily protocol deals everyone the same sequence.
 let bossSalt = 'w0';
+// How much work a commander is, beyond its raw numbers: 1 is a straight fight, 2 carries a
+// mechanic that reshapes the field, 3 arrives with a retinue you have to kill through first.
+// A flat shuffle treated all seven as interchangeable, so a first-ever commander was as likely
+// to be the Bastion - 406 HP behind a ward that soaks it to 12% until its generator falls - as
+// the Warlord's 280 HP behind fifteen armour. Same sector, twice the fight.
+// Swept against the threat mix per sector: at 5.0 the opening sector runs roughly 64% light,
+// 32% mid, 4% heavy, and by sector 4 the draw is indistinguishable from uniform. Lower values
+// turn the bias into a gate - at 2.0 sector 1 was 91% the same two commanders.
+const BOSS_THREAT_JITTER = 5.0;
 function bossOrder(cycle) {
     // Seeded directly rather than through seededRng, which falls back to Math.random when no
     // daily seed is set - the order has to be stable across every call in a run, or the map
@@ -436,6 +445,14 @@ function bossOrder(cycle) {
     for (let i = idx.length - 1; i > 0; i--) {
         const j = Math.floor(rng() * (i + 1));
         [idx[i], idx[j]] = [idx[j], idx[i]];
+    }
+    // The first cycle - a run's first seven sectors, which is every run most people finish -
+    // is then sorted by threat plus enough jitter that the order is still a surprise. A heavy
+    // commander can still open a run, it is just no longer as likely as a light one. Later
+    // cycles keep the flat shuffle: by sector 8 the squad has earned the whole roster.
+    if (cycle === 0) {
+        const key = new Map(idx.map(i => [i, (BOSS_POOL[i].threat || 2) + rng() * BOSS_THREAT_JITTER]));
+        idx.sort((a, b) => key.get(a) - key.get(b));
     }
     if (cycle > 0) {
         const prev = bossOrder(cycle - 1);
@@ -797,6 +814,10 @@ function enterNode(id) {
     return node;
 }
 const SECTOR_TIER_BONUS = 3;
+// Heavies phase in rather than arriving all at once: rare, then common, then usual. The bands
+// have to sit above the shallowest heavy's gate or the ramp has nowhere to act - raising those
+// gates to keep heavies out of sector 1 left these at 6 and 9, below every heavy in the game.
+const HEAVY_RAMP = { rare: 11, common: 14 };
 // Per-tier growth within a sector. Damage eased from 0.12 after the simulator showed every
 // expedition dying in sector 1, stacked on the heavy-unlock cliff at tier 6 - see the heavy
 // weight ramp in generateEnemies, which was the other half of that wall.
@@ -3320,6 +3341,14 @@ function typeNameOf(ent) {
     return ent.eliteType ? String(ent.name).replace(`*${ent.eliteType}* `, '') : ent.name;
 }
 
+// Where a type first becomes reachable, in the coordinates the player actually navigates.
+// minTier lives in effTier space - currentTier + (sector - 1) * SECTOR_TIER_BONUS - so the
+// shallowest sector that can reach a given threshold is the one this solves for.
+function unlockDepth(minTier) {
+    const sector = Math.max(1, Math.ceil((minTier - TOTAL_TIERS) / SECTOR_TIER_BONUS) + 1);
+    return { sector, tier: minTier - (sector - 1) * SECTOR_TIER_BONUS };
+}
+
 function dossierHtml(name) {
     const rec = bestiaryRecord(name);
     const tally = bestiaryEntry(name);
@@ -3334,7 +3363,7 @@ function dossierHtml(name) {
     }).join('');
     return `<div class="dossier-body">
         <div class="dossier-name">${name}</div>
-        <div class="dossier-sub">${rec.boss ? 'WARLORD' : rec.faction} \u00B7 ${rec.range === 'ranged' ? 'RANGED' : 'MELEE'}${rec.isHeavy && !rec.boss ? ' \u00B7 HEAVY' : ''}${rec.minTier ? ` \u00B7 FROM TIER ${rec.minTier}` : ''}</div>
+        <div class="dossier-sub">${rec.boss ? 'WARLORD' : rec.faction} \u00B7 ${rec.range === 'ranged' ? 'RANGED' : 'MELEE'}${rec.isHeavy && !rec.boss ? ' \u00B7 HEAVY' : ''}${rec.minTier ? (d => ` \u00B7 FROM S${d.sector} T${d.tier}`)(unlockDepth(rec.minTier)) : ''}</div>
         ${sig ? `<div class="dossier-sig"><span class="dossier-sig-name">${sig.name}</span>
             <span class="dossier-sig-kind">${sig.kind === 'action' ? 'TELEGRAPHED' : sig.kind.toUpperCase()}</span>
             <span class="dossier-sig-desc">${sig.desc}</span></div>` : ''}
@@ -3369,19 +3398,19 @@ function closeDossier() { inspecting = null; renderDossier(); }
 const ENEMY_POOL = {
     'BEASTS': [
     { name: "Attack Dog", sig: 'PACK_HUNT', minTier: 1, isHeavy: false, classType: "BEAST", range: 'melee', maxHp: 30, speed: 18, armor: 0, dmgBase: 10, img: "enemy_dog.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } }, 
-    { name: "Mutant", sig: 'DRAG_DOWN', minTier: 5, isHeavy: true, classType: "MUTANT", range: 'melee', maxHp: 70, speed: 7, armor: 0, dmgBase: 25, img: "enemy_mutant.webp", scale: 1.5, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 20, energy: -5 } }, 
-    { name: "Chem Fiend", sig: 'GAS_BLOOM', minTier: 6, isHeavy: true, classType: "MUTANT", range: 'ranged', maxHp: 60, speed: 11, armor: 0, dmgBase: 15, img: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 50, energy: -5 } }
+    { name: "Mutant", sig: 'DRAG_DOWN', minTier: 9, isHeavy: true, classType: "MUTANT", range: 'melee', maxHp: 70, speed: 7, armor: 0, dmgBase: 25, img: "enemy_mutant.webp", scale: 1.5, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 20, energy: -5 } }, 
+    { name: "Chem Fiend", sig: 'GAS_BLOOM', minTier: 11, isHeavy: true, classType: "MUTANT", range: 'ranged', maxHp: 60, speed: 11, armor: 0, dmgBase: 15, img: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 50, energy: -5 } }
     ],
     'RAIDERS': [
     { name: "Raider", sig: 'CALL_IT_IN', minTier: 1, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 40, speed: 10, armor: 0, dmgBase: 12, img: "enemy_raider.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 2, energy: 0 } }, 
     { name: "Psycho", sig: 'FRENZY', minTier: 4, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 45, speed: 14, armor: 0, dmgBase: 18, img: "enemy_psycho.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
     { name: "Sniper", sig: 'RANGING', minTier: 5, isHeavy: false, classType: "RAIDER", range: 'ranged', maxHp: 35, speed: 16, armor: 0, dmgBase: 25, img: "enemy_sniper.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
-    { name: "Juggernaut", sig: 'RIOT_PLATE', minTier: 7, isHeavy: true, classType: "RAIDER", range: 'melee', maxHp: 90, speed: 6, armor: 5, dmgBase: 18, img: "enemy_juggernaut.webp", scale: 1.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 0, energy: -5 } }
+    { name: "Juggernaut", sig: 'RIOT_PLATE', minTier: 12, isHeavy: true, classType: "RAIDER", range: 'melee', maxHp: 90, speed: 6, armor: 5, dmgBase: 18, img: "enemy_juggernaut.webp", scale: 1.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 0, energy: -5 } }
     ],
     'MECH': [
     { name: "Drone", sig: 'ROTOR_LIFT', minTier: 4, isHeavy: false, classType: "DRONE", range: 'ranged', isHovering: true, maxHp: 25, speed: 18, armor: 5, dmgBase: 8, img: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 100, energy: -10 } }, 
     { name: "Turret", sig: 'OVERWATCH', minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
-    { name: "War Rig", sig: 'AEGIS', minTier: 8, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
+    { name: "War Rig", sig: 'AEGIS', minTier: 14, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
     ]
 };
 
@@ -3443,9 +3472,9 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
             valid = ENEMY_POOL[type].filter(e => e.minTier === minT);
         }
         let weighted = [];
-        // Heavies used to jump from weight 1 to weight 5 the moment tier 6 arrived - most of a
+        // Heavies used to jump from weight 1 to weight 5 the moment they unlocked - most of a
         // sector's deaths clustered exactly there. They ramp in now: rare, then common, then usual.
-        valid.forEach(e => { let weight = !e.isHeavy ? 5 : effTier < 6 ? 1 : effTier < 9 ? 3 : 5; for (let j = 0; j < weight; j++) weighted.push(e); });
+        valid.forEach(e => { let weight = !e.isHeavy ? 5 : effTier < HEAVY_RAMP.rare ? 1 : effTier < HEAVY_RAMP.common ? 3 : 5; for (let j = 0; j < weight; j++) weighted.push(e); });
         return weighted;
     }
 
@@ -4870,9 +4899,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
