@@ -251,6 +251,13 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
 
 /* Keyboard users get no indication of position without this - there was none at all. */
 :focus-visible { outline: 2px solid #B8860B; outline-offset: 2px; }
+/* Leaving is a real option, not a failure state, so the button reads as one of the deck's
+   choices rather than an alarm - until it is armed, when it says exactly what it will cost. */
+.btn-withdraw { border-color: #6b6f5a; color: #a7ad8e; }
+.btn-withdraw-back { border-color: #4a4a4a; color: #8a8a8a; }
+.withdraw-cost { font-size: calc(11px * var(--text-scale, 1)); line-height: 1.5; color: #d9b26a;
+  border: 1px dashed #6b5a2a; background: rgba(30,22,6,0.6); padding: 8px 10px; margin-bottom: 6px; }
+
 /* The touch floor. Measured rather than assumed: these six were the controls under 44px on a
    390px-wide phone - the ledger toggle at 29, the outpost tabs at 36, the upgrade and gear
    buttons at 33-36, the bag slots at 27, and the field prompt's two buttons at 34. Everything

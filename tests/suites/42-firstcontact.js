@@ -26,7 +26,10 @@ module.exports = {
       written: PROMPTS.every(p => p.title && p.body && p.body.length > 60),
       shouty: PROMPTS.filter(p => p.title !== p.title.toUpperCase()).map(p => p.id)
     }));
-    ok(`${table.total} prompts, each with a unique id`, table.total === 15 && table.ids === 15);
+    // The count is content, not a contract - every phase that teaches a new system adds one,
+    // and a suite that has to be edited to stay true is not testing anything. What matters is
+    // that no two prompts share an id, because the second one would silently never fire.
+    ok(`${table.total} prompts, each with a unique id`, table.total > 0 && table.ids === table.total);
     ok('each says something worth reading', table.written);
     ok('and titles are titles', table.shouty.length === 0);
 

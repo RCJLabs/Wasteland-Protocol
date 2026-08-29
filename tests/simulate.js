@@ -22,13 +22,17 @@ const flag = (name, fallback) => {
 };
 const DIFFICULTY = Number(flag('difficulty', '1.0'));
 const CONTRACTS = flag('contracts', '').split(',').filter(Boolean);
+// The sim used to fight every node to a conclusion, which is one particular player and not the
+// only one. With this on it also runs from fights it is losing, so the cost of leaving can be
+// measured against the cost of staying. `--withdraw off` is the old behaviour, for comparison.
+const WITHDRAW_POLICY = flag('withdraw', 'on') !== 'off';
 
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
   const stat = { sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
-                 wipes: 0, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
+                 wipes: 0, withdrawals: 0, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
@@ -155,10 +159,25 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
   };
 
   // Drives one fight to its end without any timers - every turn resolved synchronously.
+  // Losing badly: half the line is nearly out and the other side has barely been dented. A
+  // player reads that off the board in a glance; this is the same read in arithmetic.
+  const losing = (enemyStartHp) => {
+    const squad = activeEntities.filter(e => e.isPlayer);
+    const spent = squad.filter(e => e.hp <= e.maxHp * 0.3).length;
+    const foeHp = activeEntities.filter(e => !e.isPlayer).reduce((a, e) => a + Math.max(0, e.hp), 0);
+    return spent >= Math.ceil(squad.length / 2) && foeHp > enemyStartHp * 0.5;
+  };
+
   const fight = (nodeType, elite) => {
     initiateCombat(nodeType, elite);
     stat.fights++;
-    let rounds = 0;
+    // Counted at the door rather than at the end: a fight that is run from still happened, and
+    // the squad still had to look at whatever was in it.
+    activeEntities.filter(e => !e.isPlayer && e.sig).forEach(e => {
+      stat.sigsFaced[e.sig] = (stat.sigsFaced[e.sig] || 0) + 1;
+    });
+    const enemyStartHp = activeEntities.filter(e => !e.isPlayer).reduce((a, e) => a + e.hp, 0);
+    let rounds = 0, fled = false;
     while (combatActive && rounds < 400) {
       rounds++;
       const actor = turnQueue[activeIndex];
@@ -167,21 +186,29 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
       applyTurnStartEffects(actor);
       if (!activeEntities.some(e => e.isPlayer && e.hp > 0)) break;
       if (!activeEntities.some(e => !e.isPlayer && e.hp > 0)) break;
+      if (actor.isPlayer && withdrawPolicy && canWithdraw() && losing(enemyStartHp)) {
+        stat.kills += activeEntities.filter(e => !e.isPlayer && e.hp <= 0).length;
+        withdraw(); withdraw();          // the real thing: arms, then commits
+        fled = true;
+        break;
+      }
       if (actor.isPlayer) { if (!takeTurn()) { activeIndex = (activeIndex + 1) % turnQueue.length; continue; } }
       else { actor.intent = rollIntent(actor); executeEnemyAi(actor); }
       activeIndex = (activeIndex + 1) % turnQueue.length;
     }
     stat.rounds += rounds;
+    if (fled) { stat.withdrawals++; return 'fled'; }
     const survived = activeEntities.some(e => e.isPlayer && e.hp > 0);
     const foesLeft = activeEntities.filter(e => !e.isPlayer && e.hp > 0).length;
     stat.kills += activeEntities.filter(e => !e.isPlayer && e.hp <= 0).length;
     combatActive = false;
-    return survived && foesLeft === 0;
+    return (survived && foesLeft === 0) ? 'won' : 'lost';
   };
 
   while (stat.nodes < capNodes) {
     if (currentTier > TOTAL_TIERS) {
       currentSector++; currentTier = 1; noteDepth();
+      pursuit = null;                    // as advanceSector does: nothing follows across a sector
       sectorFront = rollFront(); frontBannerPending = false;
       stat.frontsSeen.push(sectorFront);
       sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = [];
@@ -235,13 +262,15 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
     }
 
     currentNodeType = node.type; isCurrentNodeElite = !!node.elite;
-    const won = fight(node.type, !!node.elite);
-    activeEntities.filter(e => !e.isPlayer && e.sig).forEach(e => {
-      stat.sigsFaced[e.sig] = (stat.sigsFaced[e.sig] || 0) + 1;
-    });
-    stat.nodes++; runStats.nodes++;
+    const outcome = fight(node.type, !!node.elite);
+    stat.nodes++;
 
-    if (!won) {
+    // Leaving already advanced the tier and left the node behind - and the engine deliberately
+    // does not count it as one cleared, so neither does this.
+    if (outcome === 'fled') { spend(); continue; }
+    runStats.nodes++;
+
+    if (outcome === 'lost') {
       stat.wipes++;
       stat.wipedInSector.push(currentSector); stat.wipedAtTier.push(currentTier); stat.wipedOnElite.push(!!node.elite);
       if (regroupsLeft() > 0) { stat.regroupsSpent++; regroupSquad(); spend(); continue; }
@@ -306,11 +335,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
   await page.evaluate(() => { globalSettings.sfx = false; });
 
   console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}` +
-              (CONTRACTS.length ? ` under ${CONTRACTS.join(', ')}` : '') + '\n');
+              (CONTRACTS.length ? ` under ${CONTRACTS.join(', ')}` : '') +
+              (WITHDRAW_POLICY ? ', running from fights it is losing' : ', fighting every node to a finish') + '\n');
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400 });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -339,6 +369,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
   line('bosses felled, mean', mean(nums('bosses')).toFixed(2));
   line('elites broken, mean', mean(nums('elites')).toFixed(2));
   line('wipes per run, mean', mean(nums('wipes')).toFixed(2));
+  line('withdrawals per run, mean', WITHDRAW_POLICY ? mean(nums('withdrawals')).toFixed(2) : 'policy off');
   line('regroups spent, mean', mean(nums('regroupsSpent')).toFixed(2));
   const wipeSectors = {};
   results.forEach(r => r.wipedInSector.forEach(sx => { wipeSectors[sx] = (wipeSectors[sx] || 0) + 1; }));
