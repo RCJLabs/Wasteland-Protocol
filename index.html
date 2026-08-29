@@ -197,6 +197,10 @@
             <div class="stat stat-tech"><span class="stat-label">Tech</span><span class="stat-value" id="mat-tech">0</span></div>
         </div>
         
+        <button id="outpost-view-toggle" class="citadel-view-toggle" data-action="outpost-view">📜 LEDGER VIEW</button>
+        <div id="outpost-scene"></div>
+        <div id="outpost-sheet" class="citadel-sheet" style="display:none;"></div>
+        <div id="outpost-ledger">
         <div class="op-tabs">
             <button id="tab-roster" class="op-tab-btn op-tab-active" data-action="outpost-tab" data-tab="ROSTER">SQUAD ROSTER</button>
             <button id="tab-workbench" class="op-tab-btn" data-action="outpost-tab" data-tab="WORKBENCH">WORKBENCH</button>
@@ -228,6 +232,7 @@
         <div class="inventory-sect">
             <div class="inventory-title"><span>TACTICAL INVENTORY</span> <span id="inv-count">0/4</span></div>
             <div id="outpost-inventory" class="inventory-grid"></div>
+        </div>
         </div>
 
         <button class="return-btn" data-action="map">CONFIRM & RETURN TO MAP</button>

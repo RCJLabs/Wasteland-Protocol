@@ -404,6 +404,35 @@ button.reach-short { border-color: #7a5a20; }
 .muster-reroll { font-size: 12px; padding: 5px; border-color: #7a5c14; color: #d9a93d; }
 .muster-note { flex-shrink: 0; font-size: 10px; line-height: 1.5; color: #8a8578; margin: 10px 0; }
 
+/* The camp: the squad's own sprites around a fire, state readable in the bodies. */
+#outpost-scene { position: relative; flex: 1 1 auto; min-height: 340px; overflow: hidden; border: 1px solid #33301f; }
+.camp-bg { position: absolute; inset: 0; background: url('bg_canyon.webp') center 30% / cover; filter: brightness(0.45) saturate(0.7); }
+.camp-glow { position: absolute; left: 50%; top: 62%; width: 220px; height: 160px; transform: translate(-50%, -50%);
+  background: radial-gradient(ellipse, rgba(255, 150, 60, 0.35), transparent 65%); pointer-events: none; }
+.camp-fire { position: absolute; left: 50%; top: 60%; width: 44px; height: 44px; transform: translate(-50%, -50%); }
+.camp-op { position: absolute; transform: translate(-50%, -100%); background: none; border: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; min-width: 48px; min-height: 56px; }
+.camp-op img { height: 64px; filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.7)); }
+.camp-op.op-injured img { filter: saturate(0.25) brightness(0.75) drop-shadow(0 4px 6px rgba(0, 0, 0, 0.7));
+  transform: rotate(6deg) translateY(3px); }
+.camp-op.op-benched { opacity: 0.75; }
+.camp-op.op-benched img { height: 52px; }
+.camp-name { font-size: 8px; letter-spacing: 1px; color: #d5cfc0; text-transform: uppercase;
+  background: rgba(0, 0, 0, 0.55); padding: 1px 4px; white-space: nowrap; }
+.camp-name-dead { color: #8a8578; }
+.camp-cairn { position: absolute; transform: translate(-50%, -100%); background: none; border: none; cursor: pointer;
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 4px; min-width: 44px; min-height: 44px; }
+.camp-cairn svg { width: 34px; height: 26px; }
+.camp-station { position: absolute; transform: translate(-50%, -50%); background: rgba(5, 5, 5, 0.45);
+  border: 1px solid #4a4030; cursor: pointer; display: flex; flex-direction: column; align-items: center;
+  gap: 2px; padding: 6px; min-width: 56px; min-height: 52px; }
+.camp-station:hover { border-color: #B8860B; }
+.camp-station svg { width: 40px; height: 30px; }
+#outpost-ledger { display: none; flex-direction: column; gap: 15px; flex: 1 1 auto; min-height: 0; }
+.medbay-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 6px 0;
+  border-bottom: 1px dashed #33301f; font-size: 11px; color: #d5cfc0; }
+.camp-sheet-close { width: 100%; margin-top: 8px; border-color: #888; color: #999; }
+
 /* A cursed card is unmistakable: violet heat and a warning where the tier goes. */
 .relic-cursed { border-color: #8a3fbf; color: #c98aff; box-shadow: 0 0 12px rgba(138, 63, 191, 0.35) inset; }
 .relic-cursed .relic-card-tier { color: #ff5a5a; }

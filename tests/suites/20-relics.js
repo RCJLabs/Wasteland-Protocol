@@ -218,7 +218,7 @@ module.exports = {
                cards: cards.length,
                indices: cards.map(c => c.dataset.index),
                named: cards.every(c => c.querySelector('.relic-card-name') && c.querySelector('.relic-card-desc')),
-               tiered: cards.every(c => c.className.includes('relic-common') || c.className.includes('relic-rare')),
+               tiered: cards.every(c => c.className.includes('relic-common') || c.className.includes('relic-rare') || c.className.includes('relic-cursed')),
                mapHidden: getComputedStyle(document.getElementById('screen-map')).display };
     });
     ok('the cache opens on its own screen', screen.visible === 'flex' && screen.mapHidden === 'none');

@@ -248,6 +248,8 @@ module.exports = {
     await page.evaluate(() => {
       activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       gearStash = ['JAGGED_EDGE', 'PLATED_VEST', 'LONG_BARREL'];
+      // The gear slots live on the ledger's cards; the camp fronts the outpost by default.
+      outpostView = 'list';
       activeGearSelector = null; renderOutpost();
     });
     const ui = await page.evaluate(() => ({

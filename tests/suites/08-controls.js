@@ -79,6 +79,10 @@ module.exports = {
     await state(() => { scrap = 999; materials = { parts: 9, chems: 9, tech: 9 }; });
     await click('[data-action="outpost"]');
     ok('outpost opens from the map', await shown('screen-outpost') === 'flex');
+    // The camp scene fronts the outpost now; the ledger holds the tabs these controls live in.
+    ok('the camp scene fronts the outpost', await shown('outpost-scene') === 'block');
+    await click('[data-action="outpost-view"]');
+    ok('the toggle opens the ledger', await shown('outpost-ledger') === 'flex');
     await click('[data-action="outpost-tab"][data-tab="WORKBENCH"]');
     ok('workbench tab switches', await shown('outpost-workbench-view') === 'flex');
     const inv0 = await state(() => inventory.length);
