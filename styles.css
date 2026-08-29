@@ -548,3 +548,36 @@ button.reach-short { border-color: #7a5a20; }
   text-align: center; color: #d98a5a; border: 1px solid #6b3a22; background: rgba(20,8,4,0.78);
   padding: 1px 2px; margin-bottom: 2px; overflow-wrap: anywhere; }
 .sig-tag.sig-spent { color: #7a7266; border-color: #3a352c; text-decoration: line-through; }
+
+/* The dossier: what a hostile does, what it resists, and what it has cost you. Opened by
+   tapping any hostile while you are not mid-aim, so it never competes with targeting. */
+.dossier { display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(300px, 88%); max-height: 76%; overflow-y: auto; z-index: 60;
+  flex-direction: column; gap: 8px; padding: 14px;
+  background: rgba(8, 7, 5, 0.97); border: 1px solid #6b5a2a; box-shadow: 0 8px 28px rgba(0,0,0,0.85); }
+.dossier-body { display: flex; flex-direction: column; gap: 8px; }
+.dossier-name { font-size: 15px; font-weight: bold; color: #d9a93d; letter-spacing: 1px; text-transform: uppercase; }
+.dossier-sub { font-size: 9px; letter-spacing: 1.5px; color: #8a8578; text-transform: uppercase; margin-top: -4px; }
+.dossier-sig { display: flex; flex-direction: column; gap: 3px; border-left: 2px solid #d98a5a;
+  padding: 6px 0 6px 8px; background: rgba(30,14,6,0.5); }
+.dossier-sig-name { font-size: 12px; font-weight: bold; color: #d98a5a; text-transform: uppercase; letter-spacing: 1px; }
+.dossier-sig-kind { font-size: 8px; letter-spacing: 1.5px; color: #8a8578; }
+.dossier-sig-desc { font-size: 11px; line-height: 1.5; color: #c9c0ab; }
+.dos-res-row { display: flex; gap: 6px; }
+.dos-res { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; align-items: center;
+  border: 1px solid #333; padding: 5px 2px; font-size: 8px; letter-spacing: 1px; color: #7a7266; }
+.dos-res.dos-strong { border-color: #4a6b3a; color: #9ab07a; }
+.dos-res.dos-weak { border-color: #6b3a3a; color: #d98a8a; }
+.dos-res.dos-immune { border-color: #3a5a6b; color: #7fb0c9; }
+.dossier-tally { display: flex; justify-content: space-between; gap: 6px; font-size: 9px;
+  letter-spacing: 1px; color: #8a8578; border-top: 1px solid #2a2620; padding-top: 8px; }
+.dossier-tally b { color: #d5cfc0; font-size: 12px; }
+.dossier-tally .dos-cost b { color: #d98a8a; }
+.dossier-none { font-size: 11px; color: #8a8578; text-align: center; padding: 16px 0; }
+.dossier-close { background: #111; border: 1px solid #444; color: #999; font-family: monospace;
+  font-size: 11px; padding: 9px; cursor: pointer; letter-spacing: 1px; }
+.dossier-close:hover { border-color: #d9a93d; color: #d9a93d; }
+/* An idle hostile invites a tap without pretending to be a target. */
+.entity.inspectable { cursor: help; }
+.entity.inspectable .portrait { transition: filter .2s; }
+.entity.inspectable:hover .portrait { filter: drop-shadow(0 0 8px rgba(217,169,61,0.55)); }

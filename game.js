@@ -828,6 +828,15 @@ const CODEX = [
         ...GEAR_POOL.filter(g => g.slot === 'mod').map(g => `${g.name} (${g.cls}) — ${g.desc}`),
         ...GEAR_POOL.filter(g => g.slot === 'trinket').map(g => `${g.name} — ${g.desc}`)
     ] },
+    { id: 'BESTIARY', title: 'THE BESTIARY', body: () => [
+        'Everything the wasteland fields, and what you know of it. A file fills in the first time you meet its subject.',
+        ...bestiaryRoster().map(r => {
+            if (!hasMet(r.name)) return `${r.boss ? 'WARLORD' : r.faction} \u00B7 [ NO FILE ]`;
+            const t = bestiaryEntry(r.name);
+            const s = r.sig ? ENEMY_SIGS[r.sig] : null;
+            return `${r.name} (${r.boss ? 'WARLORD' : r.faction}) \u2014 ${s ? s.name + ': ' + s.desc + ' ' : ''}Met ${t.met}, killed ${t.killed}, cost you ${t.felled}.`;
+        })
+    ] },
     { id: 'HOSTILES', title: 'KNOW THE HOSTILES', body: () => [
         'Every hostile carries a signature. A passive one is always running; an action is telegraphed by its own icon a turn before it lands, so there is always an answer.',
         ...Object.values(ENEMY_SIGS).map(s => `${s.name} (${s.kind === 'action' ? 'telegraphed' : s.kind}) \u2014 ${s.desc}`)
@@ -1110,6 +1119,8 @@ const ACTIONS = {
     'shop-finish':      () => finishShop(),
     'seed-daily':       () => { document.getElementById('seed-input').value = dailySeed(); },
     'chronicle':        () => renderChronicle(),
+    'inspect':          el => openDossier(el.dataset.id),
+    'dossier-close':    () => closeDossier(),
     'ascension-cycle':  () => { ascension = (ascension + 1) % (unlockedProtocols() + 1); renderContracts(); },
     'loadout-bench':    el => {
         const ch = playerRoster.find(c => c.id === el.dataset.id);
@@ -1776,7 +1787,7 @@ function takeRelic(index) {
 
 let bestScore = 0; let bestSector = 0;
 
-function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, mastery })); }
+function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, mastery, bestiary })); }
 
 function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
 
@@ -1805,6 +1816,7 @@ function loadMeta() {
         metaUpgrades = { ...metaUpgrades, ...(d.metaUpgrades || {}) };
         bestScore = d.bestScore || 0; bestSector = d.bestSector || 0;
         mastery = (d.mastery && typeof d.mastery === 'object') ? d.mastery : {};
+        bestiary = (d.bestiary && typeof d.bestiary === 'object' && !Array.isArray(d.bestiary)) ? d.bestiary : {};
         return;
     }
     // No readable meta yet - adopt the best progress any slot recorded. A corrupt meta blob
@@ -2977,25 +2989,106 @@ function formatStat(n) {
     return (n / 1000000).toFixed(1) + 'M';
 }
 
+// ── Know your enemy ─────────────────────────────────────────────────────────────────────
+// A signature the player cannot read is just an unpleasant surprise. The bestiary remembers
+// every type met across every run - what it does, what it resists, and what it has cost you -
+// and any hostile on the field can be tapped for its dossier whenever you are not mid-aim.
+let bestiary = {};   // name -> { met, killed, felled }, meta-persisted
+
+function bestiaryEntry(name) {
+    const b = bestiary[name];
+    return { met: (b && b.met) || 0, killed: (b && b.killed) || 0, felled: (b && b.felled) || 0 };
+}
+function noteBestiary(name, field) {
+    if (!name) return;
+    if (!bestiary[name]) bestiary[name] = { met: 0, killed: 0, felled: 0 };
+    bestiary[name][field] = (bestiary[name][field] || 0) + 1;
+}
+function hasMet(name) { return bestiaryEntry(name).met > 0; }
+
+// Every hostile that exists, ordinary stock first and then the commanders.
+function bestiaryRoster() {
+    const out = [];
+    Object.entries(ENEMY_POOL).forEach(([faction, list]) =>
+        list.forEach(e => out.push({ name: e.name, faction, sig: e.sig, minTier: e.minTier,
+                                     range: e.range, isHeavy: e.isHeavy, resistances: e.resistances, boss: false })));
+    BOSS_POOL.forEach(b => out.push({ name: b.name, faction: 'COMMAND', sig: null, minTier: null,
+                                      range: b.range, isHeavy: true, resistances: b.resistances, boss: true,
+                                      passive: b.passive || null }));
+    return out;
+}
+function bestiaryRecord(name) { return bestiaryRoster().find(e => e.name === name) || null; }
+
+// The name a unit is filed under: an affix is a modifier on a type, not a type of its own.
+function typeNameOf(ent) {
+    if (!ent || ent.isPlayer) return null;
+    return ent.eliteType ? String(ent.name).replace(`*${ent.eliteType}* `, '') : ent.name;
+}
+
+function dossierHtml(name) {
+    const rec = bestiaryRecord(name);
+    const tally = bestiaryEntry(name);
+    if (!rec) return `<div class="dossier-body"><div class="dossier-none">No file on this one.</div></div>`;
+    const sig = rec.sig ? ENEMY_SIGS[rec.sig] : null;
+    const res = ['phys', 'bio', 'energy'].map(t => {
+        const v = (rec.resistances || {})[t] || 0;
+        const word = v >= 100 ? 'IMMUNE' : v > 5 ? `RESISTS ${v}` : v < 0 ? `WEAK ${v}` : '\u2014';
+        const cls = v >= 100 ? 'dos-immune' : v > 5 ? 'dos-strong' : v < 0 ? 'dos-weak' : '';
+        return `<div class="dos-res ${cls}"><span>${t.toUpperCase()}</span><span>${word}</span></div>`;
+    }).join('');
+    return `<div class="dossier-body">
+        <div class="dossier-name">${name}</div>
+        <div class="dossier-sub">${rec.boss ? 'WARLORD' : rec.faction} \u00B7 ${rec.range === 'ranged' ? 'RANGED' : 'MELEE'}${rec.isHeavy && !rec.boss ? ' \u00B7 HEAVY' : ''}${rec.minTier ? ` \u00B7 FROM TIER ${rec.minTier}` : ''}</div>
+        ${sig ? `<div class="dossier-sig"><span class="dossier-sig-name">${sig.name}</span>
+            <span class="dossier-sig-kind">${sig.kind === 'action' ? 'TELEGRAPHED' : sig.kind.toUpperCase()}</span>
+            <span class="dossier-sig-desc">${sig.desc}</span></div>` : ''}
+        ${rec.passive ? `<div class="dossier-sig"><span class="dossier-sig-name">${rec.passive.name || 'Command'}</span>
+            <span class="dossier-sig-desc">${rec.passive.desc || ''}</span></div>` : ''}
+        <div class="dos-res-row">${res}</div>
+        <div class="dossier-tally">
+            <span>MET <b>${tally.met}</b></span>
+            <span>KILLED <b>${tally.killed}</b></span>
+            <span class="${tally.felled ? 'dos-cost' : ''}">COST YOU <b>${tally.felled}</b></span>
+        </div>
+    </div>`;
+}
+
+let inspecting = null;   // the id of the hostile whose file is open
+
+function renderDossier() {
+    const el = document.getElementById('dossier');
+    if (!el) return;
+    const ent = inspecting ? activeEntities.find(e => e.id === inspecting) : null;
+    if (!ent) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.innerHTML = dossierHtml(typeNameOf(ent))
+        + `<button class="dossier-close" data-action="dossier-close">CLOSE</button>`;
+    el.style.display = 'flex';
+}
+function openDossier(id) { inspecting = id; renderDossier(); }
+function closeDossier() { inspecting = null; renderDossier(); }
+
+// The stock the wasteland draws from. Lifted out of the generator so the bestiary can
+// enumerate every type that exists, met or not.
+const ENEMY_POOL = {
+    'BEASTS': [
+    { name: "Attack Dog", sig: 'PACK_HUNT', minTier: 1, isHeavy: false, classType: "BEAST", range: 'melee', maxHp: 30, speed: 18, armor: 0, dmgBase: 10, img: "enemy_dog.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } }, 
+    { name: "Mutant", sig: 'DRAG_DOWN', minTier: 5, isHeavy: true, classType: "MUTANT", range: 'melee', maxHp: 70, speed: 7, armor: 0, dmgBase: 25, img: "enemy_mutant.webp", scale: 1.5, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 20, energy: -5 } }, 
+    { name: "Chem Fiend", sig: 'GAS_BLOOM', minTier: 6, isHeavy: true, classType: "MUTANT", range: 'ranged', maxHp: 60, speed: 11, armor: 0, dmgBase: 15, img: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 50, energy: -5 } }
+    ],
+    'RAIDERS': [
+    { name: "Raider", sig: 'CALL_IT_IN', minTier: 1, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 40, speed: 10, armor: 0, dmgBase: 12, img: "enemy_raider.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 2, energy: 0 } }, 
+    { name: "Psycho", sig: 'FRENZY', minTier: 4, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 45, speed: 14, armor: 0, dmgBase: 18, img: "enemy_psycho.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
+    { name: "Sniper", sig: 'RANGING', minTier: 5, isHeavy: false, classType: "RAIDER", range: 'ranged', maxHp: 35, speed: 16, armor: 0, dmgBase: 25, img: "enemy_sniper.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
+    { name: "Juggernaut", sig: 'RIOT_PLATE', minTier: 7, isHeavy: true, classType: "RAIDER", range: 'melee', maxHp: 90, speed: 6, armor: 5, dmgBase: 18, img: "enemy_juggernaut.webp", scale: 1.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 0, energy: -5 } }
+    ],
+    'MECH': [
+    { name: "Drone", sig: 'ROTOR_LIFT', minTier: 4, isHeavy: false, classType: "DRONE", range: 'ranged', isHovering: true, maxHp: 25, speed: 18, armor: 5, dmgBase: 8, img: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 100, energy: -10 } }, 
+    { name: "Turret", sig: 'OVERWATCH', minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
+    { name: "War Rig", sig: 'AEGIS', minTier: 8, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
+    ]
+};
+
 function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
-    const pool = {
-        'BEASTS': [
-            { name: "Attack Dog", sig: 'PACK_HUNT', minTier: 1, isHeavy: false, classType: "BEAST", range: 'melee', maxHp: 30, speed: 18, armor: 0, dmgBase: 10, img: "enemy_dog.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } }, 
-            { name: "Mutant", sig: 'DRAG_DOWN', minTier: 5, isHeavy: true, classType: "MUTANT", range: 'melee', maxHp: 70, speed: 7, armor: 0, dmgBase: 25, img: "enemy_mutant.webp", scale: 1.5, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 20, energy: -5 } }, 
-            { name: "Chem Fiend", sig: 'GAS_BLOOM', minTier: 6, isHeavy: true, classType: "MUTANT", range: 'ranged', maxHp: 60, speed: 11, armor: 0, dmgBase: 15, img: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 50, energy: -5 } }
-        ],
-        'RAIDERS': [
-            { name: "Raider", sig: 'CALL_IT_IN', minTier: 1, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 40, speed: 10, armor: 0, dmgBase: 12, img: "enemy_raider.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 2, energy: 0 } }, 
-            { name: "Psycho", sig: 'FRENZY', minTier: 4, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 45, speed: 14, armor: 0, dmgBase: 18, img: "enemy_psycho.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
-            { name: "Sniper", sig: 'RANGING', minTier: 5, isHeavy: false, classType: "RAIDER", range: 'ranged', maxHp: 35, speed: 16, armor: 0, dmgBase: 25, img: "enemy_sniper.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
-            { name: "Juggernaut", sig: 'RIOT_PLATE', minTier: 7, isHeavy: true, classType: "RAIDER", range: 'melee', maxHp: 90, speed: 6, armor: 5, dmgBase: 18, img: "enemy_juggernaut.webp", scale: 1.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 0, energy: -5 } }
-        ],
-        'MECH': [
-            { name: "Drone", sig: 'ROTOR_LIFT', minTier: 4, isHeavy: false, classType: "DRONE", range: 'ranged', isHovering: true, maxHp: 25, speed: 18, armor: 5, dmgBase: 8, img: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 100, energy: -10 } }, 
-            { name: "Turret", sig: 'OVERWATCH', minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
-            { name: "War Rig", sig: 'AEGIS', minTier: 8, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
-        ]
-    };
 
     let bossBaseHp = currentSector === 1 ? 100 : 300;
     // Eased from 30/40 when the simulator showed the wall had just moved to tier 10: squads
@@ -3026,11 +3119,11 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     const effTier = currentTier + (currentSector - 1) * SECTOR_TIER_BONUS;
 
     function poolFor(type) {
-        let valid = pool[type].filter(e => effTier >= e.minTier);
+        let valid = ENEMY_POOL[type].filter(e => effTier >= e.minTier);
         if (valid.length === 0) {
             // Nothing has unlocked yet - fall back to the cheapest stock, never the whole pool.
-            let minT = Math.min(...pool[type].map(e => e.minTier));
-            valid = pool[type].filter(e => e.minTier === minT);
+            let minT = Math.min(...ENEMY_POOL[type].map(e => e.minTier));
+            valid = ENEMY_POOL[type].filter(e => e.minTier === minT);
         }
         let weighted = [];
         // Heavies used to jump from weight 1 to weight 5 the moment tier 6 arrived - most of a
@@ -3043,7 +3136,7 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     // Only raiders bring reinforcements from elsewhere - they are scavengers, so salvaged
     // machinery and war dogs both fit. Beasts are wild and mechs are automated; neither
     // recruits, and a turret standing among a pack of dogs just reads as a bug.
-    const allies = (FACTION_ALLIES[nodeType] || []).filter(t => pool[t]);
+    const allies = (FACTION_ALLIES[nodeType] || []).filter(t => ENEMY_POOL[t]);
 
     let sZ = effTier >= 9 ? (Math.random() < 0.25 ? 4 : 3)
            : effTier >= 4 ? (Math.random() < 0.5 ? 3 : 2)
@@ -3315,6 +3408,7 @@ function initiateCombat(nodeType, isEliteNode) {
         ent.oiledTurns = 0; ent.corrodedTurns = 0; ent.markedTurns = 0; ent.guardTurns = 0; });
     momentumFocus = 0; pressExtra = false; pendingOverdrive = null;
     playerRoster.forEach(ent => { ent.secondWindUsed = false; ent.deadRendered = ent.hp <= 0; });
+    inspecting = null;
     bondSavesUsed = new Set();
     // The Glass Cannon Core's teeth: nobody walks in whole.
     if (hasRelic('GLASS_CANNON_CORE'))
@@ -3339,6 +3433,10 @@ function initiateCombat(nodeType, isEliteNode) {
             log(`> The warlord does not come alone: ${escort.name} rides with them.`, 'log-dmg');
         }
     }
+    // Every distinct type on the field goes into the file, once per fight however many of them
+    // showed up. This has to run after the line is built, escort and all.
+    [...new Set(activeEntities.filter(e => !e.isPlayer).map(typeNameOf))].forEach(n => noteBestiary(n, 'met'));
+    saveMeta();
     // The Lead-Lined Coat weighs on the turn order without touching the sheet.
     const queueSpeed = e => e.speed - (e.isPlayer && hasRelic('LEAD_LINED_COAT') ? 3 : 0);
     turnQueue = [...activeEntities].sort((a, b) => queueSpeed(b) - queueSpeed(a));
@@ -3415,6 +3513,11 @@ function renderField() {
             if (ent.sig === 'RANGING' && ent.lockOn) state = ' \u2022 LOCKED';
             sigTag = `<div class="sig-tag${(ent.sig === 'RIOT_PLATE' && !(ent.plate > 0)) ? ' sig-spent' : ''}" title="${s.desc}">${s.name.toUpperCase()}${state}</div>`;
         }
+        // Not aiming at anything? Then a tap on a hostile opens its file rather than doing nothing.
+        if (!pendingAction && !ent.isPlayer && !isDead) {
+            tCls = 'inspectable';
+            clk = `tabindex="0" role="button" aria-label="Inspect ${ent.name}" data-action="inspect" data-id="${ent.id}"`;
+        }
         let eff = ''; if (ent.bleedingTurns > 0 && !isDead) eff += `💧`; if (ent.stunnedTurns > 0 && !isDead) eff += `💫`; if (ent.armorTurns > 0 && !isDead) eff += `🛡️`; if (ent.oiledTurns > 0 && !isDead) eff += `🛢️`; if (ent.corrodedTurns > 0 && !isDead) eff += `🧪`; if (ent.markedTurns > 0 && !isDead) eff += `🎯`;
         let hoverCls = ent.isHovering && !isDead ? 'hovering' : '';
         const hint = (pendingAction && !isDead && tCls === 'targetable-enemy') ? comboHint(pendingAction, ent) : null;
@@ -3450,6 +3553,12 @@ function renderField() {
     pTeam.innerHTML = pCells.join(''); eTeam.innerHTML = eCells.join('');
     pTeam.classList.toggle('crowded', pTeam.children.length >= 4);
     eTeam.classList.toggle('crowded', eTeam.children.length >= 4);
+    // An open file closes itself if its subject dies or the squad starts aiming.
+    if (inspecting) {
+        const subj = activeEntities.find(e => e.id === inspecting);
+        if (!subj || subj.hp <= 0 || pendingAction) inspecting = null;
+    }
+    renderDossier();
     renderCommandDeck();
 }
 
@@ -3923,6 +4032,8 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
         log(`> ${target.name} refuses to go down!`, 'log-heal');
         spawnFCT(target.id, 'SECOND WIND', 'fct-heal'); playSFX('heal', 1.2);
     }
+    if (target.hp <= 0 && !target.isPlayer && !target.tallied) { target.tallied = true; noteBestiary(typeNameOf(target), 'killed'); }
+    if (target.hp <= 0 && target.isPlayer && !attacker.isPlayer) noteBestiary(typeNameOf(attacker), 'felled');
     // The chronicle's witness: whoever lands the blow that drops an operator is on record.
     if (target.hp <= 0 && target.isPlayer && runStats)
         runStats.lastKiller = { name: attacker.name, elite: attacker.eliteType || null,
@@ -4297,9 +4408,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, sigOf, hasSig, enemyDmgMult, fireOverwatch, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, sigOf, hasSig, enemyDmgMult, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, bestiaryRoster, bestiaryRecord, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
@@ -4335,6 +4446,8 @@ globalThis.WP = {
     get sectorFront() { return sectorFront; }, set sectorFront(v) { sectorFront = v; },
     get runSeed() { return runSeed; }, set runSeed(v) { runSeed = v; },
     get mastery() { return mastery; }, set mastery(v) { mastery = v; },
+    get bestiary() { return bestiary; }, set bestiary(v) { bestiary = v; },
+    get inspecting() { return inspecting; }, set inspecting(v) { inspecting = v; },
     get ascension() { return ascension; }, set ascension(v) { ascension = v; },
     get bestSector() { return bestSector; }, set bestSector(v) { bestSector = v; },
     get frontBannerPending() { return frontBannerPending; }, set frontBannerPending(v) { frontBannerPending = v; },
