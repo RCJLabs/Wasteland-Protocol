@@ -30,6 +30,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
+                 promotions: 0, sigsTaken: 0, gearEquipped: 0,
                  endedBy: 'cap', score: 0, contractMult: 1 };
 
   activeContracts = [...contracts];
@@ -62,9 +63,25 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
   // A squad that never spends scrap dies to arithmetic rather than to play, so the sim shops
   // the way a player would: heal the hurt, upgrade when it can afford to.
   const spend = () => {
+    // Promotions resolve the way a player would: take a signature when one is on the table,
+    // otherwise the first card. Leaving them queued would sim a squad weaker than any real one.
+    while (pendingPerkOffers.length) {
+      const offer = pendingPerkOffers[0];
+      const sigIdx = offer.options.findIndex(id => SIG_PERKS.some(p => p.id === id));
+      if (sigIdx >= 0) stat.sigsTaken++;
+      takePerkOffer(sigIdx >= 0 ? sigIdx : 0);
+      stat.promotions++;
+    }
     playerRoster.forEach(c => {
       if (c.hp <= 0 && scrap >= 50) { scrap -= 50; c.hp = Math.floor(c.maxHp * 0.5); }
       else if (c.hp < c.maxHp && scrap >= 10) { scrap -= 10; c.hp = Math.min(c.maxHp, c.hp + 30); }
+    });
+    // Gear helps nobody in the stash: each piece goes to the first deployed operator it fits.
+    gearStash.slice().forEach(id => {
+      const g = gearById(id); if (!g) return;
+      const fit = playerRoster.find(c => c.gridPos > 0 && (g.slot === 'mod'
+        ? (c.classType === g.cls && !c.weaponMod) : !c.trinket));
+      if (fit) { equipGear(fit.id, id); stat.gearEquipped++; }
     });
     while (canCarry() && materials.chems >= 2) { craftItem('MED_STIM'); stat.crafted++; }
     playerRoster.forEach(c => {
@@ -324,6 +341,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
   const items = {};
   results.forEach(r => Object.entries(r.items).forEach(([k, v]) => { items[k] = (items[k] || 0) + v; }));
   line('items used per run', Object.entries(items).map(([k, v]) => `${k} ${(v / n).toFixed(1)}`).join(', ') || 'none');
+  line('promotions per run', `${mean(nums('promotions')).toFixed(1)} (${mean(nums('sigsTaken')).toFixed(1)} signatures)`);
+  line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   line('items crafted per run', (results.reduce((a, r) => a + r.crafted, 0) / n).toFixed(1));
 
   console.log('\n── RELICS ' + '─'.repeat(48));

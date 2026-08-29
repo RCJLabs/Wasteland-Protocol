@@ -400,3 +400,16 @@ button.reach-short { border-color: #7a5a20; }
 .rank-btn-0 { border-color: #444; color: #666; }
 .muster-reroll { font-size: 12px; padding: 5px; border-color: #7a5c14; color: #d9a93d; }
 .muster-note { flex-shrink: 0; font-size: 10px; line-height: 1.5; color: #8a8578; margin: 10px 0; }
+
+/* Gear slots on the Outpost card. */
+.gear-row { border-top: 1px dashed #33301f; padding-top: 6px; margin-top: 6px; }
+.gear-slot { border-color: #4a5a6b; color: #8fb0c9; font-size: 10px; }
+.gear-pick { border-color: #B8860B; color: #d9a93d; }
+.gear-none { font-size: 10px; color: #8a8578; padding: 4px 0; }
+
+/* Field promotions reuse the cache card language: signatures glow, training is plain. */
+#screen-perk { display: none; flex-direction: column; padding: 18px 14px; gap: 12px; overflow-y: auto; }
+.perk-sig { border-color: #d9a93d; color: #ffd76a; box-shadow: 0 0 10px rgba(217,169,61,0.25) inset; }
+.perk-sig .relic-card-desc { color: #cbb98a; }
+.perk-stat { border-color: #667; color: #99a; }
+.perk-bank { border-color: #888; color: #888; margin-top: 6px; }
