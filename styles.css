@@ -404,6 +404,11 @@ button.reach-short { border-color: #7a5a20; }
 .muster-reroll { font-size: 12px; padding: 5px; border-color: #7a5c14; color: #d9a93d; }
 .muster-note { flex-shrink: 0; font-size: 10px; line-height: 1.5; color: #8a8578; margin: 10px 0; }
 
+/* A cursed card is unmistakable: violet heat and a warning where the tier goes. */
+.relic-cursed { border-color: #8a3fbf; color: #c98aff; box-shadow: 0 0 12px rgba(138, 63, 191, 0.35) inset; }
+.relic-cursed .relic-card-tier { color: #ff5a5a; }
+.relic-cursed .relic-card-desc { color: #a98ac9; }
+
 /* The seed panel on the contract board: type a wasteland, or take today's. */
 .seed-panel { flex-shrink: 0; border: 1px dashed #3a4a5a; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .seed-row { display: flex; gap: 6px; }

@@ -364,8 +364,39 @@ const RELIC_POOL = [
     { id: 'AMMO_HOIST',        tier: 'RARE',   name: "Ammo Hoist",        desc: "Ability cooldowns are one turn shorter." },
     { id: 'BULWARK_PLATING',   tier: 'RARE',   name: "Bulwark Plating",   desc: "A covered hit lands for 35% instead of 60%." },
     { id: 'SIGNAL_JAMMER',     tier: 'RARE',   name: "Signal Jammer",     desc: "Enemies never flank your line." },
-    { id: 'OVERCHARGED_CELL',  tier: 'RARE',   name: "Overcharged Cell",  desc: "Overdrive charges at 80% momentum." }
+    { id: 'OVERCHARGED_CELL',  tier: 'RARE',   name: "Overcharged Cell",  desc: "Overdrive charges at 80% momentum." },
+    // The pool learns to bite: real upsides with real teeth, marked unmistakably in the cache.
+    // Cursed relics are never dealt at random - they arrive only as a cache decision or a
+    // collector's gamble, so every one aboard was chosen.
+    { id: 'GLASS_CANNON_CORE',  tier: 'CURSED', name: "Glass Cannon Core",  desc: "All damage dealt +40% — but the squad deploys at 85% health, every fight." },
+    { id: 'SCAVENGERS_DEBT',    tier: 'CURSED', name: "Scavenger's Debt",   desc: "+40 Scrap after every fight — but the collector takes 500 at each warlord." },
+    { id: 'LEAD_LINED_COAT',    tier: 'CURSED', name: "Lead-Lined Coat",    desc: "The squad takes -20% damage — but moves 3 SPD slower in the turn order." },
+    { id: 'HUNGRY_BLADE',       tier: 'CURSED', name: "Hungry Blade",       desc: "Melee hits feed the attacker 6 HP — but everything that is not melee deals -15%." },
+    { id: 'VULTURE_ROYALTY',    tier: 'CURSED', name: "Vulture Royalty",    desc: "Elites always drop gear — but every victory pays -25% Scrap." },
+    { id: 'OVERCLOCKED_REACTOR',tier: 'CURSED', name: "Overclocked Reactor",desc: "Overdrive threshold -20 — but each overdrive vents 10 HP through your front rank." }
 ];
+
+// Three pairs upgrade each other when both halves ride together.
+const RELIC_SETS = [
+    { a: 'THERMAL_CORE', b: 'OVERCHARGED_CELL', name: 'Reactor Rig',   desc: 'Thermal Core burns at +50%.' },
+    { a: 'WHETSTONE',    b: 'RANGEFINDER',      name: 'Full Arsenal',  desc: 'Whetstone +30%, Rangefinder +25%.' },
+    { a: 'BLOOD_VIAL',   b: 'FIELD_DRESSING',   name: 'Field Surgery', desc: 'Blood Vial heals 10, and squad bleeds never last past 1 turn.' }
+];
+function relicSetActive(name) {
+    const s = RELIC_SETS.find(x => x.name === name);
+    return !!s && hasRelic(s.a) && hasRelic(s.b);
+}
+// Called wherever a relic is gained: a completed pair announces itself exactly once per run.
+function announceSets() {
+    if (!runStats) return;
+    if (!Array.isArray(runStats.setsAnnounced)) runStats.setsAnnounced = [];
+    RELIC_SETS.forEach(s => {
+        if (relicSetActive(s.name) && !runStats.setsAnnounced.includes(s.name)) {
+            runStats.setsAnnounced.push(s.name);
+            log(`> SET COMPLETE — ${s.name}: ${s.desc}`, 'log-combo');
+        }
+    });
+}
 // A run deep enough to own the whole pool still gets paid for the fight, on the same curve as
 // every other reward - a flat figure would be worth nothing by the depth it starts appearing at.
 const EMPTY_POOL_SCRAP = 150;
@@ -374,7 +405,11 @@ const OVERDRIVE_AT = 100;
 const OVERDRIVE_AT_CHARGED = 80;
 
 function hasRelic(id) { return activeRelics.some(r => r.id === id); }
-function overdriveAt() { return (hasRelic('OVERCHARGED_CELL') ? OVERDRIVE_AT_CHARGED : OVERDRIVE_AT) - bondOverdriveDiscount(); }
+function overdriveAt() {
+    const base = (hasRelic('OVERCHARGED_CELL') ? OVERDRIVE_AT_CHARGED : OVERDRIVE_AT)
+        - bondOverdriveDiscount() - (hasRelic('OVERCLOCKED_REACTOR') ? 20 : 0);
+    return Math.max(40, base);
+}
 function unownedRelics(tier) {
     return RELIC_POOL.filter(r => !hasRelic(r.id) && (!tier || r.tier === tier));
 }
@@ -383,7 +418,8 @@ function unownedRelics(tier) {
 function rollRelic(rareChance = 0.3) {
     const wantRare = Math.random() < rareChance;
     const first = unownedRelics(wantRare ? 'RARE' : 'COMMON');
-    const pool = first.length ? first : unownedRelics();
+    // The fallback never deals a curse: those arrive only by choice.
+    const pool = first.length ? first : unownedRelics().filter(r => r.tier !== 'CURSED');
     if (!pool.length) return null;
     return pool[Math.floor(Math.random() * pool.length)];
 }
@@ -398,6 +434,10 @@ function rollRelicOffer(count = 3) {
         if (seen.has(r.id)) continue; seen.add(r.id); out.push(r);
         if (out.length === count) break;
     }
+    // Sometimes one card on the table is cursed - marked unmistakably, never forced.
+    const cursed = unownedRelics('CURSED');
+    if (cursed.length && out.length && Math.random() < 0.35)
+        out[out.length - 1] = cursed[Math.floor(Math.random() * cursed.length)];
     return out;
 }
 
@@ -774,6 +814,12 @@ const CODEX = [
         ...GEAR_POOL.filter(g => g.slot === 'mod').map(g => `${g.name} (${g.cls}) — ${g.desc}`),
         ...GEAR_POOL.filter(g => g.slot === 'trinket').map(g => `${g.name} — ${g.desc}`)
     ] },
+    { id: 'CURSES', title: 'CURSES AND SETS', body: () => [
+        'Cursed relics carry real upsides and real teeth, marked unmistakably in the cache. They are never dealt at random: every curse aboard was chosen - from a cache card, or at the collector\'s table, where a held relic buys two blind draws.',
+        ...RELIC_POOL.filter(r => r.tier === 'CURSED').map(r => `${r.name} — ${r.desc}`),
+        'Three pairs upgrade each other when both halves ride together:',
+        ...RELIC_SETS.map(s => `${s.name} (${RELIC_POOL.find(r => r.id === s.a).name} + ${RELIC_POOL.find(r => r.id === s.b).name}) — ${s.desc}`)
+    ] },
     { id: 'PROTOCOL', title: 'THE DAILY PROTOCOL', body: () => [
         'A seed typed on the contract board fixes everything the wasteland generates: the maps, the fronts, the quirk draws, the opening bounty slate. The fighting stays live, and rerolls are yours.',
         "TODAY'S PROTOCOL derives the seed from the date - the same wasteland for everyone who deploys on it that day, scored on its own best line.",
@@ -839,6 +885,25 @@ const EVENT_POOL = [
     { title: "THE CHEM OASIS", desc: "A glowing pool of bio-luminescent fluid sits in a blast crater. It smells like synthetic ozone and iron.", choices: [ { label: "Extract Fluid (+2 Chems)", canAfford: () => true, execute: () => { materials.chems += 2; playSFX('heal'); return "Carefully extracted 2 Chems from the pool."; } }, { label: "Bathe Wounds (Heal All Deployed for 25 HP)", canAfford: () => true, execute: () => { playerRoster.forEach(p => { if(p.gridPos > 0 && p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + 25); }); playSFX('heal'); return "The fluid burned, but the wounds sealed rapidly."; } } ] },
     { title: "WANDERING TINKER", desc: "A hooded cyborg sits by a campfire. They gesture toward a pile of tactical gear and hold out a mechanical hand.", choices: [ { label: "Trade Scrap for Bomb (Cost: 40 Scrap)", canAfford: () => scrap >= 40 && canCarry(), execute: () => { scrap -= 40; inventory.push('SCRAP_BOMB'); checkBountyProgress('CRAFT'); playSFX('click'); return "Acquired 1 Scrap Bomb."; } }, { label: "Trade Parts for Tech (Cost: 2 Parts)", canAfford: () => materials.parts >= 2, execute: () => { materials.parts -= 2; materials.tech += 1; playSFX('click'); return "Traded 2 Parts for 1 Tech."; } }, { label: "Decline", canAfford: () => true, execute: () => { return "You nod respectfully and continue walking."; } } ] },
     { title: "RADIATION STORM", desc: "The geiger counter screams. A violent wall of radioactive dust is rapidly approaching your position.", choices: [ { label: "Sprint Through (-10 HP to All Deployed)", canAfford: () => true, execute: () => { playerRoster.forEach(p => { if(p.gridPos > 0 && p.hp > 0) p.hp = Math.max(1, p.hp - 10); }); playSFX('hit'); triggerShake(); return "The squad powered through, but took heavy radiation burns."; } }, { label: "Deploy EMP Shield (-1 EMP Charge)", canAfford: () => inventory.includes('EMP_CHARGE'), execute: () => { inventory.splice(inventory.indexOf('EMP_CHARGE'), 1); playSFX('heal'); return "The EMP Charge detonated, creating a localized magnetic shield against the storm."; } } ] },
+
+    { title: "THE COLLECTOR'S TABLE", desc: "A relic dealer in a lead apron has laid a velvet cloth over a tailgate. 'One of yours, face down. Two of mine, blind. Everyone walks away richer or angrier.'",
+      choices: [
+        { label: "Trade a held relic for two blind draws", canAfford: () => activeRelics.length >= 1 && unownedRelics().length >= 2,
+          execute: () => {
+            const given = activeRelics.splice(Math.floor(Math.random() * activeRelics.length), 1)[0];
+            // Blind means blind: the draw pool includes the cursed shelf.
+            const pool = unownedRelics().filter(r => r.id !== given.id);
+            const draws = [];
+            for (let i = 0; i < 2 && pool.length; i++) {
+                const p = pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+                activeRelics.push(p); draws.push(p.name);
+            }
+            announceSets(); playSFX('overdrive');
+            return `${given.name} slides across the cloth, face down. Back come ${draws.join(' and ')}.`;
+          } },
+        { label: "Keep what you carry", canAfford: () => true,
+          execute: () => "The dealer folds the cloth. 'Attachment. It gets them all killed.'" }
+      ] },
 
     { title: "THE DEBT COLLECTOR", desc: "A fixer in a rebreather deals cards on the hood of a burnt-out truck. She does not look up. 'Everyone out here needs something. I need to be paid back.'",
       choices: [
@@ -1529,7 +1594,7 @@ function renderRelicOffer() {
 
 function takeRelic(index) {
     const pick = pendingRelicOffer && pendingRelicOffer[index];
-    if (pick && !hasRelic(pick.id)) activeRelics.push(pick);
+    if (pick && !hasRelic(pick.id)) { activeRelics.push(pick); announceSets(); }
     pendingRelicOffer = null; saveGameState();
     if (pendingPerkOffers.length) { renderPerkOffer(); return; }
     renderMap();
@@ -2507,7 +2572,7 @@ function rollShopStock() {
     const stock = [];
     const gearId = rollGear();
     if (gearId) stock.push({ kind: 'GEAR', id: gearId, price: shopPrice(140), sold: false });
-    const relics = unownedRelics();
+    const relics = unownedRelics().filter(r => r.tier !== 'CURSED');
     if (relics.length) {
         const r = relics[Math.floor(Math.random() * relics.length)];
         stock.push({ kind: 'RELIC', id: r.id, price: shopPrice(r.tier === 'RARE' ? 320 : 240), sold: false });
@@ -2575,7 +2640,7 @@ function buyShopItem(index) {
     else if (it.kind === 'RELIC') {
         const r = RELIC_POOL.find(x => x.id === it.id);
         if (!r || hasRelic(r.id)) return;
-        activeRelics.push(r);
+        activeRelics.push(r); announceSets();
     }
     else if (it.kind === 'STIM') { if (!canCarry()) return; inventory.push('MED_STIM'); }
     else if (it.kind === 'INSURANCE') { if (regroupInsured) return; regroupInsured = true; }
@@ -2932,6 +2997,9 @@ function initiateCombat(nodeType, isEliteNode) {
     momentumFocus = 0; pressExtra = false; pendingOverdrive = null;
     playerRoster.forEach(ent => { ent.secondWindUsed = false; });
     bondSavesUsed = new Set();
+    // The Glass Cannon Core's teeth: nobody walks in whole.
+    if (hasRelic('GLASS_CANNON_CORE'))
+        deployedRoster.forEach(p => { if (p.hp > 0) p.hp = Math.min(p.hp, Math.floor(p.maxHp * 0.85)); });
     // HP keeps the steep 1.5x-per-sector curve; damage climbs far more slowly so a deep fight
     // is dangerous rather than an unavoidable one-shot. Player power compounds through
     // repeatable percentage perks, which is what makes the curve climbable at all.
@@ -2952,7 +3020,9 @@ function initiateCombat(nodeType, isEliteNode) {
             log(`> The warlord does not come alone: ${escort.name} rides with them.`, 'log-dmg');
         }
     }
-    turnQueue = [...activeEntities].sort((a, b) => b.speed - a.speed);
+    // The Lead-Lined Coat weighs on the turn order without touching the sheet.
+    const queueSpeed = e => e.speed - (e.isPlayer && hasRelic('LEAD_LINED_COAT') ? 3 : 0);
+    turnQueue = [...activeEntities].sort((a, b) => queueSpeed(b) - queueSpeed(a));
     activeIndex = 0;
     // Second Watch hands the opening turn to whichever enemy is fastest, however quick the squad is.
     if (hasContract('THEY_MOVE_FIRST')) {
@@ -3129,6 +3199,7 @@ function applyTurnStartEffects(ent) {
 
     if (ent.bleedingTurns > 0) { let b = Math.max(1, Math.floor(ent.maxHp * 0.08));
         if (ent.isPlayer && hasRelic('FIELD_DRESSING')) b = Math.max(1, Math.floor(b / 2));
+        if (ent.isPlayer && relicSetActive('Field Surgery')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 1);
         if (hasQuirk(ent, 'SLOW_BLEEDER')) b = Math.max(1, Math.floor(b / 2));
         if (hasTrinket(ent, 'TOURNIQUET')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 2); ent.hp = Math.max(0, ent.hp - b); log(`> ${ent.name} bleeds for ${b}.`, "log-dmg"); spawnFCT(ent.id, `-${b}`, "fct-dmg"); ent.bleedingTurns--; chg = true; if(ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); }
     // Expiring temporary armour used to zero the unit's innate plating too, so any armoured
@@ -3241,6 +3312,15 @@ function resolveAction(targetId) {
         } else if (variant.id === 'BLOOD_SCENT') {
             all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.5, 'bio', null); if (e.hp > 0) e.bleedingTurns = Math.max(e.bleedingTurns, 3); });
         }
+        // The Overclocked Reactor's teeth: every overdrive vents through whoever holds the front.
+        if (hasRelic('OVERCLOCKED_REACTOR')) {
+            const frontman = activeEntities.filter(e => e.isPlayer && e.hp > 0).sort((a, b) => a.gridPos - b.gridPos)[0];
+            if (frontman) {
+                frontman.hp = Math.max(1, frontman.hp - 10);
+                spawnFCT(frontman.id, "-10", "fct-dmg");
+                log(`> The reactor vents through ${frontman.name}. -10 HP.`, "log-dmg");
+            }
+        }
         pendingAction = null; checkWinState(); return;
     }
 
@@ -3314,10 +3394,12 @@ function resolveAction(targetId) {
             isCombo = true; comboType = 'MARKED!';
         }
 
-        if (hasRelic('THERMAL_CORE') && atkType === 'energy') { dmgMult *= 1.3; }
-        if (hasRelic('WHETSTONE') && isMelee(pendingAction)) { dmgMult *= 1.2; }
-        if (hasRelic('RANGEFINDER') && isRanged(pendingAction)) { dmgMult *= 1.15; }
+        if (hasRelic('THERMAL_CORE') && atkType === 'energy') { dmgMult *= relicSetActive('Reactor Rig') ? 1.5 : 1.3; }
+        if (hasRelic('WHETSTONE') && isMelee(pendingAction)) { dmgMult *= relicSetActive('Full Arsenal') ? 1.3 : 1.2; }
+        if (hasRelic('RANGEFINDER') && isRanged(pendingAction)) { dmgMult *= relicSetActive('Full Arsenal') ? 1.25 : 1.15; }
         if (hasRelic('VULTURES_INSTINCT') && isCombo) { dmgMult *= 1.25; }
+        if (hasRelic('GLASS_CANNON_CORE')) { dmgMult *= 1.4; }
+        if (hasRelic('HUNGRY_BLADE') && !isMelee(pendingAction)) { dmgMult *= 0.85; }
 
         // A sandstorm blinds anything fired across the field. This used to be a second hand-kept
         // list that had drifted - a thrown molotov was somehow unaffected - and now reads the
@@ -3341,8 +3423,13 @@ function resolveAction(targetId) {
         }
 
         if (hasRelic('BLOOD_VIAL') && atkType === 'bio' && actEnt.hp < actEnt.maxHp) {
-            actEnt.hp = Math.min(actEnt.maxHp, actEnt.hp + 5);
-            spawnFCT(actEnt.id, "+5", "fct-heal");
+            const fed = relicSetActive('Field Surgery') ? 10 : 5;
+            actEnt.hp = Math.min(actEnt.maxHp, actEnt.hp + fed);
+            spawnFCT(actEnt.id, `+${fed}`, "fct-heal");
+        }
+        if (hasRelic('HUNGRY_BLADE') && isMelee(pendingAction) && actEnt.isPlayer && actEnt.hp < actEnt.maxHp) {
+            actEnt.hp = Math.min(actEnt.maxHp, actEnt.hp + 6);
+            spawnFCT(actEnt.id, "+6", "fct-heal");
         }
 
         if (pendingAction === 'FLARE_GUN') {
@@ -3400,6 +3487,7 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
         if (t.oiledTurns > 0 && atkType === 'energy') rv -= 15;
         let cd = calcDmg;
         if (hasRelic('KINETIC_MESH') && t.isPlayer && t.gridPos === 1 && atkType === 'phys') cd = Math.floor(cd * 0.75);
+        if (hasRelic('LEAD_LINED_COAT') && t.isPlayer) cd = Math.floor(cd * 0.8);
         if (hasRelic('CHEM_ETCHER') && !t.isPlayer && (t.corrodedTurns || 0) > 0) cd = Math.floor(cd * 1.25);
         if (hasQuirk(t, 'THICK_HIDE')) cd = Math.max(1, cd - 3);
         if ((abilityStr === 'SLUG_SHOT' && hasTrait(attacker, 'BREACHING_ROUNDS')) ||
@@ -3616,15 +3704,21 @@ function checkWinState() {
                 runStats.regroups++;
                 log(`> The squad regroups behind the kill. +1 FALLBACK (${regroupsLeft()}/${totalRegroups()}).`, "log-heal");
             }
+            // Scavenger's Debt comes due wherever a warlord falls.
+            if (hasRelic('SCAVENGERS_DEBT')) {
+                const taken = Math.min(scrap, 500);
+                scrap -= taken;
+                log(`> The collector's men are already here. They take ${taken} Scrap.`, "log-dmg");
+            }
         }
         if (isCurrentNodeElite) {
             checkBountyProgress('ELITE'); if (runStats) runStats.elites++;
-            if (Math.random() < 0.4) {
+            if (hasRelic('VULTURE_ROYALTY') || Math.random() < 0.4) {
                 const gDrop = rollGear();
                 if (gDrop) { gearStash.push(gDrop); log(`> GEAR SALVAGED: ${gearById(gDrop).name} (equip at the Outpost).`, "log-combo"); }
             }
             const rDrop = rollRelic();
-            if (rDrop) { activeRelics.push(rDrop); log(`> RELIC ACQUIRED: ${rDrop.name}!`, "log-combo"); }
+            if (rDrop) { activeRelics.push(rDrop); log(`> RELIC ACQUIRED: ${rDrop.name}!`, "log-combo"); announceSets(); }
             else { const b = emptyPoolScrap(); scrap += b; log(`> No relic left to find. Salvaged ${b} Scrap instead.`, "log-heal"); }
         }
         // A commander is worth a decision rather than a die roll, so it hands over three to
@@ -3653,7 +3747,9 @@ function checkWinState() {
         // hoards what the roads never paid.
         if (sectorFront === 'RAIDER_WARBAND' && currentNodeType === 'RAIDERS') s *= 2;
         if (sectorFront === 'QUIET_ROADS' && currentNodeType === 'BOSS') s *= 2;
+        if (hasRelic('VULTURE_ROYALTY')) s = Math.floor(s * 0.75);
         if (hasRelic('SCRAP_MAGNET')) s += 15;
+        if (hasRelic('SCAVENGERS_DEBT')) s += 40;
         
         // Deployed survivors earn full XP; the bench trains at half rate so reserves stay
         // rotatable instead of falling permanently behind. Downed units earn nothing.
@@ -3701,7 +3797,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario

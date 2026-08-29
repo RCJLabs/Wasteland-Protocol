@@ -13,7 +13,7 @@ module.exports = {
       common: RELIC_POOL.filter(r => r.tier === 'COMMON').length,
       rare: RELIC_POOL.filter(r => r.tier === 'RARE').length,
       uniqueIds: new Set(RELIC_POOL.map(r => r.id)).size,
-      untiered: RELIC_POOL.filter(r => !['COMMON', 'RARE'].includes(r.tier)).map(r => r.id),
+      untiered: RELIC_POOL.filter(r => !['COMMON', 'RARE', 'CURSED'].includes(r.tier)).map(r => r.id),
       undescribed: RELIC_POOL.filter(r => !r.name || !r.desc).map(r => r.id)
     }));
     ok(`the pool holds ${pool.total} relics, not four`, pool.total >= 12);
