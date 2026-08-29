@@ -1088,6 +1088,7 @@ const ACTIONS = {
         else { outpostView = 'list'; outpostSheet = null; setOutpostTab(el.dataset.spot === 'CYBER' ? 'CYBER' : 'WORKBENCH'); }
     },
     'outpost-sheet-close': () => { outpostSheet = null; activeGearSelector = null; activePosSelector = null; activePerkSelector = null; renderOutpost(); },
+    'chronicle':        () => renderChronicle(),
     'node-combat':      el => { enterNode(el.dataset.node); initiateCombat(el.dataset.type, el.dataset.elite === '1'); },
 
     'outpost-tab':      el => setOutpostTab(el.dataset.tab),
@@ -1561,6 +1562,87 @@ function renderSquadBroken() {
 }
 
 // The run only ends when the player has no regroups left, or chooses to stop.
+// ── The Chronicle ───────────────────────────────────────────────────────────────────────
+// Endless mode had no memory: a run ended and left nothing but a best score. Every ended
+// run now writes an entry - score, depth, contracts, relics, and an epitaph built from the
+// real fight that ended it - into a bounded per-slot log, and the careers add up.
+function chronicleKey(slot = currentSlot) { return 'wp_chronicle_' + slot; }
+function careerKey(slot = currentSlot) { return 'wp_career_' + slot; }
+function readChronicle(slot = currentSlot) {
+    const v = Store.getJSON(chronicleKey(slot));
+    return Array.isArray(v) ? v : [];
+}
+function readCareer(slot = currentSlot) {
+    const v = Store.getJSON(careerKey(slot));
+    return (v && v !== CORRUPT && !Array.isArray(v) && typeof v === 'object')
+        ? { runs: v.runs || 0, kills: v.kills || 0, deepestSector: v.deepestSector || 0, fielded: v.fielded || {} }
+        : { runs: 0, kills: 0, deepestSector: 0, fielded: {} };
+}
+function writeChronicle(entry) {
+    const log = readChronicle();
+    log.unshift(entry);
+    if (log.length > 50) log.length = 50;
+    Store.set(chronicleKey(), JSON.stringify(log));
+    const c = readCareer();
+    c.runs++; c.kills += entry.kills || 0;
+    c.deepestSector = Math.max(c.deepestSector, entry.sector || 0);
+    (entry.deployed || []).forEach(cl => { c.fielded[cl] = (c.fielded[cl] || 0) + 1; });
+    Store.set(careerKey(), JSON.stringify(c));
+}
+// The epitaph tells the truth: whoever landed the last blow, or whatever the weather was.
+function epitaphFor(st) {
+    const k = st && st.lastKiller;
+    if (!k) return `Vanished into the wasteland, Sector ${st ? st.deepestSector : 1}.`;
+    const where = `Sector ${k.sector}, Tier ${k.tier}`;
+    if (k.cause === 'SMOG') return `Choked out by the smog, ${where}.`;
+    if (k.cause === 'SHRAPNEL') return `Cut down by shrapnel winds, ${where}.`;
+    if (k.cause === 'BLEED') return `Bled out on the road, ${where}.`;
+    const verbs = ['Torn apart by', 'Gunned down by', 'Broken by', 'Dragged down by', 'Finished by'];
+    const verb = verbs[seedFromString(k.name || '') % verbs.length];
+    const name = `${k.elite ? String(k.elite).toUpperCase() + ' ' : ''}${k.name}`;
+    return `${verb} ${k.boss ? 'the warlord ' : 'a '}${name}, ${where}.`;
+}
+// The latest word across every slot, for the title screen.
+function latestEpitaph() {
+    let best = null;
+    for (let s = 1; s <= 3; s++) readChronicle(s).forEach(e => { if (!best || (e.when || 0) > (best.when || 0)) best = e; });
+    return best ? best.epitaph : null;
+}
+
+function renderChronicle() {
+    switchScreen('screen-chronicle');
+    const merged = { runs: 0, kills: 0, deepestSector: 0, fielded: {} };
+    let entries = [];
+    for (let s = 1; s <= 3; s++) {
+        const c = readCareer(s);
+        merged.runs += c.runs; merged.kills += c.kills;
+        merged.deepestSector = Math.max(merged.deepestSector, c.deepestSector);
+        Object.entries(c.fielded).forEach(([k, v]) => { merged.fielded[k] = (merged.fielded[k] || 0) + v; });
+        entries = entries.concat(readChronicle(s));
+    }
+    entries.sort((a, b) => (b.when || 0) - (a.when || 0));
+    entries = entries.slice(0, 50);
+    const most = Object.entries(merged.fielded).sort((a, b) => b[1] - a[1])[0];
+    document.getElementById('chronicle-career').innerHTML = merged.runs === 0 ? '' :
+        `<div class="career-line"><span>EXPEDITIONS</span><span>${merged.runs}</span></div>
+         <div class="career-line"><span>HOSTILES KILLED</span><span>${merged.kills.toLocaleString()}</span></div>
+         <div class="career-line"><span>DEEPEST EVER</span><span>SECTOR ${merged.deepestSector}</span></div>
+         <div class="career-line"><span>MOST FIELDED</span><span>${most ? `${most[0]} (${most[1]})` : '—'}</span></div>`;
+    document.getElementById('chronicle-list').innerHTML = entries.length ? entries.map(e =>
+        `<div class="chronicle-entry">
+            <div class="chronicle-epitaph">${e.epitaph || ''}</div>
+            <div class="chronicle-facts">
+                <span>${(e.score || 0).toLocaleString()} PTS</span>
+                <span>S${e.sector || 1}·T${e.tier || 1}</span>
+                <span>${e.kills || 0} kills</span>
+                <span>${(e.relics || []).length} relics</span>
+                ${(e.contracts || []).length ? `<span>signed: ${e.contracts.join(', ')}</span>` : ''}
+                ${e.seed ? `<span class="chronicle-seed">${e.seed}</span>` : ''}
+            </div>
+        </div>`).join('')
+        : `<div class="chronicle-empty">No expeditions on record. The wasteland is still waiting.</div>`;
+}
+
 function endRun() {
     combatActive = false; activeEntities = []; turnQueue = []; pendingCombat = null;
     momentum = 0; addMomentum(0);
@@ -1571,6 +1653,13 @@ function endRun() {
     if (isBest) bestScore = score;
     if (runStats.deepestSector > bestSector) bestSector = runStats.deepestSector;
     const seedPrev = noteSeedBest(runSeed, score);
+    writeChronicle({
+        when: Date.now(), score, sector: runStats.deepestSector, tier: runStats.deepestTier,
+        kills: runStats.kills || 0, nodes: runStats.nodes || 0,
+        contracts: runStats.contracts || [], relics: activeRelics.map(r => r.name),
+        seed: runSeed, epitaph: epitaphFor(runStats),
+        deployed: playerRoster.filter(p => p.gridPos > 0).map(p => p.classType)
+    });
     stashHeirloom();
     saveMeta();
     Store.remove(BASE_SAVE_KEY + currentSlot);
@@ -1763,6 +1852,8 @@ function showOutpostNotice(msg) {
 function renderTitleScreen() {
     switchScreen('screen-title'); let menuHTML = '';
     if (bestScore > 0) menuHTML += `<div style="text-align:center; font-size:11px; letter-spacing:2px; color:#B8860B; margin-bottom:6px;">BEST RUN: ${bestScore.toLocaleString()} PTS \u00B7 SECTOR ${bestSector}</div>`;
+    const lastWord = latestEpitaph();
+    if (lastWord) menuHTML += `<div class="title-epitaph">"${lastWord}"</div>`;
     if (!Store.working) menuHTML += `<div class="title-warning">⚠ STORAGE UNAVAILABLE — THIS RUN WILL NOT BE SAVED</div>`;
     for(let i=1; i<=3; i++) {
         let d = Store.getJSON(BASE_SAVE_KEY + i);
@@ -1776,6 +1867,7 @@ function renderTitleScreen() {
         }
     }
     menuHTML += `<button class="title-btn btn-meta" style="margin-top:12px;" data-action="citadel">CITADEL (💀 ${bossSkulls})</button>`;
+    menuHTML += `<button class="title-btn" style="border-color:#8a8272; color:#8a8272;" data-action="chronicle">CHRONICLE</button>`;
     document.getElementById('title-menu-container').innerHTML = menuHTML;
     document.getElementById('title-menu-container').style.display = 'flex';
     document.getElementById('difficulty-menu-container').style.display = 'none';
@@ -3348,14 +3440,18 @@ function applyTurnStartEffects(ent) {
         for (let s in ent.cooldowns) { if (ent.cooldowns[s] > 0) { ent.cooldowns[s] = Math.max(0, ent.cooldowns[s] - step); chg = true; } }
     }
     
-    if (currentWeather === 'TOXIC_SMOG') { let sDmg = Math.floor(2 * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - sDmg); log(`> ${ent.name} choked by Smog for ${sDmg} DMG.`, "log-dmg"); spawnFCT(ent.id, `-${sDmg}`, "fct-status"); chg = true; addMomentum(5); triggerHitFlash(ent.id); }
-    if (currentWeather === 'SHRAPNEL_WINDS' && Math.random() < 0.3) { let shrapDmg = Math.floor(5 * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - shrapDmg); log(`> Shrapnel struck ${ent.name} for ${shrapDmg} DMG!`, "log-dmg"); spawnFCT(ent.id, `-${shrapDmg}`, "fct-dmg"); chg = true; addMomentum(5); triggerHitFlash(ent.id); }
+    const noteWeatherDeath = cause => {
+        if (ent.hp <= 0 && ent.isPlayer && runStats)
+            runStats.lastKiller = { cause, sector: currentSector, tier: currentTier };
+    };
+    if (currentWeather === 'TOXIC_SMOG') { let sDmg = Math.floor(2 * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - sDmg); log(`> ${ent.name} choked by Smog for ${sDmg} DMG.`, "log-dmg"); spawnFCT(ent.id, `-${sDmg}`, "fct-status"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SMOG'); }
+    if (currentWeather === 'SHRAPNEL_WINDS' && Math.random() < 0.3) { let shrapDmg = Math.floor(5 * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - shrapDmg); log(`> Shrapnel struck ${ent.name} for ${shrapDmg} DMG!`, "log-dmg"); spawnFCT(ent.id, `-${shrapDmg}`, "fct-dmg"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SHRAPNEL'); }
 
     if (ent.bleedingTurns > 0) { let b = Math.max(1, Math.floor(ent.maxHp * 0.08));
         if (ent.isPlayer && hasRelic('FIELD_DRESSING')) b = Math.max(1, Math.floor(b / 2));
         if (ent.isPlayer && relicSetActive('Field Surgery')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 1);
         if (hasQuirk(ent, 'SLOW_BLEEDER')) b = Math.max(1, Math.floor(b / 2));
-        if (hasTrinket(ent, 'TOURNIQUET')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 2); ent.hp = Math.max(0, ent.hp - b); log(`> ${ent.name} bleeds for ${b}.`, "log-dmg"); spawnFCT(ent.id, `-${b}`, "fct-dmg"); ent.bleedingTurns--; chg = true; if(ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); }
+        if (hasTrinket(ent, 'TOURNIQUET')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 2); ent.hp = Math.max(0, ent.hp - b); log(`> ${ent.name} bleeds for ${b}.`, "log-dmg"); spawnFCT(ent.id, `-${b}`, "fct-dmg"); ent.bleedingTurns--; chg = true; if(ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('BLEED'); }
     // Expiring temporary armour used to zero the unit's innate plating too, so any armoured
     // enemy that braced permanently lost the armour it started with.
     if (ent.armorTurns > 0) { ent.armorTurns--; if (ent.armorTurns === 0) { ent.armor = ent.baseArmor || 0; } chg = true; }
@@ -3671,6 +3767,10 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
         log(`> ${target.name} refuses to go down!`, 'log-heal');
         spawnFCT(target.id, 'SECOND WIND', 'fct-heal'); playSFX('heal', 1.2);
     }
+    // The chronicle's witness: whoever lands the blow that drops an operator is on record.
+    if (target.hp <= 0 && target.isPlayer && runStats)
+        runStats.lastKiller = { name: attacker.name, elite: attacker.eliteType || null,
+                               boss: attacker.classType === 'BOSS', sector: currentSector, tier: currentTier, cause: 'COMBAT' };
     let logStyle = "log-dmg"; let logMsg = `> ${attacker.name} hits ${target.name} for ${netDmg}`;
     
     triggerHitFlash(target.id);
@@ -3954,7 +4054,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, renderOutpostScene, renderOutpostSheet, CAMP_SPOTS, motionOff, flashClass, pulseIntent, playAttackAnim, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, renderOutpostScene, renderOutpostSheet, CAMP_SPOTS, motionOff, flashClass, pulseIntent, playAttackAnim, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
