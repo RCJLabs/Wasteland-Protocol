@@ -26,7 +26,7 @@ module.exports = {
       written: PROMPTS.every(p => p.title && p.body && p.body.length > 60),
       shouty: PROMPTS.filter(p => p.title !== p.title.toUpperCase()).map(p => p.id)
     }));
-    ok(`${table.total} prompts, each with a unique id`, table.total === 14 && table.ids === 14);
+    ok(`${table.total} prompts, each with a unique id`, table.total === 15 && table.ids === 15);
     ok('each says something worth reading', table.written);
     ok('and titles are titles', table.shouty.length === 0);
 

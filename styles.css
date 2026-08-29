@@ -600,3 +600,31 @@ button.reach-short { border-color: #7a5a20; }
 .prompt-off { flex: 0 0 auto; background: none; border: 1px solid #3a352c; color: #7a7266;
   font-family: monospace; font-size: 9px; letter-spacing: 1px; padding: 9px 8px; cursor: pointer; }
 .prompt-off:hover { border-color: #8a8578; color: #a9a396; }
+
+/* Read the room: what is coming, what a target will absorb, and where a number came from. */
+.threat-tag { font-size: 9px; font-weight: bold; letter-spacing: 1px; text-align: center;
+  color: #e0a95a; border: 1px solid #6b4a1a; background: rgba(24,14,2,0.8); padding: 1px 3px; margin-bottom: 2px; }
+.threat-tag.threat-fatal { color: #ff8a7a; border-color: #8B0000; background: rgba(40,4,4,0.9);
+  animation: threatPulse 1.4s ease-in-out infinite; }
+@keyframes threatPulse { 0%,100% { box-shadow: 0 0 0 rgba(255,68,68,0); } 50% { box-shadow: 0 0 9px rgba(255,68,68,0.65); } }
+.soak-tag { font-size: 9px; letter-spacing: 1px; text-align: center; color: #9fb6c9;
+  border: 1px solid #3a5a6b; background: rgba(6,16,22,0.8); padding: 1px 3px; margin-bottom: 2px; }
+.log-explainable { cursor: help; }
+.log-explainable:hover { text-decoration: underline dotted; }
+.explain { display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  width: min(300px, 88%); max-height: 80%; overflow-y: auto; z-index: 70; justify-content: center; }
+.explain-card { width: 100%; background: rgba(8,7,5,0.97); border: 1px solid #6b5a2a;
+  box-shadow: 0 8px 28px rgba(0,0,0,0.85); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+.ex-head { font-size: 13px; font-weight: bold; color: #d9a93d; letter-spacing: 1px; text-transform: uppercase; }
+.ex-sub { font-size: 9px; letter-spacing: 1.5px; color: #8a8578; text-transform: uppercase; margin-top: -8px; }
+.ex-rows { display: flex; flex-direction: column; }
+.ex-row { display: flex; justify-content: space-between; gap: 10px; font-size: 11px;
+  padding: 5px 0; border-bottom: 1px solid #1f1c15; color: #c9c0ab; }
+.ex-row span:last-child { font-weight: bold; font-variant-numeric: tabular-nums; }
+.ex-row.ex-base { color: #8a8578; }
+.ex-row.ex-none { color: #6a6558; font-style: italic; }
+.ex-up span:last-child, .ex-row .ex-up { color: #9ab07a; }
+.ex-down span:last-child, .ex-row .ex-down { color: #d98a8a; }
+.ex-row.ex-soak { color: #9fb6c9; }
+.ex-row.ex-total { border-bottom: 0; border-top: 1px solid #6b5a2a; margin-top: 3px; padding-top: 7px;
+  color: #d9a93d; font-size: 13px; font-weight: bold; }

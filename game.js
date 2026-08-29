@@ -828,6 +828,11 @@ const CODEX = [
         ...GEAR_POOL.filter(g => g.slot === 'mod').map(g => `${g.name} (${g.cls}) — ${g.desc}`),
         ...GEAR_POOL.filter(g => g.slot === 'trinket').map(g => `${g.name} — ${g.desc}`)
     ] },
+    { id: 'READING', title: 'READING A FIGHT', body: () => [
+        'An operator carries an amber figure when something is aimed at them this round, and a red skull when what is aimed at them would finish them. A question mark means a ranged attacker has not committed to its mark yet.',
+        'While an ability is armed, an enemy shows the share of a blow that survives its plating and resistances - 60% means four in ten of every point is soaked before it lands.',
+        'Any damage line in the log can be tapped to read the whole arithmetic back: what was rolled, every multiplier that bent it, what the target soaked, and what landed.'
+    ] },
     { id: 'BESTIARY', title: 'THE BESTIARY', body: () => [
         'Everything the wasteland fields, and what you know of it. A file fills in the first time you meet its subject.',
         ...bestiaryRoster().map(r => {
@@ -1121,6 +1126,8 @@ const ACTIONS = {
     'chronicle':        () => renderChronicle(),
     'inspect':          el => openDossier(el.dataset.id),
     'dossier-close':    () => closeDossier(),
+    'explain':          el => openExplain(el.dataset.hit),
+    'explain-close':    () => closeExplain(),
     'prompt-ok':        () => dismissPrompt(),
     'prompt-off':       () => disablePrompts(),
     'toggle-prompts':   () => { globalSettings.prompts = globalSettings.prompts === false; Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); },
@@ -3000,6 +3007,103 @@ function formatStat(n) {
     return (n / 1000000).toFixed(1) + 'M';
 }
 
+// ── Read the room ───────────────────────────────────────────────────────────────────────
+// The engine does a great deal of arithmetic the player never sees: a number lands and there
+// is no way to ask why it was that number, and no way to know who is about to die. Three
+// readouts, all built from what the fight is already doing rather than a second model of it.
+let hitTrace = null;   // the factors of the blow currently being resolved
+let hitLog = [];       // the last two dozen blows, each with its whole story
+let explaining = null; // index into hitLog of the blow being read
+
+// What a hostile is about to do, priced honestly. Melee and flankers pick their target
+// outright, so those are exact; ranged fire is weighted, so the likeliest mark is named.
+function forecastFor(enemy) {
+    if (!enemy || enemy.isPlayer || enemy.hp <= 0 || !combatActive) return null;
+    const intent = enemy.intent || { type: 'ATTACK' };
+    const live = activeEntities.filter(e => e.isPlayer && e.hp > 0);
+    if (!live.length) return null;
+    if (intent.type === 'DEFEND' || intent.type === 'SIG') return { kind: intent.type, enemy };
+    const atk = enemy.dmgType || 'phys';
+    let raw = Math.floor(enemy.dmgBase * enemyDmgMult(enemy));
+    if (intent.type === 'AOE') {
+        raw = Math.floor(enemy.dmgBase * 0.7 * enemyDmgMult(enemy));
+        if (currentWeather === 'SANDSTORM') raw = Math.floor(raw * 0.75);
+        if (currentWeather === 'BLOODLUST') raw = Math.floor(raw * 1.2);
+        return { kind: 'AOE', enemy, hits: live.map(t => ({ target: t, dmg: mitigate(enemy, t, raw, atk, 'BASIC').n })) };
+    }
+    if (intent.type === 'HEAVY') raw = Math.floor(raw * 1.5);
+    if (intent.type === 'STATUS') raw = Math.floor(raw * 0.3);
+    if (currentWeather === 'SANDSTORM' && enemy.range === 'ranged') raw = Math.floor(raw * 0.75);
+    if (currentWeather === 'BLOODLUST') raw = Math.floor(raw * 1.2);
+    // A sniper with a mark already lined up is not choosing again.
+    let mark = enemy.lockOn ? live.find(p => p.id === enemy.lockOn) : null;
+    if (mark) raw = Math.floor(raw * 2.2);
+    if (!mark) {
+        if (intent.type === 'FLANK') mark = [...live].sort((a, b) => b.gridPos - a.gridPos)[0];
+        else if (enemy.range === 'melee') mark = [...live].sort((a, b) => a.gridPos - b.gridPos)[0];
+        else mark = [...live].sort((a, b) => (BACKLINE_WEIGHT[b.gridPos] || 1) - (BACKLINE_WEIGHT[a.gridPos] || 1))[0];
+    }
+    // Someone braced in front of the mark eats it instead, softened - same rule the AI uses.
+    let via = null;
+    if (['ATTACK', 'HEAVY', 'STATUS', 'FLANK'].includes(intent.type)) {
+        const cover = live.find(p => (p.guardTurns || 0) > 0 && p.gridPos < mark.gridPos);
+        if (cover) { via = mark; mark = cover;
+            raw = Math.floor(raw * Math.min(hasRelic('BULWARK_PLATING') ? 0.35 : 1, hasTrait(mark, 'BULWARK') ? 0.45 : 0.6)); }
+    }
+    return { kind: intent.type, enemy, exact: enemy.range === 'melee' || intent.type === 'FLANK' || !!enemy.lockOn,
+             hits: [{ target: mark, dmg: mitigate(enemy, mark, raw, atk, 'BASIC').n, via }] };
+}
+
+// Everything aimed at each operator this round, so the squad can see who will not survive it.
+function threatBoard() {
+    const board = {};
+    activeEntities.filter(e => e.isPlayer && e.hp > 0).forEach(p => { board[p.id] = { dmg: 0, exact: true }; });
+    activeEntities.filter(e => !e.isPlayer && e.hp > 0).forEach(e => {
+        const f = forecastFor(e);
+        if (!f || !f.hits) return;
+        f.hits.forEach(h => {
+            const slot = board[h.target.id];
+            if (!slot) return;
+            slot.dmg += h.dmg;
+            if (f.exact === false) slot.exact = false;
+        });
+    });
+    return board;
+}
+
+function explainHtml(i) {
+    const h = hitLog[i];
+    if (!h) return '';
+    const rows = h.trace.map(t =>
+        `<div class="ex-row"><span>${t.label}</span><span class="${t.f >= 1 ? 'ex-up' : 'ex-down'}">\u00D7${t.f.toFixed(2)}</span></div>`).join('');
+    const soak = [];
+    if (h.resist >= 100) soak.push('immune');
+    else {
+        if (h.resist > 0) soak.push(`resist \u2212${h.resist}`);
+        if (h.resist < 0) soak.push(`weak to ${h.atkType}`);
+        if (h.armor > 0) soak.push(`armour \u2212${h.armor}`);
+        if (h.plated) soak.push('riot plate halved it');
+    }
+    return `<div class="ex-head">${h.attacker} \u2192 ${h.target}</div>
+        <div class="ex-sub">${h.abilityStr || 'attack'} \u00B7 ${h.atkType}</div>
+        <div class="ex-rows">
+            <div class="ex-row ex-base"><span>rolled</span><span>${h.raw}</span></div>
+            ${rows || '<div class="ex-row ex-none"><span>nothing bent it</span><span></span></div>'}
+            <div class="ex-row ex-soak"><span>${soak.length ? soak.join(', ') : (h.soaked > 0 ? 'soaked' : 'nothing soaked it')}</span><span>${h.soaked >= 0 ? '\u2212' + h.soaked : '+' + (-h.soaked)}</span></div>
+            <div class="ex-row ex-total"><span>landed</span><span>${h.net}</span></div>
+        </div>`;
+}
+function renderExplain() {
+    const el = document.getElementById('explain');
+    if (!el) return;
+    if (explaining === null || !hitLog[explaining]) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="explain-card">${explainHtml(explaining)}
+        <button class="dossier-close" data-action="explain-close">CLOSE</button></div>`;
+    el.style.display = 'flex';
+}
+function openExplain(i) { explaining = Number(i); renderExplain(); }
+function closeExplain() { explaining = null; renderExplain(); }
+
 // ── First contact ───────────────────────────────────────────────────────────────────────
 // Seventeen interlocking systems and nothing ever taught one of them: the manual is good and
 // it is behind the settings gear, which is no use to somebody in their first fight. These are
@@ -3019,6 +3123,7 @@ const PROMPTS = [
     { id: 'CURSE',     title: 'A CURSED RELIC',  body: 'Cursed relics carry a real upside and a real cost, and they are never dealt at random - this one is on the table because you can refuse it. Read the second half of the line before you take it.' },
     { id: 'ROUTE',     title: 'THE ROUTE IS A PLAN', body: 'Taking a node commits you to what it connects to. Elites and warlords pay the most; camps and the Armory cost you a node but keep the squad standing. Look two tiers ahead before you step.' },
     { id: 'ARMORY',    title: 'THE ARMORY',      body: 'A trader on the route. Gear, a marked-up relic, stims, a quirk do-over, and a bond that prepays your next regroup. Prices climb with the sector, so scrap spent early is worth more.' },
+    { id: 'THREAT',    title: 'SOMEONE IS ABOUT TO DIE', body: 'The red figure over that operator is what lands on them this round if nothing changes, and it is more than they have left. Kill the thing aimed at them, brace in front of them, spend a STIM, or move them - but not nothing.' },
     { id: 'REGROUP',   title: 'THE SQUAD BROKE', body: 'A wipe is not the end of the expedition. Regrouping costs half your scrap and sends you back to the start of this sector with the squad on its feet. You have a limited number - felling a warlord earns one back.' }
 ];
 let seenPrompts = [];      // ids already shown, meta-persisted
@@ -3524,7 +3629,12 @@ function initiateCombat(nodeType, isEliteNode) {
 }
 
 const logEl = document.getElementById('log');
-function log(msg, styleClass = "log-dmg") { const el = document.createElement('div'); el.className = styleClass; el.innerText = msg; logEl.appendChild(el); logEl.scrollTop = logEl.scrollHeight; }
+function log(msg, styleClass = "log-dmg", hitId = null) {
+    const el = document.createElement('div'); el.className = styleClass; el.innerText = msg;
+    // A logged blow keeps a handle on its own arithmetic: tap the line to read it back.
+    if (hitId !== null) { el.classList.add('log-explainable'); el.dataset.action = 'explain'; el.dataset.hit = String(hitId); }
+    logEl.appendChild(el); logEl.scrollTop = logEl.scrollHeight;
+}
 
 function renderQueue() {
     const qStr = turnQueue.map(e => { if (e.hp <= 0) return ''; return (e.stunnedTurns > 0 ? '!' : '') + e.name.substring(0,3).toUpperCase(); }).filter(s => s !== '').join(' > ');
@@ -3551,7 +3661,8 @@ function resistBadges(ent) {
 }
 
 function renderField() {
-    renderQueue(); const pTeam = document.getElementById('player-team'); const eTeam = document.getElementById('enemy-team'); pTeam.innerHTML = ''; eTeam.innerHTML = ''; const pCells = [], eCells = [];
+    renderQueue();
+    window.__threatCache = (combatActive && !pendingAction) ? threatBoard() : {}; const pTeam = document.getElementById('player-team'); const eTeam = document.getElementById('enemy-team'); pTeam.innerHTML = ''; eTeam.innerHTML = ''; const pCells = [], eCells = [];
     activeEntities.forEach(ent => {
         let isDead = ent.hp <= 0; const isAct = (!isDead && turnQueue.length > 0 && turnQueue[activeIndex]?.id === ent.id) ? 'active' : '';
         // The first render after death plays the fall; every render after shows the settled corpse.
@@ -3574,6 +3685,23 @@ function renderField() {
                 }
                 else if (pendingAction !== 'CAUTERIZE' && pendingAction !== 'REPOSITION' && !ent.isPlayer) { tCls = 'targetable-enemy'; clk = targetable(`data-action="target" data-id="${ent.id}"`); }
             }
+        }
+        // What is aimed at this operator this round, and whether they survive it.
+        let threatTag = '';
+        if (ent.isPlayer && !isDead && combatActive && !pendingAction) {
+            const t = (window.__threatCache || {})[ent.id];
+            if (t && t.dmg > 0) {
+                const fatal = t.dmg >= ent.hp;
+                if (fatal) firePrompt('THREAT');
+                threatTag = `<div class="threat-tag${fatal ? ' threat-fatal' : ''}" title="Incoming this round if nothing changes">${fatal ? '\u2620 ' : ''}\u2212${t.dmg}${t.exact ? '' : '?'}</div>`;
+            }
+        }
+        // While an ability is armed, every target shows what it will actually absorb.
+        let soakTag = '';
+        if (!ent.isPlayer && !isDead && pendingAction && tCls === 'targetable-enemy') {
+            const probe = mitigate(turnQueue[activeIndex] || ent, ent, 100, 'phys', pendingAction);
+            const pct = Math.round(probe.n);
+            if (pct < 95) soakTag = `<div class="soak-tag" title="A 100-damage physical blow lands for this">${pct}%</div>`;
         }
         // A signature is only fair if it is visible: the name rides the card, and plate,
         // overwatch and a pending ranged shot each show their live state.
@@ -3614,7 +3742,7 @@ function renderField() {
                 ${guarding ? `<div class="guard-flag">COVERING</div>` : ''}
                 <div style="width: 100%; position: relative; z-index: 10; transform: translateY(${ent.hpDrop || 0}px);">
                     ${rank ? `<div class="rank-chip rank-${ent.gridPos}">${rank}</div>` : ''}
-                    ${sigTag}
+                    ${threatTag}${soakTag}${sigTag}
                     ${eff ? `<div class="status-badge">${eff}</div>` : ''}
                     <div class="hp-text">${ent.hp}/${ent.maxHp}</div>
                     <div class="hp-container"><div class="hp-fill ${ent.isPlayer ? 'player-hp' : 'enemy-hp'}" style="width: ${(ent.hp / ent.maxHp) * 100}%"></div></div>
@@ -3892,6 +4020,11 @@ function resolveAction(targetId) {
         let tuneUpBonus = tuneUpBattles > 0 ? 4 : 0;
         let baseDmg = actEnt.dmgBase + tuneUpBonus + Math.floor(Math.random() * 6); 
         let dmgMult = 1.0; let isCombo = false; let comboType = '';
+        // The breakdown is recorded as the real chain runs rather than worked out again
+        // afterwards, so what the player is shown cannot disagree with what happened.
+        hitTrace = []; let traceMark = 1;
+        const snap = label => { const f = dmgMult / traceMark;
+            if (Math.abs(f - 1) > 0.005) hitTrace.push({ label, f }); traceMark = dmgMult; };
 
         // Each ability's own profile first - flat rates and positional swings both settle here.
         if (pendingAction === 'FLASHBANG') { dmgMult = 0.4; actEnt.cooldowns.flashbang = hasTrait(actEnt, 'QUICK_HANDS') ? 3 : 4; }
@@ -3915,7 +4048,9 @@ function resolveAction(targetId) {
         // The Bayonet turns the rifle into a spear: front-rank bonus in, reach penalties honest.
         if (pendingAction === 'PIPE_RIFLE' && hasMod(actEnt, 'BAYONET') && actEnt.gridPos === 1) { dmgMult *= 1.25; }
 
+        snap('ability');
         if (momentumFocus > 0) { dmgMult *= 1.3; momentumFocus = 0; spawnFCT(actEnt.id, 'FOCUSED', 'fct-combo'); }
+        snap('focus');
         dmgMult *= quirkDmgMult(actEnt, target, dist);
         dmgMult *= bondDmgMult(actEnt);
         if (hasTrait(actEnt, 'GRUDGE') && actEnt.hp < actEnt.maxHp / 2) dmgMult *= 1.15;
@@ -3923,6 +4058,7 @@ function resolveAction(targetId) {
         if (hasTrait(actEnt, 'SHRAPNEL_LOAD') && pendingAction === 'PIPE_RIFLE' && target.armor > 0) dmgMult *= 1.2;
         if (hasTrait(actEnt, 'GO_FOR_THE_THROAT') && pendingAction === 'FERAL_BITE' && (target.bleedingTurns || 0) > 0) dmgMult *= 1.3;
         if (hasTrait(actEnt, 'IRONSIGHTS') && pendingAction === 'SLUG_SHOT') dmgMult *= 1.2;
+        snap('perks, quirks & bonds');
         if (hasTrait(actEnt, 'PYROPHILIA')) {
             const oiled = Math.min(3, livingEnemies.filter(e => (e.oiledTurns || 0) > 0).length);
             dmgMult *= 1 + oiled * 0.1;
@@ -3933,6 +4069,7 @@ function resolveAction(targetId) {
             ? (REACH_PENALTY[actEnt.gridPos] || 1) * (dist >= FRONT_RANKS ? DEPTH_PENALTY : 1)
             : 1;
         if (reach < 1) { dmgMult *= reach; log(`> ${actEnt.name} is reaching (${Math.round(reach * 100)}% DMG).`, "log-status"); }
+        snap('reach');
 
         // The combo multiplies whatever the ability was already worth. It has to come after every
         // profile above: an ability that assigns dmgMult outright would otherwise throw the bonus
@@ -3949,6 +4086,7 @@ function resolveAction(targetId) {
             isCombo = true; comboType = 'MARKED!';
         }
 
+        snap('combo');
         if (hasRelic('THERMAL_CORE') && atkType === 'energy') { dmgMult *= relicSetActive('Reactor Rig') ? 1.5 : 1.3; }
         if (hasRelic('WHETSTONE') && isMelee(pendingAction)) { dmgMult *= relicSetActive('Full Arsenal') ? 1.3 : 1.2; }
         if (hasRelic('RANGEFINDER') && isRanged(pendingAction)) { dmgMult *= relicSetActive('Full Arsenal') ? 1.25 : 1.15; }
@@ -3961,9 +4099,11 @@ function resolveAction(targetId) {
         // A sandstorm blinds anything fired across the field. This used to be a second hand-kept
         // list that had drifted - a thrown molotov was somehow unaffected - and now reads the
         // same reach the formation rules use.
+        snap('relics & curses');
         if (currentWeather === 'SANDSTORM' && moveReachFor(pendingAction, actEnt) === 'ranged') { dmgMult *= 0.75; }
         if (currentWeather === 'BLOODLUST') { dmgMult *= 1.2; }
         
+        snap('weather');
         playSFX(voiceFor(pendingAction));
         playAttackAnim(actEnt, target, pendingAction);
         if (isCombo) {
@@ -4047,28 +4187,38 @@ function resolveAction(targetId) {
     pendingAction = null; checkWinState();
 }
 
+// What a blow is actually worth once the victim's plating, resistances, relics and quirks
+// have had their say. Lifted out of applyDamageHit so the aiming preview runs the same
+// arithmetic the real hit does - a preview that recomputes is a preview that drifts.
+function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
+
+    let rv = t.resistances[atkType] || 0;
+    // Corrosion eats plating outright - the counter to a unit that re-plates itself each turn.
+    let ac = (abilityStr === 'FERAL_BITE' || (t.corrodedTurns || 0) > 0) ? 0 : t.armor;
+    if (t.oiledTurns > 0 && atkType === 'energy') rv -= 15;
+    let cd = calcDmg;
+    if (hasRelic('KINETIC_MESH') && t.isPlayer && t.gridPos === 1 && atkType === 'phys') cd = Math.floor(cd * 0.75);
+    if (hasRelic('LEAD_LINED_COAT') && t.isPlayer) cd = Math.floor(cd * 0.8);
+    if (hasRelic('CHEM_ETCHER') && !t.isPlayer && (t.corrodedTurns || 0) > 0) cd = Math.floor(cd * 1.25);
+    if (hasQuirk(t, 'THICK_HIDE')) cd = Math.max(1, cd - 3);
+    // Riot Plate: bolted armour soaks half of everything until the plate itself is spent.
+    if (hasSig(t, 'RIOT_PLATE') && (t.plate || 0) > 0) cd = Math.max(1, Math.floor(cd * 0.5));
+    if ((abilityStr === 'SLUG_SHOT' && hasTrait(attacker, 'BREACHING_ROUNDS')) ||
+        (abilityStr === 'QUICK_SHOT' && hasTrait(attacker, 'PIERCING_ROUNDS'))) ac = 0;
+    let n = Math.max(1, cd - rv - ac); if (rv >= 100) n = 0;
+    return { n, rv };
+}
+
 function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     if (target.hp <= 0) return;
     // Mitigation is figured per victim, so a bond partner who steps in takes the blow through
     // their own armor and resists rather than the original target's.
-    const figure = t => {
-        let rv = t.resistances[atkType] || 0;
-        // Corrosion eats plating outright - the counter to a unit that re-plates itself each turn.
-        let ac = (abilityStr === 'FERAL_BITE' || (t.corrodedTurns || 0) > 0) ? 0 : t.armor;
-        if (t.oiledTurns > 0 && atkType === 'energy') rv -= 15;
-        let cd = calcDmg;
-        if (hasRelic('KINETIC_MESH') && t.isPlayer && t.gridPos === 1 && atkType === 'phys') cd = Math.floor(cd * 0.75);
-        if (hasRelic('LEAD_LINED_COAT') && t.isPlayer) cd = Math.floor(cd * 0.8);
-        if (hasRelic('CHEM_ETCHER') && !t.isPlayer && (t.corrodedTurns || 0) > 0) cd = Math.floor(cd * 1.25);
-        if (hasQuirk(t, 'THICK_HIDE')) cd = Math.max(1, cd - 3);
-        // Riot Plate: bolted armour soaks half of everything until the plate itself is spent.
-        if (hasSig(t, 'RIOT_PLATE') && (t.plate || 0) > 0) cd = Math.max(1, Math.floor(cd * 0.5));
-        if ((abilityStr === 'SLUG_SHOT' && hasTrait(attacker, 'BREACHING_ROUNDS')) ||
-            (abilityStr === 'QUICK_SHOT' && hasTrait(attacker, 'PIERCING_ROUNDS'))) ac = 0;
-        let n = Math.max(1, cd - rv - ac); if (rv >= 100) n = 0;
-        return { n, rv };
-    };
+    const figure = t => mitigate(attacker, t, calcDmg, atkType, abilityStr);
     let { n: netDmg, rv: resistValue } = figure(target);
+    // File the whole story of this number: what it started as, what bent it, what soaked it.
+    const filed = { attacker: attacker.name, target: target.name, raw: calcDmg,
+                    trace: (hitTrace || []).slice(), atkType, abilityStr };
+    hitTrace = null;
     // Bond II: once per pair per fight, a killing blow lands on the partner instead.
     if (netDmg >= target.hp && target.isPlayer) {
         const savior = bondSavior(target);
@@ -4119,12 +4269,17 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     
     triggerHitFlash(target.id);
 
+    filed.net = netDmg; filed.soaked = calcDmg - netDmg; filed.resist = resistValue;
+    filed.armor = (abilityStr === 'FERAL_BITE' || (target.corrodedTurns || 0) > 0) ? 0 : target.armor;
+    filed.plated = hasSig(target, 'RIOT_PLATE') && (target.plate || 0) > 0;
+    hitLog.push(filed); if (hitLog.length > 24) hitLog.shift();
+    const hitId = hitLog.length - 1;
     if (netDmg === 0 && resistValue >= 100) { logMsg += " (Immune)."; spawnFCT(target.id, "IMMUNE", "fct-status"); playImpact(0, target, 0.5);
     } else if (resistValue > 5) { logMsg += " (Resisted)."; spawnFCT(target.id, `-${netDmg}`, "fct-dmg"); playImpact(netDmg, target, 0.7);
     } else if (resistValue < 0) { logMsg += " (Weakness!)."; logStyle = "log-dmg"; spawnFCT(target.id, `-${netDmg}!`, "fct-weak"); playImpact(netDmg, target, 1.25);
     } else { spawnFCT(target.id, `-${netDmg}`, "fct-dmg"); playImpact(netDmg, target); }
     
-    log(logMsg, logStyle);
+    log(logMsg, logStyle, hitId);
 
     if (target.hp <= 0) { addMomentum(15); if (!target.isPlayer) { checkBountyProgress('KILL'); if (runStats) runStats.kills++; } } else if (target.isPlayer) { addMomentum(5); }
 
@@ -4485,7 +4640,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, sigOf, hasSig, enemyDmgMult, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, bestiaryRoster, bestiaryRecord, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, sigOf, hasSig, enemyDmgMult, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
@@ -4526,6 +4681,8 @@ globalThis.WP = {
     get bestiary() { return bestiary; }, set bestiary(v) { bestiary = v; },
     get seenPrompts() { return seenPrompts; }, set seenPrompts(v) { seenPrompts = v; },
     get promptQueue() { return promptQueue; }, set promptQueue(v) { promptQueue = v; },
+    get hitLog() { return hitLog; }, set hitLog(v) { hitLog = v; },
+    get explaining() { return explaining; }, set explaining(v) { explaining = v; },
     get inspecting() { return inspecting; }, set inspecting(v) { inspecting = v; },
     get ascension() { return ascension; }, set ascension(v) { ascension = v; },
     get bestSector() { return bestSector; }, set bestSector(v) { bestSector = v; },

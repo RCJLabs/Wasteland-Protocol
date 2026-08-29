@@ -201,7 +201,9 @@ module.exports = {
     // ---- event and camp nodes ----
     await state(() => { initiateEvent(); });
     await page.waitForTimeout(200);
-    await click('[data-action="event-choice"]');
+    // The drawn event is random and its unaffordable choices render disabled, so clicking
+    // "the first choice" waits forever whenever the first one happens to be out of reach.
+    await click('[data-action="event-choice"]:not([disabled])');
     ok('event-choice resolves the encounter',
       (await page.$$('[data-action="event-finish"]')).length === 1);
     await click('[data-action="event-finish"]');

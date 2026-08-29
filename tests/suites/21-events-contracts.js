@@ -45,14 +45,17 @@ module.exports = {
     ok('a well-supplied squad can afford most of them', exercised.affordable > exercised.ran * 0.8);
 
     // ---- and they stop handing back the same one ----
+    // 80 draws left a real chance of missing one of fifteen events outright - a coupon-collector
+    // tail, not a bug in the pool - so the run that proves every event is reachable is long
+    // enough that missing one would mean the pool is genuinely broken.
     const rotation = await page.evaluate(() => {
       recentEvents = [];
-      const seq = []; for (let i = 0; i < 80; i++) seq.push(pickEvent().title);
+      const seq = []; for (let i = 0; i < 400; i++) seq.push(pickEvent().title);
       let tooSoon = 0;
       for (let i = 1; i < seq.length; i++) if (seq.slice(Math.max(0, i - EVENT_MEMORY), i).includes(seq[i])) tooSoon++;
       return { distinct: new Set(seq).size, tooSoon, memory: EVENT_MEMORY };
     });
-    ok(`80 draws reach ${rotation.distinct} different events`, rotation.distinct === pool.count);
+    ok(`400 draws reach all ${rotation.distinct} events`, rotation.distinct === pool.count);
     ok(`and none repeats within ${rotation.memory} of itself`, rotation.tooSoon === 0);
 
     // ---- some choices book something that comes due later ----
