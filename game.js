@@ -814,6 +814,12 @@ const CODEX = [
         ...GEAR_POOL.filter(g => g.slot === 'mod').map(g => `${g.name} (${g.cls}) — ${g.desc}`),
         ...GEAR_POOL.filter(g => g.slot === 'trinket').map(g => `${g.name} — ${g.desc}`)
     ] },
+    { id: 'DOSSIERS', title: 'DOSSIERS', body: () => [
+        `Every point of XP an operator earns also goes on their class's dossier, across every run. Ranks come at ${MASTERY_RANKS[1].toLocaleString()}, ${MASTERY_RANKS[2].toLocaleString()} and ${MASTERY_RANKS[3].toLocaleString()} lifetime XP - and they unlock options, never raw power.`,
+        'Rank I: a title on the card. Rank II: a class quirk joins that class\'s draw pool. Rank III: a fourth ability, with the muster picking which three of the four deploy.',
+        ...Object.keys(MASTERY_TITLES).map(cls =>
+            `${cls} — "${MASTERY_TITLES[cls]}" · quirk: ${CLASS_QUIRKS[cls].name} · fourth: ${FOURTH_ABILITIES[cls].label}`)
+    ] },
     { id: 'CURSES', title: 'CURSES AND SETS', body: () => [
         'Cursed relics carry real upsides and real teeth, marked unmistakably in the cache. They are never dealt at random: every curse aboard was chosen - from a cache card, or at the collector\'s table, where a held relic buys two blind draws.',
         ...RELIC_POOL.filter(r => r.tier === 'CURSED').map(r => `${r.name} — ${r.desc}`),
@@ -1089,6 +1095,10 @@ const ACTIONS = {
     },
     'outpost-sheet-close': () => { outpostSheet = null; activeGearSelector = null; activePosSelector = null; activePerkSelector = null; renderOutpost(); },
     'chronicle':        () => renderChronicle(),
+    'loadout-bench':    el => {
+        const ch = playerRoster.find(c => c.id === el.dataset.id);
+        if (ch && masteryRank(ch.classType) >= 3) { ch.benchedMove = el.dataset.move; renderMuster(); }
+    },
     'node-combat':      el => { enterNode(el.dataset.node); initiateCombat(el.dataset.type, el.dataset.elite === '1'); },
 
     'outpost-tab':      el => setOutpostTab(el.dataset.tab),
@@ -1747,7 +1757,7 @@ function takeRelic(index) {
 
 let bestScore = 0; let bestSector = 0;
 
-function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector })); }
+function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, mastery })); }
 
 function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames() }; }
 
@@ -1775,6 +1785,7 @@ function loadMeta() {
         bossSkulls = d.bossSkulls || 0;
         metaUpgrades = { ...metaUpgrades, ...(d.metaUpgrades || {}) };
         bestScore = d.bestScore || 0; bestSector = d.bestSector || 0;
+        mastery = (d.mastery && typeof d.mastery === 'object') ? d.mastery : {};
         return;
     }
     // No readable meta yet - adopt the best progress any slot recorded. A corrupt meta blob
@@ -1926,10 +1937,21 @@ function renderMuster() {
     body.innerHTML = playerRoster.map(ch => {
         const pos = ch.gridPos;
         const posLbl = pos === 0 ? 'BENCH' : RANK_LABELS[pos];
+        const rank = masteryRank(ch.classType);
+        const title = rank >= 1 ? `<span class="muster-title" title="Dossier rank ${rank} — ${masteryXp(ch.classType).toLocaleString()} lifetime XP">★ ${MASTERY_TITLES[ch.classType]}</span>` : '';
+        // Rank III brings four verbs to a three-slot deck: tap the one that sits out.
+        let loadout = '';
+        if (rank >= 3 && FOURTH_ABILITIES[ch.classType]) {
+            const all = [...(ABILITIES[ch.classType] || []), FOURTH_ABILITIES[ch.classType]];
+            const benched = (ch.benchedMove && all.some(a => a.move === ch.benchedMove)) ? ch.benchedMove : FOURTH_ABILITIES[ch.classType].move;
+            loadout = `<div class="muster-loadout">` + all.map(a =>
+                `<button class="loadout-chip ${a.move === benched ? 'chip-benched' : ''}" data-action="loadout-bench" data-id="${ch.id}" data-move="${a.move}">${a.move === benched ? '✕ ' : ''}${a.label}</button>`).join('') + `</div>`;
+        }
         return `<div class="muster-row ${pos > 0 ? 'muster-deployed' : ''}">
             <div class="muster-who">
                 <span class="muster-name">${ch.name}</span>
                 <span class="muster-class">${ch.classType}</span>
+                ${title}
                 <span class="muster-quirk" title="${ch.quirk ? ch.quirk.desc : ''}">${ch.quirk ? ch.quirk.name : ''}</span>
                 <span class="muster-quirk-desc">${ch.quirk ? ch.quirk.desc : ''}</span>
             </div>
@@ -1938,6 +1960,7 @@ function renderMuster() {
                 <button class="muster-rank rank-btn-${pos}" data-action="muster-rank" data-id="${ch.id}">${posLbl}</button>
                 <button class="muster-reroll" ${musterRerolls <= 0 ? 'disabled' : ''} data-action="muster-reroll" data-id="${ch.id}">⟳</button>
             </div>
+            ${loadout}
         </div>`;
     }).join('');
     const deployed = playerRoster.filter(c => c.gridPos > 0).length;
@@ -1976,7 +1999,7 @@ function musterReroll(charId) {
     if (!ch || !ch.quirk) return;
     // Strip the old quirk's stats, roll a different one, apply it - health clamped to the new cap.
     ch.maxHp -= ch.quirk.hp; ch.dmgBase -= ch.quirk.dmg; ch.speed -= ch.quirk.spd;
-    const pool = QUIRK_POOL.filter(q => q.id !== ch.quirk.id);
+    const pool = quirkPoolFor(ch.classType).filter(q => q.id !== ch.quirk.id);
     const q = pool[Math.floor(Math.random() * pool.length)];
     ch.quirk = q; ch.maxHp += q.hp; ch.dmgBase += q.dmg; ch.speed += q.spd;
     ch.hp = Math.min(ch.maxHp, Math.max(1, ch.hp + q.hp));
@@ -2010,7 +2033,10 @@ function buildNewRun(diff) {
 
     const qRng = seededRng('quirks');
     playerRoster.forEach(p => {
-        let q = QUIRK_POOL[Math.floor(qRng() * QUIRK_POOL.length)];
+        const qPool = quirkPoolFor(p.classType);
+        let q = qPool[Math.floor(qRng() * qPool.length)];
+        const fourth = FOURTH_ABILITIES[p.classType];
+        p.benchedMove = fourth ? fourth.move : null;
         p.quirk = q; p.maxHp += q.hp; p.hp = p.maxHp; p.dmgBase += q.dmg; p.speed += q.spd;
         p.level = metaUpgrades.startLevel; p.perkPoints = metaUpgrades.startLevel - 1; p.xpToNext = Math.floor(100 * Math.pow(XP_CURVE, metaUpgrades.startLevel - 1)); 
         if (hasContract('GLASS')) { p.maxHp = Math.max(1, Math.floor(p.maxHp * 0.75)); p.hp = p.maxHp; }
@@ -2445,6 +2471,8 @@ function operatorCardHtml(char) {
         let traitLine = traitSummary(char);
         let traitsDisplay = traitLine ? `<div style="font-size:9px; color:#6B8E23; text-transform:uppercase; margin-top:2px;">${traitLine}</div>` : '';
         let quirkDisplay = char.quirk ? `<div style="font-size:9px; color:#ffaa00; text-transform:uppercase; margin-top:2px;" title="${char.quirk.desc || ''}">[ ${char.quirk.name} ]</div>` : '';
+        let masteryDisplay = masteryRank(char.classType) >= 1
+            ? `<div class="mastery-line" title="Dossier rank ${masteryRank(char.classType)} — ${masteryXp(char.classType).toLocaleString()} lifetime XP">★ ${MASTERY_TITLES[char.classType]} · RANK ${['0','I','II','III'][masteryRank(char.classType)]}</div>` : '';
         let bondLine = bondLineFor(char);
         let bondDisplay = bondLine ? `<div class="bond-line" title="Bonds deepen with every fight this pair survives together.">⚯ ${bondLine}</div>` : '';
 
@@ -2470,7 +2498,7 @@ function operatorCardHtml(char) {
         else if (activePerkSelector === char.id) { btnGroupHtml = PERK_POOL.map(p => `<button class="upg-btn sub-menu-btn perk-btn" data-action="assign-perk" data-id="${char.id}" data-perk="${p.id}">${p.label}</button>`).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
         else { btnGroupHtml = `<button class="upg-btn ${posClass}" data-action="pos-menu" data-id="${char.id}">${posText}</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="HP" data-cost="${cost}">+10 HP</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="DMG" data-cost="${cost}">+3 DMG</button> ${medHtml}`; }
 
-        return `<div class="upgrade-card" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay}${traitsDisplay}${bondDisplay} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> <div class="upgrade-btn-group">${btnGroupHtml}</div> <div class="upgrade-btn-group gear-row">${gearHtml}</div> </div>`;
+        return `<div class="upgrade-card" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay}${masteryDisplay}${traitsDisplay}${bondDisplay} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> <div class="upgrade-btn-group">${btnGroupHtml}</div> <div class="upgrade-btn-group gear-row">${gearHtml}</div> </div>`;
 }
 
 function renderOutpost() {
@@ -2896,7 +2924,7 @@ function shopRerollQuirk(charId) {
     if (!it || !ch || !ch.quirk || scrap < it.price) { shopRerollPick = false; renderShop(); return; }
     // Same strip-and-reapply the muster uses: old stats off, a different quirk on, HP clamped.
     ch.maxHp -= ch.quirk.hp; ch.dmgBase -= ch.quirk.dmg; ch.speed -= ch.quirk.spd;
-    const pool = QUIRK_POOL.filter(q => q.id !== ch.quirk.id);
+    const pool = quirkPoolFor(ch.classType).filter(q => q.id !== ch.quirk.id);
     const q = pool[Math.floor(Math.random() * pool.length)];
     ch.quirk = q; ch.maxHp += q.hp; ch.dmgBase += q.dmg; ch.speed += q.spd;
     ch.hp = Math.min(ch.hp, ch.maxHp);
@@ -3101,8 +3129,62 @@ const RANK_LABELS = { 1: 'FRONT', 2: 'MID', 3: 'BACK' };
 const DEPTH_PENALTY = 0.65;
 const FRONT_RANKS = 2;
 
+// ── Dossiers: operator mastery ──────────────────────────────────────────────────────────
+// Each class accrues lifetime XP across every run, and the ranks unlock OPTIONS, never raw
+// power: a title at I, a class quirk joining that class's draw pool at II, and at III a
+// fourth ability with a bring-three-of-four loadout picked at the muster.
+const MASTERY_RANKS = [0, 1500, 4000, 8000];
+const MASTERY_TITLES = {
+    BRUISER: 'Wall of the Waste', MEDIC: 'Last Light', SCAVENGER: 'Magpie Prime',
+    PYROMANIAC: 'Firekeeper', SHOTGUNNER: 'The Doorman', SNIPER: 'One Round', HOUND: 'Alpha'
+};
+let mastery = {};   // classType -> lifetime XP, meta-persisted
+function masteryXp(cls) { return mastery[cls] || 0; }
+function masteryRank(cls) {
+    const x = masteryXp(cls); let r = 0;
+    for (let i = 1; i < MASTERY_RANKS.length; i++) if (x >= MASTERY_RANKS[i]) r = i;
+    return r;
+}
+function noteMastery(cls, amount) { if (cls) mastery[cls] = (mastery[cls] || 0) + amount; }
+
+// Rank II: one more quirk in that class's draw pool - a flavour of the class, not a buff.
+const CLASS_QUIRKS = {
+    BRUISER:    { id: 'BULLHEADED',     name: 'Bullheaded',     desc: 'Built like a bulkhead. +20 HP, -2 SPD.',  dmg: 0, hp: 20,  spd: -2 },
+    MEDIC:      { id: 'CALM_UNDER_FIRE',name: 'Calm Under Fire',desc: 'Never hurries, never late. +3 SPD, -5 HP.', dmg: 0, hp: -5, spd: 3 },
+    SCAVENGER:  { id: 'HOARDERS_EYE',   name: "Hoarder's Eye",  desc: 'Sees the angle first. +2 DMG, +1 SPD, -5 HP.', dmg: 2, hp: -5, spd: 1 },
+    PYROMANIAC: { id: 'ACCELERANT_BLOOD',name:'Accelerant Blood',desc: 'Burns from the inside. +4 DMG, -10 HP.', dmg: 4, hp: -10, spd: 0 },
+    SHOTGUNNER: { id: 'POINT_BLANK_NERVES',name:'Point-Blank Nerves',desc:'Flinches at nothing. +3 DMG, -1 SPD.', dmg: 3, hp: 0, spd: -1 },
+    SNIPER:     { id: 'ICE_VEINS',      name: 'Ice Veins',      desc: 'A pulse that never spikes. +5 DMG, -2 SPD, -5 HP.', dmg: 5, hp: -5, spd: -2 },
+    HOUND:      { id: 'WAR_BRED',       name: 'War-Bred',       desc: 'Raised on the road. +4 SPD, -5 HP.', dmg: 0, hp: -5, spd: 4 }
+};
+function quirkPoolFor(cls) {
+    const extra = masteryRank(cls) >= 2 && CLASS_QUIRKS[cls] ? [CLASS_QUIRKS[cls]] : [];
+    return [...QUIRK_POOL, ...extra];
+}
+
+// Rank III: the fourth ability. The muster picks which three of the four deploy.
+const FOURTH_ABILITIES = {
+    BRUISER:    { move: 'SHIELD_SLAM',     label: 'Shield Slam',            reach: 'melee',  cd: 'shield_slam' },
+    MEDIC:      { move: 'STIM_DART',       label: 'Stim Dart (Ally)',       reach: 'ranged', cd: 'stim_dart' },
+    SCAVENGER:  { move: 'SHIV',            label: 'Shiv',                   reach: 'melee',  cd: 'shiv' },
+    PYROMANIAC: { move: 'HEAT_WAVE',       label: 'Heat Wave (Two)',        reach: 'ranged', cd: 'heat_wave' },
+    SHOTGUNNER: { move: 'RIOT_BUTT',       label: 'Riot Butt',              reach: 'melee',  cd: 'riot_butt' },
+    SNIPER:     { move: 'PIERCING_VOLLEY', label: 'Piercing Volley (Two)',  reach: 'ranged', cd: 'piercing_volley' },
+    HOUND:      { move: 'HARRY',           label: 'Harry (Twice)',          reach: 'melee',  cd: 'harry' }
+};
+// The deck an operator actually brings: the classic three below rank III; at III, four
+// minus whichever one the muster benched (the fourth sits out by default).
+function deckFor(char) {
+    const base = ABILITIES[char.classType] || [];
+    const fourth = FOURTH_ABILITIES[char.classType];
+    if (!fourth || masteryRank(char.classType) < 3) return base;
+    const all = [...base, fourth];
+    const benched = (char.benchedMove && all.some(a => a.move === char.benchedMove)) ? char.benchedMove : fourth.move;
+    return all.filter(a => a.move !== benched);
+}
+
 const MOVE_REACH = Object.fromEntries(
-    Object.values(ABILITIES).flat().map(a => [a.move, a.reach]));
+    [...Object.values(ABILITIES).flat(), ...Object.values(FOURTH_ABILITIES)].map(a => [a.move, a.reach]));
 
 // Every ability an entity can be standing behind, in one place, so nothing needs a second list.
 function isMelee(move) { return MOVE_REACH[move] === 'melee'; }
@@ -3316,7 +3398,7 @@ function renderField() {
             if (pendingAction === 'OVERDRIVE' && turnQueue[activeIndex].classType === 'MEDIC' && ent.isPlayer) {
                 tCls = 'targetable-ally'; clk = targetable(`data-action="target" data-id="${ent.id}"`);
             } else if (!isDead) {
-                if ((pendingAction === 'CAUTERIZE' || pendingAction === 'REPOSITION') && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="target" data-id="${ent.id}"`); } 
+                if ((pendingAction === 'CAUTERIZE' || pendingAction === 'REPOSITION' || pendingAction === 'STIM_DART') && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="target" data-id="${ent.id}"`); }
                 else if (['ITEM_MED', 'ITEM_BOMB', 'ITEM_ADRENALINE', 'ITEM_EMP'].includes(pendingAction)) {
                     if (pendingAction === 'ITEM_MED' && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="use-item" data-id="${ent.id}"`); }
                     else if (pendingAction === 'ITEM_ADRENALINE' && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="use-item" data-id="${ent.id}"`); }
@@ -3400,7 +3482,7 @@ function renderCommandDeck() {
     const foes = activeEntities.filter(e => !e.isPlayer && e.hp > 0);
     const liveCombo = move => (foes.map(f => comboFor(move, f)).find(Boolean) || {}).name || null;
 
-    const deck = [...(ABILITIES[aE.classType] || [])];
+    const deck = [...deckFor(aE)];
     // Formation was fixed the moment the fight started, so a medic caught in the front rank
     // stayed there until it died. Swapping costs the whole turn, which is the price of it.
     if (activeEntities.filter(e => e.isPlayer && e.hp > 0 && e.id !== aE.id).length > 0) {
@@ -3589,8 +3671,15 @@ function resolveAction(targetId) {
         target.hp = Math.min(target.maxHp, target.hp + heal); actEnt.cooldowns.cauterize = cdFor(actEnt, 'cauterize', 3);
         if (hasTrait(actEnt, 'FIELD_SURGEON')) { target.bleedingTurns = 0; target.stunnedTurns = 0; target.oiledTurns = 0; spawnFCT(target.id, "CLEANSED", "fct-status"); }
         log(`> ${actEnt.name} heals ${target.name} for ${heal}.`, "log-heal"); spawnFCT(target.id, `+${heal}`, "fct-heal"); playSFX('heal');
+    } else if (pendingAction === 'STIM_DART') {
+        // The mastered medic's fourth verb: a patch fired across the field, and the jolt
+        // shakes a stun loose.
+        const heal = 12;
+        target.hp = Math.min(target.maxHp, target.hp + heal); target.stunnedTurns = 0;
+        actEnt.cooldowns.stim_dart = cdFor(actEnt, 'stim_dart', 2);
+        log(`> ${actEnt.name} darts ${target.name} for ${heal}.`, "log-heal"); spawnFCT(target.id, `+${heal}`, "fct-heal"); playSFX('heal');
     } else {
-        let atkType = 'phys'; if(['RAD_SHOT', 'FERAL_BITE', 'RIP_AND_TEAR'].includes(pendingAction)) atkType = 'bio'; if(['FLASHBANG', 'MOLOTOV', 'FLARE_GUN', 'ACID_FLASK', 'THERMITE'].includes(pendingAction)) atkType = 'energy';
+        let atkType = 'phys'; if(['RAD_SHOT', 'FERAL_BITE', 'RIP_AND_TEAR'].includes(pendingAction)) atkType = 'bio'; if(['FLASHBANG', 'MOLOTOV', 'FLARE_GUN', 'ACID_FLASK', 'THERMITE', 'HEAT_WAVE'].includes(pendingAction)) atkType = 'energy';
         let tuneUpBonus = tuneUpBattles > 0 ? 4 : 0;
         let baseDmg = actEnt.dmgBase + tuneUpBonus + Math.floor(Math.random() * 6); 
         let dmgMult = 1.0; let isCombo = false; let comboType = '';
@@ -3606,6 +3695,13 @@ function resolveAction(targetId) {
         if (pendingAction === 'EXECUTE_SHOT') { dmgMult *= 1.4; actEnt.cooldowns.execute_shot = 3; }
         if (pendingAction === 'SPOTTERS_MARK') { dmgMult = 0.4; actEnt.cooldowns.spotters_mark = cdFor(actEnt, 'spotters_mark', 3); }
         if (pendingAction === 'RIP_AND_TEAR') { dmgMult *= 1.2; actEnt.cooldowns.rip_and_tear = cdFor(actEnt, 'rip_and_tear', 3); }
+        // The mastered fourth verbs, priced like the classics.
+        if (pendingAction === 'SHIELD_SLAM') { dmgMult *= 0.85; actEnt.cooldowns.shield_slam = cdFor(actEnt, 'shield_slam', 2); }
+        if (pendingAction === 'SHIV') { dmgMult *= 0.9; actEnt.cooldowns.shiv = cdFor(actEnt, 'shiv', 2); }
+        if (pendingAction === 'HEAT_WAVE') { dmgMult *= 0.7; actEnt.cooldowns.heat_wave = cdFor(actEnt, 'heat_wave', 3); }
+        if (pendingAction === 'RIOT_BUTT') { dmgMult *= 0.85; actEnt.cooldowns.riot_butt = cdFor(actEnt, 'riot_butt', 2); }
+        if (pendingAction === 'PIERCING_VOLLEY') { dmgMult *= 0.75; actEnt.cooldowns.piercing_volley = cdFor(actEnt, 'piercing_volley', 3); }
+        if (pendingAction === 'HARRY') { dmgMult *= 0.6; actEnt.cooldowns.harry = cdFor(actEnt, 'harry', 2); }
         if (pendingAction === 'SNAP' && hasMod(actEnt, 'BLOOD_TRACKER') && (target.bleedingTurns || 0) > 0) { dmgMult *= 1.3; }
         // The Bayonet turns the rifle into a spear: front-rank bonus in, reach penalties honest.
         if (pendingAction === 'PIPE_RIFLE' && hasMod(actEnt, 'BAYONET') && actEnt.gridPos === 1) { dmgMult *= 1.25; }
@@ -3723,6 +3819,19 @@ function resolveAction(targetId) {
             const behind = livingEnemies[dist + 1];
             if (behind && behind.hp > 0) applyDamageHit(actEnt, behind, Math.floor(baseDmg * 0.6), atkType, null);
         }
+        // The mastered verbs' second halves: the wave and the volley carry through, the
+        // harry bites twice, and the slam leaves the Bruiser plated behind it.
+        if (pendingAction === 'HEAT_WAVE' || pendingAction === 'PIERCING_VOLLEY') {
+            const behind = livingEnemies[dist + 1];
+            if (behind && behind.hp > 0) applyDamageHit(actEnt, behind, Math.floor(baseDmg * dmgMult * (pendingAction === 'HEAT_WAVE' ? 0.9 : 0.6)), atkType, null);
+        }
+        if (pendingAction === 'HARRY' && target.hp > 0) {
+            applyDamageHit(actEnt, target, Math.floor(baseDmg * dmgMult), atkType, null);
+        }
+        if (pendingAction === 'SHIELD_SLAM') {
+            actEnt.armor += 8; actEnt.armorTurns = Math.max(actEnt.armorTurns || 0, 2);
+            spawnFCT(actEnt.id, "+ARMOR", "fct-heal");
+        }
     }
     pendingAction = null; checkWinState();
 }
@@ -3791,13 +3900,13 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
         setTimeout(() => spawnFCT(attacker.id, `+${fed}`, "fct-heal"), 260);
     }
 
-    if (abilityStr === 'RAD_SHOT' || abilityStr === 'FERAL_BITE') {
-        let bleedChance = abilityStr === 'FERAL_BITE' ? 0.9 : 0.6;
+    if (abilityStr === 'RAD_SHOT' || abilityStr === 'FERAL_BITE' || abilityStr === 'SHIV') {
+        let bleedChance = abilityStr === 'FERAL_BITE' ? 0.9 : abilityStr === 'SHIV' ? 0.4 : 0.6;
         if (abilityStr === 'RAD_SHOT' && hasTrait(attacker, 'RAD_SPECIALIST')) bleedChance = 1;
         if (sectorFront === 'BLOOD_MOON') bleedChance = 1;
-        if (Math.random() < bleedChance) { target.bleedingTurns = 3; log(`> ${target.name} bleeding!`, "log-dmg"); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
-    } else if (abilityStr === 'HEAVY_WRENCH' || abilityStr === 'FLASHBANG') {
-        let sc = (abilityStr === 'FLASHBANG') ? 0.35 : 0.2; if (abilityStr === 'FLASHBANG' && target.resistances.energy < 0) sc *= 2;
+        if (Math.random() < bleedChance) { target.bleedingTurns = abilityStr === 'SHIV' ? 2 : 3; log(`> ${target.name} bleeding!`, "log-dmg"); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
+    } else if (abilityStr === 'HEAVY_WRENCH' || abilityStr === 'FLASHBANG' || abilityStr === 'RIOT_BUTT') {
+        let sc = (abilityStr === 'FLASHBANG') ? 0.35 : abilityStr === 'RIOT_BUTT' ? 0.25 : 0.2; if (abilityStr === 'FLASHBANG' && target.resistances.energy < 0) sc *= 2;
         if (abilityStr === 'FLASHBANG' && hasMod(attacker, 'WIDE_LENS')) sc = 1;
         if (hasTrait(target, 'UNSHAKEABLE')) sc = 0;
         if (Math.random() < sc) { target.stunnedTurns = 1; log(`> ${target.name} stunned!`, "log-status"); setTimeout(() => spawnFCT(target.id, "STUNNED", "fct-status"), 300 * globalSettings.combatSpeed); }
@@ -3939,6 +4048,7 @@ function awardXp(char, amount) {
     if (amount <= 0) return;
     if (sectorFront === 'QUIET_ROADS') amount = Math.floor(amount * 0.85);
     if (hasTrinket(char, 'WAR_TROPHY')) amount = Math.floor(amount * 1.25);
+    noteMastery(char.classType, amount);
     char.xp += amount;
     while (char.xp >= char.xpToNext) {
         char.level++; char.xp -= char.xpToNext; char.xpToNext = Math.floor(char.xpToNext * XP_CURVE); char.perkPoints++;
@@ -3997,6 +4107,7 @@ function checkWinState() {
         });
         if (tuneUpBattles > 0) tuneUpBattles--;
         recordBonds();
+        saveMeta();   // mastery accrues per fight and survives whatever the run does next
 
         let scrapMult = isCurrentNodeElite ? 2 : 1;
         let s = Math.floor((Math.floor(Math.random() * 30) + (currentTier * 20)) * scrapMult * sectorRewardMult());
@@ -4054,7 +4165,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, renderOutpostScene, renderOutpostSheet, CAMP_SPOTS, motionOff, flashClass, pulseIntent, playAttackAnim, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, renderOutpostScene, renderOutpostSheet, CAMP_SPOTS, motionOff, flashClass, pulseIntent, playAttackAnim, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
@@ -4092,6 +4203,7 @@ globalThis.WP = {
     get sectorFront() { return sectorFront; }, set sectorFront(v) { sectorFront = v; },
     get runSeed() { return runSeed; }, set runSeed(v) { runSeed = v; },
     get outpostView() { return outpostView; }, set outpostView(v) { outpostView = v; },
+    get mastery() { return mastery; }, set mastery(v) { mastery = v; },
     get outpostSheet() { return outpostSheet; }, set outpostSheet(v) { outpostSheet = v; },
     get frontBannerPending() { return frontBannerPending; }, set frontBannerPending(v) { frontBannerPending = v; },
     get regroupInsured() { return regroupInsured; }, set regroupInsured(v) { regroupInsured = v; },

@@ -124,7 +124,7 @@ module.exports = {
     // ---- the muster screen ----
     await page.evaluate(() => { combatActive = false; });
     await page.waitForTimeout(700);
-    await page.evaluate(() => { activeContracts = []; currentSlot = 1; pendingDifficulty = 1.0; beginExpedition(); });
+    await page.evaluate(() => { activeContracts = []; currentSlot = 1; pendingDifficulty = 1.0; mastery = {}; beginExpedition(); });
     await page.waitForTimeout(300);
     const screen = await page.evaluate(() => ({
       shown: getComputedStyle(document.getElementById('screen-muster')).display,
@@ -178,9 +178,9 @@ module.exports = {
     // ---- deploy guards ----
     const guards = await page.evaluate(() => {
       playerRoster.forEach(c => { c.gridPos = 0; });
-      renderMuster();
+      mastery = {}; renderMuster();
       const emptyBlocked = document.getElementById('muster-deploy').disabled;
-      playerRoster[0].gridPos = 1; renderMuster();
+      playerRoster[0].gridPos = 1; mastery = {}; renderMuster();
       musterDeploy();
       return { emptyBlocked, onMap: getComputedStyle(document.getElementById('screen-map')).display };
     });
@@ -189,7 +189,7 @@ module.exports = {
 
     // Short Handed keeps its rules on the muster too.
     const short = await page.evaluate(() => {
-      activeContracts = ['SHORT_HANDED']; pendingDifficulty = 1.0; beginExpedition();
+      activeContracts = ['SHORT_HANDED']; pendingDifficulty = 1.0; mastery = {}; beginExpedition();
       const deployed = playerRoster.filter(c => c.gridPos > 0).length;
       const backEmpty = !playerRoster.some(c => c.gridPos === 3);
       // cycling can never land on rank 3

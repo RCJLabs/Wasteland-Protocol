@@ -69,7 +69,8 @@ module.exports = {
 
     // ---- reach comes from the ability table, so there is no second list to drift ----
     const table = await page.evaluate(() => {
-      const declared = Object.values(ABILITIES).flat();
+      // Declared abilities now span two tables: the classic decks and the mastered fourths.
+      const declared = [...Object.values(ABILITIES).flat(), ...Object.values(FOURTH_ABILITIES)];
       return { total: declared.length,
                unset: declared.filter(a => !a.reach).map(a => a.move),
                kinds: [...new Set(declared.map(a => a.reach))].sort(),
@@ -81,7 +82,7 @@ module.exports = {
     ok('and only in the three kinds that exist', table.kinds.join() === 'melee,ranged,self');
     ok(`the lookup covers all ${table.total} of them`, table.mapped === table.total);
     ok('the melee weapons are the ones you would expect',
-      table.melee.join() === 'BUCKSHOT,FERAL_BITE,HEAVY_WRENCH,RIP_AND_TEAR,SCRAP_BLADE,SNAP');
+      table.melee.join() === 'BUCKSHOT,FERAL_BITE,HARRY,HEAVY_WRENCH,RIOT_BUTT,RIP_AND_TEAR,SCRAP_BLADE,SHIELD_SLAM,SHIV,SNAP');
     ok('and the helpers agree with the table',
       table.sample.blade && table.sample.pistol && !table.sample.guard);
 
