@@ -591,21 +591,61 @@ const MAP_ROW_H = 96;             // px per tier row in the rendered graph
 const ELITE_TIERS = [5, 6, 7, 8, 9];
 const WEATHER_DOTS = { TOXIC_SMOG: 'wx-smog', SANDSTORM: 'wx-sand', SHRAPNEL_WINDS: 'wx-shrap' };
 
+// ── Ground ──────────────────────────────────────────────────────────────────────────────
+// Every fight was staged on the same rectangle. The backdrops already varied by faction and
+// already meant nothing: a canyon and a refinery floor played identically. Ground bends rules
+// the engine already runs - reach, area attacks, who the enemy can see past your front rank -
+// rather than adding a new system on top of them, and it is forecast on the map like weather
+// so routing around it is a decision made before the node is entered.
+//
+//   reachFree  melee ignores rank and depth penalties entirely
+//   reach      a flat multiplier on every melee swing, however well positioned
+//   ranged     a flat multiplier on every ranged attack, both sides
+//   aoe        a multiplier on anything that lands on more than one body
+//   frontCover whoever stands in the front rank takes less, whichever side they are on
+//   backline   how much harder the enemy leans past your front rank when it picks a target
+const TERRAIN = {
+    OPEN_ROAD:  { name: 'OPEN ROAD', short: 'ROAD', dot: 'tr-road',
+                  desc: 'Cracked asphalt and clear sightlines. Nothing to use, nothing in the way.',
+                  banner: '' },
+    TUNNELS:    { name: 'TUNNELS', short: 'TUNNELS', dot: 'tr-tunnel',
+                  desc: 'A service tunnel two ranks wide. Everything is within arm\u2019s reach, there are no firing lanes, and there is nowhere to be when something goes off.',
+                  reachFree: true, ranged: 0.85, aoe: 1.3,
+                  banner: '\u26CF TUNNELS: melee ignores reach, ranged -15%, area attacks +30% \u26CF' },
+    OPEN_FLATS: { name: 'OPEN FLATS', short: 'FLATS', dot: 'tr-flats',
+                  desc: 'A hundred metres of hardpan. Rifles own it, and anything carrying a blade has to walk it.',
+                  ranged: 1.15, reach: 0.8, backline: 2,
+                  banner: '\u25B3 OPEN FLATS: ranged +15%, melee -20%, your back rank is exposed \u25B3' },
+    RUINS:      { name: 'RUINS', short: 'RUINS', dot: 'tr-ruins',
+                  desc: 'Broken concrete in every direction. The front rank has something to stand behind, a blast has somewhere to stop, and nobody has a clean line at anything.',
+                  frontCover: 0.8, ranged: 0.9, aoe: 0.75,
+                  banner: '\u25A6 RUINS: front rank -20%, ranged -10%, area attacks -25% \u25A6' }
+};
+const TERRAIN_IDS = Object.keys(TERRAIN);
+// Ground is the place rather than an event, so it is commoner than weather's 0.4 - about half
+// the fights in a sector are on something that bends a rule.
+const GROUND_CHANCE = 0.5;
+let currentTerrain = 'OPEN_ROAD'; let forecastTerrain = null;
+// One accessor, so nothing has to remember that an unknown id means "the plain one".
+function ground() { return TERRAIN[currentTerrain] || TERRAIN.OPEN_ROAD; }
+function terrainName(id) { return (TERRAIN[id] || TERRAIN.OPEN_ROAD).name; }
+
+
 let sectorMap = null; let currentNodeId = null; let clearedNodeIds = []; let forecastWeather = null;
 
 // The factions the roads can draw from. These used to be enumerated by hand in five places -
 // the weather forecast, two map validators, the node whitelist and the backdrop switch - so a
 // fourth could not be added without finding all five of them first.
 const FACTIONS = {
-    RAIDERS: { bg: 'bg_highway.webp',  weather: 'SHRAPNEL_WINDS', allies: ['MECH', 'BEASTS'] },
-    BEASTS:  { bg: 'bg_canyon.webp',   weather: 'SANDSTORM',      allies: [] },
-    MECH:    { bg: 'bg_refinery.webp', weather: 'TOXIC_SMOG',     allies: [] },
+    RAIDERS: { bg: 'bg_highway.webp',  weather: 'SHRAPNEL_WINDS', ground: ['OPEN_FLATS', 'RUINS'], allies: ['MECH', 'BEASTS'] },
+    BEASTS:  { bg: 'bg_canyon.webp',   weather: 'SANDSTORM',      ground: ['TUNNELS', 'OPEN_FLATS'], allies: [] },
+    MECH:    { bg: 'bg_refinery.webp', weather: 'TOXIC_SMOG',     ground: ['RUINS', 'TUNNELS'], allies: [] },
     // Irradiated cultists: the first enemies in the game that spend a turn on each other
     // rather than on you. Standing next to one is what makes the rest dangerous.
-    CHOIR:   { bg: 'bg_refinery.webp', weather: 'TOXIC_SMOG',     allies: ['BEASTS'], minSector: 2 },
+    CHOIR:   { bg: 'bg_refinery.webp', weather: 'TOXIC_SMOG',     ground: ['TUNNELS', 'RUINS'], allies: ['BEASTS'], minSector: 2 },
     // A swarm. Each one is trivial and the pile is not, and the answer is to spread damage
     // across it rather than pick them off one at a time.
-    CARRION: { bg: 'bg_canyon.webp',   weather: 'SANDSTORM',      allies: [],         minSector: 2, swarm: 2, heavyCap: 2 }
+    CARRION: { bg: 'bg_canyon.webp',   weather: 'SANDSTORM',      ground: ['TUNNELS', 'RUINS'], allies: [],         minSector: 2, swarm: 2, heavyCap: 2 }
 };
 const FIGHT_NODES = Object.keys(FACTIONS);
 function factionsAt(sector) { return FIGHT_NODES.filter(f => (FACTIONS[f].minSector || 1) <= sector); }
@@ -738,7 +778,7 @@ function generateSectorMap(rng = Math.random) {
         const tierNodes = cols.map(c => ({
             id: `n${t}_${c}`, tier: t, col: c,
             type: t === TOTAL_TIERS ? 'BOSS' : rollNodeFaction(t, rng),
-            elite: false, weather: 'CLEAR', edges: []
+            elite: false, weather: 'CLEAR', terrain: 'OPEN_ROAD', edges: []
         }));
         byTier.push(tierNodes); nodes.push(...tierNodes);
     }
@@ -797,6 +837,13 @@ function generateSectorMap(rng = Math.random) {
             if (currentSector === 1 && n.tier === 1) n.weather = 'CLEAR';
             else if (sectorFront === 'IRRADIATED' && rng() < 0.7) n.weather = 'TOXIC_SMOG';
             else if (rng() < 0.4) n.weather = FACTIONS[n.type].weather;
+        }
+        // Ground follows the place, so a refinery reliably fights like a refinery. The opening
+        // node is plain for the same reason its sky is: nothing new in the first fight. A
+        // commander's arena stays plain too - the commander is the variable there.
+        if (FIGHT_NODES.includes(n.type) && !(currentSector === 1 && n.tier === 1)) {
+            const choices = FACTIONS[n.type].ground || [];
+            if (choices.length && rng() < GROUND_CHANCE) n.terrain = choices[Math.floor(rng() * choices.length)];
         }
     });
 
@@ -865,6 +912,7 @@ function enterNode(id) {
     currentNodeId = node.id;
     if (!clearedNodeIds.includes(node.id)) clearedNodeIds.push(node.id);
     forecastWeather = (FIGHT_NODES.includes(node.type) || node.type === 'BOSS') ? (node.weather || 'CLEAR') : null;
+    forecastTerrain = (FIGHT_NODES.includes(node.type) || node.type === 'BOSS') ? (node.terrain || 'OPEN_ROAD') : null;
     return node;
 }
 const SECTOR_TIER_BONUS = 3;
@@ -1061,7 +1109,8 @@ const CODEX = [
     ] },
     { id: 'RUN', title: 'THE EXPEDITION', body: () => [
         `${TOTAL_TIERS} tiers to a sector, laid out as branching routes. Taking a node commits you to the paths it connects to, and a commander waits at the top.`,
-        'Nodes show their faction and a weather forecast, so route around trouble or into it on purpose.',
+        'Nodes show their faction, a weather forecast and the ground, so route around trouble or into it on purpose.',
+        ...TERRAIN_IDS.filter(k => TERRAIN[k].banner).map(k => `${TERRAIN[k].name} \u2014 ${TERRAIN[k].desc} ${TERRAIN[k].banner.replace(/[^A-Za-z0-9 :,.%+-]/g, '').trim()}`),
         'Two elite fights per sector, at different depths, never forced - there is always another road. An elite drops a relic.',
         'A commander drops a choice of three.',
         `A wipe spends a regroup - ${BASE_REGROUPS} to start, more from the Citadel - and the squad comes back with tuned weapons. Felling a commander refunds one. Out of regroups ends the run and banks the score.`,
@@ -2008,7 +2057,7 @@ function regroupSquad() {
     tuneUpBattles = Math.max(tuneUpBattles, 3);
     currentTier = 1;
     // The sector keeps its map; the squad walks back in at the bottom of it.
-    currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
+    currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null;
     momentum = 0; addMomentum(0);
     combatActive = false; activeEntities = []; turnQueue = []; pendingCombat = null;
     saveGameState();
@@ -2589,13 +2638,14 @@ function buildNewRun(diff) {
     pendingConsequences = []; recentEvents = []; gearStash = []; pendingPerkOffers = [];
     // Nobody out here carries a grudge between expeditions. Every run starts among strangers.
     castState = {}; firedEvents = [];
+    currentTerrain = 'OPEN_ROAD'; forecastTerrain = null;
     activeShop = null; regroupInsured = false; shopRerollPick = false;
     bossSalt = 'w' + Math.floor(Math.random() * 1e9);
     pursuit = null; withdrawArmed = false;
     bonds = {}; bondSavesUsed = new Set();
     playerRoster.forEach(c => { c.weaponMod = null; c.trinket = null; });
     sectorFront = rollFront(seededRng('front:1'), 1); frontBannerPending = true;
-    sectorMap = generateSectorMap(seededRng('map:1')); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
+    sectorMap = generateSectorMap(seededRng('map:1')); currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null;
     odChoices = {}; pendingOverdrive = null; momentumFocus = 0; pressExtra = false;
     const kept = heirloomRelic();
     activeRelics = kept ? [kept] : [];
@@ -2630,6 +2680,7 @@ function continueGame() {
 // damage keeps landing on the live roster objects rather than on detached copies.
 function resumeCombat(c) {
     currentNodeType = c.nodeType; isCurrentNodeElite = c.isElite; currentWeather = c.weather || 'CLEAR';
+    currentTerrain = c.terrain || 'OPEN_ROAD';
     let players = (c.playerIds || []).map(id => playerRoster.find(p => p.id === id)).filter(Boolean);
     activeEntities = [...players, ...(c.enemies || [])];
     turnQueue = (c.queueIds || []).map(id => activeEntities.find(e => e.id === id)).filter(Boolean);
@@ -2646,7 +2697,7 @@ function resumeCombat(c) {
 function buildCombatSnapshot() {
     if (!combatActive || turnQueue.length === 0) return null;
     return {
-        nodeType: currentNodeType, isElite: isCurrentNodeElite, weather: currentWeather, bgFile: combatBgFile,
+        nodeType: currentNodeType, isElite: isCurrentNodeElite, weather: currentWeather, terrain: currentTerrain, bgFile: combatBgFile,
         activeIndex,
         playerIds: activeEntities.filter(e => e.isPlayer).map(e => e.id),
         enemies: activeEntities.filter(e => !e.isPlayer),
@@ -2767,7 +2818,7 @@ function devJump(deltaSector, deltaTier) {
     currentTier = Math.min(TOTAL_TIERS, Math.max(1, currentTier + deltaTier));
     // A jump breaks route continuity on purpose: the whole target tier opens up.
     if (deltaSector !== 0 || !sectorMap) { sectorMap = generateSectorMap(); clearedNodeIds = []; }
-    currentNodeId = null; forecastWeather = null;
+    currentNodeId = null; forecastWeather = null; forecastTerrain = null;
     noteDepth(); saveGameState(); renderDev();
 }
 
@@ -3017,7 +3068,8 @@ function renderMap() {
                   : n.type === 'SHOP' ? `data-action="node-shop"`
                   : `data-action="node-combat" data-type="${n.type}" data-elite="${n.elite ? 1 : 0}"`;
         const wx = WEATHER_DOTS[n.weather] || '';
-        m += `<button class="map-node node-${status} ${cutoff} ${eCls} ${(n.type === 'BOSS' && status === 'active') ? 'boss-node' : ''}" style="left:${MAP_COL_X[n.col]}%; top:${(TOTAL_TIERS - n.tier) * MAP_ROW_H + (MAP_ROW_H - 75) / 2}px" ${status === 'active' ? '' : 'disabled'} ${act} data-node="${n.id}"><span class="node-icon">${icon}</span><span class="node-lbl">${lbl}${n.elite ? ' (ELITE)' : ''}</span>${wx ? `<span class="node-weather ${wx}" title="Forecast: ${n.weather.replace('_', ' ')}"></span>` : ''}</button>`;
+        const gr = (n.terrain && n.terrain !== 'OPEN_ROAD') ? TERRAIN[n.terrain] : null;
+        m += `<button class="map-node node-${status} ${cutoff} ${eCls} ${(n.type === 'BOSS' && status === 'active') ? 'boss-node' : ''}" style="left:${MAP_COL_X[n.col]}%; top:${(TOTAL_TIERS - n.tier) * MAP_ROW_H + (MAP_ROW_H - 75) / 2}px" ${status === 'active' ? '' : 'disabled'} ${act} data-node="${n.id}"><span class="node-icon">${icon}</span><span class="node-lbl">${lbl}${n.elite ? ' (ELITE)' : ''}</span>${wx ? `<span class="node-weather ${wx}" title="Forecast: ${n.weather.replace('_', ' ')}"></span>` : ''}${gr ? `<span class="node-ground ${gr.dot}" title="Ground: ${gr.name} \u2014 ${gr.desc}">${gr.short[0]}</span>` : ''}</button>`;
     });
     m += `</div>`; mapC.innerHTML = m;
     const focusY = (TOTAL_TIERS - currentTier) * MAP_ROW_H - mapC.clientHeight * 0.45;
@@ -3029,7 +3081,7 @@ function advanceSector() {
     pursuit = null;
     currentSector++; currentTier = 1;
     sectorFront = rollFront(seededRng('front:' + currentSector), currentSector); frontBannerPending = true;
-    sectorMap = generateSectorMap(seededRng('map:' + currentSector)); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
+    sectorMap = generateSectorMap(seededRng('map:' + currentSector)); currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null;
     noteDepth(); saveGameState();
     resolveConsequence();
 }
@@ -3613,6 +3665,35 @@ let explaining = null; // index into hitLog of the blow being read
 
 // What a hostile is about to do, priced honestly. Melee and flankers pick their target
 // outright, so those are exact; ranged fire is weighted, so the likeliest mark is named.
+// The forecast and the blow itself each kept this chain by hand, in two different orders -
+// the forecast applied the STATUS cut before the weather, the blow applied it after, and with a
+// floor at every step the board could already promise a number the swing did not deal. Ground
+// would have made that a third copy, so there is one now and both call it.
+//
+// `roll` is the random spread the real swing adds and the forecast cannot know; the forecast
+// passes nothing and reads the floor of the range, which is what a forecast should promise.
+function enemyStrike(enemy, intent, opts = {}) {
+    const g = ground();
+    const type = (intent || {}).type || 'ATTACK';
+    let raw = (enemy.dmgBase + (opts.roll || 0)) * enemyDmgMult(enemy);
+    if (type === 'AOE') raw = enemy.dmgBase * 0.7 * enemyDmgMult(enemy) * (g.aoe || 1);
+    else {
+        if (opts.lockOn) raw *= 2.2;
+        if (type === 'HEAVY') raw *= 1.5;
+        if (opts.intercepted) raw *= opts.interceptMult;
+        if (type === 'STATUS') raw *= 0.3;
+        if (enemy.range === 'ranged') { if (currentWeather === 'SANDSTORM') raw *= 0.75; raw *= (g.ranged || 1); }
+        else raw *= groundReach(1);
+    }
+    if (currentWeather === 'BLOODLUST') raw *= 1.2;
+    return Math.floor(raw);
+}
+// How much of a melee swing the ground lets through, before the attacker's own rank is figured.
+function groundReach(m) {
+    const g = ground();
+    return (g.reachFree ? 1 : m) * (g.reach || 1);
+}
+
 function forecastFor(enemy) {
     if (!enemy || enemy.isPlayer || enemy.hp <= 0 || !combatActive) return null;
     const intent = enemy.intent || { type: 'ATTACK' };
@@ -3621,32 +3702,26 @@ function forecastFor(enemy) {
     if (enemy.burrowed > 0) return { kind: 'BURROW', enemy };
     if (intent.type === 'DEFEND' || intent.type === 'SIG') return { kind: intent.type, enemy };
     const atk = enemy.dmgType || 'phys';
-    let raw = Math.floor(enemy.dmgBase * enemyDmgMult(enemy));
     if (intent.type === 'AOE') {
-        raw = Math.floor(enemy.dmgBase * 0.7 * enemyDmgMult(enemy));
-        if (currentWeather === 'SANDSTORM') raw = Math.floor(raw * 0.75);
-        if (currentWeather === 'BLOODLUST') raw = Math.floor(raw * 1.2);
+        const raw = enemyStrike(enemy, intent);
         return { kind: 'AOE', enemy, hits: live.map(t => ({ target: t, dmg: mitigate(enemy, t, raw, atk, 'BASIC').n })) };
     }
-    if (intent.type === 'HEAVY') raw = Math.floor(raw * 1.5);
-    if (intent.type === 'STATUS') raw = Math.floor(raw * 0.3);
-    if (currentWeather === 'SANDSTORM' && enemy.range === 'ranged') raw = Math.floor(raw * 0.75);
-    if (currentWeather === 'BLOODLUST') raw = Math.floor(raw * 1.2);
     // A sniper with a mark already lined up is not choosing again.
     let mark = enemy.lockOn ? live.find(p => p.id === enemy.lockOn) : null;
-    if (mark) raw = Math.floor(raw * 2.2);
+    const locked = !!mark;
     if (!mark) {
         if (intent.type === 'FLANK') mark = [...live].sort((a, b) => b.gridPos - a.gridPos)[0];
         else if (enemy.range === 'melee') mark = [...live].sort((a, b) => a.gridPos - b.gridPos)[0];
-        else mark = [...live].sort((a, b) => (BACKLINE_WEIGHT[b.gridPos] || 1) - (BACKLINE_WEIGHT[a.gridPos] || 1))[0];
+        else mark = [...live].sort((a, b) => (backlineWeight(b) - backlineWeight(a)))[0];
     }
     // Someone braced in front of the mark eats it instead, softened - same rule the AI uses.
-    let via = null;
+    let via = null; let interceptMult = 1;
     if (['ATTACK', 'HEAVY', 'STATUS', 'FLANK'].includes(intent.type)) {
         const cover = live.find(p => (p.guardTurns || 0) > 0 && p.gridPos < mark.gridPos);
         if (cover) { via = mark; mark = cover;
-            raw = Math.floor(raw * Math.min(hasRelic('BULWARK_PLATING') ? 0.35 : 1, hasTrait(mark, 'BULWARK') ? 0.45 : 0.6)); }
+            interceptMult = Math.min(hasRelic('BULWARK_PLATING') ? 0.35 : 1, hasTrait(mark, 'BULWARK') ? 0.45 : 0.6); }
     }
+    const raw = enemyStrike(enemy, intent, { lockOn: locked, intercepted: !!via, interceptMult });
     return { kind: intent.type, enemy, exact: enemy.range === 'melee' || intent.type === 'FLANK' || !!enemy.lockOn,
              hits: [{ target: mark, dmg: mitigate(enemy, mark, raw, atk, 'BASIC').n, via }] };
 }
@@ -3712,6 +3787,7 @@ const PROMPTS = [
     { id: 'COMBO',     title: 'A COMBO IS LIVE', body: 'That glowing ability finishes a status something is already carrying. Combos hit far harder and build momentum - lead with the status, then cash it in.' },
     { id: 'INTENT',    title: 'THEY TELEGRAPH',  body: 'The icon over each hostile is what it intends to do next turn. A heavy blow, an area attack, a flank around your line - all of it is announced a turn early, so all of it has an answer.' },
     { id: 'SIGNATURE', title: 'EVERY HOSTILE HAS A TRICK', body: 'The tag under a hostile names what it does - plate that must be broken, a shot it is lining up, a pack that grows stronger together. Tap any hostile when you are not aiming to read its full file.' },
+    { id: 'GROUND',    title: 'THE GROUND COUNTS', body: 'This fight is not on open road, and the banner says what that changes. Tunnels put everything in arm\u2019s reach and make area attacks worse for both sides; open flats favour rifles and expose your back rank; ruins give whoever holds the front rank cover. The ground is marked on every node before you take it.' },
     { id: 'FACES',     title: 'THEY REMEMBER YOU', body: 'You have met this one before, and the tag above them says what they made of it. Paying, sparing and trading raise their standing; robbing them lowers it. What they offer next - and what turns up further down the road because of them - follows from that. It lasts one expedition.' },
     { id: 'WITHDRAW',  title: 'YOU CAN LEAVE',   body: 'A fight going badly is not a fight you have to finish. WITHDRAW forfeits this node entirely, wounds everyone on the way out, and the survivors follow you to the next one - but the squad lives. Momentum spent on the way out makes the parting wound lighter.' },
     { id: 'MOMENTUM',  title: 'MOMENTUM IS A MARKET', body: 'Fighting fills the bar. Tactics cost momentum but never cost your action: sharpen the next hit, patch the worst-off operator, or take a second turn on the spot.' },
@@ -4093,9 +4169,9 @@ const FOURTH_ABILITIES = {
     BRUISER:    { move: 'SHIELD_SLAM',     label: 'Shield Slam',            reach: 'melee',  cd: 'shield_slam' },
     MEDIC:      { move: 'STIM_DART',       label: 'Stim Dart (Ally)',       reach: 'ranged', cd: 'stim_dart' },
     SCAVENGER:  { move: 'SHIV',            label: 'Shiv',                   reach: 'melee',  cd: 'shiv' },
-    PYROMANIAC: { move: 'HEAT_WAVE',       label: 'Heat Wave (Two)',        reach: 'ranged', cd: 'heat_wave' },
+    PYROMANIAC: { move: 'HEAT_WAVE',       label: 'Heat Wave (Two)',        reach: 'ranged', cd: 'heat_wave', aoe: true },
     SHOTGUNNER: { move: 'RIOT_BUTT',       label: 'Riot Butt',              reach: 'melee',  cd: 'riot_butt' },
-    SNIPER:     { move: 'PIERCING_VOLLEY', label: 'Piercing Volley (Two)',  reach: 'ranged', cd: 'piercing_volley' },
+    SNIPER:     { move: 'PIERCING_VOLLEY', label: 'Piercing Volley (Two)',  reach: 'ranged', cd: 'piercing_volley', aoe: true },
     HOUND:      { move: 'HARRY',           label: 'Harry (Twice)',          reach: 'melee',  cd: 'harry' }
 };
 // The deck an operator actually brings: the classic three below rank III; at III, four
@@ -4111,6 +4187,11 @@ function deckFor(char) {
 
 const MOVE_REACH = Object.fromEntries(
     [...Object.values(ABILITIES).flat(), ...Object.values(FOURTH_ABILITIES)].map(a => [a.move, a.reach]));
+// Which abilities land on more than one body, read off the same declarations - so the ground
+// rule and the second hit can never disagree about what counts as an area attack.
+const MOVE_AOE = Object.fromEntries(
+    [...Object.values(ABILITIES).flat(), ...Object.values(FOURTH_ABILITIES)].map(a => [a.move, !!a.aoe]));
+function isAoe(move) { return !!MOVE_AOE[move]; }
 
 // Every ability an entity can be standing behind, in one place, so nothing needs a second list.
 function isMelee(move) { return MOVE_REACH[move] === 'melee'; }
@@ -4120,7 +4201,8 @@ function reachMult(move, attacker, dist) {
     if (!isMelee(move)) return 1;
     let m = REACH_PENALTY[attacker.gridPos] || 1;
     if (dist >= FRONT_RANKS) m *= DEPTH_PENALTY;
-    return m;
+    // A tunnel puts everything in arm's reach; open flats make every swing a walk.
+    return groundReach(m);
 }
 
 // Two separate things cost a melee swing damage, and they are surfaced separately: the attacker's
@@ -4213,6 +4295,15 @@ function applyCombatScenery(bgFile, bannerText) {
     wBanner.className = w ? w[0] : '';
     wBanner.innerText = text;
     wBanner.style.display = text ? 'block' : 'none';
+    // The ground gets its own line rather than sharing the sky's: both can be true at once, and
+    // a fight in a tunnel under a smog bank should say so twice.
+    const gBanner = document.getElementById('ground-banner');
+    if (gBanner) {
+        const g = ground();
+        gBanner.className = g.dot || '';
+        gBanner.innerText = g.banner || '';
+        gBanner.style.display = g.banner ? 'block' : 'none';
+    }
 }
 
 function initiateCombat(nodeType, isEliteNode) {
@@ -4233,6 +4324,8 @@ function initiateCombat(nodeType, isEliteNode) {
     // A fight entered from the map keeps the promise its node made; a fight staged directly
     // (dev tools, suites) still rolls as before.
     if (forecastWeather) { currentWeather = forecastWeather; forecastWeather = null; }
+    currentTerrain = forecastTerrain || 'OPEN_ROAD'; forecastTerrain = null;
+    if (currentTerrain !== 'OPEN_ROAD') firePrompt('GROUND');
     if (hasContract('HARSH_SKIES') && currentWeather === 'CLEAR') {
         currentWeather = ['TOXIC_SMOG', 'SANDSTORM', 'SHRAPNEL_WINDS'][Math.floor(Math.random() * 3)];
     }
@@ -4884,12 +4977,14 @@ function resolveAction(targetId) {
             const oiled = Math.min(3, livingEnemies.filter(e => (e.oiledTurns || 0) > 0).length);
             dmgMult *= 1 + oiled * 0.1;
         }
-        // Where the two of them are standing, before anything else is figured in.
+        // Where the two of them are standing, and what they are standing on. This used to keep
+        // its own copy of the rank arithmetic; it reads the same one the deck and the forecast
+        // do, so ground cannot apply to the button's estimate and not to the swing.
         const effReach = moveReachFor(pendingAction, actEnt);
         const reach = effReach === 'melee'
-            ? (REACH_PENALTY[actEnt.gridPos] || 1) * (dist >= FRONT_RANKS ? DEPTH_PENALTY : 1)
+            ? groundReach((REACH_PENALTY[actEnt.gridPos] || 1) * (dist >= FRONT_RANKS ? DEPTH_PENALTY : 1))
             : 1;
-        if (reach < 1) { dmgMult *= reach; log(`> ${actEnt.name} is reaching (${Math.round(reach * 100)}% DMG).`, "log-status"); }
+        if (reach !== 1) { dmgMult *= reach; if (reach < 1) log(`> ${actEnt.name} is reaching (${Math.round(reach * 100)}% DMG).`, "log-status"); }
         snap('reach');
 
         // The combo multiplies whatever the ability was already worth. It has to come after every
@@ -4923,8 +5018,12 @@ function resolveAction(targetId) {
         snap('relics & curses');
         if (currentWeather === 'SANDSTORM' && moveReachFor(pendingAction, actEnt) === 'ranged') { dmgMult *= 0.75; }
         if (currentWeather === 'BLOODLUST') { dmgMult *= 1.2; }
-        
+
         snap('weather');
+        // The melee half of the ground was already folded into reach above; this is the rest.
+        if (moveReachFor(pendingAction, actEnt) === 'ranged') dmgMult *= (ground().ranged || 1);
+        if (isAoe(pendingAction)) dmgMult *= (ground().aoe || 1);
+        snap('ground');
         playSFX(voiceFor(pendingAction));
         playAttackAnim(actEnt, target, pendingAction);
         if (isCombo) {
@@ -4993,7 +5092,7 @@ function resolveAction(targetId) {
         }
         // The mastered verbs' second halves: the wave and the volley carry through, the
         // harry bites twice, and the slam leaves the Bruiser plated behind it.
-        if (pendingAction === 'HEAT_WAVE' || pendingAction === 'PIERCING_VOLLEY') {
+        if (isAoe(pendingAction)) {
             const behind = livingEnemies[dist + 1];
             if (behind && behind.hp > 0) applyDamageHit(actEnt, behind, Math.floor(baseDmg * dmgMult * (pendingAction === 'HEAT_WAVE' ? 0.9 : 0.6)), atkType, null);
         }
@@ -5022,6 +5121,8 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     if (hasRelic('LEAD_LINED_COAT') && t.isPlayer) cd = Math.floor(cd * 0.8);
     if (hasRelic('CHEM_ETCHER') && !t.isPlayer && (t.corrodedTurns || 0) > 0) cd = Math.floor(cd * 1.25);
     if (hasQuirk(t, 'THICK_HIDE')) cd = Math.max(1, cd - 3);
+    // Ruins are cover for whoever is standing in them, and the front rank is where the cover is.
+    if (t.gridPos === 1 && ground().frontCover) cd = Math.max(1, Math.floor(cd * ground().frontCover));
     // Every dose the Vatborn takes is another split seam: it hits harder and it takes more.
     if (t.venomStacks > 0) cd = Math.floor(cd * (1 + (t.venom ? t.venom.taken : 0.12) * t.venomStacks));
     // Teeming: a Carrion is only hard to kill while the rest of the pile is standing. Picking
@@ -5157,6 +5258,11 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
 // a front rank protected nobody and standing a sniper at the back was free. It now leans on the
 // back line, where the fragile units are - and a flank ignores the ranks entirely.
 const BACKLINE_WEIGHT = { 1: 1, 2: 3, 3: 5 };
+// Open ground lets a shooter see past your front rank; the weighting is where that lands.
+function backlineWeight(ent) {
+    const w = BACKLINE_WEIGHT[ent.gridPos] || 1;
+    return ent.gridPos > 1 ? w * (ground().backline || 1) : w;
+}
 
 function pickTarget(enemy, candidates, intent) {
     if (candidates.length === 0) return null;
@@ -5167,7 +5273,7 @@ function pickTarget(enemy, candidates, intent) {
         return [...candidates].sort((a, b) => a.gridPos - b.gridPos)[0];
     }
     const weighted = [];
-    candidates.forEach(t => { const w = BACKLINE_WEIGHT[t.gridPos] || 1; for (let i = 0; i < w; i++) weighted.push(t); });
+    candidates.forEach(t => { const w = Math.round(backlineWeight(t)); for (let i = 0; i < w; i++) weighted.push(t); });
     return weighted[Math.floor(Math.random() * weighted.length)];
 }
 
@@ -5453,9 +5559,7 @@ function executeEnemyAi(enemy) {
 
     if (intent.type === 'AOE') {
         playSFX('blast'); triggerShake(); log(`> ${enemy.name} unleashed an area attack!`, "log-dmg");
-        let rawDmg = Math.floor(enemy.dmgBase * 0.7 * enemyDmgMult(enemy)); 
-        if (currentWeather === 'SANDSTORM') rawDmg = Math.floor(rawDmg * 0.75);
-        if (currentWeather === 'BLOODLUST') rawDmg = Math.floor(rawDmg * 1.2);
+        const rawDmg = enemyStrike(enemy, intent);
         validTargets.forEach(targ => { applyDamageHit(enemy, targ, rawDmg, enemy.dmgType || 'phys', 'BASIC'); });
         enemy.intent = rollIntent(enemy); checkWinState(); return;
     }
@@ -5464,33 +5568,28 @@ function executeEnemyAi(enemy) {
         playSFX(enemy.classType === 'BEAST' || enemy.classType === 'MUTANT' ? 'beast'
               : enemy.range === 'ranged' ? 'rifle' : 'blade');
         playAttackAnim(enemy, target, null);
-        let t = enemy.dmgType || 'phys'; 
-        let rawDmg = enemy.dmgBase + Math.floor(Math.random() * 5);
-        rawDmg = Math.floor(rawDmg * enemyDmgMult(enemy));
+        let t = enemy.dmgType || 'phys';
+        const roll = Math.floor(Math.random() * 5);
 
         // The ranged shot comes due: if the marked operator still stands, this one hurts.
+        let locked = false;
         if (enemy.lockOn) {
             const mark = validTargets.find(p => p.id === enemy.lockOn);
             enemy.lockOn = null;
             if (mark) {
-                target = mark; intercepted = null;
-                rawDmg = Math.floor(rawDmg * 2.2);
+                target = mark; intercepted = null; locked = true;
                 log(`> ${enemy.name} takes the shot it lined up.`, 'log-dmg');
                 triggerShake();
             }
         }
-
-        if (intent.type === 'HEAVY') { rawDmg = Math.floor(rawDmg * 1.5); triggerShake(); }
+        if (intent.type === 'HEAVY') triggerShake();
+        let interceptMult = 1;
         if (intercepted) {
-            rawDmg = Math.floor(rawDmg * Math.min(hasRelic('BULWARK_PLATING') ? 0.35 : 1, hasTrait(target, 'BULWARK') ? 0.45 : 0.6));
+            interceptMult = Math.min(hasRelic('BULWARK_PLATING') ? 0.35 : 1, hasTrait(target, 'BULWARK') ? 0.45 : 0.6);
             log(`> ${target.name} steps in front of ${intercepted.name}.`, "log-status");
             spawnFCT(target.id, "COVERED", "fct-heal");
         }
-
-        if (currentWeather === 'SANDSTORM' && enemy.range === 'ranged') rawDmg = Math.floor(rawDmg * 0.75);
-        if (currentWeather === 'BLOODLUST') rawDmg = Math.floor(rawDmg * 1.2);
-
-        if (intent.type === 'STATUS') { rawDmg = Math.floor(rawDmg * 0.3); }
+        const rawDmg = enemyStrike(enemy, intent, { roll, lockOn: locked, intercepted: !!intercepted, interceptMult });
 
         applyDamageHit(enemy, target, rawDmg, t, 'BASIC');
 
@@ -5628,7 +5727,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
@@ -5693,6 +5792,8 @@ globalThis.WP = {
     get activeEvent() { return activeEvent; }, set activeEvent(v) { activeEvent = v; },
     get pendingConsequences() { return pendingConsequences; }, set pendingConsequences(v) { pendingConsequences = v; },
     get recentEvents() { return recentEvents; }, set recentEvents(v) { recentEvents = v; },
+    get currentTerrain() { return currentTerrain; }, set currentTerrain(v) { currentTerrain = v; },
+    get forecastTerrain() { return forecastTerrain; }, set forecastTerrain(v) { forecastTerrain = v; },
     get castState() { return castState; }, set castState(v) { castState = v; },
     get firedEvents() { return firedEvents; }, set firedEvents(v) { firedEvents = v; },
     get activeChoices() { return activeChoices; }, set activeChoices(v) { activeChoices = v; },

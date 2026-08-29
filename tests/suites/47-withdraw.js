@@ -129,26 +129,36 @@ module.exports = {
     const chase = await page.evaluate(() => {
       __stage({ momentum: 0 });
       const foes = activeEntities.filter(e => !e.isPlayer && e.hp > 0);
-      // Wound one, so it can be checked that they arrive carrying it.
-      foes[0].hp = Math.floor(foes[0].maxHp * 0.4);
-      const marked = { name: foes[0].name, hp: foes[0].hp };
+      // Wound all of them, differently, and check the whole chase rather than one enemy: the
+      // chase takes the toughest three, so wounding an arbitrary one and hoping it is chased
+      // passes or fails on how many hostiles the fight happened to roll.
+      foes.forEach((f, i) => { f.hp = Math.max(1, Math.floor(f.maxHp * (0.3 + i * 0.13))); });
+      const left = Object.fromEntries(foes.map(f => [f.id, f.hp]));
       withdraw(); withdraw();
       const waiting = pursuit ? pursuit.units.length : 0;
       const capped = waiting <= WITHDRAW.pursuers;
-      // The next fight inherits them, on top of its own.
+      // Captured at the health the squad left them at, every one of them.
+      const captured = (pursuit ? pursuit.units : []).every(u => left[u.id] === u.hp);
+      const owed = (pursuit ? pursuit.units : []).map(u => u.hp).sort((a, b) => a - b).join();
+      // The next fight inherits them, on top of its own. Under a clear sky on purpose: the
+      // arriving chase takes its own first turn, and shrapnel landing on it is the weather
+      // working, not the chase arriving wrong.
       const plain = generateEnemies('RAIDERS', 1, false, 1).length;
+      forecastWeather = 'CLEAR';
       initiateCombat('RAIDERS', false);
       const chasers = activeEntities.filter(e => e.id.startsWith('chase_'));
-      const woundedArrival = chasers.some(c => c.name === marked.name && c.hp === marked.hp);
+      const arrived = chasers.map(c => c.hp).sort((a, b) => a - b).join();
+      const woundedArrival = captured && owed.length > 0 && owed === arrived;
       const cleared = pursuit === null;
       const total = activeEntities.filter(e => !e.isPlayer).length;
       combatActive = false;
-      return { waiting, capped, chasers: chasers.length, woundedArrival, cleared, total, plain };
+      return { waiting, capped, chasers: chasers.length, woundedArrival, cleared, total, plain, owed, arrived };
     });
     ok(`the survivors follow (${chase.waiting} of them)`, chase.waiting > 0 && chase.capped);
     ok(`and are waiting at the next fight, on top of its own (${chase.total} against about ${chase.plain})`,
       chase.chasers === chase.waiting && chase.total > chase.plain);
-    ok('carrying the wounds the squad already put on them', chase.woundedArrival);
+    ok(`carrying the wounds the squad already put on them (${chase.owed} left, ${chase.arrived} arrived)`,
+      chase.woundedArrival);
     ok('and they are spent on arrival, so running twice does not stack a mob', chase.cleared);
 
     // ---- the chase does not outlive the sector, or the run ----

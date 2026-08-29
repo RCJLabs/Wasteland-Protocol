@@ -183,6 +183,11 @@ module.exports = {
         return Math.round(b.bottom - h.bottom);
       };
       const frame = () => new Promise(r => requestAnimationFrame(() => r()));
+      // Settling on two matching frames is not enough on its own: an undecoded sprite has a
+      // stable wrong height for several frames running, and the loop below happily agrees with
+      // itself before the image arrives and moves everything. Wait for the pixels first.
+      await Promise.all([...document.querySelectorAll('img.portrait')]
+        .map(img => (img.decode ? img.decode() : Promise.resolve()).catch(() => {})));
       let prev = read();
       for (let i = 0; i < 12; i++) {
         await frame(); await frame();

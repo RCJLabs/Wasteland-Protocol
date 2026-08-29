@@ -152,6 +152,16 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .runover-line { display: flex; justify-content: space-between; }
 .runover-line span:last-child { color: #ccc; font-weight: bold; }
 #weather-banner { text-align: center; font-size: 11px; font-weight: bold; padding: 4px; letter-spacing: 1px; display: none; text-shadow: 1px 1px 2px #000; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+/* The ground reads quieter than the sky: weather is an event happening to the fight, ground is
+   the fight's own floor. Each terrain keeps one colour across the map dot and this line. */
+#ground-banner { text-align: center; font-size: 10px; font-weight: bold; padding: 3px; letter-spacing: 1px; display: none; text-shadow: 1px 1px 2px #000; border-top: 1px solid rgba(0,0,0,0.5); }
+.tr-tunnel { background: #2a1f14; color: #c9a227; }
+.tr-flats  { background: #1d2430; color: #8fb6d6; }
+.tr-ruins  { background: #23241f; color: #a8b09a; }
+/* On the map it is a single lettered chip beside the weather dot, so the two never merge into
+   one indistinguishable mark. */
+.node-ground { position: absolute; right: 3px; bottom: 3px; width: 13px; height: 13px; line-height: 13px;
+  font-size: 9px; font-weight: bold; text-align: center; border: 1px solid rgba(0,0,0,0.6); }
 .weather-smog { background: rgba(40, 60, 10, 0.8); color: #aaffaa; display: block !important; border-bottom: 1px solid #6B8E23; }
 .weather-sand { background: rgba(80, 50, 10, 0.8); color: #ffcc66; display: block !important; border-bottom: 1px solid #B8860B; }
 .weather-shrap { background: rgba(40, 40, 40, 0.8); color: #cccccc; display: block !important; border-bottom: 1px solid #888; }
