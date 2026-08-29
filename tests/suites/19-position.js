@@ -10,9 +10,9 @@ module.exports = {
     // A hero, and four indestructible dummies deep enough to have a back rank of their own.
     await page.evaluate(() => {
       window.__line = (classType, pos, foeCount = 4) => {
-        currentSlot = 1; confirmNewGame(1.0); initiateCombat('RAIDERS', false);
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null; initiateCombat('RAIDERS', false);
         const hero = playerRoster.find(h => h.classType === classType);
-        hero.gridPos = pos; hero.maxHp = 9999; hero.hp = 9999; hero.dmgBase = 100; hero.stunnedTurns = 0; hero.quirk = null;
+        hero.gridPos = pos; hero.maxHp = 9999; hero.hp = 9999; hero.dmgBase = 100; hero.stunnedTurns = 0; hero.quirk = null; sectorFront = null;
         Object.keys(hero.cooldowns).forEach(k => hero.cooldowns[k] = 0);
         const foes = [];
         for (let i = 0; i < foeCount; i++) {
@@ -110,7 +110,7 @@ module.exports = {
 
     // ---- enemies read the formation ----
     const who = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       playerRoster.forEach((h, i) => { h.gridPos = i < 3 ? i + 1 : 0; h.hp = h.maxHp; });
       initiateCombat('RAIDERS', false);
       const squad = activeEntities.filter(e => e.isPlayer);
@@ -147,7 +147,7 @@ module.exports = {
     // ---- a braced front rank is what answers a flank ----
     const cover = await page.evaluate(() => {
       const run = (braced) => {
-        currentSlot = 1; confirmNewGame(1.0);
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
         playerRoster.forEach((h, i) => { h.gridPos = i < 3 ? i + 1 : 0; h.maxHp = 900; h.hp = 900; h.guardTurns = 0; });
         initiateCombat('RAIDERS', false);
         const squad = activeEntities.filter(e => e.isPlayer);
@@ -185,7 +185,7 @@ module.exports = {
 
     // ---- and the squad can change formation once the shooting has started ----
     const swap = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       playerRoster.forEach((h, i) => { h.gridPos = i < 3 ? i + 1 : 0; h.hp = h.maxHp; });
       initiateCombat('RAIDERS', false);
       const squad = activeEntities.filter(e => e.isPlayer);
@@ -211,7 +211,7 @@ module.exports = {
 
     // A unit cannot reposition with itself, or with a body.
     const refuse = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       playerRoster.forEach((h, i) => { h.gridPos = i < 3 ? i + 1 : 0; h.hp = h.maxHp; });
       initiateCombat('RAIDERS', false);
       const squad = activeEntities.filter(e => e.isPlayer);
@@ -276,7 +276,7 @@ module.exports = {
     await page.evaluate(() => { combatActive = false; });
     await page.waitForTimeout(900);
     const live = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       playerRoster.forEach((h, i) => { h.gridPos = i < 3 ? i + 1 : 0; h.maxHp = 600; h.hp = 600; });
       initiateCombat('RAIDERS', false);
       let turns = 0;

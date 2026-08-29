@@ -122,7 +122,7 @@ module.exports = {
 
     // Opening it mid-run must not disturb the run.
     const midRun = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       currentSector = 2; currentTier = 5; scrap = 321;
       const before = { sector: currentSector, tier: currentTier, scrap, roster: playerRoster.map(p => p.hp) };
       renderCodex();

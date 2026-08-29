@@ -23,7 +23,7 @@ module.exports = {
 
     // ---- each spawns with its own shape ----
     const built = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const out = {};
       for (const s of [1, 2, 3]) {
         currentSector = s; currentTier = 8;
@@ -45,7 +45,7 @@ module.exports = {
       built.COLOSSUS.passive === 'PLATING' && built.MATRIARCH.passive === 'FEAST' && !built.WARLORD.passive);
 
     // ---- their art loads ----
-    await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); currentSector = 2; currentTier = 6; initiateCombat('BOSS', false); });
+    await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 2; currentTier = 6; initiateCombat('BOSS', false); });
     await page.waitForTimeout(900);
     ok('boss art renders', await page.evaluate(() =>
       [...document.querySelectorAll('#enemy-team .portrait')].every(i => i.complete && i.naturalWidth > 0)));
@@ -54,7 +54,7 @@ module.exports = {
     // ---- breaking each one past half does something different ----
     const enrage = async (sector) => {
       await page.evaluate((se) => {
-        currentSlot = 1; confirmNewGame(1.0); currentSector = se; currentTier = 6;
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = se; currentTier = 6;
         playerRoster.forEach(c => { if (c.gridPos > 0) { c.maxHp = 5000; c.hp = 5000; c.bleedingTurns = 0; } });
         initiateCombat('BOSS', false);
         const boss = activeEntities.find(e => e.id === 'b1');
@@ -89,7 +89,7 @@ module.exports = {
 
     // ---- passives ----
     const plating = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0); currentSector = 2; currentTier = 5; initiateCombat('BOSS', false);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 2; currentTier = 5; initiateCombat('BOSS', false);
       const boss = activeEntities.find(e => e.id === 'b1');
       boss.armor = 10;
       applyTurnStartEffects(boss); const one = boss.armor;
@@ -100,7 +100,7 @@ module.exports = {
     ok('but not without limit', plating.capped === plating.cap);
 
     const feast = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0); currentSector = 3; currentTier = 5; initiateCombat('BOSS', false);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 3; currentTier = 5; initiateCombat('BOSS', false);
       const boss = activeEntities.find(e => e.id === 'b1');
       boss.hp = Math.floor(boss.maxHp / 2);
       const before = boss.hp;
@@ -113,7 +113,7 @@ module.exports = {
 
     // ---- an armoured unit keeps its innate plating after bracing ----
     const armour = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0); currentSector = 2; currentTier = 8;
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 2; currentTier = 8;
       const squad = generateEnemies('MECH', 2, false, 2);
       const t = squad.find(e => e.baseArmor > 0) || squad[0];
       const innate = t.baseArmor;
@@ -133,7 +133,7 @@ module.exports = {
       await page.evaluate(() => { combatActive = false; });
       await page.waitForTimeout(900);
       await page.evaluate((se) => {
-        currentSlot = 1; confirmNewGame(1.0); currentSector = se; currentTier = 8;
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = se; currentTier = 8;
         playerRoster.forEach(c => { if (c.gridPos > 0) { c.maxHp = 400; c.hp = 400; } });
         initiateCombat('BOSS', false);
       }, sector);
@@ -205,7 +205,7 @@ module.exports = {
 
     // resuming a saved boss fight restores its arena rather than a default one
     await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0); currentSector = 3; currentTier = 8;
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 3; currentTier = 8;
       initiateCombat('BOSS', false); saveGameState();
     });
     await page.reload();
@@ -221,7 +221,7 @@ module.exports = {
 
     // ---- the map says who is waiting ----
     const label = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0); currentSector = 2; renderMap();
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 2; renderMap();
       const node = [...document.querySelectorAll('.map-node')].find(n => /💀/.test(n.innerText));
       return node ? node.innerText.replace(/\s+/g, ' ').trim() : '';
     });

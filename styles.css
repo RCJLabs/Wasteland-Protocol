@@ -404,6 +404,20 @@ button.reach-short { border-color: #7a5a20; }
 .muster-reroll { font-size: 12px; padding: 5px; border-color: #7a5c14; color: #d9a93d; }
 .muster-note { flex-shrink: 0; font-size: 10px; line-height: 1.5; color: #8a8578; margin: 10px 0; }
 
+/* The sector front: a badge that rides the map header, and a splash on sector entry. */
+#front-badge { display: flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0;
+    border: 1px solid #6b3a3a; background: #140808; color: #c96a5a; font-size: 11px;
+    letter-spacing: 2px; padding: 5px 8px; }
+.front-icon { font-size: 12px; }
+#front-banner { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%);
+    z-index: 40; pointer-events: none; opacity: 0; text-align: center;
+    background: rgba(10, 4, 4, 0.92); border: 2px solid #8B0000; padding: 18px 26px; }
+.front-banner-name { color: #ff6a4a; font-size: 20px; font-weight: bold; letter-spacing: 3px; }
+.front-banner-desc { color: #b9a68a; font-size: 11px; margin-top: 8px; max-width: 260px; line-height: 1.5; }
+@keyframes frontBanner { 0% { opacity: 0; transform: translate(-50%, -60%); }
+    12% { opacity: 1; transform: translate(-50%, -50%); } 80% { opacity: 1; } 100% { opacity: 0; } }
+.front-banner-show { animation: frontBanner 3.2s ease-out forwards; }
+
 /* The tie between two operators, on the roster card. */
 .bond-line { font-size: 9px; color: #7ab0d0; text-transform: uppercase; margin-top: 2px; }
 

@@ -31,13 +31,14 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
                  wipes: 0, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0,
-                 maxBond: 0, bondSaves: 0,
+                 maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1 };
 
   activeContracts = [...contracts];
   currentSlot = 1;
   confirmNewGame(difficulty);
   stat.contractMult = runStats.contractMult;
+  stat.frontsSeen.push(sectorFront);
 
   // The template deploys the same three operators every time, so a sim that leaves the formation
   // alone measures three classes and reports the other four as dead content. A player rotates the
@@ -181,6 +182,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
   while (stat.nodes < capNodes) {
     if (currentTier > TOTAL_TIERS) {
       currentSector++; currentTier = 1; noteDepth();
+      sectorFront = rollFront(); frontBannerPending = false;
+      stat.frontsSeen.push(sectorFront);
       sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = [];
       // consequences that came due
       const due = consequencesDue().length;
@@ -364,6 +367,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   line('armories visited per run', `${mean(nums('shops')).toFixed(1)} (${Math.round(mean(nums('shopScrap')))} scrap spent)`);
   line('deepest bond per run', `${mean(nums('maxBond')).toFixed(1)} fights (${mean(nums('bondSaves')).toFixed(1)} step-ins)`);
+  const fronts = {};
+  results.forEach(r => (r.frontsSeen || []).forEach(f => { if (f) fronts[f] = (fronts[f] || 0) + 1; }));
+  line('fronts weathered', Object.entries(fronts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ') || 'none');
   line('items crafted per run', (results.reduce((a, r) => a + r.crafted, 0) / n).toFixed(1));
 
   console.log('\n── RELICS ' + '─'.repeat(48));

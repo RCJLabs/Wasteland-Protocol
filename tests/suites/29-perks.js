@@ -26,7 +26,7 @@ module.exports = {
 
     // ---- a level-up queues an offer ----
     const levelled = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       pendingPerkOffers = [];
       const ch = playerRoster[0];
       ch.xp = 0; ch.level = 1; ch.xpToNext = 100; ch.perkPoints = 0;
@@ -121,10 +121,10 @@ module.exports = {
     // ---- the signatures do what they say ----
     await page.evaluate(() => {
       window.__perkFight = (cls, traitId, setup) => {
-        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); initiateCombat('RAIDERS', false);
+        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null; initiateCombat('RAIDERS', false);
         const hero = playerRoster.find(h => h.classType === cls);
         hero.gridPos = 1; hero.maxHp = 1000; hero.hp = 1000; hero.dmgBase = 100;
-        hero.quirk = null; hero.weaponMod = null; hero.trinket = null; hero.stunnedTurns = 0;
+        hero.quirk = null; hero.weaponMod = null; hero.trinket = null; hero.stunnedTurns = 0; sectorFront = null;
         hero.traits = traitId ? [traitId] : [];
         Object.keys(hero.cooldowns).forEach(k => hero.cooldowns[k] = 0);
         const foes = [];
@@ -223,7 +223,7 @@ module.exports = {
     await page.evaluate(() => { combatActive = false; });
     await page.waitForTimeout(700);
     await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const ch = playerRoster[0]; ch.perkPoints = 1;
       pendingPerkOffers = [{ charId: ch.id, options: ['BULWARK', 'VETERAN', 'SWIFT'] }];
       saveGameState();

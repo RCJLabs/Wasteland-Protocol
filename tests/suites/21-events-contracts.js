@@ -26,7 +26,7 @@ module.exports = {
       const failures = [];
       let ran = 0, affordable = 0;
       EVENT_POOL.forEach(ev => ev.choices.forEach((c, i) => {
-        currentSlot = 1; activeContracts = []; confirmNewGame(1.0);
+        currentSlot = 1; activeContracts = []; confirmNewGame(1.0); sectorFront = null;
         scrap = 500; materials = { parts: 5, chems: 5, tech: 5 };
         inventory = ['MED_STIM']; currentSector = 2; pendingConsequences = [];
         try {
@@ -68,7 +68,7 @@ module.exports = {
     ok('every declared kind is actually reachable from an event', booking.allKindsUsed);
 
     const timing = await page.evaluate(() => {
-      currentSlot = 1; activeContracts = []; confirmNewGame(1.0);
+      currentSlot = 1; activeContracts = []; confirmNewGame(1.0); sectorFront = null;
       currentSector = 1; pendingConsequences = [];
       bookConsequence('DEBT', 2, { amount: 400 });
       const at = s => { currentSector = s; return consequencesDue().length; };
@@ -81,7 +81,7 @@ module.exports = {
 
     const debt = await page.evaluate(() => {
       const run = (purse) => {
-        currentSlot = 1; activeContracts = []; confirmNewGame(1.0);
+        currentSlot = 1; activeContracts = []; confirmNewGame(1.0); sectorFront = null;
         playerRoster.forEach(u => { if (u.gridPos > 0) { u.maxHp = 100; u.hp = 100; } });
         pendingConsequences = []; currentSector = 1;
         bookConsequence('DEBT', 1, { amount: 400 });
@@ -105,7 +105,7 @@ module.exports = {
 
     const others = await page.evaluate(() => {
       const fire = (kind) => {
-        currentSlot = 1; activeContracts = []; confirmNewGame(1.0);
+        currentSlot = 1; activeContracts = []; confirmNewGame(1.0); sectorFront = null;
         playerRoster.forEach(u => { if (u.gridPos > 0) { u.maxHp = 100; u.hp = 60; } });
         scrap = 0; materials = { parts: 0, chems: 0, tech: 0 };
         pendingConsequences = []; currentSector = 2;
@@ -126,7 +126,7 @@ module.exports = {
 
     // A consequence must not evaporate on a reload, or the promise the event made is void.
     await page.evaluate(() => {
-      currentSlot = 1; activeContracts = []; confirmNewGame(1.0);
+      currentSlot = 1; activeContracts = []; confirmNewGame(1.0); sectorFront = null;
       pendingConsequences = []; currentSector = 1;
       bookConsequence('DEBT', 2, { amount: 400 });
       recentEvents = ['THE HOARD', 'MINEFIELD'];
@@ -148,7 +148,7 @@ module.exports = {
 
     // Reaching the sector it is booked against is what fires it.
     const arrival = await page.evaluate(() => {
-      currentSlot = 1; activeContracts = []; confirmNewGame(1.0);
+      currentSlot = 1; activeContracts = []; confirmNewGame(1.0); sectorFront = null;
       pendingConsequences = []; currentSector = 1; currentTier = TOTAL_TIERS + 1; scrap = 1000;
       bookConsequence('DEBT', 1, { amount: 400 });
       advanceSector();
@@ -168,7 +168,7 @@ module.exports = {
     ok('with nothing outstanding', acknowledged.left === 0);
 
     const stacked = await page.evaluate(() => {
-      currentSlot = 1; activeContracts = []; confirmNewGame(1.0);
+      currentSlot = 1; activeContracts = []; confirmNewGame(1.0); sectorFront = null;
       pendingConsequences = []; currentSector = 2; scrap = 2000;
       bookConsequence('DEBT', 0, { amount: 100 });
       bookConsequence('AMBUSH', 0);
@@ -207,7 +207,7 @@ module.exports = {
 
     // Each has to actually change the run, not just the multiplier.
     const effects = await page.evaluate(() => {
-      const run = (ids) => { activeContracts = ids; currentSlot = 1; confirmNewGame(1.0); };
+      const run = (ids) => { activeContracts = ids; currentSlot = 1; confirmNewGame(1.0); sectorFront = null; };
       const out = {};
       run([]);
       out.normal = { bag: inventory.length, deployed: playerRoster.filter(p => p.gridPos > 0).length,
@@ -229,14 +229,14 @@ module.exports = {
 
     // Events hand out items too, so the rule cannot live at the crafting bench alone.
     const dry = await page.evaluate(() => {
-      activeContracts = ['NO_CONSUMABLES']; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = ['NO_CONSUMABLES']; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       scrap = 500; materials = { parts: 9, chems: 9, tech: 9 };
       const offered = EVENT_POOL.flatMap(e => e.choices
         .filter(c => String(c.execute).includes('inventory.push'))
         .map(c => ({ title: e.title, can: c.canAfford() })));
       craftItem('MED_STIM');
       const crafted = inventory.length;
-      activeContracts = []; confirmNewGame(1.0);
+      activeContracts = []; confirmNewGame(1.0); sectorFront = null;
       scrap = 500; materials = { parts: 9, chems: 9, tech: 9 };
       const offeredNormally = EVENT_POOL.flatMap(e => e.choices
         .filter(c => String(c.execute).includes('inventory.push'))
@@ -256,9 +256,9 @@ module.exports = {
 
     const glass = await page.evaluate(() => {
       const tmpl = Object.fromEntries(ROSTER_TEMPLATE.map(t => [t.id, t.maxHp]));
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const normal = playerRoster.map(u => u.maxHp / (tmpl[u.id] + u.quirk.hp));
-      activeContracts = ['GLASS']; confirmNewGame(1.0);
+      activeContracts = ['GLASS']; confirmNewGame(1.0); sectorFront = null;
       const glassed = playerRoster.map(u => u.maxHp / (tmpl[u.id] + u.quirk.hp));
       const full = playerRoster.every(u => u.hp === u.maxHp);
       activeContracts = [];
@@ -270,18 +270,18 @@ module.exports = {
 
     const combat = await page.evaluate(() => {
       const opener = (ids) => {
-        activeContracts = ids; currentSlot = 1; confirmNewGame(1.0);
+        activeContracts = ids; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
         currentSector = 2; currentTier = 4; initiateCombat('RAIDERS', false);
         return turnQueue[activeIndex].isPlayer;
       };
       const weather = (ids) => {
-        activeContracts = ids; currentSlot = 1; confirmNewGame(1.0);
+        activeContracts = ids; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
         let clear = 0;
         for (let i = 0; i < 120; i++) { currentSector = 2; currentTier = 4; initiateCombat('RAIDERS', false); if (currentWeather === 'CLEAR') clear++; }
         return clear;
       };
       const grace = (ids) => {
-        activeContracts = ids; currentSlot = 1; confirmNewGame(1.0);
+        activeContracts = ids; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
         currentSector = 1; currentTier = 1; initiateCombat('RAIDERS', false);
         return currentWeather;
       };
@@ -373,7 +373,7 @@ module.exports = {
 
     // ---- and the run-over screen says what the score was earned under ----
     const over = await page.evaluate(() => {
-      activeContracts = ['GLASS', 'NO_REGROUPS']; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = ['GLASS', 'NO_REGROUPS']; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       runStats = { ...newRunStats(), deepestSector: 3, deepestTier: 4, kills: 20 };
       endRun();
       const text = document.getElementById('runover-lines').innerText;
@@ -385,7 +385,7 @@ module.exports = {
     ok('and what was signed for', /GLASS JAW/.test(over.text) && /NO FALLBACK/.test(over.text));
 
     const plainOver = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       runStats = { ...newRunStats(), deepestSector: 3, deepestTier: 4, kills: 20 };
       endRun();
       return document.getElementById('runover-lines').innerText;

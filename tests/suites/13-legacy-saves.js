@@ -12,7 +12,7 @@ module.exports = {
     // ---- a roster saved before the WebP migration ----
     await page.evaluate(() => {
       localStorage.clear();
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       playerRoster.forEach(c => { c.img = c.img.replace('.webp', '.png'); });
       saveGameState();
     });
@@ -41,7 +41,7 @@ module.exports = {
     // ---- a combat snapshot saved before the migration ----
     await page.evaluate(() => {
       localStorage.clear();
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       initiateCombat('RAIDERS', false);
       saveGameState();
       // rewrite the stored save the way an older build would have left it
@@ -74,7 +74,7 @@ module.exports = {
     // ---- a roster saved with the single-trait field ----
     const traits = await page.evaluate(() => {
       localStorage.clear();
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       saveGameState();
       const raw = JSON.parse(localStorage.getItem(BASE_SAVE_KEY + 1));
       raw.roster.forEach(c => { delete c.traits; c.trait = 'VETERAN'; });

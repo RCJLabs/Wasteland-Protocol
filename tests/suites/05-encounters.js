@@ -7,7 +7,7 @@ module.exports = {
     await page.waitForTimeout(500);
 
     const r = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const sample = (sector, tier, type, n) => {
         currentSector = sector; currentTier = tier;
         const names = new Set(), sizes = new Set(); let mixed = 0;
@@ -35,7 +35,7 @@ module.exports = {
     ok('deep fights mix factions', r.deep.mixed > 0.15);
 
     await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0); currentSector = 2; currentTier = 9;
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 2; currentTier = 9;
       initiateCombat('RAIDERS', false);
     });
     await page.waitForTimeout(400);

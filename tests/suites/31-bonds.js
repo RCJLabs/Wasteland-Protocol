@@ -35,7 +35,7 @@ module.exports = {
 
     // ---- victory records every deployed pair ----
     const recorded = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       playerRoster.forEach((c, i) => { c.gridPos = i < 3 ? i + 1 : 0; });
       const [a, b, c] = playerRoster;
       const bench = playerRoster[3];
@@ -56,7 +56,7 @@ module.exports = {
     // ---- fixture: two operators, a clean enemy ----
     await page.evaluate(() => {
       window.__bondFight = (count) => {
-        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); initiateCombat('RAIDERS', false);
+        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null; initiateCombat('RAIDERS', false);
         const a = playerRoster.find(h => h.classType === 'BRUISER');
         const b = playerRoster.find(h => h.classType === 'MEDIC');
         [a, b].forEach((h, i) => {
@@ -75,7 +75,7 @@ module.exports = {
         }
         activeEntities = [a, b, ...foes]; turnQueue = [a, b, ...foes];
         activeIndex = 0; combatActive = true; pendingAction = null; currentWeather = null; momentumFocus = 0;
-        bonds = {}; bondSavesUsed = new Set();
+        bonds = {}; bondSavesUsed = new Set(); sectorFront = null;
         if (count) bonds[bondKey(a.id, b.id)] = count;
         return { a, b, foes };
       };
@@ -151,7 +151,7 @@ module.exports = {
     // ---- persistence and the fresh start ----
     const persisted = await page.evaluate(() => {
       combatActive = false; activeEntities = [];
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const [a, b] = playerRoster;
       bonds[bondKey(a.id, b.id)] = 7;
       saveGameState();
@@ -164,7 +164,7 @@ module.exports = {
       loadGameState();
       const legacy = Object.keys(bonds).length === 0;
       bonds = { old: 9 };
-      confirmNewGame(1.0);
+      confirmNewGame(1.0); sectorFront = null;
       const fresh = Object.keys(bonds).length === 0;
       return { loaded, legacy, fresh };
     });
@@ -174,7 +174,7 @@ module.exports = {
 
     // ---- the roster card wears the tie ----
     const card = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const a = playerRoster.find(h => h.classType === 'BRUISER');
       const b = playerRoster.find(h => h.classType === 'MEDIC');
       bonds[bondKey(a.id, b.id)] = 4;

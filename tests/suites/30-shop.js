@@ -30,7 +30,7 @@ module.exports = {
 
     // ---- the map draws it as its own destination ----
     const mapUi = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const n = sectorMap.nodes.find(x => x.tier === 2) || sectorMap.nodes[1];
       n.type = 'SHOP'; n.elite = false;
       renderMap();
@@ -42,7 +42,7 @@ module.exports = {
 
     // ---- stock: the audit's five shelves at sector prices ----
     const stock = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const s1 = rollShopStock();
       currentSector = 3;
       const s3 = rollShopStock();
@@ -70,7 +70,7 @@ module.exports = {
 
     // ---- buying, with a pinned shelf ----
     const pinShop = () => page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       activeShop = { nodeId: 'pin', stock: [
         { kind: 'GEAR', id: 'PLATED_VEST', price: 140, sold: false },
         { kind: 'RELIC', id: 'WHETSTONE', price: 240, sold: false },
@@ -153,7 +153,7 @@ module.exports = {
 
     // ---- entering and leaving through the real flow ----
     const flow = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const n = sectorMap.nodes.find(x => x.tier === 1);
       n.type = 'SHOP';
       enterNode(n.id); initiateShop();
@@ -170,7 +170,7 @@ module.exports = {
 
     // ---- a reload mid-haggle resumes the same shelf ----
     await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       activeShop = { nodeId: 'persist', stock: [
         { kind: 'GEAR', id: 'GAS_MASK', price: 140, sold: false },
         { kind: 'STIM', price: 35, sold: true }

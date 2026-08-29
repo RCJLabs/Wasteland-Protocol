@@ -39,7 +39,7 @@ module.exports = {
 
     // ---- the map renders as a graph ----
     const drawn = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       renderMap();
       const nodes = [...document.querySelectorAll('.map-node')];
       const lines = document.querySelectorAll('#map-nodes svg line');
@@ -90,7 +90,7 @@ module.exports = {
     const forecast = await page.evaluate(() => {
       // find a generated map holding a forecast node so the test is deterministic
       for (let i = 0; i < 60; i++) {
-        activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
         currentSector = 2; sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = [];
         const wet = sectorMap.nodes.find(n => n.weather && !['CLEAR', 'BLOODLUST'].includes(n.weather));
         if (!wet) continue;
@@ -126,7 +126,7 @@ module.exports = {
     await page.waitForTimeout(700);
     // The comparison data has to live on this side of the reload - the reload wipes window.
     const before = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const first = sectorMap.nodes.filter(n => n.tier === 1)[1] || sectorMap.nodes.filter(n => n.tier === 1)[0];
       enterNode(first.id); currentTier = 2;
       saveGameState();
@@ -168,7 +168,7 @@ module.exports = {
 
     // ---- a regroup walks back in at the bottom of the same map ----
     const regroup = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const shape = sectorMap.nodes.map(n => n.id + n.type).join();
       const first = sectorMap.nodes.filter(n => n.tier === 1)[0];
       enterNode(first.id); currentTier = 2;
@@ -185,7 +185,7 @@ module.exports = {
 
     // ---- a new sector is a new map ----
     const advanced = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const before = sectorMap.nodes.map(n => n.id + n.type + (n.elite ? 'E' : '')).join();
       currentTier = TOTAL_TIERS + 1;
       renderMap();
@@ -203,7 +203,7 @@ module.exports = {
 
     // ---- a dev jump opens the whole target tier rather than stranding the run ----
     const jumped = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const first = sectorMap.nodes.filter(n => n.tier === 1)[0];
       enterNode(first.id); currentTier = 2;
       devJump(0, 5);
@@ -214,7 +214,7 @@ module.exports = {
 
     // ---- and a full sector is playable end to end through the graph ----
     const walk = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       let steps = 0; const path = [];
       while (currentTier <= TOTAL_TIERS && steps < 30) {
         const open = availableNodeIds();

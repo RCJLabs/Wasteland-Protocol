@@ -17,7 +17,7 @@ module.exports = {
     const setup = await page.evaluate(() => {
       localStorage.clear(); currentSlot = 1; loadMeta();
       bossSkulls = 5; saveMeta();
-      confirmNewGame(1.0);
+      confirmNewGame(1.0); sectorFront = null;
       currentSector = 3; currentTier = 6; scrap = 600; noteDepth(); saveGameState();
       return { regroups: runStats.regroups, slot: !!localStorage.getItem(BASE_SAVE_KEY + 1) };
     });
@@ -84,7 +84,7 @@ module.exports = {
 
     // ---- ending early is a deliberate choice ----
     const early = await page.evaluate(() => {
-      localStorage.clear(); currentSlot = 2; loadMeta(); confirmNewGame(1.0);
+      localStorage.clear(); currentSlot = 2; loadMeta(); confirmNewGame(1.0); sectorFront = null;
       currentSector = 2; noteDepth(); saveGameState();
       initiateCombat('RAIDERS', false);
       playerRoster.forEach(c => c.hp = 0); checkWinState();
@@ -98,7 +98,7 @@ module.exports = {
 
     // ---- an in-flight save from before this change gets regroups ----
     const legacy = await page.evaluate(() => {
-      localStorage.clear(); currentSlot = 3; loadMeta(); confirmNewGame(1.0); saveGameState();
+      localStorage.clear(); currentSlot = 3; loadMeta(); confirmNewGame(1.0); sectorFront = null; saveGameState();
       const raw = JSON.parse(localStorage.getItem(BASE_SAVE_KEY + 3));
       delete raw.runStats.regroups;
       localStorage.setItem(BASE_SAVE_KEY + 3, JSON.stringify(raw));
@@ -111,7 +111,7 @@ module.exports = {
     // Measured before this, squads entered every new sector with their regroups already spent
     // and died holding nothing.
     const refund = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       runStats.regroups = 0;
       currentSector = 1; currentTier = TOTAL_TIERS;
       playerRoster.forEach(c => { if (c.gridPos > 0) { c.maxHp = 9999; c.hp = 9999; } });

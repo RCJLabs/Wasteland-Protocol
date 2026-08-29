@@ -7,7 +7,7 @@ module.exports = {
     await page.waitForTimeout(500);
 
     const bounty = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const beforeType = activeBounties[0].type;
       const beforeDesc = activeBounties[0].desc;
       activeBounties[0].current = activeBounties[0].target - 1;
@@ -28,7 +28,7 @@ module.exports = {
     ok('contracts stay distinct types', new Set(bounty.types).size === 3);
 
     const xp = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0); initiateCombat('RAIDERS', false);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null; initiateCombat('RAIDERS', false);
       const hero = playerRoster.find(p => p.gridPos > 0);
       hero.level = 1; hero.perkPoints = 0; hero.xp = 400; hero.xpToNext = 100;
       activeEntities.filter(e => !e.isPlayer).forEach(e => e.hp = 0);
@@ -40,7 +40,7 @@ module.exports = {
     ok('leftover xp sits below the next threshold', xp.xp < xp.next);
 
     const bench = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0); initiateCombat('RAIDERS', false);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null; initiateCombat('RAIDERS', false);
       const deployed = playerRoster.filter(c => c.gridPos > 0);
       const benched = playerRoster.filter(c => c.gridPos === 0);
       [...deployed, ...benched].forEach(c => { c.xp = 0; c.xpToNext = 100000; });

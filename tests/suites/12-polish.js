@@ -21,7 +21,7 @@ module.exports = {
       !/previousScreen/.test(src) && !/\boutpostTab\b/.test(src));
 
     // settings still open and close correctly without the tracking variable
-    await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); openSettings(); });
+    await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; openSettings(); });
     await page.waitForTimeout(200);
     ok('settings still open', await page.$eval('#screen-settings', e => getComputedStyle(e).display) === 'flex');
     await page.evaluate(() => closeSettings());
@@ -36,7 +36,7 @@ module.exports = {
 
     // a dead squad is told in-game, not through a modal
     await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       playerRoster.forEach(p => { if (p.gridPos > 0) p.hp = 0; });
       initiateCombat('RAIDERS', false);
     });
@@ -73,7 +73,7 @@ module.exports = {
     // ---- 10: containers are written once, and still render correctly ----
     ok('no render loop appends to innerHTML any more', !/innerHTML\s*\+=/.test(src));
     const counts = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0); scrap = 999; renderOutpost();
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null; scrap = 999; renderOutpost();
       return {
         roster: document.getElementById('outpost-roster').children.length,
         cyber: document.getElementById('cybernetics-roster').children.length,

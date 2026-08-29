@@ -9,7 +9,7 @@ module.exports = {
     // ---- a node only fields units that belong there ----
     const HOME = { BEAST: 'BEASTS', MUTANT: 'BEASTS', RAIDER: 'RAIDERS', DRONE: 'MECH', MECH: 'MECH' };
     const mix = await page.evaluate((home) => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const sample = (type, sector, tier, n) => {
         currentSector = sector; currentTier = tier;
         const foreign = [];

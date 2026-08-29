@@ -36,10 +36,10 @@ module.exports = {
     // ---- fixture: a duel with a chosen mod ----
     await page.evaluate(() => {
       window.__gearFight = (cls, gearId, setup) => {
-        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); initiateCombat('RAIDERS', false);
+        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null; initiateCombat('RAIDERS', false);
         const hero = playerRoster.find(h => h.classType === cls);
         hero.gridPos = 1; hero.maxHp = 9999; hero.hp = 9999; hero.dmgBase = 100;
-        hero.quirk = null; hero.stunnedTurns = 0; hero.weaponMod = null; hero.trinket = null;
+        hero.quirk = null; hero.stunnedTurns = 0; hero.weaponMod = null; hero.trinket = null; sectorFront = null;
         Object.keys(hero.cooldowns).forEach(k => hero.cooldowns[k] = 0);
         if (gearId) {
           const g = gearById(gearId);
@@ -164,7 +164,7 @@ module.exports = {
     // ---- trinkets ----
     const trinkets = await page.evaluate(() => {
       // stat trinkets apply and remove cleanly
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const ch = playerRoster[0];
       ch.weaponMod = null; ch.trinket = null;
       const base = { hp: ch.maxHp, spd: ch.speed, dmg: ch.dmgBase, phys: ch.resistances.phys };
@@ -199,7 +199,7 @@ module.exports = {
 
     // ---- equip rules ----
     const rules = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const bruiser = playerRoster.find(c => c.classType === 'BRUISER');
       const sniper = playerRoster.find(c => c.classType === 'SNIPER');
       gearStash = ['JAGGED_EDGE', 'LONG_BARREL', 'IRON_KNUCKLES'];
@@ -218,7 +218,7 @@ module.exports = {
 
     // ---- drops ----
     const drops = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       playerRoster.forEach(c => { if (c.gridPos > 0) { c.maxHp = 9999; c.hp = 9999; } });
       let eliteDrops = 0;
       for (let i = 0; i < 60; i++) {
@@ -246,7 +246,7 @@ module.exports = {
     await page.evaluate(() => { combatActive = false; });
     await page.waitForTimeout(700);
     await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       gearStash = ['JAGGED_EDGE', 'PLATED_VEST', 'LONG_BARREL'];
       activeGearSelector = null; renderOutpost();
     });

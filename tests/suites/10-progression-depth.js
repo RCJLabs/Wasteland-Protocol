@@ -8,7 +8,7 @@ module.exports = {
 
     // ---- 03: perks are repeatable ----
     const perks = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const c = playerRoster[0];
       c.perkPoints = 3; c.traits = []; renderOutpost();
       const offeredAtStart = !!document.querySelector(`[data-action="perk-menu"][data-id="${c.id}"]`);
@@ -27,7 +27,7 @@ module.exports = {
     ok('the tally reads back compactly', /VETERAN x2/.test(perks.summary) && /FORTIFIED/.test(perks.summary));
 
     const stacking = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const c = playerRoster[0];
       c.perkPoints = 10; c.traits = [];
       const dmg0 = c.dmgBase, hp0 = c.maxHp;
@@ -96,7 +96,7 @@ module.exports = {
     ok(`and usual by tier 9 (${(ramp.late * 100).toFixed(0)}%)`, ramp.late > ramp.mid);
 
     // ---- 05: resistances are visible on the unit ----
-    await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); currentSector = 2; currentTier = 6; initiateCombat('MECH', false); });
+    await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 2; currentTier = 6; initiateCombat('MECH', false); });
     await page.waitForTimeout(600);
     const badges = await page.evaluate(() => ({
       rows: document.querySelectorAll('.res-row').length,

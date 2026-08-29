@@ -47,7 +47,7 @@ module.exports = {
     ok('the game boots with no network', offline.title === 'flex' && offline.menu);
     ok('the title art is available offline', offline.art);
 
-    await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); initiateCombat('RAIDERS', false); });
+    await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; initiateCombat('RAIDERS', false); });
     await page.waitForTimeout(700);
     const fight = await page.evaluate(() => ({
       screen: getComputedStyle(document.getElementById('screen-combat')).display,

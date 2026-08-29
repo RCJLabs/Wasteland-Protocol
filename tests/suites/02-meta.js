@@ -8,11 +8,11 @@ module.exports = {
     const r = await page.evaluate(() => {
       currentSlot = 1;
       bossSkulls = 5; metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4 }; saveMeta();
-      confirmNewGame(1.0);
+      confirmNewGame(1.0); sectorFront = null;
       const afterNewGame = bossSkulls;
       buyMetaUpgrade('LEVEL');
       const spent = { skulls: bossSkulls, startLevel: metaUpgrades.startLevel };
-      confirmNewGame(1.0);
+      confirmNewGame(1.0); sectorFront = null;
       return { afterNewGame, spent, skullsNow: bossSkulls,
                heroLevel: playerRoster[0].level, perks: playerRoster[0].perkPoints };
     });

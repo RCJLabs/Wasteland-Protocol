@@ -415,6 +415,8 @@ const WEATHER_DOTS = { TOXIC_SMOG: 'wx-smog', SANDSTORM: 'wx-sand', SHRAPNEL_WIN
 let sectorMap = null; let currentNodeId = null; let clearedNodeIds = []; let forecastWeather = null;
 
 function rollNodeFaction(tier, rng) {
+    const biased = frontFactionBias(tier, rng);
+    if (biased) return biased;
     if (tier < 3) return rng() < 0.55 ? 'RAIDERS' : 'BEASTS';
     const r = rng();
     return r < 0.4 ? 'RAIDERS' : r < 0.7 ? 'BEASTS' : 'MECH';
@@ -424,6 +426,36 @@ function rollNodeFaction(tier, rng) {
 // different depths, never forced (every parent of an elite has another child to offer);
 // at least one camp and one event; every node leads somewhere; every route reaches the
 // commander. The bounty board's 'defeat 2 elites' contract depends on the elite count.
+// ── Sector fronts ───────────────────────────────────────────────────────────────────────
+// Every sector rolls a front: a condition that tilts what the generator builds, what the
+// weather does, what falls as loot, and what the boss brings. "Sector 3 was a blood moon"
+// becomes a sentence a player says about a run.
+const FRONTS = [
+    { id: 'RAIDER_WARBAND',   name: 'Raider Warband',   icon: '☠',
+      desc: 'Raider-heavy roads. Their elites hit a quarter harder; their loot pays double.' },
+    { id: 'MACHINE_UPRISING', name: 'Machine Uprising', icon: '⚙',
+      desc: 'The machines are walking. Mech-heavy roads past the shallows, and tech falls in pairs.' },
+    { id: 'BLOOD_MOON',       name: 'Blood Moon',       icon: '◖',
+      desc: 'Beasts everywhere, and every wound wants to bleed.' },
+    { id: 'IRRADIATED',       name: 'Irradiated',       icon: '☢',
+      desc: 'Smog hangs over most roads, and the boss fights under it. Chems fall in pairs.' },
+    { id: 'QUIET_ROADS',      name: 'Quiet Roads',      icon: '~',
+      desc: 'Fewer fights, more strange encounters, leaner XP - and a boss hoarding double scrap.' }
+];
+let sectorFront = null;        // rolled per sector; null on saves from before fronts existed
+let frontBannerPending = false;
+
+function frontById(id) { return FRONTS.find(f => f.id === id) || null; }
+function currentFront() { return frontById(sectorFront); }
+function rollFront(rng = Math.random) { return FRONTS[Math.floor(rng() * FRONTS.length)].id; }
+// The generation tilt: half of everything on the roads is the front's own faction. The
+// machines stay out of the first two tiers, same as the base table.
+function frontFactionBias(tier, rng) {
+    const bias = { RAIDER_WARBAND: 'RAIDERS', MACHINE_UPRISING: 'MECH', BLOOD_MOON: 'BEASTS' }[sectorFront];
+    if (bias && !(tier < 3 && bias === 'MECH') && rng() < 0.5) return bias;
+    return null;
+}
+
 function generateSectorMap(rng = Math.random) {
     const byTier = [];
     const nodes = [];
@@ -482,12 +514,15 @@ function generateSectorMap(rng = Math.random) {
     // The Armory is uncommon on purpose: a shop on most maps but not all, so finding one on
     // the route ahead is a reason to steer, not a fixture to tick off.
     if (rng() < 0.65) swapOne('SHOP', 3, 9);
+    // Quiet Roads trades two more fights away for strange encounters.
+    if (sectorFront === 'QUIET_ROADS') { swapOne('EVENT', 2, 9); swapOne('EVENT', 2, 9); }
 
     // The forecast is a contract: the weather a node shows is the weather its fight gets.
     nodes.forEach(n => {
         if (n.type === 'BOSS') n.weather = 'BLOODLUST';
         else if (['RAIDERS', 'BEASTS', 'MECH'].includes(n.type)) {
             if (currentSector === 1 && n.tier === 1) n.weather = 'CLEAR';
+            else if (sectorFront === 'IRRADIATED' && rng() < 0.7) n.weather = 'TOXIC_SMOG';
             else if (rng() < 0.4) n.weather = { MECH: 'TOXIC_SMOG', RAIDERS: 'SHRAPNEL_WINDS', BEASTS: 'SANDSTORM' }[n.type];
         }
     });
@@ -693,6 +728,10 @@ const CODEX = [
         'Elites sometimes carry a piece; a commander always does.',
         ...GEAR_POOL.filter(g => g.slot === 'mod').map(g => `${g.name} (${g.cls}) — ${g.desc}`),
         ...GEAR_POOL.filter(g => g.slot === 'trinket').map(g => `${g.name} — ${g.desc}`)
+    ] },
+    { id: 'FRONTS', title: 'SECTOR FRONTS', body: () => [
+        'Every sector rolls a front, announced as you enter and worn on the map header. A front tilts what the roads hold, what the weather does, what falls as loot, and what the boss brings.',
+        ...FRONTS.map(f => `${f.name} — ${f.desc}`)
     ] },
     { id: 'BONDS', title: 'BONDS', body: () => [
         `Two operators who fight together accumulate a bond, named for the pair and levelled by fights survived side by side: I at ${BOND_LEVELS[0]}, II at ${BOND_LEVELS[1]}, III at ${BOND_LEVELS[2]}.`,
@@ -1682,6 +1721,7 @@ function buildNewRun(diff) {
     activeShop = null; regroupInsured = false; shopRerollPick = false;
     bonds = {}; bondSavesUsed = new Set();
     playerRoster.forEach(c => { c.weaponMod = null; c.trinket = null; });
+    sectorFront = rollFront(); frontBannerPending = true;
     sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
     odChoices = {}; pendingOverdrive = null; momentumFocus = 0; pressExtra = false;
     const kept = heirloomRelic();
@@ -1738,7 +1778,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, bonds, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, bonds, sectorFront, pendingConsequences, recentEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -1755,6 +1795,9 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
             (it.kind !== 'GEAR' || gearById(it.id)) && (it.kind !== 'RELIC' || RELIC_POOL.some(r => r.id === it.id)));
         regroupInsured = !!d.regroupInsured; shopRerollPick = false;
         bonds = (d.bonds && typeof d.bonds === 'object') ? d.bonds : {};
+        // A save from before fronts existed finishes its current sector without one.
+        sectorFront = frontById(d.sectorFront) ? d.sectorFront : null;
+        frontBannerPending = false;
         // Gear fields on a roster saved before gear existed, and any id that no longer exists,
         // resolve to empty slots rather than phantom equipment.
         playerRoster.forEach(c => {
@@ -2017,11 +2060,26 @@ function renderCitadel() { switchScreen('screen-citadel'); document.getElementBy
 function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossSkulls -= 1; metaUpgrades.startScrap += 50; } else if (type === 'LEVEL' && bossSkulls >= 2) { bossSkulls -= 2; metaUpgrades.startLevel += 1; } else if (type === 'INV' && bossSkulls >= 3) { bossSkulls -= 3; metaUpgrades.invMax += 1; } else if (type === 'REGROUP' && bossSkulls >= 4) { bossSkulls -= 4; metaUpgrades.extraRegroups = (metaUpgrades.extraRegroups || 0) + 1; } else if (type === 'VAULT' && bossSkulls >= 5 && !metaUpgrades.vault) { bossSkulls -= 5; metaUpgrades.vault = 1; } saveMeta(); renderCitadel(); }
 
 function renderMap() {
-    switchScreen('screen-map'); 
+    switchScreen('screen-map');
     noteDepth();
     document.getElementById('scrap-display').innerText = formatStat(scrap);
     document.getElementById('map-sector-lbl').innerText = currentSector;
     document.getElementById('map-score-lbl').innerText = formatStat(computeScore(runStats));
+
+    // The front rides the header for the whole sector; entering the sector gets the splash.
+    const front = currentFront();
+    const badge = document.getElementById('front-badge');
+    badge.style.display = front ? 'flex' : 'none';
+    if (front) { badge.innerHTML = `<span class="front-icon">${front.icon}</span><span>${front.name.toUpperCase()}</span>`; badge.title = front.desc; }
+    const banner = document.getElementById('front-banner');
+    if (front && frontBannerPending) {
+        frontBannerPending = false;
+        banner.querySelector('.front-banner-name').innerText = `${front.icon} ${front.name.toUpperCase()}`;
+        banner.querySelector('.front-banner-desc').innerText = front.desc;
+        banner.classList.remove('front-banner-show');
+        void banner.offsetWidth;   // restart the animation when sectors chain quickly
+        banner.classList.add('front-banner-show');
+    }
     
     let bHtml = '';
     if(!activeBounties || activeBounties.length === 0) activeBounties = generateBounties();
@@ -2083,6 +2141,7 @@ function renderMap() {
 
 function advanceSector() {
     currentSector++; currentTier = 1;
+    sectorFront = rollFront(); frontBannerPending = true;
     sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = []; forecastWeather = null;
     noteDepth(); saveGameState();
     resolveConsequence();
@@ -2792,6 +2851,8 @@ function initiateCombat(nodeType, isEliteNode) {
     if (hasContract('HARSH_SKIES') && currentWeather === 'CLEAR') {
         currentWeather = ['TOXIC_SMOG', 'SANDSTORM', 'SHRAPNEL_WINDS'][Math.floor(Math.random() * 3)];
     }
+    // An irradiated sector's warlord fights under the smog, not the bloodlust.
+    if (nodeType === 'BOSS' && sectorFront === 'IRRADIATED') currentWeather = 'TOXIC_SMOG';
     applyCombatScenery(bgFile, nodeType === 'BOSS' ? bossForSector().banner : null);
 
     // Enemies are built fresh each fight; the squad persists, so anything left on a unit has to
@@ -2808,6 +2869,19 @@ function initiateCombat(nodeType, isEliteNode) {
     const dmgMult = difficultyMult * (1 + ((currentTier - 1) * TIER_DMG_GROWTH)) * Math.pow(SECTOR_DMG_SCALE, currentSector - 1);
     
     activeEntities = [...deployedRoster, ...generateEnemies(nodeType, mult, isEliteNode, dmgMult)];
+    // The front's fingerprints on the fight itself: a warband's elites hit harder, and a
+    // faction front's warlord does not arrive alone.
+    if (sectorFront === 'RAIDER_WARBAND' && isEliteNode && nodeType === 'RAIDERS')
+        activeEntities.filter(e => !e.isPlayer).forEach(e => { e.dmgBase = Math.ceil(e.dmgBase * 1.25); });
+    if (nodeType === 'BOSS') {
+        const addFaction = { RAIDER_WARBAND: 'RAIDERS', MACHINE_UPRISING: 'MECH', BLOOD_MOON: 'BEASTS' }[sectorFront];
+        if (addFaction) {
+            const escort = generateEnemies(addFaction, mult, false, dmgMult)[0];
+            escort.id = 'front_escort';
+            activeEntities.push(escort);
+            log(`> The warlord does not come alone: ${escort.name} rides with them.`, 'log-dmg');
+        }
+    }
     turnQueue = [...activeEntities].sort((a, b) => b.speed - a.speed);
     activeIndex = 0;
     // Second Watch hands the opening turn to whichever enemy is fastest, however quick the squad is.
@@ -3306,12 +3380,18 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     if (abilityStr === 'RAD_SHOT' || abilityStr === 'FERAL_BITE') {
         let bleedChance = abilityStr === 'FERAL_BITE' ? 0.9 : 0.6;
         if (abilityStr === 'RAD_SHOT' && hasTrait(attacker, 'RAD_SPECIALIST')) bleedChance = 1;
+        if (sectorFront === 'BLOOD_MOON') bleedChance = 1;
         if (Math.random() < bleedChance) { target.bleedingTurns = 3; log(`> ${target.name} bleeding!`, "log-dmg"); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
     } else if (abilityStr === 'HEAVY_WRENCH' || abilityStr === 'FLASHBANG') {
         let sc = (abilityStr === 'FLASHBANG') ? 0.35 : 0.2; if (abilityStr === 'FLASHBANG' && target.resistances.energy < 0) sc *= 2;
         if (abilityStr === 'FLASHBANG' && hasMod(attacker, 'WIDE_LENS')) sc = 1;
         if (hasTrait(target, 'UNSHAKEABLE')) sc = 0;
         if (Math.random() < sc) { target.stunnedTurns = 1; log(`> ${target.name} stunned!`, "log-status"); setTimeout(() => spawnFCT(target.id, "STUNNED", "fct-status"), 300 * globalSettings.combatSpeed); }
+    } else if (sectorFront === 'BLOOD_MOON' && atkType === 'phys' && netDmg > 0 && target.hp > 0 && Math.random() < 0.2) {
+        // Under the blood moon any raw hit can open a wound, on either side of the field.
+        target.bleedingTurns = Math.max(target.bleedingTurns || 0, 2);
+        log(`> The blood moon opens ${target.name}.`, "log-dmg");
+        setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed);
     }
 }
 
@@ -3442,6 +3522,7 @@ const RESERVE_XP_RATE = 0.5;
 
 function awardXp(char, amount) {
     if (amount <= 0) return;
+    if (sectorFront === 'QUIET_ROADS') amount = Math.floor(amount * 0.85);
     if (hasTrinket(char, 'WAR_TROPHY')) amount = Math.floor(amount * 1.25);
     char.xp += amount;
     while (char.xp >= char.xpToNext) {
@@ -3497,7 +3578,11 @@ function checkWinState() {
         recordBonds();
 
         let scrapMult = isCurrentNodeElite ? 2 : 1;
-        let s = Math.floor((Math.floor(Math.random() * 30) + (currentTier * 20)) * scrapMult * sectorRewardMult()); 
+        let s = Math.floor((Math.floor(Math.random() * 30) + (currentTier * 20)) * scrapMult * sectorRewardMult());
+        // The front's ledger: a warband's raiders carry double, and a quiet sector's boss
+        // hoards what the roads never paid.
+        if (sectorFront === 'RAIDER_WARBAND' && currentNodeType === 'RAIDERS') s *= 2;
+        if (sectorFront === 'QUIET_ROADS' && currentNodeType === 'BOSS') s *= 2;
         if (hasRelic('SCRAP_MAGNET')) s += 15;
         
         // Deployed survivors earn full XP; the bench trains at half rate so reserves stay
@@ -3509,7 +3594,12 @@ function checkWinState() {
         });
 
         let matDrops = (1 + Math.floor(Math.random() * 2)) * scrapMult + (hasRelic('SALVAGE_RIG') ? 1 : 0);
-        for(let i=0; i<matDrops; i++) { let m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)]; materials[m]++; log(`> Salvaged: 1 ${m.toUpperCase()}`, "log-heal"); }
+        for(let i=0; i<matDrops; i++) {
+            let m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)];
+            const paired = (sectorFront === 'MACHINE_UPRISING' && m === 'tech') || (sectorFront === 'IRRADIATED' && m === 'chems');
+            materials[m] += paired ? 2 : 1;
+            log(`> Salvaged: ${paired ? 2 : 1} ${m.toUpperCase()}`, "log-heal");
+        }
 
         document.getElementById('command-deck').innerHTML = `<button data-action="loot" data-amount="${s}">LOOT ${s}</button>`; combatActive = false; stopAmbience(); 
     } 
@@ -3541,7 +3631,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
@@ -3576,6 +3666,8 @@ globalThis.WP = {
     get activeShop() { return activeShop; }, set activeShop(v) { activeShop = v; },
     get bonds() { return bonds; }, set bonds(v) { bonds = v; },
     get bondSavesUsed() { return bondSavesUsed; }, set bondSavesUsed(v) { bondSavesUsed = v; },
+    get sectorFront() { return sectorFront; }, set sectorFront(v) { sectorFront = v; },
+    get frontBannerPending() { return frontBannerPending; }, set frontBannerPending(v) { frontBannerPending = v; },
     get regroupInsured() { return regroupInsured; }, set regroupInsured(v) { regroupInsured = v; },
     get shopRerollPick() { return shopRerollPick; }, set shopRerollPick(v) { shopRerollPick = v; },
     get pendingRelicOffer() { return pendingRelicOffer; }, set pendingRelicOffer(v) { pendingRelicOffer = v; },

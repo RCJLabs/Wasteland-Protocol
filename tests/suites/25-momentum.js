@@ -8,9 +8,9 @@ module.exports = {
 
     await page.evaluate(() => {
       window.__fight = (cls, mom) => {
-        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); initiateCombat('RAIDERS', false);
+        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null; initiateCombat('RAIDERS', false);
         const hero = playerRoster.find(h => h.classType === cls);
-        hero.gridPos = 1; hero.maxHp = 1000; hero.hp = 1000; hero.dmgBase = 100; hero.stunnedTurns = 0; hero.quirk = null;
+        hero.gridPos = 1; hero.maxHp = 1000; hero.hp = 1000; hero.dmgBase = 100; hero.stunnedTurns = 0; hero.quirk = null; sectorFront = null;
         Object.keys(hero.cooldowns).forEach(k => hero.cooldowns[k] = 0);
         const foes = activeEntities.filter(e => !e.isPlayer);
         foes.forEach(f => { f.maxHp = 100000; f.hp = 100000; f.armor = 0; f.baseArmor = 0;
@@ -211,11 +211,11 @@ module.exports = {
     await page.evaluate(() => { combatActive = false; });
     await page.waitForTimeout(700);
     const persisted = await page.evaluate(() => {
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       odChoices = { SNIPER: 'OVERWATCH' }; saveGameState();
       loadGameState();
       const kept = odChoices.SNIPER;
-      confirmNewGame(1.0);
+      confirmNewGame(1.0); sectorFront = null;
       return { kept, cleared: Object.keys(odChoices).length === 0 };
     });
     ok('the locked choice survives a save', persisted.kept === 'OVERWATCH');

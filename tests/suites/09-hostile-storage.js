@@ -59,7 +59,7 @@ module.exports = {
     ok('the engine initialises anyway', r.state.engine && r.state.title === 'flex');
     ok('the player is told saving is off', /NOT BE SAVED/.test(r.state.menu));
     const playable = await r.p2.evaluate(() => {
-      WP.currentSlot = 1; WP.confirmNewGame(1.0);
+      WP.currentSlot = 1; WP.confirmNewGame(1.0); sectorFront = null;
       const onMap = getComputedStyle(document.getElementById('screen-map')).display === 'flex';
       WP.initiateCombat('RAIDERS', false);
       return { onMap, inCombat: getComputedStyle(document.getElementById('screen-combat')).display === 'flex' };

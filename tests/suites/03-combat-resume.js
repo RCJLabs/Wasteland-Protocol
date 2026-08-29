@@ -6,7 +6,7 @@ module.exports = {
     await page.waitForTimeout(500);
 
     const before = await page.evaluate(() => {
-      localStorage.clear(); currentSlot = 1; loadMeta(); confirmNewGame(1.0);
+      localStorage.clear(); currentSlot = 1; loadMeta(); confirmNewGame(1.0); sectorFront = null;
       initiateCombat('RAIDERS', false);
       const hero = playerRoster.find(p => p.gridPos > 0); hero.hp = 17;
       const enemy = activeEntities.find(e => !e.isPlayer); enemy.hp = 9;

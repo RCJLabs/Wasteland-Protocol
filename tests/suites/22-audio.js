@@ -44,9 +44,9 @@ module.exports = {
     await page.evaluate(() => {
       initAudio();
       window.__turn = (cls, move, setup) => {
-        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); initiateCombat('RAIDERS', false);
+        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null; initiateCombat('RAIDERS', false);
         const hero = playerRoster.find(h => h.classType === cls);
-        hero.gridPos = 1; hero.maxHp = 9999; hero.hp = 9999; hero.dmgBase = 100; hero.quirk = null;
+        hero.gridPos = 1; hero.maxHp = 9999; hero.hp = 9999; hero.dmgBase = 100; hero.quirk = null; sectorFront = null;
         Object.keys(hero.cooldowns).forEach(k => hero.cooldowns[k] = 0);
         const foe = activeEntities.find(e => !e.isPlayer);
         foe.maxHp = 1000; foe.hp = 1000; foe.armor = 0; foe.baseArmor = 0;
@@ -126,7 +126,7 @@ module.exports = {
 
     const live = await page.evaluate(() => {
       globalSettings.sfx = true; initAudio();
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const enter = (type, sector, tier) => {
         currentSector = sector; currentTier = tier; initiateCombat(type, false);
         return { biome: ambienceBiome, running: !!ambienceNodes };
@@ -146,7 +146,7 @@ module.exports = {
     const ends = await page.evaluate(() => {
       const after = (finish) => {
         globalSettings.sfx = true; initAudio();
-        activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
         currentSector = 2; currentTier = 4; initiateCombat('RAIDERS', false);
         const during = !!ambienceNodes;
         finish();
@@ -163,7 +163,7 @@ module.exports = {
 
     const muted = await page.evaluate(() => {
       globalSettings.sfx = false;
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       currentSector = 2; currentTier = 4; initiateCombat('RAIDERS', false);
       const running = !!ambienceNodes;
       globalSettings.sfx = true;
@@ -174,7 +174,7 @@ module.exports = {
     // ---- a commander breaking is not the same event as taking a hit ----
     const enrage = await page.evaluate(() => {
       globalSettings.sfx = true;
-      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       playerRoster.forEach(c => { if (c.gridPos > 0) { c.maxHp = 5000; c.hp = 5000; } });
       currentSector = 1; currentTier = 10; initiateCombat('BOSS', false);
       const boss = activeEntities.find(e => e.id === 'b1');

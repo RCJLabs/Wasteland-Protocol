@@ -6,7 +6,7 @@ module.exports = {
     await page.waitForTimeout(500);
 
     const shape = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const deep = { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, deepestSector: 3, deepestTier: 1 };
       const farm = { kills: 60, elites: 2, bosses: 0, scrapEarned: 900, nodes: 20, deepestSector: 1, deepestTier: 10 };
       return { zero: computeScore(newRunStats()), deep: computeScore(deep), farm: computeScore(farm) };
@@ -17,7 +17,7 @@ module.exports = {
     const run = await page.evaluate(() => {
       localStorage.clear(); currentSlot = 1; loadMeta();
       bossSkulls = 4; saveMeta();
-      confirmNewGame(1.0);
+      confirmNewGame(1.0); sectorFront = null;
       currentSector = 2; currentTier = 4; noteDepth();
       Object.assign(runStats, { kills: 30, elites: 1, bosses: 1, scrapEarned: 400, nodes: 12 });
       // A wipe only ends the run once regroups are gone - spend them so this exercises the
@@ -54,7 +54,7 @@ module.exports = {
     ok('the slot reads empty after a lost run', /SLOT 1 \[ EMPTY \]/.test(title.menu));
 
     const weaker = await page.evaluate(() => {
-      currentSlot = 2; confirmNewGame(1.0); runStats.kills = 1; noteDepth();
+      currentSlot = 2; confirmNewGame(1.0); sectorFront = null; runStats.kills = 1; noteDepth();
       const before = bestScore; endRun();   // ending early is always available
       return { before, after: bestScore, banner: document.getElementById('runover-best').innerText };
     });

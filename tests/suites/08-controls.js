@@ -245,7 +245,7 @@ module.exports = {
     ok('the second press clears the slot',
       await state(() => localStorage.getItem(BASE_SAVE_KEY + 3)) === null);
 
-    await state(() => { currentSlot = 1; confirmNewGame(1.0); openSettings(); });
+    await state(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; openSettings(); });
     await click('[data-action="return-title"]');
     ok('return-title leaves the run', await shown('screen-title') === 'flex');
   }

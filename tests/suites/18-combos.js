@@ -12,10 +12,10 @@ module.exports = {
     // ability can be measured without the rest of the squad or the enemy AI interfering.
     const duel = () => page.evaluate(() => {
       window.__duel = (classType, setup) => {
-        currentSlot = 1; confirmNewGame(1.0); initiateCombat('RAIDERS', false);
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null; initiateCombat('RAIDERS', false);
         const hero = playerRoster.find(h => h.classType === classType);
         const foe = activeEntities.find(e => !e.isPlayer);
-        hero.gridPos = 1; hero.maxHp = 9999; hero.hp = 9999; hero.dmgBase = 100; hero.stunnedTurns = 0; hero.quirk = null;
+        hero.gridPos = 1; hero.maxHp = 9999; hero.hp = 9999; hero.dmgBase = 100; hero.stunnedTurns = 0; hero.quirk = null; sectorFront = null;
         Object.keys(hero.cooldowns).forEach(k => hero.cooldowns[k] = 0);
         foe.maxHp = 100000; foe.hp = 100000; foe.armor = 0; foe.baseArmor = 0;
         foe.resistances = { phys: 0, bio: 0, energy: 0 };
@@ -38,7 +38,7 @@ module.exports = {
 
     // ---- every class has a third option ----
     const decks = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const out = {};
       playerRoster.forEach(h => {
         const { hero, foe } = window.__duel(h.classType);
@@ -416,7 +416,7 @@ module.exports = {
     await page.evaluate(() => { combatActive = false; });
     await page.waitForTimeout(700);
     const live = await page.evaluate(async () => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       playerRoster.forEach((h, i) => { h.gridPos = i < 4 ? i + 1 : 0; h.maxHp = 500; h.hp = 500; });
       initiateCombat('RAIDERS', false);
       const foe = activeEntities.find(e => !e.isPlayer);

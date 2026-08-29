@@ -8,7 +8,7 @@ module.exports = {
     await page.waitForTimeout(600);
 
     // ---- reachable, and every control in it is wired ----
-    await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); openSettings(); });
+    await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; openSettings(); });
     await page.waitForTimeout(200);
     await page.locator('[data-action="dev-open"]:visible').first().click();
     await page.waitForTimeout(300);
@@ -39,7 +39,7 @@ module.exports = {
 
     // ---- jumping ----
     const jump = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const start = { s: currentSector, t: currentTier };
       devJump(3, 0); const s1 = currentSector;
       devJump(0, 4); const t1 = currentTier;
@@ -57,7 +57,7 @@ module.exports = {
                                   ['COLOSSUS','Siege Colossus','bg_foundry.webp'],
                                   ['MATRIARCH','Carrion Matriarch','bg_nest.webp']]) {
       const r = await page.evaluate((bid) => {
-        currentSlot = 1; confirmNewGame(1.0); currentSector = 1; currentTier = 1;
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 1; currentTier = 1;
         devFightBoss(bid);
         return { name: activeEntities.find(e => !e.isPlayer).name,
                  tier: currentTier, sector: currentSector,
@@ -70,7 +70,7 @@ module.exports = {
 
     // ---- handouts ----
     const give = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const before = { scrap, parts: materials.parts, level: playerRoster[0].level,
                        relics: activeRelics.length, skulls: bossSkulls };
       ['SCRAP','MATS','LEVEL','RELIC','BAG','PERKS','SKULL'].forEach(devGive);
@@ -91,7 +91,7 @@ module.exports = {
 
     // ---- resolving a fight ----
     const resolve = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       initiateCombat('RAIDERS', false); devResolve(true);
       const won = document.getElementById('command-deck').innerText;
       initiateCombat('RAIDERS', false); devResolve(false);
@@ -108,7 +108,7 @@ module.exports = {
     const lifts = await page.evaluate(() => {
       const out = {};
       for (const [sector, label] of [[1,'thunderdome'],[2,'foundry'],[3,'nest']]) {
-        currentSlot = 1; confirmNewGame(1.0); currentSector = sector; currentTier = 8;
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = sector; currentTier = 8;
         initiateCombat('BOSS', false);
         out[label] = { bg: combatBgFile, margin: document.querySelector('.battlefield').style.marginBottom };
       }
@@ -122,7 +122,7 @@ module.exports = {
       lifts.thunderdome.margin === '12vh' && lifts.canyon.margin === '12vh');
 
     const onGround = await page.evaluate(async () => {
-      currentSlot = 1; confirmNewGame(1.0); currentSector = 3; currentTier = 8;
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 3; currentTier = 8;
       initiateCombat('BOSS', false);
       await new Promise(r => setTimeout(r, 400));
       const sky = document.getElementById('combat-sky-layer').getBoundingClientRect();

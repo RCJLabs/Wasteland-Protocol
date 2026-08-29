@@ -18,7 +18,7 @@ module.exports = {
         };
       });
     };
-    let r = await survey(() => { currentSlot = 1; confirmNewGame(1.0); scrap = 999; renderOutpost(); });
+    let r = await survey(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; scrap = 999; renderOutpost(); });
     ok(`every outpost control is focusable (${r.total})`, r.unreachable.length === 0);
     r = await survey(() => renderMap());
     ok(`every map control is focusable (${r.total})`, r.unreachable.length === 0);

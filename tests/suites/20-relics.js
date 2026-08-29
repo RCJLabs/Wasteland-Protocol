@@ -54,7 +54,7 @@ module.exports = {
 
     // ---- an elite drops one, leaning common ----
     const drop = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const tiers = { COMMON: 0, RARE: 0 };
       for (let i = 0; i < 2000; i++) { activeRelics = []; tiers[rollRelic().tier]++; }
       activeRelics = [];
@@ -70,7 +70,7 @@ module.exports = {
 
     // ---- a commander offers three to choose between ----
     const offer = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const runs = [];
       for (let i = 0; i < 200; i++) { activeRelics = []; runs.push(rollRelicOffer()); }
       activeRelics = [];
@@ -90,7 +90,7 @@ module.exports = {
 
     // ---- owning everything pays out rather than dropping nothing ----
     const exhausted = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       activeRelics = [...RELIC_POOL];
       const shallow = (() => { currentSector = 1; return emptyPoolScrap(); })();
       const deep = (() => { currentSector = 8; return emptyPoolScrap(); })();
@@ -105,10 +105,10 @@ module.exports = {
     // ---- every relic actually does what it says ----
     await page.evaluate(() => {
       window.__line = (cls, relics, setup) => {
-        currentSlot = 1; confirmNewGame(1.0); initiateCombat('RAIDERS', false);
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null; initiateCombat('RAIDERS', false);
         activeRelics = (relics || []).map(id => RELIC_POOL.find(r => r.id === id));
         const hero = playerRoster.find(h => h.classType === cls);
-        hero.gridPos = 1; hero.maxHp = 9999; hero.hp = 9999; hero.dmgBase = 100; hero.stunnedTurns = 0; hero.quirk = null;
+        hero.gridPos = 1; hero.maxHp = 9999; hero.hp = 9999; hero.dmgBase = 100; hero.stunnedTurns = 0; hero.quirk = null; sectorFront = null;
         Object.keys(hero.cooldowns).forEach(k => hero.cooldowns[k] = 0);
         const foe = activeEntities.find(e => !e.isPlayer);
         foe.maxHp = 1e6; foe.hp = 1e6; foe.armor = 0; foe.baseArmor = 0;
@@ -170,7 +170,7 @@ module.exports = {
         return n;
       };
       const covered = relics => {
-        currentSlot = 1; confirmNewGame(1.0);
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
         playerRoster.forEach((h, i) => { h.gridPos = i < 3 ? i + 1 : 0; h.maxHp = 900; h.hp = 900; h.guardTurns = 0; });
         initiateCombat('RAIDERS', false);
         activeRelics = (relics || []).map(id => RELIC_POOL.find(r => r.id === id));
@@ -211,7 +211,7 @@ module.exports = {
 
     // ---- the choice screen ----
     const screen = await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       pendingRelicOffer = rollRelicOffer(); renderRelicOffer();
       const cards = [...document.querySelectorAll('#relic-choices [data-action="take-relic"]')];
       return { visible: getComputedStyle(document.getElementById('screen-relic')).display,
@@ -247,7 +247,7 @@ module.exports = {
     await page.evaluate(() => { combatActive = false; });
     await page.waitForTimeout(700);
     await page.evaluate(() => {
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       activeRelics = []; pendingRelicOffer = null;
       currentSector = 1; currentTier = TOTAL_TIERS;
       playerRoster.forEach(c => { if (c.gridPos > 0) { c.maxHp = 9999; c.hp = 9999; } });
@@ -307,7 +307,7 @@ module.exports = {
     const carried = await page.evaluate((v) => {
       // locked: nothing is banked however good the run was
       bossSkulls = 0; metaUpgrades.vault = 0; metaUpgrades.heirloom = null;
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       activeRelics = [RELIC_POOL.find(r => r.id === v.rareId)];
       stashHeirloom();
       const lockedBank = metaUpgrades.heirloom;
@@ -317,13 +317,13 @@ module.exports = {
       document.querySelector('[data-kind="VAULT"]').click();
       const bought = { vault: metaUpgrades.vault, skulls: bossSkulls };
 
-      currentSlot = 1; confirmNewGame(1.0);
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       activeRelics = [RELIC_POOL.find(r => r.id === v.commons[0]), RELIC_POOL.find(r => r.id === v.rareId)];
       stashHeirloom();
       const banked = metaUpgrades.heirloom;
 
       // the next run starts armed with it
-      confirmNewGame(1.0);
+      confirmNewGame(1.0); sectorFront = null;
       const startedWith = activeRelics.map(r => r.id);
 
       // and buying it twice is not possible

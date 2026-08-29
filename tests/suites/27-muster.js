@@ -22,7 +22,7 @@ module.exports = {
     // ---- the systemic quirks actually fire ----
     await page.evaluate(() => {
       window.__quirkFight = (quirkId, setup) => {
-        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); initiateCombat('RAIDERS', false);
+        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null; initiateCombat('RAIDERS', false);
         const hero = playerRoster.find(h => h.classType === 'BRUISER');
         hero.gridPos = 1; hero.maxHp = 1000; hero.hp = 1000; hero.dmgBase = 100;
         hero.quirk = QUIRK_POOL.find(q => q.id === quirkId);
