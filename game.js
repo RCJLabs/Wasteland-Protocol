@@ -68,7 +68,18 @@ const Store = {
 
 let audioCtx = null;
 let currentSlot = 1;
-let globalSettings = { combatSpeed: 1.0, sfx: true };
+// One on/off switch covered every sound in the game, so a player who wanted the hits without
+// the drone had to choose between all of it and none. Two levels now, and motion is a setting
+// rather than only whatever the operating system says.
+const VOL_STEPS = [0, 0.35, 0.7, 1];
+const VOL_NAMES = ['OFF', 'LOW', 'MED', 'FULL'];
+const MOTION_MODES = ['auto', 'full', 'off'];
+const MOTION_NAMES = { auto: 'SYSTEM', full: 'ON', off: 'OFF' };
+const TEXT_STEPS = [1, 1.15, 1.3];
+const TEXT_NAMES = ['NORMAL', 'LARGE', 'LARGEST'];
+let globalSettings = { combatSpeed: 1.0, sfx: true, sfxVol: 1, ambVol: 0.7, motion: 'auto', textScale: 1 };
+function volName(v) { const i = VOL_STEPS.indexOf(v); return VOL_NAMES[i < 0 ? VOL_STEPS.length - 1 : i]; }
+function cycleVol(v) { const i = VOL_STEPS.indexOf(v); return VOL_STEPS[(i < 0 ? 0 : i + 1) % VOL_STEPS.length]; }
 
 let bossSkulls = 0; let metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0, vault: 0, heirloom: null };
 let scrap = 0; let currentTier = 1; let currentSector = 1; let difficultyMult = 1.0; 
@@ -948,6 +959,12 @@ const CODEX = [
         'Iron Guard covers the ranks behind it: a single-target hit aimed past the guard is taken by the guard, softened.',
         'Reposition swaps two operators and costs the whole turn.'
     ] },
+    { id: 'STATUSES', title: 'STATUS MARKS', body: () => [
+        'Every mark on a unit reads four ways, so none of them depends on telling one colour from another.',
+        'The letter says which it is. The border says it again by shape. The number is how many turns are left.',
+        ...STATUSES.map(s => `${s.letter} - ${s.name}: ${s.desc}`),
+        'Corroding a target is the answer to anything that re-plates itself. Oiling one is the setup for fire.'
+    ] },
     { id: 'RESISTANCE', title: 'ARMOUR AND RESISTANCE', body: () => [
         'Every enemy carries three badges under its health: P physical, B biological, E energy.',
         'Orange means weak to it. Grey means it shrugs it off. Struck through means immune - that attack does nothing at all.',
@@ -1244,7 +1261,10 @@ const ACTIONS = {
     'settings-open':    () => openSettings(),
     'settings-close':   () => closeSettings(),
     'toggle-speed':     () => toggleGameSpeed(),
-    'toggle-sfx':       () => toggleSFX(),
+    'toggle-sfx':       () => cycleSfx(),
+    'toggle-amb':       () => cycleAmbience(),
+    'toggle-motion':    () => cycleMotion(),
+    'toggle-text':      () => cycleTextScale(),
     'erase-save':       () => eraseCurrentSave(),
     'return-title':     () => returnToTitle(),
     'title':            () => renderTitleScreen(),
@@ -1409,18 +1429,37 @@ function voiceFor(move) {
 const SFX_LOG_MAX = 40;
 let sfxLog = [];
 
-let sfxBus = null, ambienceNodes = null, ambienceBiome = null;
+let sfxBus = null, ambBus = null, ambienceNodes = null, ambienceBiome = null;
 
 function initAudio() {
-    if (!audioCtx && globalSettings.sfx) {
+    if (!audioCtx && (sfxVol() > 0 || ambVol() > 0)) {
         try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
         catch (e) { console.log('Web Audio API not supported.'); }
     }
     if (audioCtx && !sfxBus) {
-        try { sfxBus = audioCtx.createGain(); sfxBus.gain.value = 1; sfxBus.connect(audioCtx.destination); }
-        catch (e) { sfxBus = null; }
+        try { sfxBus = audioCtx.createGain(); sfxBus.connect(audioCtx.destination);
+              ambBus = audioCtx.createGain(); ambBus.connect(audioCtx.destination); }
+        catch (e) { sfxBus = null; ambBus = null; }
     }
+    applyVolumes();
 }
+
+// Live, so turning the bed down mid-fight is heard at once rather than at the next node.
+function applyVolumes() {
+    try {
+        if (sfxBus) sfxBus.gain.value = sfxVol();
+        if (ambBus) ambBus.gain.value = ambVol();
+    } catch (e) { /* a closed context is not worth throwing over */ }
+}
+// What the mixer is actually doing, for the suites and for anyone debugging a silent build.
+function audioState() {
+    return { ctx: !!audioCtx, split: !!(sfxBus && ambBus && sfxBus !== ambBus),
+             sfxGain: sfxBus ? sfxBus.gain.value : null,
+             ambGain: ambBus ? ambBus.gain.value : null };
+}
+// A save from before the split carries one boolean; honour it until the player sets a level.
+function sfxVol() { return globalSettings.sfx === false ? 0 : (globalSettings.sfxVol ?? 1); }
+function ambVol() { return globalSettings.sfx === false ? 0 : (globalSettings.ambVol ?? 0.7); }
 
 // A short burst of filtered noise is what separates a shotgun from a tone at the same pitch.
 function noiseBurst(t, dur, level, cutoff) {
@@ -1441,7 +1480,7 @@ function noiseBurst(t, dur, level, cutoff) {
 function playSFX(type, weight = 1) {
     const spec = SFX[type];
     if (spec) { sfxLog.push({ type, weight: Math.round(weight * 100) / 100 }); if (sfxLog.length > SFX_LOG_MAX) sfxLog.shift(); }
-    if (!globalSettings.sfx || !audioCtx || !spec) return;
+    if (sfxVol() <= 0 || !audioCtx || !spec) return;
     try {
         if (audioCtx.state === 'suspended') audioCtx.resume();
         if (!sfxBus) initAudio();
@@ -1483,16 +1522,16 @@ function ambienceFor(bg) { return AMBIENCE[bg] || DEFAULT_AMBIENCE; }
 
 function startAmbience(bg) {
     stopAmbience();
-    if (!globalSettings.sfx) return;
+    if (ambVol() <= 0) return;
     initAudio();
-    if (!audioCtx || !sfxBus) return;
+    if (!audioCtx || !ambBus) return;
     const spec = ambienceFor(bg);
     try {
         if (audioCtx.state === 'suspended') audioCtx.resume();
         const t = audioCtx.currentTime;
         const bed = audioCtx.createGain(); bed.gain.setValueAtTime(0, t);
         bed.gain.linearRampToValueAtTime(0.5, t + 1.5);
-        bed.connect(sfxBus);
+        bed.connect(ambBus);
 
         const osc = audioCtx.createOscillator(); osc.type = 'sine';
         osc.frequency.value = spec.drone;
@@ -1551,6 +1590,10 @@ function triggerGlitch() {
 // melee lunges to contact, ranged flashes and draws a tracer, the struck recoil, the dead
 // fall once and stay fallen, and an enemy's intent pulses through the beat before it acts.
 function motionOff() {
+    // The operating system's preference is the default, not the only say: a player who wants
+    // the animations on a machine set to reduce them can have them, and the reverse.
+    if (globalSettings.motion === 'off') return true;
+    if (globalSettings.motion === 'full') return false;
     try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
 }
 // A one-shot class that removes itself - looked up again by id so a renderField rebuild
@@ -2046,6 +2089,7 @@ function initEngine() {
     loadMeta();
     let saved = Store.getJSON(SETTINGS_KEY);
     if (saved && saved !== CORRUPT) { globalSettings = { ...globalSettings, ...saved }; }
+    applyTextScale();
     updateSettingsUI(); 
     renderTitleScreen(); 
 }
@@ -2053,9 +2097,52 @@ function initEngine() {
 function switchScreen(screenId) { if (screenId !== 'screen-combat') stopAmbience(); document.querySelectorAll('#engine > div:not(.settings-icon):not(#screen-settings)').forEach(el => el.style.display = 'none'); document.getElementById(screenId).style.display = 'flex'; if (screenId === 'screen-map' || screenId === 'screen-outpost' || screenId === 'screen-citadel') { document.getElementById('btn-global-settings').style.display = 'block'; } else { document.getElementById('btn-global-settings').style.display = 'none'; } }
 function openSettings() { disarmErase(); document.getElementById('screen-settings').style.display = 'flex'; }
 function closeSettings() { disarmErase(); document.getElementById('screen-settings').style.display = 'none'; }
-function toggleGameSpeed() { globalSettings.combatSpeed = globalSettings.combatSpeed === 1.0 ? 0.5 : 1.0; Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); }
-function toggleSFX() { globalSettings.sfx = !globalSettings.sfx; if (globalSettings.sfx) initAudio(); Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); }
-function updateSettingsUI() { document.getElementById('btn-toggle-speed').innerText = globalSettings.combatSpeed === 1.0 ? "COMBAT SPEED: NORMAL" : "COMBAT SPEED: FAST"; document.getElementById('btn-toggle-sfx').innerText = globalSettings.sfx ? "AUDIO SFX: ON" : "AUDIO SFX: OFF"; const fp = document.getElementById('btn-toggle-prompts'); if (fp) fp.innerText = globalSettings.prompts === false ? "FIELD PROMPTS: OFF" : "FIELD PROMPTS: ON"; }
+function saveSettings() { Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); }
+function toggleGameSpeed() { globalSettings.combatSpeed = globalSettings.combatSpeed === 1.0 ? 0.5 : 1.0; saveSettings(); }
+// The old single switch stays honoured on load, and is retired the moment a level is chosen.
+function cycleSfx() {
+    globalSettings.sfx = true;
+    globalSettings.sfxVol = cycleVol(sfxVol());
+    if (globalSettings.sfxVol > 0) initAudio();
+    applyVolumes(); saveSettings();
+}
+function cycleAmbience() {
+    globalSettings.sfx = true;
+    globalSettings.ambVol = cycleVol(ambVol());
+    if (globalSettings.ambVol > 0) initAudio();
+    applyVolumes();
+    // A bed already playing is restarted or silenced to match, rather than waiting for the
+    // next node to notice.
+    if (globalSettings.ambVol <= 0) stopAmbience();
+    else if (ambienceBiome) startAmbience(ambienceBiome);
+    saveSettings();
+}
+function cycleMotion() {
+    const i = MOTION_MODES.indexOf(globalSettings.motion);
+    globalSettings.motion = MOTION_MODES[(i < 0 ? 0 : i + 1) % MOTION_MODES.length];
+    applyTextScale(); saveSettings();
+}
+function cycleTextScale() {
+    const i = TEXT_STEPS.indexOf(globalSettings.textScale);
+    globalSettings.textScale = TEXT_STEPS[(i < 0 ? 0 : i + 1) % TEXT_STEPS.length];
+    applyTextScale(); saveSettings();
+}
+// Both of these are read by the stylesheet rather than by the engine, so one place sets them.
+function applyTextScale() {
+    const r = document.documentElement;
+    if (!r) return;
+    r.style.setProperty('--text-scale', String(globalSettings.textScale || 1));
+    r.classList.toggle('motion-off', motionOff());
+}
+function updateSettingsUI() {
+    const set = (id, text) => { const el = document.getElementById(id); if (el) el.innerText = text; };
+    set('btn-toggle-speed', globalSettings.combatSpeed === 1.0 ? 'COMBAT SPEED: NORMAL' : 'COMBAT SPEED: FAST');
+    set('btn-toggle-sfx', `SOUND EFFECTS: ${volName(sfxVol())}`);
+    set('btn-toggle-amb', `AMBIENCE: ${volName(ambVol())}`);
+    set('btn-toggle-motion', `ANIMATION: ${MOTION_NAMES[globalSettings.motion] || 'SYSTEM'}`);
+    set('btn-toggle-text', `TEXT SIZE: ${TEXT_NAMES[Math.max(0, TEXT_STEPS.indexOf(globalSettings.textScale))]}`);
+    set('btn-toggle-prompts', globalSettings.prompts === false ? 'FIELD PROMPTS: OFF' : 'FIELD PROMPTS: ON');
+}
 function returnToTitle() { closeSettings(); renderTitleScreen(); }
 // A native confirm() is jarring on a phone, looks nothing like the game, and is suppressed
 // outright in some browsers - which would silently erase or silently do nothing. Two-step the
@@ -3933,6 +4020,30 @@ function portraitFor(ent) {
     return (ent && ent.stand && PENDING_ART.includes(ent.img)) ? ent.stand : ent.img;
 }
 
+// A status was a bare emoji in a coloured box: two channels a colourblind player cannot
+// separate - bleed, oil and corrosion are a droplet, a barrel and a flask at ten pixels - and
+// it never said how long any of it had left. Each carries a letter, a border shape of its own
+// and its remaining turns now, so colour is the last of four cues rather than the only one.
+const STATUSES = [
+    { key: 'bleedingTurns', name: 'BLEED',    letter: 'B', icon: '\u{1F4A7}', cls: 'st-bleed',
+      desc: 'Loses 8% of its health at the start of each of its turns.' },
+    { key: 'stunnedTurns',  name: 'STUN',     letter: 'S', icon: '\u{1F4AB}', cls: 'st-stun',
+      desc: 'Loses its turn entirely.' },
+    { key: 'armorTurns',    name: 'BRACED',   letter: 'A', icon: '\u{1F6E1}\uFE0F', cls: 'st-armor',
+      desc: 'Carrying temporary armour on top of its own.' },
+    { key: 'oiledTurns',    name: 'OILED',    letter: 'O', icon: '\u{1F6E2}\uFE0F', cls: 'st-oil',
+      desc: 'Takes 15 more from energy, and fire ignites it for double.' },
+    { key: 'corrodedTurns', name: 'CORRODED', letter: 'C', icon: '\u{1F9EA}', cls: 'st-corrode',
+      desc: 'Armour counts as zero against every hit.' },
+    { key: 'markedTurns',   name: 'MARKED',   letter: 'M', icon: '\u{1F3AF}', cls: 'st-mark',
+      desc: 'Ranged, and lined up to be executed next turn.' }
+];
+function statusChips(ent) {
+    return STATUSES.filter(s => (ent[s.key] || 0) > 0).map(s =>
+        `<span class="st ${s.cls}" title="${s.name}: ${s.desc}" aria-label="${s.name}, ${ent[s.key]} turns left">` +
+        `<b>${s.letter}</b><i>${ent[s.key]}</i></span>`).join('');
+}
+
 function resistBadges(ent) {
     if (ent.isPlayer || !ent.resistances) return '';
     const marks = DMG_TYPES.map(([type, glyph]) => {
@@ -4025,7 +4136,7 @@ function renderField() {
             tCls = 'inspectable';
             clk = `tabindex="0" role="button" aria-label="Inspect ${ent.name}" data-action="inspect" data-id="${ent.id}"`;
         }
-        let eff = ''; if (ent.bleedingTurns > 0 && !isDead) eff += `💧`; if (ent.stunnedTurns > 0 && !isDead) eff += `💫`; if (ent.armorTurns > 0 && !isDead) eff += `🛡️`; if (ent.oiledTurns > 0 && !isDead) eff += `🛢️`; if (ent.corrodedTurns > 0 && !isDead) eff += `🧪`; if (ent.markedTurns > 0 && !isDead) eff += `🎯`;
+        let eff = isDead ? '' : statusChips(ent);
         let hoverCls = ent.isHovering && !isDead ? 'hovering' : '';
         const hint = (pendingAction && !isDead && tCls === 'targetable-enemy') ? comboHint(pendingAction, ent) : null;
         // Rank is currently only legible from the left-to-right ordering, which says nothing
@@ -5131,9 +5242,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },

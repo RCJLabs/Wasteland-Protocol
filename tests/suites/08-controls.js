@@ -69,9 +69,14 @@ module.exports = {
     ok('settings open', await shown('screen-settings') === 'flex');
     await click('[data-action="toggle-speed"]');
     ok('toggle-speed changes combat speed', await state(() => globalSettings.combatSpeed) !== speed0);
-    const sfx0 = await state(() => globalSettings.sfx);
+    // The single on/off switch became a level, so the control cycles rather than flips.
+    const sfx0 = await state(() => sfxVol());
     await click('[data-action="toggle-sfx"]');
-    ok('toggle-sfx flips the audio setting', await state(() => globalSettings.sfx) !== sfx0);
+    ok('toggle-sfx moves the effects level', await state(() => sfxVol()) !== sfx0);
+    const amb0 = await state(() => ambVol());
+    await click('[data-action="toggle-amb"]');
+    ok('toggle-amb moves the ambience level on its own',
+      await state(() => ambVol()) !== amb0 && await state(() => sfxVol()) !== sfx0);
     await click('[data-action="settings-close"]');
     ok('settings close', await shown('screen-settings') === 'none');
 

@@ -5,7 +5,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .title-header { font-size: clamp(30px, 8vw, 60px); color: #B8860B; font-weight: bold; text-transform: uppercase; letter-spacing: 4px; text-shadow: 3px 3px 0px #8B0000, 0 0 15px rgba(184, 134, 11, 0.5); margin-bottom: 10px; }
 .title-sub { color: #666; font-size: clamp(12px, 3vw, 16px); letter-spacing: 8px; margin-bottom: 8vh; text-shadow: 1px 1px 2px #000; }
 .title-menu { display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 300px; }
-.title-btn { background: #111; color: #ccc; border: 2px solid #444; padding: 20px; font-family: monospace; font-size: clamp(14px, 4vw, 18px); font-weight: bold; cursor: pointer; text-transform: uppercase; transition: all 0.2s ease; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
+.title-btn { background: #111; color: #ccc; border: 2px solid #444; padding: 20px; font-family: monospace; font-size: calc(clamp(14px, 4vw, 18px) * var(--text-scale, 1)); font-weight: bold; cursor: pointer; text-transform: uppercase; transition: all 0.2s ease; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
 .title-btn:hover { background: #8B0000; color: #fff; border-color: #ff0000; box-shadow: 0 0 15px rgba(255,0,0,0.4); transform: translateY(-2px); }
 .title-btn:active { transform: translateY(2px); box-shadow: none; }
 .btn-continue { border-color: #B8860B; color: #B8860B; }
@@ -15,9 +15,12 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 
 .settings-icon { position: absolute; top: 8px; right: 12px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; font-size: 24px; cursor: pointer; color: #888; transition: 0.2s; z-index: 100; text-shadow: 0 0 5px #000; }
 .settings-icon:hover { color: #fff; transform: rotate(90deg); }
-#screen-settings { display: none; flex-direction: column; justify-content: center; align-items: center; padding: 20px; height: 100%; box-sizing: border-box; background: rgba(0,0,0,0.95); z-index: 200; position: absolute; top:0; left:0; width:100%; }
-.settings-menu { display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 300px; text-align: center; }
-.settings-title { color: #B8860B; font-size: 24px; font-weight: bold; margin-bottom: 20px; letter-spacing: 2px; }
+#screen-settings { display: none; flex-direction: column; justify-content: flex-start; align-items: center; padding: 20px; height: 100%; overflow-y: auto; box-sizing: border-box; background: rgba(0,0,0,0.95); z-index: 200; position: absolute; top:0; left:0; width:100%; }
+.settings-menu { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 300px; text-align: center; padding-bottom: 24px; }
+/* The settings list outgrew a phone screen. It scrolls, and its own buttons are compact so the
+   whole list is reachable without one - the title screen's buttons stay full size. */
+.settings-menu .title-btn { padding: 13px 16px; }
+.settings-title { color: #B8860B; font-size: 24px; font-weight: bold; margin: 12px 0 16px; letter-spacing: 2px; flex-shrink: 0; }
 
 /* The upgrade list scrolls inside its own container, with the header and the way out pinned.
    Scrolling the whole screen put RETURN TO TITLE below the fold once a fifth card existed. */
@@ -154,7 +157,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 /* Sprites overlap on purpose, but the readouts ride on top of them - so a six-strong swarm
    painted every card over its neighbour. A crowded hostile line stands its units apart; the
    squad never exceeds four and reads fine as it is. */
-#enemy-team.crowded .entity { margin: 0; }
+#enemy-team.crowded .entity { --overlap: 0px; margin: 0; }
 .team.crowded .portrait { width: calc(100% * min(var(--sprite-scale, 1), 1.45) * var(--row-fit, 1)); }
 /* A commander and its retinue share the line. They stand beside each other rather than
    stacked, the retinue reads in front, and fitEnemyRow narrows the whole row to the width it
@@ -165,7 +168,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .team.retinue .entity:nth-child(2) { z-index: 3; }
 #player-team { flex-direction: row-reverse; } 
 #enemy-team { flex-direction: row; }
-.entity { width: clamp(55px, 16vw, 110px); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; position: relative; transition: transform 0.2s; gap: 2px; margin: 0 -1.5vw; z-index: 1; }
+.entity { width: clamp(55px, 16vw, 110px); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; position: relative; transition: transform 0.2s; gap: 2px; --overlap: 1.5vw; margin: 0 calc(-1 * var(--overlap)); z-index: 1; }
 .entity:nth-child(1) { z-index: 3; } .entity:nth-child(2) { z-index: 2; } .entity:nth-child(3) { z-index: 1; } .entity:nth-child(4) { z-index: 4; }
 .entity.active .portrait { filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)); }
 .entity.dead { opacity: 0.55; filter: grayscale(90%); }
@@ -196,11 +199,23 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 /* Six statuses can stack on one unit, which will not fit on the HP line beside the numbers.
    They get their own row and wrap onto a second line rather than being squeezed and clipped. */
 .status-badge { font-size: 10px; line-height: 12px; display: flex; flex-wrap: wrap; align-items: center;
-  justify-content: center; gap: 1px; margin-bottom: 1px; text-shadow: 1px 1px 2px #000; }
-.status-bleed { background-color: rgba(139,0,0,0.7); color: #fff; text-shadow: 0 0 2px #000; }
-.status-stun { background-color: rgba(184,134,11,0.7); color: #000; font-weight: bold; }
-.status-shield { background-color: rgba(107,142,35,0.7); color: #fff; }
-.status-oil { background-color: rgba(50,50,50,0.9); color: #B8860B; }
+  justify-content: center; gap: 1px; margin-bottom: 1px; text-shadow: 1px 1px 2px #000;
+  max-width: calc(100% - 2 * var(--overlap)); margin-left: auto; margin-right: auto; }
+/* Four cues per status, in this order of reliability: the letter, the border shape, the turn
+   count, and only then the colour. A player who cannot separate the reds from the greens still
+   reads B3 in a square from O2 in a dashed box. The legend is in the field manual. */
+.st { display: inline-flex; align-items: baseline; gap: 1px; padding: 0 2px; min-width: 15px;
+  justify-content: center; font-size: 9px; line-height: 13px; letter-spacing: 0;
+  border: 1px solid currentColor; background: rgba(8,6,4,0.72); text-shadow: 0 0 2px #000; }
+.st b { font-weight: 700; }
+.st i { font-style: normal; opacity: 0.85; font-size: 8px; }
+.st-bleed   { color: #ff6b6b; border-radius: 0; }                          /* square */
+.st-stun    { color: #ffd24a; border-radius: 0; border-style: double; border-width: 3px; }
+.st-armor   { color: #9acd32; border-radius: 999px; padding: 0 4px; }      /* pill */
+.st-oil     { color: #c9a227; border-style: dashed; border-radius: 0; }
+.st-corrode { color: #7fd8a0; border-style: dotted; border-radius: 0; }
+.st-mark    { color: #ff9d5c; border-radius: 0;
+              clip-path: polygon(0 0, calc(100% - 4px) 0, 100% 4px, 100% 100%, 0 100%); }
 .portrait { width: calc(100% * var(--sprite-scale, 1) * var(--row-fit, 1)); height: auto; max-height: 25vh; object-fit: contain; object-position: bottom; margin-bottom: calc(-1 * var(--sprite-sink, 0px)); transition: all 0.2s; filter: drop-shadow(2px 4px 4px rgba(0,0,0,0.8)); }
 
 @keyframes hoverSprite { 0% { transform: translateY(0); } 50% { transform: translateY(-15px); } 100% { transform: translateY(0); } }
@@ -226,9 +241,9 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 
 .dashboard { height: 35vh; max-height: 250px; background: #050505; border: 2px solid #333; display: grid; grid-template-columns: 1fr 1fr; box-sizing: border-box; margin: 5px; }
 #command-deck { border-right: 2px solid #333; padding: 10px; display: flex; flex-direction: column; justify-content: flex-start; gap: 8px; overflow-y: auto; min-width: 0; }
-#log { padding: 10px; overflow-y: auto; font-size: clamp(10px, 3vw, 12px); color: #555; display: flex; flex-direction: column; }
+#log { padding: 10px; overflow-y: auto; font-size: calc(clamp(10px, 3vw, 12px) * var(--text-scale, 1)); color: #555; display: flex; flex-direction: column; }
 .log-turn { color: #aaa; margin-top: 5px; } .log-heal { color: #6B8E23; } .log-dmg { color: #8B0000; } .log-status { color: #B8860B; } .log-combo { color: #ff44ff; font-weight: bold; }
-button { background: #111; color: #ccc; border: 1px solid #444; padding: clamp(10px, 3vh, 15px); font-family: monospace; font-size: clamp(10px, 3vw, 13px); cursor: pointer; text-transform: uppercase; transition: 0.2s; flex-shrink:0;}
+button { background: #111; color: #ccc; border: 1px solid #444; padding: clamp(10px, 3vh, 15px); font-family: monospace; font-size: calc(clamp(10px, 3vw, 13px) * var(--text-scale, 1)); cursor: pointer; text-transform: uppercase; transition: 0.2s; flex-shrink:0;}
 button:hover:not(:disabled) { background: #222; border-color: #888; }
 button:active { background: #000; }
 button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
@@ -236,10 +251,29 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
 
 /* Keyboard users get no indication of position without this - there was none at all. */
 :focus-visible { outline: 2px solid #B8860B; outline-offset: 2px; }
+/* The touch floor. Measured rather than assumed: these six were the controls under 44px on a
+   390px-wide phone - the ledger toggle at 29, the outpost tabs at 36, the upgrade and gear
+   buttons at 33-36, the bag slots at 27, and the field prompt's two buttons at 34. Everything
+   else already cleared it, and suite 46 keeps it that way across seven screens. */
+.citadel-view-toggle, .op-tab-btn, .upg-btn, .inv-slot,
+.prompt-ok, .prompt-off { min-height: 44px; }
+/* A tightened hostile line squeezed its slots to 43px wide, one short of the same floor. */
+.team.crowded .entity { min-width: 44px; }
+
 .entity:focus-visible { outline-offset: -2px; }
 
 /* Screen shake and the glitch pass are decorative and can be genuinely unpleasant. Damage
    numbers and the active-unit pulse carry information, so they stay. */
+/* The animation setting is a class on the root, so effects can be turned off on a machine that
+   never asked for that and back on for a player who wants them despite the system preference.
+   Everything the media query below silences is silenced here too. */
+:root.motion-off .fx-shake, :root.motion-off .fx-glitch { animation: none !important; }
+:root.motion-off .hovering { animation: none; }
+:root.motion-off .settings-icon:hover { transform: none; }
+:root.motion-off .title-btn:hover, :root.motion-off .title-btn:active { transform: none; }
+:root.motion-off .combo-flag { animation: none; }
+:root.motion-off * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+
 @media (prefers-reduced-motion: reduce) {
     .fx-shake, .fx-glitch { animation: none !important; }
     .hovering { animation: none; }
@@ -347,8 +381,8 @@ button.reach-short { border-color: #7a5a20; }
   overflow: hidden; background: linear-gradient(rgba(12,11,8,0.96), rgba(0,0,0,0.98)); }
 .codex-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-bottom: 6px; }
 .codex-entry { border-left: 2px solid #B8860B; padding-left: 10px; }
-.codex-title { font-size: 12px; font-weight: bold; letter-spacing: 2px; color: #B8860B; margin-bottom: 6px; }
-.codex-line { font-size: 11px; line-height: 1.6; color: #a9a396; margin-bottom: 3px; }
+.codex-title { font-size: calc(12px * var(--text-scale, 1)); font-weight: bold; letter-spacing: 2px; color: #B8860B; margin-bottom: 6px; }
+.codex-line { font-size: calc(11px * var(--text-scale, 1)); line-height: 1.6; color: #a9a396; margin-bottom: 3px; }
 #screen-codex .return-btn { flex-shrink: 0; margin-top: 12px; }
 
 /* The momentum market: cheap spends that never cost the action. */

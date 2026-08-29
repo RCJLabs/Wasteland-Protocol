@@ -206,9 +206,11 @@ module.exports = {
       pendingAction = null; renderField();
       return document.getElementById(foe.id).innerText;
     });
-    ok('a corroded target is badged', badges.includes('🧪'));
-    ok('a marked target is badged', badges.includes('🎯'));
-    ok('older statuses still show alongside them', badges.includes('💧'));
+    // A badge is a letter, a border shape and a turn count now - an emoji was two channels a
+    // colourblind player could not separate. C3 is corroded with three turns left.
+    ok(`a corroded target is badged (${badges.replace(/\s+/g, '')})`, /C\s*3/.test(badges));
+    ok('a marked target is badged', /M\s*3/.test(badges));
+    ok('older statuses still show alongside them', /B\s*2/.test(badges));
     // Six statuses can sit on one unit now, and they used to share a nowrap line with the HP
     // numbers - so the row was squeezed and everything but the last badge was cut off.
     const badgeBox = await page.evaluate(() => {
@@ -216,7 +218,7 @@ module.exports = {
         const el = document.querySelector('#enemy-team .status-badge');
         const ent = el.closest('.entity').getBoundingClientRect();
         const r = el.getBoundingClientRect();
-        return { shown: el.textContent, w: r.width, h: r.height,
+        return { shown: el.textContent, count: el.querySelectorAll('.st').length, w: r.width, h: r.height,
                  clipped: el.scrollWidth > Math.ceil(r.width) || el.scrollHeight > Math.ceil(r.height),
                  spills: r.left < ent.left - 1 || r.right > ent.right + 1 };
       };
@@ -234,7 +236,7 @@ module.exports = {
       return { full, one, bare: none === null };
     });
     ok(`all six statuses are shown at once (${badgeBox.full.shown})`,
-      [...badgeBox.full.shown].filter(c => c.codePointAt(0) > 0x2000).length >= 6);
+      badgeBox.full.count === 6);
     ok('none of them is clipped', !badgeBox.full.clipped);
     ok('and the row stays within the unit', !badgeBox.full.spills);
     // The row is full width, so it is the height that tells you whether it wrapped.
