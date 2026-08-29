@@ -5,6 +5,22 @@
 //   node tests/simulate.js [runs] [--difficulty 1.0] [--contracts GLASS,NO_REGROUPS]
 //
 // It asserts nothing. It is a measuring instrument, and it prints what it measured.
+//
+// ── On sample size ──────────────────────────────────────────────────────────────────────
+// Median score is heavy-tailed: a run ends anywhere between sector 1 and sector 10, and the
+// deep runs carry most of the score. Thirty expeditions does not resolve it. On identical
+// code this printed 10,025, 10,600, 10,545 and 10,560 at thirty, then 16,210 at sixty, then
+// 11,455 at a hundred and fifty. Four samples agreeing inside 6% looked like a tight
+// instrument and was luck - a phase measured against those baselines came out at +76%, then
+// +11%, then -33%, with the sign unstable.
+//
+// So: 150+ expeditions before believing anything about score, nodes or depth, and a paired
+// baseline run in the same session. Wipes per run is the stable figure and sits near 4.5
+// across every sample ever taken here; if lethality is the question, thirty will do.
+//
+// This is written down because a claim was published off a thirty-run pair and was wrong:
+// N11 was reported as +49% median score. Re-measured at 150 against its own predecessor it
+// is 14,460 -> 11,455, which is not an increase at all.
 const path = require('path');
 const { serve } = require('./server');
 
