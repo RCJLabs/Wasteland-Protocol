@@ -890,6 +890,8 @@ const EVENT_POOL = [
       choices: [
         { label: "Trade a held relic for two blind draws", canAfford: () => activeRelics.length >= 1 && unownedRelics().length >= 2,
           execute: () => {
+            // Every choice must resolve safely even when its canAfford gate would refuse it.
+            if (!activeRelics.length) return "Nothing on your side of the cloth. The dealer's eyes slide past you.";
             const given = activeRelics.splice(Math.floor(Math.random() * activeRelics.length), 1)[0];
             // Blind means blind: the draw pool includes the cursed shelf.
             const pool = unownedRelics().filter(r => r.id !== given.id);
