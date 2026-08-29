@@ -1333,6 +1333,53 @@ function triggerGlitch() {
     el.classList.add('fx-glitch');
 }
 
+// ── Combat that moves ───────────────────────────────────────────────────────────────────
+// All transform-based, no new art, and every effect sits behind prefers-reduced-motion:
+// melee lunges to contact, ranged flashes and draws a tracer, the struck recoil, the dead
+// fall once and stay fallen, and an enemy's intent pulses through the beat before it acts.
+function motionOff() {
+    try { return window.matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
+}
+// A one-shot class that removes itself - looked up again by id so a renderField rebuild
+// between add and remove cannot strand it.
+function flashClass(id, cls, ms) {
+    if (motionOff()) return;
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.add(cls);
+    setTimeout(() => { const live = document.getElementById(id); if (live) live.classList.remove(cls); }, ms);
+}
+function pulseIntent(ent) {
+    if (motionOff()) return;
+    const el = document.getElementById(ent.id);
+    const icon = el && el.querySelector('.intent-icon');
+    if (icon) icon.classList.add('intent-pulse');
+}
+function playAttackAnim(attacker, target, move) {
+    if (motionOff()) return 'still';
+    const a = document.getElementById(attacker.id);
+    if (!a) return 'none';
+    const melee = move ? moveReachFor(move, attacker) === 'melee' : attacker.range !== 'ranged';
+    if (melee) { flashClass(attacker.id, attacker.isPlayer ? 'anim-lunge-right' : 'anim-lunge-left', 430); return 'lunge'; }
+    const flash = document.createElement('div');
+    flash.className = `muzzle-flash ${attacker.isPlayer ? 'flash-right' : 'flash-left'}`;
+    a.appendChild(flash); setTimeout(() => flash.remove(), 240);
+    const t = target ? document.getElementById(target.id) : null;
+    const field = document.querySelector('.battlefield');
+    if (t && field) {
+        const ar = a.getBoundingClientRect(), tr = t.getBoundingClientRect(), br = field.getBoundingClientRect();
+        const x1 = ar.left + ar.width / 2 - br.left, y1 = ar.top + ar.height * 0.55 - br.top;
+        const x2 = tr.left + tr.width / 2 - br.left, y2 = tr.top + tr.height * 0.55 - br.top;
+        const tracer = document.createElement('div');
+        tracer.className = 'tracer-line';
+        tracer.style.left = `${x1}px`; tracer.style.top = `${y1}px`;
+        tracer.style.width = `${Math.hypot(x2 - x1, y2 - y1)}px`;
+        tracer.style.transform = `rotate(${Math.atan2(y2 - y1, x2 - x1)}rad)`;
+        field.appendChild(tracer); setTimeout(() => tracer.remove(), 220);
+    }
+    return 'tracer';
+}
+
 function triggerHitFlash(id) {
     let el = document.getElementById(id);
     if(el) {
@@ -3097,7 +3144,7 @@ function initiateCombat(nodeType, isEliteNode) {
     playerRoster.forEach(ent => { ent.stunnedTurns = 0; ent.bleedingTurns = 0; ent.armorTurns = 0; ent.armor = 0;
         ent.oiledTurns = 0; ent.corrodedTurns = 0; ent.markedTurns = 0; ent.guardTurns = 0; });
     momentumFocus = 0; pressExtra = false; pendingOverdrive = null;
-    playerRoster.forEach(ent => { ent.secondWindUsed = false; });
+    playerRoster.forEach(ent => { ent.secondWindUsed = false; ent.deadRendered = ent.hp <= 0; });
     bondSavesUsed = new Set();
     // The Glass Cannon Core's teeth: nobody walks in whole.
     if (hasRelic('GLASS_CANNON_CORE'))
@@ -3165,7 +3212,11 @@ function resistBadges(ent) {
 function renderField() {
     renderQueue(); const pTeam = document.getElementById('player-team'); const eTeam = document.getElementById('enemy-team'); pTeam.innerHTML = ''; eTeam.innerHTML = ''; const pCells = [], eCells = [];
     activeEntities.forEach(ent => {
-        let isDead = ent.hp <= 0; const isAct = (!isDead && turnQueue.length > 0 && turnQueue[activeIndex]?.id === ent.id) ? 'active' : ''; const dCls = isDead ? 'dead' : '';
+        let isDead = ent.hp <= 0; const isAct = (!isDead && turnQueue.length > 0 && turnQueue[activeIndex]?.id === ent.id) ? 'active' : '';
+        // The first render after death plays the fall; every render after shows the settled corpse.
+        const dCls = isDead ? (ent.deadRendered ? 'dead settled' : 'dead dying') : '';
+        if (isDead && !ent.deadRendered) ent.deadRendered = true;
+        if (!isDead) ent.deadRendered = false;
         let tCls = ''; let clk = '';
         // Targets are divs, so they need to be announced and reachable like the buttons are.
         const targetable = attrs => `${attrs} tabindex="0" role="button" aria-label="Target ${ent.name}"`;
@@ -3286,7 +3337,8 @@ function processTurn() {
     saveGameState();
     renderField(); applyTurnStartEffects(aE); if (!combatActive) return; if (!aE.hp > 0) return checkWinState(); 
     if (aE.stunnedTurns > 0) { if (!aE.isPlayer) { log(`> ${aE.name} stunned.`, "log-status"); spawnFCT(aE.id, "STUNNED", "fct-status"); aE.stunnedTurns--; setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return; } else return; }
-    if (!aE.isPlayer) setTimeout(() => executeEnemyAi(aE), 1000 * globalSettings.combatSpeed);
+    // The beat of air before the swing: the intent icon pulses through the wait.
+    if (!aE.isPlayer) { pulseIntent(aE); setTimeout(() => executeEnemyAi(aE), 1000 * globalSettings.combatSpeed); }
 }
 
 function applyTurnStartEffects(ent) {
@@ -3510,7 +3562,8 @@ function resolveAction(targetId) {
         if (currentWeather === 'BLOODLUST') { dmgMult *= 1.2; }
         
         playSFX(voiceFor(pendingAction));
-        if (isCombo) { 
+        playAttackAnim(actEnt, target, pendingAction);
+        if (isCombo) {
             log(`> COMBO ACTIVATED: ${comboType}`, "log-combo"); playSFX('combo'); 
             if (hasQuirk(actEnt, 'OVERCHARGED')) addMomentum(10);
             setTimeout(() => spawnFCT(target.id, comboType, "fct-combo"), 200); 
@@ -3611,6 +3664,7 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
         }
     }
     target.hp = Math.max(0, target.hp - netDmg);
+    if (netDmg > 0) flashClass(target.id, target.isPlayer ? 'anim-recoil-left' : 'anim-recoil-right', 320);
     // Second Wind: once per fight, a killing blow leaves them standing at 1.
     if (target.hp <= 0 && hasQuirk(target, 'SECOND_WIND') && !target.secondWindUsed) {
         target.secondWindUsed = true; target.hp = 1;
@@ -3750,6 +3804,7 @@ function executeEnemyAi(enemy) {
     if (target) {
         playSFX(enemy.classType === 'BEAST' || enemy.classType === 'MUTANT' ? 'beast'
               : enemy.range === 'ranged' ? 'rifle' : 'blade');
+        playAttackAnim(enemy, target, null);
         let t = enemy.dmgType || 'phys'; 
         let rawDmg = enemy.dmgBase + Math.floor(Math.random() * 5);
         
@@ -3899,7 +3954,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, renderOutpostScene, renderOutpostSheet, CAMP_SPOTS, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, renderOutpostScene, renderOutpostSheet, CAMP_SPOTS, motionOff, flashClass, pulseIntent, playAttackAnim, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario

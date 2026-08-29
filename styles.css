@@ -147,7 +147,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 
 .intent-icon { position: absolute; top: -25px; font-size: 14px; background: #111; border: 1px solid #444; border-radius: 50%; width: 22px; height: 22px; display: flex; justify-content: center; align-items: center; z-index: 20; box-shadow: 0 2px 4px #000; }
 
-.battlefield { display: flex; justify-content: center; gap: clamp(18px, 9vw, 70px); flex-grow: 1; align-items: flex-end; padding: 0 22px 0 0; box-sizing: border-box; margin-bottom: 12vh; /* overridden per backdrop by applyCombatScenery */ }
+.battlefield { position: relative; display: flex; justify-content: center; gap: clamp(18px, 9vw, 70px); flex-grow: 1; align-items: flex-end; padding: 0 22px 0 0; box-sizing: border-box; margin-bottom: 12vh; /* overridden per backdrop by applyCombatScenery; relative so tracer lines can anchor to it */ }
 .team { display: flex; align-items: flex-end; justify-content: center; min-width: 0; }
 /* Four-strong squads tighten up so oversized sprites stay inside the viewport. */
 .team.crowded .entity { width: clamp(42px, 11vw, 78px); }
@@ -157,7 +157,19 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .entity { width: clamp(55px, 16vw, 110px); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; position: relative; transition: transform 0.2s; gap: 2px; margin: 0 -1.5vw; z-index: 1; }
 .entity:nth-child(1) { z-index: 3; } .entity:nth-child(2) { z-index: 2; } .entity:nth-child(3) { z-index: 1; } .entity:nth-child(4) { z-index: 4; }
 .entity.active .portrait { filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)); }
-.entity.dead { opacity: 0.3; filter: grayscale(100%); transform: scale(0.9); }
+.entity.dead { opacity: 0.55; filter: grayscale(90%); }
+/* The dead fall once and stay fallen: the first post-death render plays the fall, every
+   render after holds the settled pose - renderField rebuilds constantly, so the split
+   between .dying and .settled is what keeps corpses from re-dying on every repaint. */
+.entity.dead .portrait { transform-origin: 50% 88%; }
+.entity.dead.dying .portrait { animation: deathFall 0.55s ease-in forwards; }
+.entity.dead.settled .portrait { transform: rotate(78deg) translateY(12%) translateX(5%); }
+@keyframes deathFall {
+  0% { transform: rotate(0) translateY(0); }
+  62% { transform: rotate(85deg) translateY(13%) translateX(5%); }
+  78% { transform: rotate(72deg) translateY(11%) translateX(5%); }
+  100% { transform: rotate(78deg) translateY(12%) translateX(5%); }
+}
 .entity.targetable-enemy .portrait { filter: drop-shadow(0 0 12px #ff0000); cursor: pointer; }
 .entity.targetable-ally .portrait { filter: drop-shadow(0 0 12px #6B8E23); cursor: pointer; }
 .entity.targetable-enemy:active .portrait { filter: drop-shadow(0 0 20px #ff0000) brightness(1.5); }
@@ -403,6 +415,34 @@ button.reach-short { border-color: #7a5a20; }
 .rank-btn-0 { border-color: #444; color: #666; }
 .muster-reroll { font-size: 12px; padding: 5px; border-color: #7a5c14; color: #d9a93d; }
 .muster-note { flex-shrink: 0; font-size: 10px; line-height: 1.5; color: #8a8578; margin: 10px 0; }
+
+/* ── Combat that moves: all transforms, no new art. ────────────────────────────────── */
+@keyframes lungeRight { 0% { transform: translateX(0); } 45% { transform: translateX(26px); } 100% { transform: translateX(0); } }
+@keyframes lungeLeft { 0% { transform: translateX(0); } 45% { transform: translateX(-26px); } 100% { transform: translateX(0); } }
+.anim-lunge-right { animation: lungeRight 0.42s ease-in-out; }
+.anim-lunge-left { animation: lungeLeft 0.42s ease-in-out; }
+@keyframes recoilLeft { 0% { transform: translateX(0); } 35% { transform: translateX(-9px) rotate(-2deg); } 100% { transform: translateX(0); } }
+@keyframes recoilRight { 0% { transform: translateX(0); } 35% { transform: translateX(9px) rotate(2deg); } 100% { transform: translateX(0); } }
+.anim-recoil-left { animation: recoilLeft 0.3s ease-out; }
+.anim-recoil-right { animation: recoilRight 0.3s ease-out; }
+.muzzle-flash { position: absolute; top: 40%; width: 16px; height: 16px; border-radius: 50%;
+  background: radial-gradient(circle, #fff 0%, #ffb347 45%, transparent 70%);
+  z-index: 30; pointer-events: none; animation: muzzle 0.22s ease-out forwards; }
+.flash-right { right: -6px; } .flash-left { left: -6px; }
+@keyframes muzzle { 0% { opacity: 1; transform: scale(0.6); } 100% { opacity: 0; transform: scale(1.7); } }
+.tracer-line { position: absolute; height: 2px; transform-origin: 0 50%;
+  background: linear-gradient(90deg, rgba(255, 220, 150, 0.15), #ffd76a);
+  z-index: 25; pointer-events: none; animation: tracer 0.2s linear forwards; }
+@keyframes tracer { 0% { opacity: 1; } 100% { opacity: 0; } }
+.intent-pulse { animation: intentPulse 0.5s ease-in-out infinite; }
+@keyframes intentPulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.35); } }
+/* The reduced-motion audit: every effect above, stilled - the dead simply lie settled. */
+@media (prefers-reduced-motion: reduce) {
+  .anim-lunge-right, .anim-lunge-left, .anim-recoil-left, .anim-recoil-right,
+  .muzzle-flash, .tracer-line, .intent-pulse, .entity.dead.dying .portrait { animation: none !important; }
+  .entity.dead.dying .portrait { transform: rotate(78deg) translateY(12%) translateX(5%); }
+  .front-banner-show { animation: none !important; opacity: 1; }
+}
 
 /* The camp: the squad's own sprites around a fire, state readable in the bodies. */
 #outpost-scene { position: relative; flex: 1 1 auto; min-height: 340px; overflow: hidden; border: 1px solid #33301f; }
