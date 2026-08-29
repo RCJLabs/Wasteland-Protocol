@@ -1121,6 +1121,9 @@ const ACTIONS = {
     'chronicle':        () => renderChronicle(),
     'inspect':          el => openDossier(el.dataset.id),
     'dossier-close':    () => closeDossier(),
+    'prompt-ok':        () => dismissPrompt(),
+    'prompt-off':       () => disablePrompts(),
+    'toggle-prompts':   () => { globalSettings.prompts = globalSettings.prompts === false; Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); },
     'ascension-cycle':  () => { ascension = (ascension + 1) % (unlockedProtocols() + 1); renderContracts(); },
     'loadout-bench':    el => {
         const ch = playerRoster.find(c => c.id === el.dataset.id);
@@ -1576,6 +1579,7 @@ function regroupSquad() {
 }
 
 function renderSquadBroken() {
+    firePrompt('REGROUP');
     combatActive = false; activeEntities = []; turnQueue = []; pendingCombat = null;
     momentum = 0; addMomentum(0);
     noteDepth();
@@ -1767,6 +1771,8 @@ function collectLoot(amount) {
 }
 
 function renderRelicOffer() {
+    firePrompt('RELIC');
+    if ((pendingRelicOffer || []).some(r => r.tier === 'CURSED')) firePrompt('CURSE');
     switchScreen('screen-relic');
     const c = document.getElementById('relic-choices');
     c.innerHTML = pendingRelicOffer.map((r, i) =>
@@ -1787,7 +1793,7 @@ function takeRelic(index) {
 
 let bestScore = 0; let bestSector = 0;
 
-function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, mastery, bestiary })); }
+function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, mastery, bestiary, seenPrompts })); }
 
 function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
 
@@ -1817,6 +1823,7 @@ function loadMeta() {
         bestScore = d.bestScore || 0; bestSector = d.bestSector || 0;
         mastery = (d.mastery && typeof d.mastery === 'object') ? d.mastery : {};
         bestiary = (d.bestiary && typeof d.bestiary === 'object' && !Array.isArray(d.bestiary)) ? d.bestiary : {};
+        seenPrompts = Array.isArray(d.seenPrompts) ? d.seenPrompts.filter(id => typeof id === 'string') : [];
         return;
     }
     // No readable meta yet - adopt the best progress any slot recorded. A corrupt meta blob
@@ -1860,7 +1867,7 @@ function openSettings() { disarmErase(); document.getElementById('screen-setting
 function closeSettings() { disarmErase(); document.getElementById('screen-settings').style.display = 'none'; }
 function toggleGameSpeed() { globalSettings.combatSpeed = globalSettings.combatSpeed === 1.0 ? 0.5 : 1.0; Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); }
 function toggleSFX() { globalSettings.sfx = !globalSettings.sfx; if (globalSettings.sfx) initAudio(); Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); }
-function updateSettingsUI() { document.getElementById('btn-toggle-speed').innerText = globalSettings.combatSpeed === 1.0 ? "COMBAT SPEED: NORMAL" : "COMBAT SPEED: FAST"; document.getElementById('btn-toggle-sfx').innerText = globalSettings.sfx ? "AUDIO SFX: ON" : "AUDIO SFX: OFF"; }
+function updateSettingsUI() { document.getElementById('btn-toggle-speed').innerText = globalSettings.combatSpeed === 1.0 ? "COMBAT SPEED: NORMAL" : "COMBAT SPEED: FAST"; document.getElementById('btn-toggle-sfx').innerText = globalSettings.sfx ? "AUDIO SFX: ON" : "AUDIO SFX: OFF"; const fp = document.getElementById('btn-toggle-prompts'); if (fp) fp.innerText = globalSettings.prompts === false ? "FIELD PROMPTS: OFF" : "FIELD PROMPTS: ON"; }
 function returnToTitle() { closeSettings(); renderTitleScreen(); }
 // A native confirm() is jarring on a phone, looks nothing like the game, and is suppressed
 // outright in some browsers - which would silently erase or silently do nothing. Two-step the
@@ -1979,6 +1986,7 @@ const MUSTER_REROLLS = 2;
 const RANK_CYCLE = { 0: 1, 1: 2, 2: 3, 3: 0 };
 
 function renderMuster() {
+    firePrompt('MUSTER');
     switchScreen('screen-muster');
     document.getElementById('muster-rerolls').innerText = `⟳ ${musterRerolls} REROLLS LEFT`;
     const body = document.getElementById('muster-body');
@@ -2473,6 +2481,7 @@ function renderMap() {
         edges += `<line class="${cls}" x1="${MAP_COL_X[n.col]}%" y1="${yOf(n.tier)}" x2="${MAP_COL_X[to.col]}%" y2="${yOf(to.tier)}"></line>`;
     }));
 
+    if (sectorMap.nodes.some(n => n.edges.length > 1)) firePrompt('ROUTE');
     let m = `<div class="map-graph" style="height:${TOTAL_TIERS * MAP_ROW_H}px">`;
     m += `<svg class="map-edges" aria-hidden="true">${edges}</svg>`;
     sectorMap.nodes.forEach(n => {
@@ -2640,6 +2649,7 @@ function rollPerkOffer(char) {
 }
 
 function renderPerkOffer() {
+    firePrompt('PROMOTION');
     const offer = pendingPerkOffers[0];
     if (!offer) { renderMap(); return; }
     const char = playerRoster.find(c => c.id === offer.charId);
@@ -2836,6 +2846,7 @@ function shopItemLabel(it) {
 }
 
 function renderShop() {
+    firePrompt('ARMORY');
     if (!activeShop) { renderMap(); return; }
     switchScreen('screen-shop');
     document.getElementById('shop-scrap').innerText = `SCRAP ON HAND: ${formatStat(scrap)}`;
@@ -2987,6 +2998,66 @@ function formatStat(n) {
     if (n < 100000) return n.toLocaleString();
     if (n < 1000000) return Math.round(n / 1000) + 'K';
     return (n / 1000000).toFixed(1) + 'M';
+}
+
+// ── First contact ───────────────────────────────────────────────────────────────────────
+// Seventeen interlocking systems and nothing ever taught one of them: the manual is good and
+// it is behind the settings gear, which is no use to somebody in their first fight. These are
+// not a tutorial level - each one fires once, ever, at the moment its system first matters,
+// and says the smallest true thing that makes the next decision make sense.
+const PROMPTS = [
+    { id: 'MUSTER',    title: 'THE MUSTER',      body: 'Pick who deploys and where they stand. Front rank takes the melee; the back rank is where fragile operators survive. Quirks are rolled fresh each expedition - the rerolls are yours to spend.' },
+    { id: 'REACH',     title: 'REACH',           body: 'That ability is marked REACH -%. Melee swung from the middle or back rank lands soft. Move the operator forward, or hit something with a weapon that does not care.' },
+    { id: 'COMBO',     title: 'A COMBO IS LIVE', body: 'That glowing ability finishes a status something is already carrying. Combos hit far harder and build momentum - lead with the status, then cash it in.' },
+    { id: 'INTENT',    title: 'THEY TELEGRAPH',  body: 'The icon over each hostile is what it intends to do next turn. A heavy blow, an area attack, a flank around your line - all of it is announced a turn early, so all of it has an answer.' },
+    { id: 'SIGNATURE', title: 'EVERY HOSTILE HAS A TRICK', body: 'The tag under a hostile names what it does - plate that must be broken, a shot it is lining up, a pack that grows stronger together. Tap any hostile when you are not aiming to read its full file.' },
+    { id: 'MOMENTUM',  title: 'MOMENTUM IS A MARKET', body: 'Fighting fills the bar. Tactics cost momentum but never cost your action: sharpen the next hit, patch the worst-off operator, or take a second turn on the spot.' },
+    { id: 'OVERDRIVE', title: 'OVERDRIVE IS READY', body: 'A full bar buys one devastating move from the operator taking their turn. The first time a class uses one you choose which of its two it fights with for the rest of the expedition.' },
+    { id: 'PROMOTION', title: 'FIELD PROMOTION', body: 'A level-up offers three picks on the spot. Signatures change what an ability does and can only be taken once; training is a flat stat you can take again. Banking keeps the point for the Outpost.' },
+    { id: 'GEAR',      title: 'SALVAGED GEAR',   body: 'Weapon mods change what an ability does - its reach, its cooldown, who it hits. Trinkets are worn passives anyone can take. Two slots each, fitted at the Outpost.' },
+    { id: 'RELIC',     title: "THE COMMANDER'S CACHE", body: 'Relics last the whole expedition and stack with everything. Take the one that suits how this squad already fights, not the rarest card on the table.' },
+    { id: 'CURSE',     title: 'A CURSED RELIC',  body: 'Cursed relics carry a real upside and a real cost, and they are never dealt at random - this one is on the table because you can refuse it. Read the second half of the line before you take it.' },
+    { id: 'ROUTE',     title: 'THE ROUTE IS A PLAN', body: 'Taking a node commits you to what it connects to. Elites and warlords pay the most; camps and the Armory cost you a node but keep the squad standing. Look two tiers ahead before you step.' },
+    { id: 'ARMORY',    title: 'THE ARMORY',      body: 'A trader on the route. Gear, a marked-up relic, stims, a quirk do-over, and a bond that prepays your next regroup. Prices climb with the sector, so scrap spent early is worth more.' },
+    { id: 'REGROUP',   title: 'THE SQUAD BROKE', body: 'A wipe is not the end of the expedition. Regrouping costs half your scrap and sends you back to the start of this sector with the squad on its feet. You have a limited number - felling a warlord earns one back.' }
+];
+let seenPrompts = [];      // ids already shown, meta-persisted
+let promptQueue = [];
+
+function promptSeen(id) { return seenPrompts.includes(id); }
+// Fires at most once ever, and never while the player has turned them off.
+function firePrompt(id) {
+    if (globalSettings.prompts === false) return;
+    if (promptSeen(id) || promptQueue.includes(id)) return;
+    if (!PROMPTS.some(p => p.id === id)) return;
+    promptQueue.push(id);
+    renderPrompt();
+}
+function renderPrompt() {
+    const el = document.getElementById('prompt');
+    if (!el) return;
+    const p = PROMPTS.find(x => x.id === promptQueue[0]);
+    if (!p) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    el.innerHTML = `<div class="prompt-card">
+        <div class="prompt-title">${p.title}</div>
+        <div class="prompt-body">${p.body}</div>
+        <div class="prompt-row">
+            <button class="prompt-ok" data-action="prompt-ok">GOT IT</button>
+            <button class="prompt-off" data-action="prompt-off">STOP SHOWING THESE</button>
+        </div>
+    </div>`;
+    el.style.display = 'flex';
+}
+function dismissPrompt() {
+    const id = promptQueue.shift();
+    if (id && !seenPrompts.includes(id)) { seenPrompts.push(id); saveMeta(); }
+    renderPrompt();
+}
+function disablePrompts() {
+    globalSettings.prompts = false;
+    Store.set(SETTINGS_KEY, JSON.stringify(globalSettings));
+    promptQueue = [];
+    renderPrompt(); updateSettingsUI();
 }
 
 // ── Know your enemy ─────────────────────────────────────────────────────────────────────
@@ -3437,6 +3508,8 @@ function initiateCombat(nodeType, isEliteNode) {
     // showed up. This has to run after the line is built, escort and all.
     [...new Set(activeEntities.filter(e => !e.isPlayer).map(typeNameOf))].forEach(n => noteBestiary(n, 'met'));
     saveMeta();
+    firePrompt('INTENT');
+    if (activeEntities.some(e => !e.isPlayer && sigOf(e))) firePrompt('SIGNATURE');
     // The Lead-Lined Coat weighs on the turn order without touching the sheet.
     const queueSpeed = e => e.speed - (e.isPlayer && hasRelic('LEAD_LINED_COAT') ? 3 : 0);
     turnQueue = [...activeEntities].sort((a, b) => queueSpeed(b) - queueSpeed(a));
@@ -3586,7 +3659,9 @@ function renderCommandDeck() {
 
     // The tactics row: cheap spends that do not cost the action. Rendered whenever any is
     // affordable, so the price of holding for the overdrive is always visible.
+    if (momentum >= overdriveAt()) firePrompt('OVERDRIVE');
     if (!pendingAction && MOMENTUM_TACTICS.some(t => momentum >= tacticCost(t))) {
+        firePrompt('MOMENTUM');
         deckHtml += `<div class="tactic-row">` + MOMENTUM_TACTICS.map(t =>
             `<button class="tactic-btn" ${momentum < tacticCost(t) ? 'disabled' : ''} ${t.id === 'STIM' && !stimTarget() ? 'disabled' : ''} data-action="tactic" data-kind="${t.id}" title="${t.desc}"><span class="tactic-name">${t.label}</span><span class="tactic-cost">⚡${tacticCost(t)}</span></button>`
         ).join('') + `</div>`;
@@ -3613,6 +3688,8 @@ function renderCommandDeck() {
         // and that is worth knowing before the ability is even selected.
         const short = (cd === 0 && isMelee(a.move) && (REACH_PENALTY[aE.gridPos] || 1) < 1)
             ? `-${Math.round((1 - REACH_PENALTY[aE.gridPos]) * 100)}%` : null;
+        if (ready) firePrompt('COMBO');
+        if (short) firePrompt('REACH');
         const cls = [ready ? 'combo-ready' : '', short ? 'reach-short' : ''].filter(Boolean).join(' ');
         deckHtml += `<button ${cd > 0 ? 'disabled' : ''} ${cls ? `class="${cls}"` : ''} data-action="${a.act || 'queue'}" data-move="${a.move}">`
                   + `${a.label}${cd > 0 ? ` [${cd}]` : ''}${ready ? ` <span class="combo-tag">${ready}</span>` : ''}`
@@ -4325,7 +4402,7 @@ function checkWinState() {
             checkBountyProgress('ELITE'); if (runStats) runStats.elites++;
             if (hasRelic('VULTURE_ROYALTY') || Math.random() < 0.4) {
                 const gDrop = rollGear();
-                if (gDrop) { gearStash.push(gDrop); log(`> GEAR SALVAGED: ${gearById(gDrop).name} (equip at the Outpost).`, "log-combo"); }
+                if (gDrop) { gearStash.push(gDrop); firePrompt('GEAR'); log(`> GEAR SALVAGED: ${gearById(gDrop).name} (equip at the Outpost).`, "log-combo"); }
             }
             const rDrop = rollRelic();
             if (rDrop) { activeRelics.push(rDrop); log(`> RELIC ACQUIRED: ${rDrop.name}!`, "log-combo"); announceSets(); }
@@ -4408,7 +4485,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, sigOf, hasSig, enemyDmgMult, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, bestiaryRoster, bestiaryRecord, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, sigOf, hasSig, enemyDmgMult, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, bestiaryRoster, bestiaryRecord, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
@@ -4447,6 +4524,8 @@ globalThis.WP = {
     get runSeed() { return runSeed; }, set runSeed(v) { runSeed = v; },
     get mastery() { return mastery; }, set mastery(v) { mastery = v; },
     get bestiary() { return bestiary; }, set bestiary(v) { bestiary = v; },
+    get seenPrompts() { return seenPrompts; }, set seenPrompts(v) { seenPrompts = v; },
+    get promptQueue() { return promptQueue; }, set promptQueue(v) { promptQueue = v; },
     get inspecting() { return inspecting; }, set inspecting(v) { inspecting = v; },
     get ascension() { return ascension; }, set ascension(v) { ascension = v; },
     get bestSector() { return bestSector; }, set bestSector(v) { bestSector = v; },

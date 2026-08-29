@@ -51,6 +51,15 @@ const SUITES = fs.readdirSync(path.join(__dirname, 'suites')).filter(f => f.ends
     // surface onto globalThis for suite bodies - descriptors are copied, so the state
     // accessors stay live in both directions. Re-applied on every navigation.
     await context.addInitScript(() => {
+      // Onboarding prompts are a card over the controls, dismissed by a tap. That is right for
+      // a player and wrong for a suite driving those controls, so every suite runs with them
+      // off - 42-firstcontact turns them back on for itself.
+      try {
+        const k = 'wasteland_rpg_core_settings';
+        const s = JSON.parse(localStorage.getItem(k) || '{}');
+        s.prompts = false;
+        localStorage.setItem(k, JSON.stringify(s));
+      } catch (e) { /* storage blocked; the boot path handles that on its own */ }
       let engine;
       Object.defineProperty(window, 'WP', {
         configurable: true,

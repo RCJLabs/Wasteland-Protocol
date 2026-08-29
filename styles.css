@@ -581,3 +581,22 @@ button.reach-short { border-color: #7a5a20; }
 .entity.inspectable { cursor: help; }
 .entity.inspectable .portrait { transition: filter .2s; }
 .entity.inspectable:hover .portrait { filter: drop-shadow(0 0 8px rgba(217,169,61,0.55)); }
+
+/* First contact: the smallest true thing about a system, the first time it matters. The
+   container never eats a click - only the card does - so a prompt can never block the fight
+   underneath it. */
+.prompt { display: none; position: absolute; left: 0; right: 0; bottom: 0; z-index: 120;
+  justify-content: center; padding: 0 10px 10px; pointer-events: none; }
+.prompt-card { pointer-events: auto; width: 100%; max-width: 460px;
+  background: rgba(10, 9, 6, 0.97); border: 1px solid #B8860B;
+  box-shadow: 0 -6px 24px rgba(0,0,0,0.8); padding: 12px 14px;
+  display: flex; flex-direction: column; gap: 7px; }
+.prompt-title { font-size: 12px; font-weight: bold; letter-spacing: 2px; color: #d9a93d; text-transform: uppercase; }
+.prompt-body { font-size: 11.5px; line-height: 1.6; color: #c9c0ab; }
+.prompt-row { display: flex; gap: 8px; align-items: stretch; margin-top: 2px; }
+.prompt-ok { flex: 1 1 auto; background: #111; border: 1px solid #B8860B; color: #d9a93d;
+  font-family: monospace; font-size: 12px; letter-spacing: 1px; padding: 9px; cursor: pointer; }
+.prompt-ok:hover { background: #B8860B; color: #000; }
+.prompt-off { flex: 0 0 auto; background: none; border: 1px solid #3a352c; color: #7a7266;
+  font-family: monospace; font-size: 9px; letter-spacing: 1px; padding: 9px 8px; cursor: pointer; }
+.prompt-off:hover { border-color: #8a8578; color: #a9a396; }
