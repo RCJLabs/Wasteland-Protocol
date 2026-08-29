@@ -3,13 +3,14 @@
 // data-action attributes, never by calling a global. See the inspection surface at the
 // foot of this file for the one deliberate export.
 
-const PENDING_ART = [
-    "enemy_boss_vatborn.webp", "enemy_boss_marshal.webp", "enemy_boss_stormcaller.webp", "enemy_boss_bastion.webp"
-];
+// Art that is commissioned but not yet drawn. Anything listed here is kept out of the
+// preloader and the service worker cache so neither chases a file that does not exist, and
+// the portrait fallback covers it on the field. Empty is the healthy state.
+const PENDING_ART = [];
 const ASSET_LIST = [
     "bg_title.webp", "bg_combat.webp", "bg_thunderdome.webp", "bg_refinery.webp", "bg_highway.webp", "bg_canyon.webp", "bg_foundry.webp", "bg_nest.webp",
     "hero_bruiser.webp", "hero_medic.webp", "hero_scavenger.webp", "hero_pyro.webp", "hero_shotgunner.webp", "hero_sniper.webp", "hero_hound.webp",
-    "enemy_dog.webp", "enemy_mutant.webp", "enemy_chem.webp", "enemy_raider.webp", "enemy_psycho.webp", "enemy_sniper.webp", "enemy_juggernaut.webp", "enemy_drone.webp", "enemy_turret.webp", "enemy_warrig.webp", "enemy_boss.webp", "enemy_boss_mech.webp", "enemy_boss_vulture.webp",
+    "enemy_dog.webp", "enemy_hound_bulldog.webp", "enemy_mutant.webp", "enemy_chem.webp", "enemy_raider.webp", "enemy_psycho.webp", "enemy_sniper.webp", "enemy_juggernaut.webp", "enemy_drone.webp", "enemy_turret.webp", "enemy_warrig.webp", "enemy_boss.webp", "enemy_boss_mech.webp", "enemy_boss_vulture.webp",
     "enemy_boss_vatborn.webp", "enemy_boss_marshal.webp", "enemy_boss_stormcaller.webp", "enemy_boss_bastion.webp"
 ];
 // The title art is fetched immediately; everything else waits until the menu is up so the
@@ -302,6 +303,15 @@ const PERK_POOL = [
     { id: 'HARDENED',  label: 'HARDENED (+10% MAX HP)',  apply: c => { const g = Math.ceil(c.maxHp * 0.1); c.maxHp += g; c.hp += g; } }
 ];
 
+// A commander's passive is stored as an id on its pool entry; this is what that id means.
+// The dossier used to read .name and .desc straight off the id string, which are both
+// undefined on a string - so every warlord's file carried an empty block headed "Command".
+const BOSS_PASSIVES = {
+    PLATING: { name: 'Re-Plating', desc: 'Welds 6 points of armour back on every turn, up to 30 over its base.' },
+    FEAST:   { name: 'Feast',      desc: 'Heals itself off a share of every wound it opens.' },
+    VENOM:   { name: 'Venom Pump', desc: 'Doses itself every 2 turns: +14% damage and +2 speed each time, but the pressure sloughs 4 armour and opens it to +15% damage taken. Five doses at most.' }
+};
+
 // One Warlord fought at every depth made the back half of a run repetitive, so each sector
 // now draws a different commander. They differ in more than numbers: what they intend to do,
 // what they do passively, and what happens when you break them past half health.
@@ -350,29 +360,32 @@ const BOSS_POOL = [
     // rather than simply out-damage.
     {
         id: 'VATBORN', name: 'The Vatborn', short: 'VATBORN', img: 'enemy_boss_vatborn.webp', scale: 2.2,
-        range: 'melee', hpMult: 1.15, dmgMult: 0.95, speed: 8, armor: 8,
+        range: 'melee', hpMult: 1.15, dmgMult: 0.82, speed: 8, armor: 16,
         resistances: { phys: 5, bio: 60, energy: -10 },
-        dmgType: 'bio',
-        blurb: 'A thing grown in a tank, and it does not die so much as divide.',
+        dmgType: 'bio', passive: 'VENOM',
+        blurb: 'Slab-armoured and slow, until it starts pumping. Every dose buys it strength and costs it skin.',
         bg: 'bg_nest.webp',
         banner: '\u{1F9EA} VAT REEK: All units deal +20% DMG \u{1F9EA}',
-        intents: [['ATTACK', 0.35], ['HEAVY', 0.25], ['STATUS', 0.25], ['AOE', 0.15]],
-        // Splitting divides what is left rather than adding to it: the same pool of health, in
-        // three places at once, hitting from three places at once.
-        enrage: { cry: 'THE VATBORN COMES APART - AND KEEPS COMING!', speedBonus: 3,
-                  split: { name: 'Vat-Spawn', img: 'enemy_mutant.webp', scale: 1.3, count: 2, share: 0.4 } }
+        intents: [['ATTACK', 0.35], ['HEAVY', 0.30], ['STATUS', 0.20], ['AOE', 0.15]],
+        // The pump is a trade it makes against itself, and the whole fight is a question of
+        // timing: chip a wall early, or hold the burst until the tubes are wide open and it is
+        // hitting hard enough to matter.
+        venom: { every: 2, dmg: 0.14, speed: 2, armorLoss: 4, taken: 0.15, max: 5 },
+        // No damage step at the enrage: the two doses it takes are the enrage.
+        enrage: { cry: 'THE VATBORN CRANKS THE TANK WIDE OPEN!', venomBurst: 2,
+                  backbreaker: { mult: 1.5, stun: 1 } }
     },
     {
         id: 'MARSHAL', name: 'The Marshal', short: 'MARSHAL', img: 'enemy_boss_marshal.webp', scale: 2.2,
         range: 'ranged', hpMult: 1.0, dmgMult: 1.15, speed: 11, armor: 10,
         resistances: { phys: 8, bio: 0, energy: 8 },
-        blurb: 'Never rides alone. While Bulldog stands, the Marshal is barely worth shooting at.',
+        blurb: 'Never walks the line alone. While the hound Bulldog stands, the Marshal is barely worth shooting at.',
         bg: 'bg_thunderdome.webp',
         banner: '\u{1F6E1} MARSHAL\u2019S COLUMN: All units deal +20% DMG \u{1F6E1}',
         intents: [['ATTACK', 0.40], ['STATUS', 0.25], ['HEAVY', 0.20], ['DEFEND', 0.15]],
         // The lieutenant is the fight: kill Bulldog or spend the whole fight chipping plate.
-        escort: { name: 'Bulldog', classType: 'RAIDER', range: 'melee', hp: 70, dmg: 20, speed: 12,
-                  img: 'enemy_juggernaut.webp', scale: 1.6, armor: 5, sig: 'RIOT_PLATE',
+        escort: { name: 'Bulldog', classType: 'BEAST', range: 'melee', hp: 66, dmg: 18, speed: 16,
+                  img: 'enemy_hound_bulldog.webp', scale: 1.5, armor: 5, sig: 'RIOT_PLATE',
                   resistances: { phys: 10, bio: 0, energy: -5 } },
         escortArmor: 22,
         enrage: { cry: 'THE MARSHAL CALLS THE COLUMN IN!', dmgScale: 1.3, speedBonus: 3 }
@@ -391,7 +404,7 @@ const BOSS_POOL = [
         enrage: { cry: 'THE STORMCALLER OPENS THE SKY!', dmgScale: 1.2, speedBonus: 2 }
     },
     {
-        id: 'BASTION', name: 'The Bastion', short: 'BASTION', img: 'enemy_boss_bastion.webp', scale: 2.5,
+        id: 'BASTION', name: 'The Bastion', short: 'BASTION', img: 'enemy_boss_bastion.webp', scale: 2.25,
         range: 'ranged', hpMult: 1.45, dmgMult: 0.85, speed: 4, armor: 25,
         resistances: { phys: 20, bio: 100, energy: -10 },
         blurb: 'A fortress on legs behind a shield it did not build. Kill the generator first.',
@@ -400,7 +413,7 @@ const BOSS_POOL = [
         intents: [['DEFEND', 0.30], ['AOE', 0.30], ['ATTACK', 0.25], ['HEAVY', 0.15]],
         // Warded to near-invulnerability until the generator standing beside it is destroyed.
         ward: { name: 'Ward Generator', classType: 'MECH', range: 'ranged', hp: 55, dmg: 6, speed: 3,
-                img: 'enemy_turret.webp', scale: 0.9, armor: 6,
+                img: 'enemy_turret.webp', scale: 1.2, armor: 6,
                 resistances: { phys: 5, bio: 100, energy: -20 } },
         wardSoak: 0.12,
         enrage: { cry: 'BASTION WARD COLLAPSING - FULL BATTERIES!', dmgScale: 1.35, forceAoe: true }
@@ -3312,6 +3325,7 @@ function dossierHtml(name) {
     const tally = bestiaryEntry(name);
     if (!rec) return `<div class="dossier-body"><div class="dossier-none">No file on this one.</div></div>`;
     const sig = rec.sig ? ENEMY_SIGS[rec.sig] : null;
+    const bp = rec.passive ? BOSS_PASSIVES[rec.passive] : null;
     const res = ['phys', 'bio', 'energy'].map(t => {
         const v = (rec.resistances || {})[t] || 0;
         const word = v >= 100 ? 'IMMUNE' : v > 5 ? `RESISTS ${v}` : v < 0 ? `WEAK ${v}` : '\u2014';
@@ -3324,8 +3338,9 @@ function dossierHtml(name) {
         ${sig ? `<div class="dossier-sig"><span class="dossier-sig-name">${sig.name}</span>
             <span class="dossier-sig-kind">${sig.kind === 'action' ? 'TELEGRAPHED' : sig.kind.toUpperCase()}</span>
             <span class="dossier-sig-desc">${sig.desc}</span></div>` : ''}
-        ${rec.passive ? `<div class="dossier-sig"><span class="dossier-sig-name">${rec.passive.name || 'Command'}</span>
-            <span class="dossier-sig-desc">${rec.passive.desc || ''}</span></div>` : ''}
+        ${bp ? `<div class="dossier-sig"><span class="dossier-sig-name">${bp.name}</span>
+            <span class="dossier-sig-kind">PASSIVE</span>
+            <span class="dossier-sig-desc">${bp.desc}</span></div>` : ''}
         <div class="dos-res-row">${res}</div>
         <div class="dossier-tally">
             <span>MET <b>${tally.met}</b></span>
@@ -3393,6 +3408,7 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
         if (b.sink) boss.sink = b.sink;
         if (b.dmgType) boss.dmgType = b.dmgType;
         if (b.stormTurn) { boss.stormTurn = b.stormTurn; boss.stormClock = 0; }
+        if (b.venom) { boss.venom = { ...b.venom }; boss.venomStacks = 0; boss.venomClock = 0; }
         boss.intent = rollIntent(boss);
 
         // A warlord that does not arrive alone brings its own: a lieutenant it hides behind, or
@@ -3787,7 +3803,7 @@ function resistBadges(ent) {
 
 function renderField() {
     renderQueue();
-    window.__threatCache = (combatActive && !pendingAction) ? threatBoard() : {}; const pTeam = document.getElementById('player-team'); const eTeam = document.getElementById('enemy-team'); pTeam.innerHTML = ''; eTeam.innerHTML = ''; const pCells = [], eCells = [];
+    window.__threatCache = (combatActive && !pendingAction) ? threatBoard() : {}; const pTeam = document.getElementById('player-team'); const eTeam = document.getElementById('enemy-team'); pTeam.innerHTML = ''; eTeam.innerHTML = ''; const pCells = [], eCells = [], eLoad = [];
     activeEntities.forEach(ent => {
         let isDead = ent.hp <= 0; const isAct = (!isDead && turnQueue.length > 0 && turnQueue[activeIndex]?.id === ent.id) ? 'active' : '';
         // The first render after death plays the fall; every render after shows the settled corpse.
@@ -3829,8 +3845,15 @@ function renderField() {
             if (pct < 95) soakTag = `<div class="soak-tag" title="A 100-damage physical blow lands for this">${pct}%</div>`;
         }
         // A signature is only fair if it is visible: the name rides the card, and plate,
-        // overwatch and a pending ranged shot each show their live state.
+        // overwatch and a pending ranged shot each show their live state. A commander's
+        // passive is as much a rule of the fight as a signature is, so it rides the card the
+        // same way - and the pump shows the dose it is on.
         let sigTag = '';
+        const bossPas = (!ent.isPlayer && !isDead && !sigOf(ent) && ent.bossPassive) ? BOSS_PASSIVES[ent.bossPassive] : null;
+        if (bossPas) {
+            const dose = ent.venom ? ` ${ent.venomStacks || 0}/${ent.venom.max}` : '';
+            sigTag = `<div class="sig-tag" title="${bossPas.desc}">${bossPas.name.toUpperCase()}${dose}</div>`;
+        }
         if (!ent.isPlayer && !isDead && sigOf(ent)) {
             const s = sigOf(ent);
             let state = '';
@@ -3874,11 +3897,12 @@ function renderField() {
                     ${isDead ? '' : resistBadges(ent)}
                 </div><img class="portrait ${hoverCls}" src="${ent.img}" style="${eliteGlow}">
             </div>`;
-        if (ent.isPlayer) pCells.push(html); else eCells.push(html);
+        if (ent.isPlayer) pCells.push(html); else { eCells.push(html); eLoad.push(Math.max(1, ent.scale || 1)); }
     });
     pTeam.innerHTML = pCells.join(''); eTeam.innerHTML = eCells.join('');
     pTeam.classList.toggle('crowded', pTeam.children.length >= 4);
     eTeam.classList.toggle('crowded', eTeam.children.length >= 4);
+    fitEnemyRow(eTeam, eLoad);
     // An open file closes itself if its subject dies or the squad starts aiming.
     if (inspecting) {
         const subj = activeEntities.find(e => e.id === inspecting);
@@ -3993,6 +4017,25 @@ function applyTurnStartEffects(ent) {
     if (ent.corrodedTurns > 0) { ent.corrodedTurns--; chg = true; }
     if (ent.markedTurns > 0) { ent.markedTurns--; chg = true; }
     if (chg) renderField();
+}
+
+// A commander's sprite is two to three slots wide. Standing one beside its retinue drew the
+// retinue entirely behind it - and the retinue is the unit these fights are asking you to
+// shoot first, so it was hidden behind the one thing you cannot usefully hit. Crowding is a
+// question of how much sprite is in the row rather than how many units are in it, so a row
+// carrying a commander measures the width it has and fits itself to it. Ordinary rows never
+// reach the guard, and a lone commander keeps its full size.
+function fitEnemyRow(team, scales) {
+    // 2.0 is the line between the heaviest ordinary stock (a Juggernaut at 1.8, which has
+    // always overlapped its neighbours and reads fine doing it) and a commander.
+    const retinue = scales.length > 1 && scales.some(s => s >= 2);
+    team.classList.toggle('retinue', retinue);
+    if (!retinue) { team.style.removeProperty('--row-fit'); return; }
+    const slot = team.firstElementChild ? team.firstElementChild.getBoundingClientRect().width : 0;
+    // Half the field, less the gap the two teams keep between them.
+    const room = (team.parentElement ? team.parentElement.clientWidth : 0) * 0.44;
+    const want = slot * scales.reduce((a, s) => a + s, 0);
+    team.style.setProperty('--row-fit', (want > room && room > 0) ? (room / want).toFixed(3) : '1');
 }
 
 function stimTarget() {
@@ -4326,6 +4369,8 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     if (hasRelic('LEAD_LINED_COAT') && t.isPlayer) cd = Math.floor(cd * 0.8);
     if (hasRelic('CHEM_ETCHER') && !t.isPlayer && (t.corrodedTurns || 0) > 0) cd = Math.floor(cd * 1.25);
     if (hasQuirk(t, 'THICK_HIDE')) cd = Math.max(1, cd - 3);
+    // Every dose the Vatborn takes is another split seam: it hits harder and it takes more.
+    if (t.venomStacks > 0) cd = Math.floor(cd * (1 + (t.venom ? t.venom.taken : 0.12) * t.venomStacks));
     // Riot Plate: bolted armour soaks half of everything until the plate itself is spent.
     if (hasSig(t, 'RIOT_PLATE') && (t.plate || 0) > 0) cd = Math.max(1, Math.floor(cd * 0.5));
     // A ward holds until its generator falls; a lieutenant's cover is worth heavy plate.
@@ -4454,6 +4499,24 @@ function pickTarget(enemy, candidates, intent) {
     return weighted[Math.floor(Math.random() * weighted.length)];
 }
 
+// One dose of the pump. Loud on the field on purpose: the whole mechanic is a trade the
+// player has to be able to read, so each dose says both halves of it at once.
+function venomDose(enemy, quiet) {
+    const v = enemy.venom;
+    if (!v || enemy.venomStacks >= v.max) return;
+    enemy.venomStacks++;
+    enemy.dmgBase = Math.max(1, Math.ceil(enemy.dmgBase * (1 + v.dmg)));
+    enemy.speed += v.speed;
+    enemy.baseArmor = Math.max(0, (enemy.baseArmor || 0) - v.armorLoss);
+    enemy.armor = Math.max(0, (enemy.armor || 0) - v.armorLoss);
+    if (!quiet) {
+        log(`> ${enemy.name} hits the pump - dose ${enemy.venomStacks}. Stronger, and further open.`, 'log-status');
+        spawnFCT(enemy.id, `VENOM ${enemy.venomStacks}`, 'fct-status');
+        playSFX('heal');
+    }
+    renderField();
+}
+
 function executeEnemyAi(enemy) {
     if (!combatActive) return;
     if (enemy.sigCd > 0) enemy.sigCd--;
@@ -4468,6 +4531,15 @@ function executeEnemyAi(enemy) {
         playSFX('enrage'); triggerShake(); renderField();
     }
     
+    // The Vatborn buys strength with skin. Each dose is worth more damage and more speed, and
+    // costs it armour and a share of its own resilience - so the wall you opened on gets
+    // steadily more dangerous and steadily easier to kill at the same time.
+    if (enemy.venom && enemy.hp > 0 && enemy.venomStacks < enemy.venom.max &&
+        ++enemy.venomClock >= enemy.venom.every) {
+        enemy.venomClock = 0;
+        venomDose(enemy);
+    }
+
     if (enemy.classType === 'BOSS' && enemy.phase === 1 && enemy.hp <= enemy.maxHp * (ascension >= 2 ? 0.6 : 0.5)) {
         enemy.phase = 2;
         playSFX('enrage');
@@ -4489,27 +4561,24 @@ function executeEnemyAi(enemy) {
             log(`> The squad is choking on rot.`, "log-status");
         }
 
-        if (e.split) {
-            // The same pool of health, in three places at once. Whatever the Vatborn had left is
-            // shared out - killing it is now killing all of it.
-            const share = Math.max(1, Math.floor(enemy.hp * (e.split.share || 0.4)));
-            enemy.hp = Math.max(1, enemy.hp - share * e.split.count);
-            enemy.maxHp = Math.max(enemy.hp, Math.floor(enemy.maxHp * 0.5));
-            enemy.armor = 0; enemy.baseArmor = 0;
-            for (let i = 0; i < (e.split.count || 2); i++) {
-                const half = {
-                    id: `split_${Date.now()}_${i}`, name: e.split.name, classType: enemy.classType,
-                    range: enemy.range, maxHp: share, hp: share, speed: enemy.speed,
-                    armor: 0, baseArmor: 0, isPlayer: false,
-                    dmgBase: Math.max(1, Math.floor(enemy.dmgBase * 0.7)),
-                    img: e.split.img, scale: e.split.scale, hpDrop: 0,
-                    stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
-                    resistances: { ...enemy.resistances }, dmgType: enemy.dmgType || 'phys', sig: null, sigCd: 0
-                };
-                half.intent = rollIntent(half);
-                activeEntities.push(half); turnQueue.push(half);
+        // The tank goes wide open at once: two doses in a breath, and the most broken operator
+        // on the field gets picked up and put back down.
+        if (e.venomBurst && enemy.venom) {
+            for (let i = 0; i < e.venomBurst && enemy.venomStacks < enemy.venom.max; i++) venomDose(enemy, true);
+        }
+        if (e.backbreaker) {
+            const hurt = activeEntities.filter(t => t.isPlayer && t.hp > 0)
+                .sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp))[0];
+            if (hurt) {
+                log(`> ${enemy.name} picks up ${hurt.name}. BACKBREAKER!`, 'log-dmg');
+                spawnFCT(enemy.id, 'BACKBREAKER', 'fct-status');
+                applyDamageHit(enemy, hurt, Math.floor(enemy.dmgBase * (e.backbreaker.mult || 1.8)),
+                    enemy.dmgType || 'phys', 'BACKBREAKER');
+                if (hurt.hp > 0 && e.backbreaker.stun) {
+                    hurt.stunnedTurns = Math.max(hurt.stunnedTurns, e.backbreaker.stun);
+                    spawnFCT(hurt.id, 'STUNNED', 'fct-status');
+                }
             }
-            log(`> ${enemy.name} splits into ${e.split.count} and keeps coming.`, 'log-dmg');
         }
 
         if (e.summon) {
@@ -4801,9 +4870,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },

@@ -15,13 +15,26 @@ module.exports = {
       complete: BOSS_POOL.every(b => b.name && b.short && b.img && b.blurb && b.bg && b.banner && b.intents && b.enrage),
       arted: BOSS_POOL.every(b => ASSET_LIST.includes(b.img)),
       mechanics: BOSS_POOL.filter(b => b.escort || b.ward || b.stormTurn || b.passive ||
-        b.enrage.split || b.enrage.summon || b.enrage.plague).length,
+        b.venom || b.enrage.summon || b.enrage.plague || b.enrage.backbreaker).length,
       newOnes: BOSS_POOL.filter(b => ['VATBORN', 'MARSHAL', 'STORMCALLER', 'BASTION'].includes(b.id)).length
     }));
     ok(`seven warlords, each with a unique id`, pool.count === 7 && pool.ids === 7);
     ok('each fully described, with its arena and its art declared', pool.complete && pool.arted);
     ok('every one carries a mechanic, not just intent weights', pool.mechanics === 7);
     ok('the four new ones are all present', pool.newOnes === 4);
+    // The dossier used to read .name off the passive id - a string - and print an empty block
+    // headed "Command" for every commander that had one.
+    const passives = await page.evaluate(() => {
+      const named = BOSS_POOL.filter(b => b.passive);
+      return { held: named.map(b => b.passive),
+               described: named.every(b => BOSS_PASSIVES[b.passive] && BOSS_PASSIVES[b.passive].name && BOSS_PASSIVES[b.passive].desc),
+               inFile: named.every(b => {
+                 const h = dossierHtml(b.name);
+                 return h.includes(BOSS_PASSIVES[b.passive].name) && !h.includes('Command');
+               }) };
+    });
+    ok(`every named passive is spelled out (${passives.held.join(', ')})`, passives.described);
+    ok('and the warlord\u2019s file prints it rather than an empty block', passives.inFile);
 
     // ---- the rotation: stable within a run, and never twice running ----
     const rotation = await page.evaluate(() => {
@@ -80,6 +93,8 @@ module.exports = {
         marshalSize: marshal.length, escort: marshal[1] && marshal[1].name,
         escortLinked: marshal[0].escortId === marshal[1].id,
         escortPlated: marshal[1] && marshal[1].sig === 'RIOT_PLATE' && marshal[1].plate > 0,
+        escortImg: marshal[1] && marshal[1].img, escortClass: marshal[1] && marshal[1].classType,
+        escortSpeed: marshal[1] && marshal[1].speed,
         bastionSize: bastion.length, ward: bastion[1] && bastion[1].name,
         wardLinked: bastion[0].wardId === bastion[1].id,
         loneSize: lone.length
@@ -88,6 +103,9 @@ module.exports = {
     ok(`the Marshal rides in with ${retinue.escort}`,
       retinue.marshalSize === 2 && retinue.escort === 'Bulldog' && retinue.escortLinked);
     ok('and the lieutenant carries its own plate', retinue.escortPlated);
+    ok(`the hound runs on its own art and its own legs (${retinue.escortImg}, SPD ${retinue.escortSpeed})`,
+      retinue.escortImg === 'enemy_hound_bulldog.webp' && retinue.escortClass === 'BEAST' &&
+      retinue.escortSpeed > 15);
     ok(`the Bastion stands behind a ${retinue.ward}`,
       retinue.bastionSize === 2 && retinue.ward === 'Ward Generator' && retinue.wardLinked);
     ok('a warlord with no retinue still arrives alone', retinue.loneSize === 1);
@@ -122,36 +140,85 @@ module.exports = {
     ok(`a standing lieutenant is worth heavy plate (100 -> ${cover.upEsc})`, cover.upEsc === 78);
     ok(`and falls away with them (100 -> ${cover.downEsc})`, cover.downEsc === 100);
 
-    // ---- the Vatborn divides what is left rather than adding to it ----
-    const split = await page.evaluate(() => {
+    // ---- the Vatborn buys strength with skin ----
+    const venom = await page.evaluate(() => {
       activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       initiateCombat('RAIDERS', false);
       const b = BOSS_POOL.find(x => x.id === 'VATBORN');
       const boss = {
         id: 'vb', name: b.name, classType: 'BOSS', range: 'melee', phase: 1,
-        maxHp: 400, hp: 180, speed: 8, armor: 8, baseArmor: 8, isPlayer: false, dmgBase: 30,
+        maxHp: 400, hp: 400, speed: 8, armor: b.armor, baseArmor: b.armor, isPlayer: false, dmgBase: 100,
         img: b.img, scale: b.scale, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0,
-        oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { ...b.resistances },
-        intents: b.intents, enrage: b.enrage, dmgType: 'bio'
+        oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 },
+        intents: b.intents, enrage: b.enrage, dmgType: 'bio', bossPassive: b.passive,
+        venom: { ...b.venom }, venomStacks: 0, venomClock: 0
+      };
+      boss.intent = rollIntent(boss);
+      const hero = playerRoster.find(p => p.gridPos > 0);
+      hero.quirk = null; hero.trinket = null; hero.traits = []; activeRelics = [];
+      activeEntities = [hero, boss]; turnQueue = [hero, boss];
+      combatActive = true;
+      const cold = { dmg: boss.dmgBase, speed: boss.speed, armor: boss.armor,
+                     takes: mitigate(hero, boss, 100, 'phys', null).n };
+      const steps = [];
+      // It doses on its own clock, not on every turn.
+      for (let i = 0; i < 12; i++) { boss.venomClock++;
+        if (boss.venomClock >= boss.venom.every && boss.venomStacks < boss.venom.max) {
+          boss.venomClock = 0; venomDose(boss, true);
+        }
+        steps.push(boss.venomStacks);
+      }
+      const hot = { dmg: boss.dmgBase, speed: boss.speed, armor: boss.armor,
+                    takes: mitigate(hero, boss, 100, 'phys', null).n };
+      renderField();
+      const tag = document.querySelector('#enemy-team .sig-tag');
+      const card = tag ? tag.innerText.trim() : '';
+      combatActive = false;
+      return { cold, hot, steps, cap: boss.venom.max, stacks: boss.venomStacks, card };
+    });
+    ok(`it starts behind real plate (${venom.cold.armor} armour, a 100 blow lands for ${venom.cold.takes})`,
+      venom.cold.armor >= 12 && venom.cold.takes < 90);
+    ok(`each dose buys damage and speed (${venom.cold.dmg} -> ${venom.hot.dmg} DMG, ${venom.cold.speed} -> ${venom.hot.speed} SPD)`,
+      venom.hot.dmg > venom.cold.dmg * 1.5 && venom.hot.speed > venom.cold.speed);
+    ok(`and costs it skin (a 100 blow now lands for ${venom.hot.takes})`,
+      venom.hot.armor === 0 && venom.hot.takes > venom.cold.takes * 1.5);
+    ok(`the pump runs dry (${venom.stacks}/${venom.cap} doses, ticking every other turn)`,
+      venom.stacks === venom.cap && venom.steps[0] === 0 && venom.steps[1] === 1);
+    ok(`and the card counts the doses out loud (${venom.card})`,
+      /VENOM PUMP\s+5\/5/i.test(venom.card));
+
+    // ---- and at half health it opens the tank and breaks somebody over its knee ----
+    const back = await page.evaluate(() => {
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      initiateCombat('RAIDERS', false);
+      const b = BOSS_POOL.find(x => x.id === 'VATBORN');
+      const boss = {
+        id: 'vb', name: b.name, classType: 'BOSS', range: 'melee', phase: 1,
+        maxHp: 400, hp: 180, speed: 8, armor: b.armor, baseArmor: b.armor, isPlayer: false, dmgBase: 20,
+        img: b.img, scale: b.scale, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0,
+        oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 },
+        intents: b.intents, enrage: b.enrage, dmgType: 'bio', bossPassive: b.passive,
+        venom: { ...b.venom }, venomStacks: 0, venomClock: 0
       };
       boss.intent = rollIntent(boss);
       const heroes = playerRoster.filter(p => p.gridPos > 0);
+      heroes.forEach(h => { h.quirk = null; h.trinket = null; h.traits = []; h.maxHp = 200; h.hp = 200; });
+      activeRelics = [];
+      // The most broken operator on the field is the one it picks up.
+      const mark = heroes[heroes.length - 1]; mark.hp = 120;
       activeEntities = [...heroes, boss]; turnQueue = [...heroes, boss];
       combatActive = true;
-      const poolBefore = boss.hp;
       executeEnemyAi(boss);
-      const spawn = activeEntities.filter(e => !e.isPlayer && e.id !== 'vb');
-      const poolAfter = boss.hp + spawn.reduce((a, s) => a + s.hp, 0);
-      const out = { phase: boss.phase, spawned: spawn.length, named: spawn[0] && spawn[0].name,
-                    poolBefore, poolAfter, queued: spawn.every(s => turnQueue.includes(s)),
-                    armourGone: boss.armor === 0 };
+      const out = { phase: boss.phase, stacks: boss.venomStacks,
+                    markHp: mark.hp, markStunned: mark.stunnedTurns,
+                    othersWhole: heroes.filter(h => h !== mark).every(h => h.hp === h.maxHp) };
       combatActive = false;
       return out;
     });
-    ok('at half health the Vatborn comes apart', split.phase === 2 && split.spawned === 2);
-    ok(`into ${split.named}s that share what it had left (${split.poolBefore} -> ${split.poolAfter})`,
-      split.poolAfter === split.poolBefore && split.named === 'Vat-Spawn');
-    ok('each taking its own turn, and the husk sheds its plate', split.queued && split.armourGone);
+    ok('breaking it past half cranks the tank wide open', back.phase === 2 && back.stacks === 2);
+    ok(`and the worst-off operator gets picked up and put down (120 -> ${back.markHp} HP)`,
+      back.markHp < 120 && back.markStunned >= 1);
+    ok('it is one operator, not the whole line', back.othersWhole);
 
     // ---- the Stormcaller will not let a forecast stand ----
     const storm = await page.evaluate(() => {

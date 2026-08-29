@@ -59,8 +59,8 @@ module.exports = {
     ok('boss art renders', await page.evaluate(() =>
       [...document.querySelectorAll('#enemy-team .portrait')].every(i => i.complete && i.naturalWidth > 0)));
     const pending = await page.evaluate(() => PENDING_ART);
-    ok('no missing boss asset beyond the art still to be drawn',
-      notFound.filter(f => !pending.includes(f)).length === 0);
+    ok('nothing is still waiting to be drawn', pending.length === 0);
+    ok(`no missing boss asset (${notFound.join(', ') || 'none'})`, notFound.length === 0);
 
     // ---- breaking each one past half does something different ----
     const enrage = async (bossId) => {
