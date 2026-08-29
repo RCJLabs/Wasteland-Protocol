@@ -30,7 +30,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
-                 promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0,
+                 promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1 };
 
@@ -236,6 +236,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
 
     currentNodeType = node.type; isCurrentNodeElite = !!node.elite;
     const won = fight(node.type, !!node.elite);
+    activeEntities.filter(e => !e.isPlayer && e.sig).forEach(e => {
+      stat.sigsFaced[e.sig] = (stat.sigsFaced[e.sig] || 0) + 1;
+    });
     stat.nodes++; runStats.nodes++;
 
     if (!won) {
@@ -366,6 +369,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes }) => {
   line('promotions per run', `${mean(nums('promotions')).toFixed(1)} (${mean(nums('sigsTaken')).toFixed(1)} signatures)`);
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   line('armories visited per run', `${mean(nums('shops')).toFixed(1)} (${Math.round(mean(nums('shopScrap')))} scrap spent)`);
+  const sigs = {};
+  results.forEach(r => Object.entries(r.sigsFaced || {}).forEach(([k, v]) => { sigs[k] = (sigs[k] || 0) + v; }));
+  line('hostile signatures met', Object.entries(sigs).sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `${k} ${v}`).join(', ') || 'none');
   line('deepest bond per run', `${mean(nums('maxBond')).toFixed(1)} fights (${mean(nums('bondSaves')).toFixed(1)} step-ins)`);
   const fronts = {};
   results.forEach(r => (r.frontsSeen || []).forEach(f => { if (f) fronts[f] = (fronts[f] || 0) + 1; }));

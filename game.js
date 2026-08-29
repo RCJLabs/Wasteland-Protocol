@@ -828,6 +828,10 @@ const CODEX = [
         ...GEAR_POOL.filter(g => g.slot === 'mod').map(g => `${g.name} (${g.cls}) — ${g.desc}`),
         ...GEAR_POOL.filter(g => g.slot === 'trinket').map(g => `${g.name} — ${g.desc}`)
     ] },
+    { id: 'HOSTILES', title: 'KNOW THE HOSTILES', body: () => [
+        'Every hostile carries a signature. A passive one is always running; an action is telegraphed by its own icon a turn before it lands, so there is always an answer.',
+        ...Object.values(ENEMY_SIGS).map(s => `${s.name} (${s.kind === 'action' ? 'telegraphed' : s.kind}) \u2014 ${s.desc}`)
+    ] },
     { id: 'ASCENSION', title: 'ASCENSION PROTOCOLS', body: () => [
         'The ladder after the game is beaten in the ordinary sense: named protocols unlocked by your deepest sector ever, chosen on the contract board, each rung stacking every twist below it - with a score multiplier above what contracts give.',
         ...PROTOCOLS.map(p => `${p.name} (Sector ${p.gate}) — ${p.desc} Score x${p.mult.toFixed(2)}.`)
@@ -2879,6 +2883,46 @@ function finishShop() {
     currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap();
 }
 
+// ── Enemies that do things ──────────────────────────────────────────────────────────────
+// Ten enemy types shared six generic intents between them, so every fight was the same fight
+// with different numbers: the only per-enemy behaviour in the engine was one hardcoded name
+// list. Each type now carries a signature - either a passive that bends how it deals or takes
+// damage, or a telegraphed action it rolls alongside the ordinary intents, so the squad gets
+// a turn's warning and an answer. Every one is built from statuses, reach and formation rules
+// the squad already plays with, pointed the other way.
+const ENEMY_SIGS = {
+    PACK_HUNT:  { name: 'Pack Hunt',    kind: 'passive', desc: 'Deals +12% damage for every other living packmate.' },
+    FRENZY:     { name: 'Frenzy',       kind: 'passive', desc: 'Hits harder the closer it is to death, up to +60%.' },
+    RIOT_PLATE: { name: 'Riot Plate',   kind: 'passive', desc: 'Bolted plate halves incoming damage until it is broken through.' },
+    ROTOR_LIFT: { name: 'Rotor Lift',   kind: 'passive', desc: 'Hovers out of reach: melee lands at 40%.' },
+    GAS_BLOOM:  { name: 'Gas Bloom',    kind: 'death',   desc: 'Bursts on death, corroding the whole squad for 2 turns.' },
+    DRAG_DOWN:  { name: 'Drag Down',    kind: 'action',  icon: '\u{1FA9D}', weight: 0.30, cd: 2,
+                  desc: 'Hauls a back-rank operator to the front and mauls them.' },
+    CALL_IT_IN: { name: 'Call It In',   kind: 'action',  icon: '\u{1F4E3}', weight: 0.22, cd: 99,
+                  desc: 'Whistles up another raider. Once each.' },
+    RANGING:    { name: 'Ranging Shot', kind: 'action',  icon: '\u{1F52D}', weight: 0.40, cd: 2,
+                  desc: 'Ranges the back rank, then executes that operator next turn for double.' },
+    OVERWATCH:  { name: 'Overwatch',    kind: 'action',  icon: '\u{1F3AF}', weight: 0.35, cd: 3,
+                  desc: 'Locks the field down: the next two operators to act are shot as they move.' },
+    AEGIS:      { name: 'Aegis Field',  kind: 'action',  icon: '\u{1F4E1}', weight: 0.30, cd: 3,
+                  desc: 'Projects plating onto every other enemy for 2 turns.' }
+};
+function sigOf(ent) { return (ent && !ent.isPlayer && ent.sig) ? (ENEMY_SIGS[ent.sig] || null) : null; }
+function hasSig(ent, id) { return !!(ent && !ent.isPlayer && ent.sig === id); }
+
+// The passives that change what an enemy's blow is worth, figured where the raw damage is.
+function enemyDmgMult(enemy) {
+    let m = 1;
+    if (hasSig(enemy, 'PACK_HUNT')) {
+        const pack = activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.id !== enemy.id && hasSig(e, 'PACK_HUNT')).length;
+        m *= 1 + 0.12 * pack;
+    }
+    if (hasSig(enemy, 'FRENZY') && enemy.maxHp > 0) {
+        m *= 1 + 0.6 * (1 - Math.max(0, enemy.hp) / enemy.maxHp);
+    }
+    return m;
+}
+
 const INTENT_ICONS = { AOE: '🧨', HEAVY: '💥', STATUS: '☣️', DEFEND: '🛡️', ATTACK: '⚔️', FLANK: '🌀' };
 
 function intentFor(type, enemy) {
@@ -2888,6 +2932,12 @@ function intentFor(type, enemy) {
 
 function rollIntent(enemy) {
     let rand = Math.random();
+    // A signature action outranks the generic table when it is off cooldown and its roll comes
+    // up - so a turret sometimes covers the field instead of simply shooting again.
+    const sig = sigOf(enemy);
+    if (sig && sig.kind === 'action' && (enemy.sigCd || 0) <= 0 && Math.random() < sig.weight) {
+        return { type: 'SIG', icon: sig.icon, sig: enemy.sig };
+    }
     // A boss past its threshold can be locked into one behaviour - the Colossus stops aiming
     // at anyone in particular and just shells the whole line.
     if (enemy.forceAoe) return intentFor('AOE', enemy);
@@ -2930,20 +2980,20 @@ function formatStat(n) {
 function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     const pool = {
         'BEASTS': [
-            { name: "Attack Dog", minTier: 1, isHeavy: false, classType: "BEAST", range: 'melee', maxHp: 30, speed: 18, armor: 0, dmgBase: 10, img: "enemy_dog.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } }, 
-            { name: "Mutant", minTier: 5, isHeavy: true, classType: "MUTANT", range: 'melee', maxHp: 70, speed: 7, armor: 0, dmgBase: 25, img: "enemy_mutant.webp", scale: 1.5, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 20, energy: -5 } }, 
-            { name: "Chem Fiend", minTier: 6, isHeavy: true, classType: "MUTANT", range: 'ranged', maxHp: 60, speed: 11, armor: 0, dmgBase: 15, img: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 50, energy: -5 } }
+            { name: "Attack Dog", sig: 'PACK_HUNT', minTier: 1, isHeavy: false, classType: "BEAST", range: 'melee', maxHp: 30, speed: 18, armor: 0, dmgBase: 10, img: "enemy_dog.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } }, 
+            { name: "Mutant", sig: 'DRAG_DOWN', minTier: 5, isHeavy: true, classType: "MUTANT", range: 'melee', maxHp: 70, speed: 7, armor: 0, dmgBase: 25, img: "enemy_mutant.webp", scale: 1.5, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 20, energy: -5 } }, 
+            { name: "Chem Fiend", sig: 'GAS_BLOOM', minTier: 6, isHeavy: true, classType: "MUTANT", range: 'ranged', maxHp: 60, speed: 11, armor: 0, dmgBase: 15, img: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 50, energy: -5 } }
         ],
         'RAIDERS': [
-            { name: "Raider", minTier: 1, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 40, speed: 10, armor: 0, dmgBase: 12, img: "enemy_raider.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 2, energy: 0 } }, 
-            { name: "Psycho", minTier: 4, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 45, speed: 14, armor: 0, dmgBase: 18, img: "enemy_psycho.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
-            { name: "Sniper", minTier: 5, isHeavy: false, classType: "RAIDER", range: 'ranged', maxHp: 35, speed: 16, armor: 0, dmgBase: 25, img: "enemy_sniper.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
-            { name: "Juggernaut", minTier: 7, isHeavy: true, classType: "RAIDER", range: 'melee', maxHp: 90, speed: 6, armor: 5, dmgBase: 18, img: "enemy_juggernaut.webp", scale: 1.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 0, energy: -5 } }
+            { name: "Raider", sig: 'CALL_IT_IN', minTier: 1, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 40, speed: 10, armor: 0, dmgBase: 12, img: "enemy_raider.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 2, energy: 0 } }, 
+            { name: "Psycho", sig: 'FRENZY', minTier: 4, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 45, speed: 14, armor: 0, dmgBase: 18, img: "enemy_psycho.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
+            { name: "Sniper", sig: 'RANGING', minTier: 5, isHeavy: false, classType: "RAIDER", range: 'ranged', maxHp: 35, speed: 16, armor: 0, dmgBase: 25, img: "enemy_sniper.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
+            { name: "Juggernaut", sig: 'RIOT_PLATE', minTier: 7, isHeavy: true, classType: "RAIDER", range: 'melee', maxHp: 90, speed: 6, armor: 5, dmgBase: 18, img: "enemy_juggernaut.webp", scale: 1.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 0, energy: -5 } }
         ],
         'MECH': [
-            { name: "Drone", minTier: 4, isHeavy: false, classType: "DRONE", range: 'ranged', isHovering: true, maxHp: 25, speed: 18, armor: 5, dmgBase: 8, img: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 100, energy: -10 } }, 
-            { name: "Turret", minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
-            { name: "War Rig", minTier: 8, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
+            { name: "Drone", sig: 'ROTOR_LIFT', minTier: 4, isHeavy: false, classType: "DRONE", range: 'ranged', isHovering: true, maxHp: 25, speed: 18, armor: 5, dmgBase: 8, img: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 100, energy: -10 } }, 
+            { name: "Turret", sig: 'OVERWATCH', minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
+            { name: "War Rig", sig: 'AEGIS', minTier: 8, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
         ]
     };
 
@@ -3005,6 +3055,10 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
         if (allies.length && effTier >= 6 && i > 0 && Math.random() < 0.25) usePool = poolFor(allies[Math.floor(Math.random() * allies.length)]);
         let t = JSON.parse(JSON.stringify(usePool[Math.floor(Math.random() * usePool.length)])); 
         let hp = Math.floor(t.maxHp * mult); t.hp = hp; t.maxHp = hp; t.dmgBase = Math.floor(t.dmgBase * dmgMult); t.baseArmor = t.armor || 0;
+        t.sigCd = 0;
+        // Riot Plate is a second bar that only soaks: sized off the unit so it scales with the
+        // sector without needing a curve of its own.
+        if (hasSig(t, 'RIOT_PLATE')) t.plate = Math.floor(hp * 0.5);
         
         if (isEliteNode && (ascension >= 1 || Math.random() < 0.6)) {
             let affixes = ['FRENZIED', 'ARMORED', 'VAMPIRIC'];
@@ -3350,6 +3404,17 @@ function renderField() {
                 else if (pendingAction !== 'CAUTERIZE' && pendingAction !== 'REPOSITION' && !ent.isPlayer) { tCls = 'targetable-enemy'; clk = targetable(`data-action="target" data-id="${ent.id}"`); }
             }
         }
+        // A signature is only fair if it is visible: the name rides the card, and plate,
+        // overwatch and a pending ranged shot each show their live state.
+        let sigTag = '';
+        if (!ent.isPlayer && !isDead && sigOf(ent)) {
+            const s = sigOf(ent);
+            let state = '';
+            if (ent.sig === 'RIOT_PLATE') state = (ent.plate || 0) > 0 ? ` ${ent.plate}` : ' BROKEN';
+            if (ent.sig === 'OVERWATCH' && (ent.overwatch || 0) > 0) state = ' \u2022 LIVE';
+            if (ent.sig === 'RANGING' && ent.lockOn) state = ' \u2022 LOCKED';
+            sigTag = `<div class="sig-tag${(ent.sig === 'RIOT_PLATE' && !(ent.plate > 0)) ? ' sig-spent' : ''}" title="${s.desc}">${s.name.toUpperCase()}${state}</div>`;
+        }
         let eff = ''; if (ent.bleedingTurns > 0 && !isDead) eff += `💧`; if (ent.stunnedTurns > 0 && !isDead) eff += `💫`; if (ent.armorTurns > 0 && !isDead) eff += `🛡️`; if (ent.oiledTurns > 0 && !isDead) eff += `🛢️`; if (ent.corrodedTurns > 0 && !isDead) eff += `🧪`; if (ent.markedTurns > 0 && !isDead) eff += `🎯`;
         let hoverCls = ent.isHovering && !isDead ? 'hovering' : '';
         const hint = (pendingAction && !isDead && tCls === 'targetable-enemy') ? comboHint(pendingAction, ent) : null;
@@ -3373,6 +3438,7 @@ function renderField() {
                 ${guarding ? `<div class="guard-flag">COVERING</div>` : ''}
                 <div style="width: 100%; position: relative; z-index: 10; transform: translateY(${ent.hpDrop || 0}px);">
                     ${rank ? `<div class="rank-chip rank-${ent.gridPos}">${rank}</div>` : ''}
+                    ${sigTag}
                     ${eff ? `<div class="status-badge">${eff}</div>` : ''}
                     <div class="hp-text">${ent.hp}/${ent.maxHp}</div>
                     <div class="hp-container"><div class="hp-fill ${ent.isPlayer ? 'player-hp' : 'enemy-hp'}" style="width: ${(ent.hp / ent.maxHp) * 100}%"></div></div>
@@ -3531,7 +3597,22 @@ function skipStunnedTurn() { turnQueue[activeIndex].stunnedTurns--; renderField(
 function queueAction(a, variant) { pendingAction = a; if (a === 'OVERDRIVE') pendingOverdrive = variant || null; renderField(); }
 function cancelAction() { pendingAction = null; renderField(); }
 
+// A turret that has locked the field down shoots whoever moves next, before their action
+// resolves. It is what makes killing it first worth a turn.
+function fireOverwatch(actor) {
+    if (!actor || !actor.isPlayer || actor.hp <= 0) return;
+    const watcher = activeEntities.find(e => !e.isPlayer && e.hp > 0 && (e.overwatch || 0) > 0);
+    if (!watcher) return;
+    watcher.overwatch--;
+    log(`> ${watcher.name} fires on ${actor.name} as they move.`, 'log-dmg');
+    playAttackAnim(watcher, actor, null);
+    applyDamageHit(watcher, actor, Math.floor(watcher.dmgBase * 0.7 * enemyDmgMult(watcher)), watcher.dmgType || 'phys', 'BASIC');
+}
+
 function resolveAction(targetId) {
+    fireOverwatch(turnQueue[activeIndex]);
+    // The covering shot can drop the operator who was about to act; their turn ends with them.
+    if (!combatActive || !turnQueue[activeIndex] || turnQueue[activeIndex].hp <= 0) { pendingAction = null; checkWinState(); return; }
     let actEnt = turnQueue[activeIndex]; let target = activeEntities.find(e => e.id === targetId);
     let livingEnemies = activeEntities.filter(e => !e.isPlayer && e.hp > 0);
     let dist = livingEnemies.findIndex(e => e.id === targetId);
@@ -3687,6 +3768,8 @@ function resolveAction(targetId) {
         if (hasRelic('RANGEFINDER') && isRanged(pendingAction)) { dmgMult *= relicSetActive('Full Arsenal') ? 1.25 : 1.15; }
         if (hasRelic('VULTURES_INSTINCT') && isCombo) { dmgMult *= 1.25; }
         if (hasRelic('GLASS_CANNON_CORE')) { dmgMult *= 1.4; }
+        // Rotor Lift: a hovering drone is a ranged problem. Swinging at it is most of a wasted turn.
+        if (hasSig(target, 'ROTOR_LIFT') && moveReachFor(pendingAction, actEnt) === 'melee') dmgMult *= 0.4;
         if (hasRelic('HUNGRY_BLADE') && !isMelee(pendingAction)) { dmgMult *= 0.85; }
 
         // A sandstorm blinds anything fired across the field. This used to be a second hand-kept
@@ -3792,6 +3875,8 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
         if (hasRelic('LEAD_LINED_COAT') && t.isPlayer) cd = Math.floor(cd * 0.8);
         if (hasRelic('CHEM_ETCHER') && !t.isPlayer && (t.corrodedTurns || 0) > 0) cd = Math.floor(cd * 1.25);
         if (hasQuirk(t, 'THICK_HIDE')) cd = Math.max(1, cd - 3);
+        // Riot Plate: bolted armour soaks half of everything until the plate itself is spent.
+        if (hasSig(t, 'RIOT_PLATE') && (t.plate || 0) > 0) cd = Math.max(1, Math.floor(cd * 0.5));
         if ((abilityStr === 'SLUG_SHOT' && hasTrait(attacker, 'BREACHING_ROUNDS')) ||
             (abilityStr === 'QUICK_SHOT' && hasTrait(attacker, 'PIERCING_ROUNDS'))) ac = 0;
         let n = Math.max(1, cd - rv - ac); if (rv >= 100) n = 0;
@@ -3810,8 +3895,28 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
             ({ n: netDmg, rv: resistValue } = figure(target));
         }
     }
+    // Riot Plate drains by what it soaked; breaking it is a moment worth announcing, and it is
+    // why a single heavy hit beats chip damage against a Juggernaut.
+    if (hasSig(target, 'RIOT_PLATE') && (target.plate || 0) > 0 && netDmg > 0) {
+        target.plate -= netDmg;
+        if (target.plate <= 0) {
+            target.plate = 0;
+            log(`> ${target.name}'s riot plate buckles!`, 'log-combo');
+            spawnFCT(target.id, 'PLATE BROKEN', 'fct-weak');
+        }
+    }
     target.hp = Math.max(0, target.hp - netDmg);
     if (netDmg > 0) flashClass(target.id, target.isPlayer ? 'anim-recoil-left' : 'anim-recoil-right', 320);
+    // Gas Bloom: a chem fiend is as dangerous dead as alive.
+    if (target.hp <= 0 && hasSig(target, 'GAS_BLOOM') && !target.bloomed) {
+        target.bloomed = true;
+        activeEntities.filter(p => p.isPlayer && p.hp > 0).forEach(p => {
+            p.corrodedTurns = Math.max(p.corrodedTurns || 0, 2);
+            spawnFCT(p.id, 'CORRODED', 'fct-status');
+        });
+        log(`> ${target.name} bursts. The squad is choking on the cloud.`, 'log-dmg');
+        playSFX('blast');
+    }
     // Second Wind: once per fight, a killing blow leaves them standing at 1.
     if (target.hp <= 0 && hasQuirk(target, 'SECOND_WIND') && !target.secondWindUsed) {
         target.secondWindUsed = true; target.hp = 1;
@@ -3880,6 +3985,7 @@ function pickTarget(enemy, candidates, intent) {
 
 function executeEnemyAi(enemy) {
     if (!combatActive) return;
+    if (enemy.sigCd > 0) enemy.sigCd--;
     
     if (enemy.classType === 'BOSS' && enemy.phase === 1 && enemy.hp <= enemy.maxHp * (ascension >= 2 ? 0.6 : 0.5)) {
         enemy.phase = 2;
@@ -3938,6 +4044,77 @@ function executeEnemyAi(enemy) {
         if (cover) { intercepted = target; target = cover; }
     }
     
+    if (intent.type === 'SIG') {
+        const sig = sigOf(enemy);
+        enemy.sigCd = (sig && sig.cd) || 2;
+        enemy.intentDone = true;
+
+        if (enemy.sig === 'DRAG_DOWN') {
+            // Reaches past the line and hauls the furthest operator to the front, then mauls
+            // them - the formation answer to a formation game.
+            const back = [...validTargets].sort((a, b) => b.gridPos - a.gridPos)[0];
+            const front = [...validTargets].sort((a, b) => a.gridPos - b.gridPos)[0];
+            if (back && front && back.id !== front.id) {
+                const swap = back.gridPos; back.gridPos = front.gridPos; front.gridPos = swap;
+                const order = (a, b) => (a.isPlayer && b.isPlayer) ? a.gridPos - b.gridPos : 0;
+                activeEntities = [...activeEntities.filter(e => e.isPlayer).sort(order), ...activeEntities.filter(e => !e.isPlayer)];
+                log(`> ${enemy.name} drags ${back.name} out of the line!`, 'log-dmg');
+                spawnFCT(back.id, 'DRAGGED', 'fct-status');
+            }
+            if (back) { triggerShake(); playAttackAnim(enemy, back, null); applyDamageHit(enemy, back, Math.floor((enemy.dmgBase + 4) * enemyDmgMult(enemy)), enemy.dmgType || 'phys', 'BASIC'); }
+        }
+
+        else if (enemy.sig === 'CALL_IT_IN') {
+            // One whistle each, and never into an already-crowded field.
+            const crowd = activeEntities.filter(e => !e.isPlayer && e.hp > 0).length;
+            if (crowd < 5) {
+                const m = 1 + ((currentTier - 1) * 0.4);
+                const help = JSON.parse(JSON.stringify(enemy));
+                help.id = `called_${Date.now()}_${Math.floor(Math.random() * 999)}`;
+                help.hp = help.maxHp = Math.max(10, Math.floor(40 * m * difficultyMult));
+                help.dmgBase = Math.max(4, Math.floor(12 * m * difficultyMult));
+                help.sig = null; help.sigCd = 0; help.plate = 0;
+                help.bleedingTurns = 0; help.stunnedTurns = 0; help.oiledTurns = 0;
+                help.corrodedTurns = 0; help.markedTurns = 0; help.armorTurns = 0;
+                help.intent = rollIntent(help);
+                activeEntities.push(help); turnQueue.push(help);
+                log(`> ${enemy.name} whistles. Another raider comes running.`, 'log-dmg');
+                playSFX('enrage');
+            } else {
+                log(`> ${enemy.name} shouts for help. Nobody answers.`, 'log-status');
+            }
+        }
+
+        else if (enemy.sig === 'RANGING') {
+            // Two beats: range someone in the back, then execute them. Killing the sniper,
+            // healing the mark or breaking line of sight are all real answers.
+            const mark = [...validTargets].sort((a, b) => b.gridPos - a.gridPos)[0];
+            if (mark) {
+                enemy.lockOn = mark.id;
+                log(`> ${enemy.name} ranges ${mark.name}.`, 'log-status');
+                spawnFCT(mark.id, 'RANGED', 'fct-weak');
+                playSFX('click');
+            }
+        }
+
+        else if (enemy.sig === 'OVERWATCH') {
+            enemy.overwatch = 2;
+            log(`> ${enemy.name} locks the field down.`, 'log-status');
+            spawnFCT(enemy.id, 'OVERWATCH', 'fct-status');
+            playSFX('heal');
+        }
+
+        else if (enemy.sig === 'AEGIS') {
+            const covered = activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.id !== enemy.id);
+            covered.forEach(e => { e.armor = (e.armor || 0) + 8; e.armorTurns = Math.max(e.armorTurns || 0, 2); spawnFCT(e.id, '+ARMOR', 'fct-heal'); });
+            log(covered.length ? `> ${enemy.name} throws plating over ${covered.length === 1 ? 'its escort' : 'its escorts'}.`
+                               : `> ${enemy.name} projects a field over nobody.`, 'log-status');
+            playSFX('heal');
+        }
+
+        enemy.intent = rollIntent(enemy); checkWinState(); return;
+    }
+
     if (intent.type === 'DEFEND') {
         enemy.armor += 15; enemy.armorTurns = 2; spawnFCT(enemy.id, "+ARMOR", "fct-heal"); log(`> ${enemy.name} took a defensive stance!`, "log-status"); playSFX('heal');
         enemy.intent = rollIntent(enemy); checkWinState(); return;
@@ -3945,7 +4122,7 @@ function executeEnemyAi(enemy) {
 
     if (intent.type === 'AOE') {
         playSFX('blast'); triggerShake(); log(`> ${enemy.name} unleashed an area attack!`, "log-dmg");
-        let rawDmg = Math.floor(enemy.dmgBase * 0.7); 
+        let rawDmg = Math.floor(enemy.dmgBase * 0.7 * enemyDmgMult(enemy)); 
         if (currentWeather === 'SANDSTORM') rawDmg = Math.floor(rawDmg * 0.75);
         if (currentWeather === 'BLOODLUST') rawDmg = Math.floor(rawDmg * 1.2);
         validTargets.forEach(targ => { applyDamageHit(enemy, targ, rawDmg, enemy.dmgType || 'phys', 'BASIC'); });
@@ -3958,7 +4135,20 @@ function executeEnemyAi(enemy) {
         playAttackAnim(enemy, target, null);
         let t = enemy.dmgType || 'phys'; 
         let rawDmg = enemy.dmgBase + Math.floor(Math.random() * 5);
-        
+        rawDmg = Math.floor(rawDmg * enemyDmgMult(enemy));
+
+        // The ranged shot comes due: if the marked operator still stands, this one hurts.
+        if (enemy.lockOn) {
+            const mark = validTargets.find(p => p.id === enemy.lockOn);
+            enemy.lockOn = null;
+            if (mark) {
+                target = mark; intercepted = null;
+                rawDmg = Math.floor(rawDmg * 2.2);
+                log(`> ${enemy.name} takes the shot it lined up.`, 'log-dmg');
+                triggerShake();
+            }
+        }
+
         if (intent.type === 'HEAVY') { rawDmg = Math.floor(rawDmg * 1.5); triggerShake(); }
         if (intercepted) {
             rawDmg = Math.floor(rawDmg * Math.min(hasRelic('BULWARK_PLATING') ? 0.35 : 1, hasTrait(target, 'BULWARK') ? 0.45 : 0.6));
@@ -4107,9 +4297,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, collectLoot, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, flashClass, pulseIntent, playAttackAnim, sigOf, hasSig, enemyDmgMult, fireOverwatch, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, resistBadges, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, RESERVE_XP_RATE, ASSET_LIST, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },

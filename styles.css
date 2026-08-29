@@ -540,3 +540,11 @@ button.reach-short { border-color: #7a5a20; }
 .perk-sig .relic-card-desc { color: #cbb98a; }
 .perk-stat { border-color: #667; color: #99a; }
 .perk-bank { border-color: #888; color: #888; margin-top: 6px; }
+
+/* Enemy signatures: the name of the thing a hostile does, on the hostile that does it. */
+/* The live state - plate remaining, LIVE, LOCKED - is the half that matters mid-fight, so the
+   badge wraps rather than truncating: an ellipsis ate exactly the part worth reading. */
+.sig-tag { font-size: 7.5px; line-height: 1.25; letter-spacing: .5px; text-transform: uppercase;
+  text-align: center; color: #d98a5a; border: 1px solid #6b3a22; background: rgba(20,8,4,0.78);
+  padding: 1px 2px; margin-bottom: 2px; overflow-wrap: anywhere; }
+.sig-tag.sig-spent { color: #7a7266; border-color: #3a352c; text-decoration: line-through; }
