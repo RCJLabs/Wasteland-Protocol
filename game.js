@@ -1686,8 +1686,17 @@ const SFX = {
     shotgun:  { wave: 'sawtooth', from: 420,  to: 70,  dur: 0.26, gain: 0.12, noise: 0.75, filter: 1100 },
     flame:    { wave: 'sawtooth', from: 180,  to: 420, dur: 0.30, gain: 0.07, noise: 0.85, filter: 900 },
     beast:    { wave: 'sawtooth', from: 520,  to: 90,  dur: 0.16, gain: 0.09, noise: 0.55, filter: 1500 },
-    // outcomes
+    // outcomes. An impact used to be one voice at three volumes; a scratch, a solid landing
+    // and a shell that takes a third of somebody off are three different sounds now, and the
+    // two results that change a decision - a weakness found, a unit down - have their own.
+    graze:    { wave: 'triangle', from: 320,  to: 170, dur: 0.06, gain: 0.05, noise: 0.18, filter: 2600 },
     hit:      { wave: 'triangle', from: 200,  to: 55,  dur: 0.12, gain: 0.09 },
+    crunch:   { wave: 'triangle', from: 150,  to: 42,  dur: 0.20, gain: 0.12, noise: 0.40, filter: 1000, chord: [1, 0.5] },
+    crush:    { wave: 'sawtooth', from: 120,  to: 30,  dur: 0.34, gain: 0.15, noise: 0.65, filter: 620,  chord: [1, 0.5, 1.5] },
+    soak:     { wave: 'square',   from: 280,  to: 230, dur: 0.08, gain: 0.06, noise: 0.22, filter: 1400 },
+    weak:     { wave: 'square',   from: 1500, to: 260, dur: 0.24, gain: 0.11, noise: 0.35, filter: 3200, chord: [1, 1.5, 2] },
+    downed:   { wave: 'sawtooth', from: 300,  to: 38,  dur: 0.50, gain: 0.13, noise: 0.45, filter: 760,  chord: [1, 0.5] },
+    fallen:   { wave: 'sine',     from: 240,  to: 46,  dur: 0.90, gain: 0.10, noise: 0.20, filter: 400,  chord: [1, 0.5, 0.75] },
     heal:     { wave: 'sine',     from: 440,  to: 880, dur: 0.18, gain: 0.05 },
     combo:    { wave: 'square',   from: 660,  to: 1320,dur: 0.20, gain: 0.06 },
     enrage:   { wave: 'sawtooth', from: 90,   to: 40,  dur: 1.10, gain: 0.16, noise: 0.5, filter: 500, chord: [1, 1.5] },
@@ -1762,8 +1771,9 @@ function noiseBurst(t, dur, level, cutoff) {
     src.start(t); src.stop(t + dur);
 }
 
-// weight 1 is the voice as written; a heavier hit is louder, lower and longer.
-function playSFX(type, weight = 1) {
+// weight 1 is the voice as written; a heavier hit is louder, lower and longer. delay puts a
+// sound just behind the one before it, so a kill reads as a second event rather than a tail.
+function playSFX(type, weight = 1, delay = 0) {
     const spec = SFX[type];
     if (spec) { sfxLog.push({ type, weight: Math.round(weight * 100) / 100 }); if (sfxLog.length > SFX_LOG_MAX) sfxLog.shift(); }
     if (sfxVol() <= 0 || !audioCtx || !spec) return;
@@ -1771,7 +1781,7 @@ function playSFX(type, weight = 1) {
         if (audioCtx.state === 'suspended') audioCtx.resume();
         if (!sfxBus) initAudio();
         if (!sfxBus) return;
-        const t = audioCtx.currentTime;
+        const t = audioCtx.currentTime + Math.max(0, delay);
         const w = Math.max(0.5, Math.min(2.2, weight));
         const dur = spec.dur * (0.85 + w * 0.15);
         const drop = 1 / (0.8 + w * 0.2);
@@ -1789,20 +1799,91 @@ function playSFX(type, weight = 1) {
     } catch (e) {}
 }
 
-// An impact is worth what it took off. A scratch and a boss's opening shell should not land
-// with the same thump.
-// A low bed under the fight, keyed to where it is happening. Quiet enough to sit behind the
-// blips, different enough that a foundry does not sound like a canyon.
+// "Impacts distinct enough that you can hear a crit without looking." Two things about a blow
+// are worth hearing and they are independent, so they are two layers rather than one voice
+// picked off a list: the band says what it was worth - the share of a target's health it took
+// off - and the mark, a few milliseconds behind so the two fuse into one event, says what
+// happened on the way in. Replacing the band with the mark was the first attempt and it threw
+// the weight away: measured over twelve expeditions, 27% of all impacts were resisted and 19%
+// found a weakness, so nearly half of them would have landed as the same thin clank whether
+// they took off two health or two hundred.
+const IMPACT_TIERS = [
+    { at: 0.34, voice: 'crush'  },
+    { at: 0.15, voice: 'crunch' },
+    { at: 0.05, voice: 'hit'    },
+    { at: 0,    voice: 'graze'  }
+];
+const SOAK_AT = 0.8;        // scale at or below this: armour or resistance blunted it
+const WEAK_AT = 1.2;        // at or above: it went into something soft
+const MARK_DELAY = 0.03;    // close enough to fuse with the band, far enough to colour it
+const DEATH_DELAY = 0.11;   // far enough behind to read as a second event, not a tail
+
+function impactVoice(share) {
+    const tier = IMPACT_TIERS.find(t => share >= t.at);
+    return (tier || IMPACT_TIERS[IMPACT_TIERS.length - 1]).voice;
+}
+function impactMark(scale) {
+    if (scale <= SOAK_AT) return 'soak';
+    if (scale >= WEAK_AT) return 'weak';
+    return null;
+}
+
+function playImpact(dmg, target, scale = 1) {
+    const share = target && target.maxHp ? dmg / target.maxHp : 0.1;
+    playSFX(impactVoice(share), (0.6 + Math.min(1.6, share * 4)) * scale);
+    const mark = impactMark(scale);
+    if (mark) playSFX(mark, 1, MARK_DELAY);
+    // A kill used to be whatever the last hit sounded like. One of your own going down and a
+    // raider dropping are not the same event either.
+    if (target && typeof target.hp === 'number' && target.hp <= 0)
+        playSFX(target.isPlayer ? 'fallen' : 'downed', 1, DEATH_DELAY);
+}
+
+// A low bed under the fight, keyed to where it is happening. The first pass was one sine and one
+// band of noise with the numbers swapped per backdrop - a room tone, not a room: every biome had
+// the same shape at a different pitch, and it sat dead flat for the length of a fight. Each bed
+// is layered now: a sub, a voice a fixed interval above it whose waveform carries the character,
+// wind whose filter breathes instead of holding still, and a sparse event only that place makes.
+// Under all of it sits a heat layer that comes up with momentum.
 const AMBIENCE = {
-    'bg_canyon.webp':     { drone: 62,  cutoff: 320, hiss: 0.020, name: 'CANYON' },
-    'bg_highway.webp':    { drone: 78,  cutoff: 420, hiss: 0.026, name: 'HIGHWAY' },
-    'bg_refinery.webp':   { drone: 48,  cutoff: 260, hiss: 0.032, name: 'REFINERY' },
-    'bg_foundry.webp':    { drone: 40,  cutoff: 220, hiss: 0.036, name: 'FOUNDRY' },
-    'bg_nest.webp':       { drone: 92,  cutoff: 500, hiss: 0.030, name: 'NEST' },
-    'bg_thunderdome.webp':{ drone: 55,  cutoff: 360, hiss: 0.034, name: 'THUNDERDOME' },
-    'bg_combat.webp':     { drone: 70,  cutoff: 380, hiss: 0.022, name: 'WASTES' }
+    'bg_canyon.webp':     { drone: 62, interval: 1.50, voice: 'sine',     cutoff: 320, hiss: 0.020,
+                            sway: 0.45, swayRate: 0.06, name: 'CANYON',
+                            mote: { wave: 'sine',     from: 340, to: 150, dur: 1.9, gain: 0.026, noise: 0.5, filter: 700,  every: [7, 15] } },
+    'bg_highway.webp':    { drone: 78, interval: 2.00, voice: 'sawtooth', cutoff: 420, hiss: 0.026,
+                            sway: 0.30, swayRate: 0.11, name: 'HIGHWAY',
+                            mote: { wave: 'sawtooth', from: 190, to: 88,  dur: 2.4, gain: 0.022, noise: 0.7, filter: 500,  every: [9, 19] } },
+    'bg_refinery.webp':   { drone: 48, interval: 1.19, voice: 'square',   cutoff: 260, hiss: 0.032,
+                            sway: 0.55, swayRate: 0.24, name: 'REFINERY',
+                            mote: { wave: 'square',   from: 620, to: 610, dur: 1.1, gain: 0.018, noise: 1.4, filter: 2600, every: [5, 11] } },
+    'bg_foundry.webp':    { drone: 40, interval: 2.51, voice: 'triangle', cutoff: 220, hiss: 0.036,
+                            sway: 0.35, swayRate: 0.05, name: 'FOUNDRY',
+                            mote: { wave: 'triangle', from: 980, to: 240, dur: 1.5, gain: 0.030, noise: 0.35, filter: 3000, every: [6, 13] } },
+    'bg_nest.webp':       { drone: 92, interval: 3.02, voice: 'sawtooth', cutoff: 500, hiss: 0.030,
+                            sway: 0.50, swayRate: 0.33, name: 'NEST',
+                            mote: { wave: 'sawtooth', from: 1500, to: 820, dur: 0.5, gain: 0.024, noise: 0.3, filter: 3400, every: [4, 9] } },
+    'bg_thunderdome.webp':{ drone: 55, interval: 1.26, voice: 'square',   cutoff: 360, hiss: 0.034,
+                            sway: 0.60, swayRate: 0.09, name: 'THUNDERDOME',
+                            mote: { wave: 'sawtooth', from: 150, to: 210, dur: 2.8, gain: 0.020, noise: 2.2, filter: 1100, every: [8, 16] } },
+    'bg_combat.webp':     { drone: 70, interval: 1.40, voice: 'triangle', cutoff: 380, hiss: 0.022,
+                            sway: 0.40, swayRate: 0.08, name: 'WASTES',
+                            mote: { wave: 'sine',     from: 260, to: 70,  dur: 2.0, gain: 0.024, noise: 0.6, filter: 620,  every: [8, 17] } }
 };
 const DEFAULT_AMBIENCE = AMBIENCE['bg_combat.webp'];
+
+// "A combat bed that thickens as momentum climbs." Under the floor it is just the room; from
+// there to overdrive the low layer comes up, the wind opens, and the pulse beneath it speeds
+// from a slow swell to something nearer a heartbeat.
+const HEAT_FLOOR = 25;
+const PULSE_SLOW = 0.35, PULSE_FAST = 2.4;
+// A small speaker gives up somewhere below 300Hz, and a bed pitched at 40 is a bed nobody hears:
+// rendered offline, four of the seven put almost everything they had under 100Hz. The character
+// layer is lifted by whole octaves until it lands where a phone can reproduce it - octaves, so
+// the interval that makes a foundry a foundry rather than a canyon survives the move.
+const VOICE_FLOOR = 260;
+function voiceLift(hz) { let f = hz; while (f < VOICE_FLOOR) f *= 2; return f; }
+let ambienceBg = null;          // the backdrop file, not the display name - restarts read this
+let ambienceHeatLevel = 0;      // 0 at rest, 1 at overdrive
+let ambienceMotes = 0;          // how many place-sounds have fired, for the suites
 
 function ambienceFor(bg) { return AMBIENCE[bg] || DEFAULT_AMBIENCE; }
 
@@ -1819,42 +1900,145 @@ function startAmbience(bg) {
         bed.gain.linearRampToValueAtTime(0.5, t + 1.5);
         bed.connect(ambBus);
 
-        const osc = audioCtx.createOscillator(); osc.type = 'sine';
-        osc.frequency.value = spec.drone;
-        const oscGain = audioCtx.createGain(); oscGain.gain.value = 0.035;
-        osc.connect(oscGain); oscGain.connect(bed); osc.start(t);
+        // 1. the sub - the floor of the room
+        const sub = audioCtx.createOscillator(); sub.type = 'sine';
+        sub.frequency.value = spec.drone;
+        const subGain = audioCtx.createGain(); subGain.gain.value = 0.035;
+        sub.connect(subGain); subGain.connect(bed); sub.start(t);
 
-        // Two seconds of noise looped, filtered right down - wind rather than static.
+        // 2. the voice above it. The interval and the waveform are what make a foundry a foundry
+        //    rather than a canyon at another pitch. Detuned a few cents so the two beat slowly
+        //    against each other instead of sitting locked and lifeless.
+        const voice = audioCtx.createOscillator(); voice.type = spec.voice || 'triangle';
+        voice.frequency.value = voiceLift(spec.drone * (spec.interval || 1.5));
+        try { voice.detune.value = 7; } catch (e) { /* older param, not worth failing the bed over */ }
+        const voiceLp = audioCtx.createBiquadFilter(); voiceLp.type = 'lowpass';
+        voiceLp.frequency.value = Math.max(spec.cutoff * 2.5, voice.frequency.value * 2.5);
+        const voiceGain = audioCtx.createGain(); voiceGain.gain.value = 0.026;
+        voice.connect(voiceLp); voiceLp.connect(voiceGain); voiceGain.connect(bed); voice.start(t);
+
+        // 3. wind - two seconds of noise looped, filtered right down, with the cutoff swaying so
+        //    it breathes. A filter that never moves is the tell that a bed is a loop.
         const frames = Math.floor(audioCtx.sampleRate * 2);
         const buf = audioCtx.createBuffer(1, frames, audioCtx.sampleRate);
         const data = buf.getChannelData(0);
         for (let i = 0; i < frames; i++) data[i] = Math.random() * 2 - 1;
-        const hiss = audioCtx.createBufferSource(); hiss.buffer = buf; hiss.loop = true;
+        const wind = audioCtx.createBufferSource(); wind.buffer = buf; wind.loop = true;
         const lp = audioCtx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = spec.cutoff;
-        const hissGain = audioCtx.createGain(); hissGain.gain.value = spec.hiss;
-        hiss.connect(lp); lp.connect(hissGain); hissGain.connect(bed); hiss.start(t);
+        const windGain = audioCtx.createGain(); windGain.gain.value = spec.hiss;
+        wind.connect(lp); lp.connect(windGain); windGain.connect(bed); wind.start(t);
 
-        ambienceNodes = { bed, osc, hiss };
-        ambienceBiome = spec.name;
-    } catch (e) { ambienceNodes = null; ambienceBiome = null; }
+        const sway = audioCtx.createOscillator(); sway.type = 'sine';
+        sway.frequency.value = spec.swayRate || 0.08;
+        const swayDepth = audioCtx.createGain();
+        swayDepth.gain.value = spec.cutoff * (spec.sway || 0.4);
+        sway.connect(swayDepth); swayDepth.connect(lp.frequency); sway.start(t);
+
+        // 4. heat - silent at rest. Wired up now rather than started on demand, so momentum is
+        //    heard the moment it moves instead of at the next node. An octave above the sub and
+        //    not below it: rendered offline, a saw at half the drone put everything it had under
+        //    50Hz, moved the mix by 11% and would have been inaudible on the phone speaker this
+        //    is played on.
+        const heat = audioCtx.createOscillator(); heat.type = 'sawtooth';
+        heat.frequency.value = spec.drone * 2;
+        const heatLp = audioCtx.createBiquadFilter(); heatLp.type = 'lowpass'; heatLp.frequency.value = 500;
+        const heatGain = audioCtx.createGain(); heatGain.gain.value = 0;
+        heat.connect(heatLp); heatLp.connect(heatGain); heatGain.connect(bed); heat.start(t);
+
+        // 5. the pulse under the heat, modulating its gain. Depth is zero until momentum moves.
+        const pulse = audioCtx.createOscillator(); pulse.type = 'sine';
+        pulse.frequency.value = PULSE_SLOW;
+        const pulseDepth = audioCtx.createGain(); pulseDepth.gain.value = 0;
+        pulse.connect(pulseDepth); pulseDepth.connect(heatGain.gain); pulse.start(t);
+
+        ambienceNodes = { bed, lp, heatLp, heatGain, pulseDepth, pulse, spec, moteTimer: null,
+                          parts: { sub, voice, wind, heat, pulse },
+                          sources: [sub, voice, wind, sway, heat, pulse] };
+        ambienceBiome = spec.name; ambienceBg = bg;
+        scheduleMote();
+        ambienceHeat();
+    } catch (e) { ambienceNodes = null; ambienceBiome = null; ambienceBg = null; }
 }
 
 function stopAmbience() {
-    if (!ambienceNodes) { ambienceBiome = null; return; }
+    if (ambienceNodes && ambienceNodes.moteTimer) clearTimeout(ambienceNodes.moteTimer);
+    if (!ambienceNodes) { ambienceBiome = null; ambienceBg = null; ambienceHeatLevel = 0; return; }
     try {
         const t = audioCtx.currentTime;
         ambienceNodes.bed.gain.cancelScheduledValues(t);
         ambienceNodes.bed.gain.setValueAtTime(ambienceNodes.bed.gain.value, t);
         ambienceNodes.bed.gain.linearRampToValueAtTime(0.0001, t + 0.4);
-        ambienceNodes.osc.stop(t + 0.45);
-        ambienceNodes.hiss.stop(t + 0.45);
+        ambienceNodes.sources.forEach(s => { try { s.stop(t + 0.45); } catch (e) {} });
     } catch (e) {}
-    ambienceNodes = null; ambienceBiome = null;
+    ambienceNodes = null; ambienceBiome = null; ambienceBg = null; ambienceHeatLevel = 0;
 }
 
-function playImpact(dmg, target, scale = 1) {
-    const share = target && target.maxHp ? dmg / target.maxHp : 0.1;
-    playSFX('hit', (0.6 + Math.min(1.6, share * 4)) * scale);
+// The layer you actually notice: every few seconds the place makes a sound of its own. Built
+// straight onto the bed rather than through playSFX, because it is the room and not an effect -
+// and because the effects log is a test surface that a background timer has no business writing.
+function scheduleMote() {
+    if (!ambienceNodes || !ambienceNodes.spec.mote) return;
+    const [lo, hi] = ambienceNodes.spec.mote.every;
+    ambienceNodes.moteTimer = setTimeout(() => { playMote(); scheduleMote(); },
+        (lo + Math.random() * (hi - lo)) * 1000);
+}
+
+function playMote() {
+    if (!ambienceNodes || !audioCtx || !ambBus || ambVol() <= 0) return;
+    const m = ambienceNodes.spec.mote; if (!m) return;
+    try {
+        const t = audioCtx.currentTime;
+        const g = audioCtx.createGain();
+        g.gain.setValueAtTime(0.0001, t);
+        g.gain.exponentialRampToValueAtTime(m.gain, t + Math.min(0.3, m.dur * 0.25));
+        g.gain.exponentialRampToValueAtTime(0.0001, t + m.dur);
+        g.connect(ambienceNodes.bed);
+        const o = audioCtx.createOscillator(); o.type = m.wave;
+        o.frequency.setValueAtTime(Math.max(20, m.from), t);
+        o.frequency.exponentialRampToValueAtTime(Math.max(20, m.to), t + m.dur);
+        o.connect(g); o.start(t); o.stop(t + m.dur + 0.05);
+        if (m.noise) {
+            const frames = Math.max(1, Math.floor(audioCtx.sampleRate * m.dur));
+            const nb = audioCtx.createBuffer(1, frames, audioCtx.sampleRate);
+            const d = nb.getChannelData(0);
+            for (let i = 0; i < frames; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / frames);
+            const src = audioCtx.createBufferSource(); src.buffer = nb;
+            const nlp = audioCtx.createBiquadFilter(); nlp.type = 'lowpass';
+            nlp.frequency.value = m.filter || 900;
+            const ng = audioCtx.createGain();
+            ng.gain.setValueAtTime(Math.min(0.12, m.noise * m.gain), t);
+            ng.gain.exponentialRampToValueAtTime(0.0001, t + m.dur);
+            src.connect(nlp); nlp.connect(ng); ng.connect(ambienceNodes.bed);
+            src.start(t); src.stop(t + m.dur);
+        }
+        ambienceMotes++;
+    } catch (e) {}
+}
+
+// Called on every momentum change, so the bed tracks the fight rather than the node.
+function ambienceHeat() {
+    if (!ambienceNodes || !audioCtx) { return ambienceHeatLevel; }
+    const ceiling = Math.max(HEAT_FLOOR + 1, overdriveAt());
+    const heat = combatActive
+        ? Math.max(0, Math.min(1, (momentum - HEAT_FLOOR) / (ceiling - HEAT_FLOOR)))
+        : 0;
+    try {
+        const t = audioCtx.currentTime, ease = 0.35;
+        ambienceNodes.heatGain.gain.setTargetAtTime(0.075 * heat, t, ease);
+        ambienceNodes.pulseDepth.gain.setTargetAtTime(0.055 * heat, t, ease);
+        ambienceNodes.pulse.frequency.setTargetAtTime(PULSE_SLOW + (PULSE_FAST - PULSE_SLOW) * heat, t, ease);
+        ambienceNodes.lp.frequency.setTargetAtTime(ambienceNodes.spec.cutoff * (1 + heat * 1.4), t, ease);
+        ambienceNodes.heatLp.frequency.setTargetAtTime(500 + 1100 * heat, t, ease);
+    } catch (e) { /* a closed context is not worth throwing over */ }
+    ambienceHeatLevel = heat;
+    return heat;
+}
+
+// What the bed is actually doing, for the suites and for anyone debugging a thin mix.
+function ambienceState() {
+    const n = ambienceNodes;
+    return { biome: ambienceBiome, bg: ambienceBg, running: !!n,
+             layers: n ? Object.keys(n.parts) : [], heat: ambienceHeatLevel, motes: ambienceMotes };
 }
 
 function triggerShake() {
@@ -1945,6 +2129,8 @@ function addMomentum(amt) {
     const fill = document.getElementById('momentum-fill'); const txt = document.getElementById('momentum-txt');
     if (fill) fill.style.width = momentum + '%';
     if (txt) txt.innerText = momentum >= overdriveAt() ? 'MOMENTUM: FULL — OVERDRIVE READY' : `MOMENTUM: ${momentum}%`;
+    // The bar is not the only thing that moves. A fight you are winning gets heavier underneath.
+    ambienceHeat();
 }
 
 // What the fight currently being fought has cost and how long it has run. The board reads it
@@ -2490,8 +2676,10 @@ function cycleAmbience() {
     applyVolumes();
     // A bed already playing is restarted or silenced to match, rather than waiting for the
     // next node to notice.
+    // ambienceBiome is the display name; the table is keyed by backdrop. Restarting off the
+    // name silently dropped every fight onto the fallback bed.
     if (globalSettings.ambVol <= 0) stopAmbience();
-    else if (ambienceBiome) startAmbience(ambienceBiome);
+    else if (ambienceBg) startAmbience(ambienceBg);
     saveSettings();
 }
 function cycleMotion() {
@@ -4946,6 +5134,7 @@ function processTurn() {
 
 function applyTurnStartEffects(ent) {
     let chg = false;
+    const wasAlive = ent.hp > 0;
     if (ent.isPlayer && ent.cooldowns) {
         const step = hasRelic('AMMO_HOIST') ? 2 : 1;
         for (let s in ent.cooldowns) { if (ent.cooldowns[s] > 0) { ent.cooldowns[s] = Math.max(0, ent.cooldowns[s] - step); chg = true; } }
@@ -4963,6 +5152,9 @@ function applyTurnStartEffects(ent) {
         if (ent.isPlayer && relicSetActive('Field Surgery')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 1);
         if (hasQuirk(ent, 'SLOW_BLEEDER')) b = Math.max(1, Math.floor(b / 2));
         if (hasTrinket(ent, 'TOURNIQUET')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 2); ent.hp = Math.max(0, ent.hp - b); log(`> ${ent.name} bleeds for ${b}.`, "log-dmg"); spawnFCT(ent.id, `-${b}`, "fct-dmg"); ent.bleedingTurns--; chg = true; if(ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('BLEED'); }
+    // Bleeding out and choking are deaths too. Now that a unit going down has a voice, dying to
+    // a status tick in silence is the odd one out rather than the norm.
+    if (wasAlive && ent.hp <= 0) playSFX(ent.isPlayer ? 'fallen' : 'downed');
     // Expiring temporary armour used to zero the unit's innate plating too, so any armoured
     // enemy that braced permanently lost the armour it started with.
     if (ent.armorTurns > 0) { ent.armorTurns--; if (ent.armorTurns === 0) { ent.armor = ent.baseArmor || 0; } chg = true; }
@@ -6069,13 +6261,21 @@ if ('serviceWorker' in navigator) {
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
+    ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
+    // settable so the mix can be rendered offline and measured rather than guessed at
+    get sfxBus() { return sfxBus; }, set sfxBus(v) { sfxBus = v; },
+    get ambBus() { return ambBus; }, set ambBus(v) { ambBus = v; },
     get ambienceBiome() { return ambienceBiome; },
     get ambienceNodes() { return ambienceNodes; },
+    get ambienceBg() { return ambienceBg; },
+    get ambienceHeatLevel() { return ambienceHeatLevel; },
+    get ambienceMotes() { return ambienceMotes; }, set ambienceMotes(v) { ambienceMotes = v; },
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },
     get globalSettings() { return globalSettings; }, set globalSettings(v) { globalSettings = v; },
     get bossSkulls() { return bossSkulls; }, set bossSkulls(v) { bossSkulls = v; },

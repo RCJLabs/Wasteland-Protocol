@@ -76,12 +76,16 @@ module.exports = {
     ok('and a combo gets its own sting', turns.combo.includes('combo'));
 
     // One weapon, one impact. Two sounds for one hit is the tell that something is firing twice.
+    // Which impact voice it is now depends on what the blow was worth, so the set is derived
+    // from the table rather than named - adding a band must not need this rewritten.
     const single = await page.evaluate(() => {
+      const bands = new Set(IMPACT_TIERS.map(t => t.voice));
       const r = window.__turn('MEDIC', 'PISTOL');
-      return { played: r.played, hits: r.played.filter(t => t === 'hit').length };
+      return { played: r.played, hits: r.played.filter(t => bands.has(t)).length,
+               weaponFirst: !bands.has(r.played[0]) };
     });
-    ok('an attack lands exactly one impact', single.hits === 1);
-    ok('after its weapon', single.played[0] !== 'hit' && single.played.length === 2);
+    ok(`an attack lands exactly one impact (${single.played.join(' > ')})`, single.hits === 1);
+    ok('after its weapon, and nothing else', single.weaponFirst && single.played.length === 2);
 
     // ---- an impact is worth what it took off ----
     const weight = await page.evaluate(() => {
@@ -96,19 +100,28 @@ module.exports = {
     ok('and a weakness is heavier', weight.weakness > weight.solid);
 
     // A shrugged-off hit and a hit that did nothing used to sound identical - to each other, and
-    // to no sound at all.
+    // to no sound at all. Each now carries a mark layered over the band, so what happened on the
+    // way in is audible without costing the weight of what still landed.
     const resistance = await page.evaluate(() => {
+      const bands = new Set(IMPACT_TIERS.map(t => t.voice));
+      const marks = new Set(['soak', 'weak']);
       const against = (res) => {
         const r = window.__turn('MEDIC', 'PISTOL', f => { f.resistances = { phys: res, bio: 0, energy: 0 }; });
-        return r.full.filter(e => e.type === 'hit');
+        return { band: r.full.filter(e => bands.has(e.type)), mark: r.full.filter(e => marks.has(e.type)) };
       };
       return { clean: against(0), resisted: against(30), immune: against(100), weak: against(-20) };
     });
-    ok('a resisted hit still makes a sound', resistance.resisted.length === 1);
-    ok('quieter than a clean one', resistance.resisted[0].weight < resistance.clean[0].weight);
-    ok('an immune hit makes the faintest one', resistance.immune.length === 1 &&
-      resistance.immune[0].weight < resistance.resisted[0].weight);
-    ok('and a weakness the loudest', resistance.weak[0].weight > resistance.clean[0].weight);
+    ok('a resisted hit still makes a sound', resistance.resisted.band.length === 1);
+    ok('quieter than a clean one', resistance.resisted.band[0].weight < resistance.clean.band[0].weight);
+    ok('an immune hit makes the faintest one', resistance.immune.band.length === 1 &&
+      resistance.immune.band[0].weight < resistance.resisted.band[0].weight);
+    ok('and a weakness the loudest', resistance.weak.band[0].weight > resistance.clean.band[0].weight);
+    ok(`armour is marked over the top of it (${resistance.resisted.mark.map(m => m.type).join()})`,
+      resistance.resisted.mark.length === 1 && resistance.resisted.mark[0].type === 'soak');
+    ok('and so is an immune hit', resistance.immune.mark.length === 1 && resistance.immune.mark[0].type === 'soak');
+    ok(`a weakness gets a mark of its own (${resistance.weak.mark.map(m => m.type).join()})`,
+      resistance.weak.mark.length === 1 && resistance.weak.mark[0].type === 'weak');
+    ok('and a clean hit carries no mark at all', resistance.clean.mark.length === 0);
 
     // ---- a bed under the fight, keyed to where it is happening ----
     const beds = await page.evaluate(() => ({
@@ -195,14 +208,27 @@ module.exports = {
     ok('and every one of them exists in the table', named.missing.length === 0);
     if (named.missing.length) console.log('        missing:', named.missing.join(', '));
 
-    // A voice declared and never used is dead weight, the same way an inert relic is.
+    // A voice declared and never used is dead weight, the same way an inert relic is. Reachable
+    // means one of three things now: something asks for it by name, an ability speaks with it,
+    // or the impact selector can produce it - and the third is measured by driving the selector
+    // across the whole space rather than by reading the table and hoping.
     const unused = await page.evaluate(async () => {
       const src = await (await fetch('game.js')).text();
-      return Object.keys(SFX).filter(n =>
-        !src.includes(`playSFX('${n}'`) && !Object.values(CLASS_VOICE).includes(n) && !Object.values(MOVE_VOICE_OVERRIDE).includes(n));
+      const reachable = new Set();
+      for (let share = 0; share <= 1.001; share += 0.01) reachable.add(impactVoice(share));
+      for (let scale = 0; scale <= 2.001; scale += 0.05) { const m = impactMark(scale); if (m) reachable.add(m); }
+      for (const dead of [{ maxHp: 100, hp: 0, isPlayer: true }, { maxHp: 100, hp: 0, isPlayer: false }]) {
+        sfxLog = []; playImpact(60, dead); sfxLog.forEach(e => reachable.add(e.type));
+      }
+      return { reachable: [...reachable].sort(),
+               missing: Object.keys(SFX).filter(n => !src.includes(`playSFX('${n}'`)
+                 && !Object.values(CLASS_VOICE).includes(n)
+                 && !Object.values(MOVE_VOICE_OVERRIDE).includes(n)
+                 && !reachable.has(n)) };
     });
-    ok('and every voice in the table is reachable', unused.length === 0);
-    if (unused.length) console.log('        unused:', unused.join(', '));
+    ok(`and every voice in the table is reachable (${unused.reachable.length} of them through the impact selector)`,
+      unused.missing.length === 0);
+    if (unused.missing.length) console.log('        unused:', unused.missing.join(', '));
 
     // ---- none of this may throw when there is no audio to play through ----
     const headless = await page.evaluate(() => {
