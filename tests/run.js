@@ -82,7 +82,13 @@ const SUITES = fs.readdirSync(path.join(__dirname, 'suites')).filter(f => f.ends
       if (m.type() === 'warning' && /Unmapped action/.test(m.text())) errors.push(m.text());
     });
 
+    // The last assertion to report is remembered so a throw can say where in the suite it got
+    // to. A page.evaluate TypeError arrives with a stack that names the evaluate wrapper and
+    // nothing about the suite, so without this an intermittent abort has to be reproduced to be
+    // located - and one that fires once in twenty batteries may not be reproducible on demand.
+    let lastOk = null;
     const ok = (name, cond) => {
+      lastOk = name;
       if (cond) { passed++; console.log(`  PASS  ${name}`); }
       else { failed++; console.log(`  FAIL  ${name}`); }
     };
@@ -96,6 +102,7 @@ const SUITES = fs.readdirSync(path.join(__dirname, 'suites')).filter(f => f.ends
       failed++; console.log(`  FAIL  [${suite.name}] suite threw: ${e.message}`);
       // Where it threw, not just what: an intermittent throw is otherwise a whole battery of
       // guessing, because the message alone does not say which assertion was in flight.
+      console.log(`        got as far as: ${lastOk || '(threw before its first assertion)'}`);
       if (e.stack) console.log('        ' + String(e.stack).split('\n').slice(0, 6).join('\n        '));
     }
     if (errors.length) {
