@@ -373,11 +373,31 @@ const PERK_POOL = [
 // A commander's passive is stored as an id on its pool entry; this is what that id means.
 // The dossier used to read .name and .desc straight off the id string, which are both
 // undefined on a string - so every warlord's file carried an empty block headed "Command".
+// Four of the seven commanders showed no tag at all on the field. Three of those were not
+// missing a mechanic - the Marshal's hound, the Stormcaller's sky and the Bastion's ward are
+// each the whole shape of that fight - they were missing the line that says so while you are
+// in it. The blurb at the door said it once and then the card said nothing for the rest of the
+// fight, which is the one place a player is actually asking.
+//
+// A passive may carry `state`, which reports live the way a signature's does: a ward that is
+// down has to stop claiming to be up, or the tag is worse than no tag.
 const BOSS_PASSIVES = {
     PLATING: { name: 'Re-Plating', desc: 'Welds 6 points of armour back on every turn, up to 30 over its base.' },
     FEAST:   { name: 'Feast',      desc: 'Heals itself off a share of every wound it opens.' },
-    VENOM:   { name: 'Venom Pump', desc: 'Doses itself every 2 turns: +14% damage and +2 speed each time, but the pressure sloughs 4 armour and opens it to +15% damage taken. Five doses at most.' }
+    VENOM:   { name: 'Venom Pump', desc: 'Doses itself every 2 turns: +14% damage and +2 speed each time, but the pressure sloughs 4 armour and opens it to +15% damage taken. Five doses at most.' },
+    // The one that was genuinely missing. The others are declarations of what was already there.
+    BLOODLETTER: { name: 'Bloodletter', desc: 'Every blow it lands opens a wound. Its hits bleed for 2 turns.' },
+    COLUMN:  { name: 'The Column', desc: 'While its hound stands, the Marshal carries 22 more armour and is barely worth shooting at. Kill the hound first.',
+               state: ent => bossRetinueUp(ent, 'escortId') ? ' \u2022 HOUND UP' : ' \u2022 ALONE' },
+    STORMBRINGER: { name: 'Stormbringer', desc: 'Turns the sky over on its own clock, whatever the forecast promised. Every change lands on both sides of the field.',
+                    state: ent => ent.stormTurn ? ` \u2022 ${Math.max(0, ent.stormTurn - (ent.stormClock || 0))} TO TURN` : '' },
+    WARDED:  { name: 'Warded', desc: 'A shield it did not build. While the generator stands, everything you land on the Bastion is soaked to a fraction. Kill the generator first.',
+               state: ent => bossRetinueUp(ent, 'wardId') ? ' \u2022 WARD UP' : ' \u2022 WARD DOWN' }
 };
+// Whether the thing a commander is hiding behind is still standing.
+function bossRetinueUp(ent, key) {
+    return !!(ent && ent[key] && activeEntities.some(e => e.id === ent[key] && e.hp > 0));
+}
 
 // One Warlord fought at every depth made the back half of a run repetitive, so each sector
 // now draws a different commander. They differ in more than numbers: what they intend to do,
@@ -387,7 +407,8 @@ const BOSS_POOL = [
         id: 'WARLORD', threat: 1, name: 'Warlord', short: 'WARLORD', img: 'enemy_boss.webp', scale: 2.2,
         range: 'melee', hpMult: 1.0, dmgMult: 1.0, speed: 9, armor: 15,
         resistances: { phys: 10, bio: 5, energy: 5 },
-        blurb: 'A raider chieftain who fights alongside their pack.',
+        passive: 'BLOODLETTER',
+        blurb: 'A raider chieftain who fights alongside their pack. Everything it swings is serrated.',
         bg: 'bg_thunderdome.webp',
         banner: '\uD83D\uDC80 THUNDERDOME BLOODLUST: All units deal +20% DMG \uD83D\uDC80',
         intents: [['ATTACK', 0.30], ['AOE', 0.20], ['HEAVY', 0.20], ['STATUS', 0.20], ['DEFEND', 0.10]],
@@ -462,6 +483,7 @@ const BOSS_POOL = [
         id: 'MARSHAL', threat: 3, name: 'The Marshal', short: 'MARSHAL', img: 'enemy_boss_marshal.webp', scale: 2.2,
         range: 'ranged', hpMult: 1.0, dmgMult: 1.15, speed: 11, armor: 10,
         resistances: { phys: 8, bio: 0, energy: 8 },
+        passive: 'COLUMN',
         blurb: 'Never walks the line alone. While the hound Bulldog stands, the Marshal is barely worth shooting at.',
         bg: 'bg_thunderdome.webp',
         banner: '\u{1F6E1} MARSHAL\u2019S COLUMN: All units deal +20% DMG \u{1F6E1}',
@@ -481,7 +503,7 @@ const BOSS_POOL = [
         id: 'STORMCALLER', threat: 2, name: 'The Stormcaller', short: 'STORM', img: 'enemy_boss_stormcaller.webp', scale: 2.3,
         range: 'ranged', hpMult: 1.05, dmgMult: 0.9, speed: 13, armor: 12,
         resistances: { phys: 0, bio: 10, energy: 25 },
-        dmgType: 'energy',
+        dmgType: 'energy', passive: 'STORMBRINGER',
         blurb: 'Fights with the sky. Whatever the forecast said, it will not stay true.',
         bg: 'bg_thunderdome.webp',
         banner: '\u26A1 THE SKY TURNS: All units deal +20% DMG \u26A1',
@@ -498,6 +520,7 @@ const BOSS_POOL = [
         id: 'BASTION', threat: 3, name: 'The Bastion', short: 'BASTION', img: 'enemy_boss_bastion.webp', scale: 2.25,
         range: 'ranged', hpMult: 1.45, dmgMult: 0.85, speed: 4, armor: 25,
         resistances: { phys: 20, bio: 100, energy: -10 },
+        passive: 'WARDED',
         blurb: 'A fortress on legs behind a shield it did not build. Kill the generator first.',
         bg: 'bg_foundry.webp',
         banner: '\u{1F6A7} BASTION WARD: All units deal +20% DMG \u{1F6A7}',
@@ -5256,7 +5279,9 @@ function renderField() {
         const bossPas = (!ent.isPlayer && !isDead && !sigOf(ent) && ent.bossPassive) ? BOSS_PASSIVES[ent.bossPassive] : null;
         if (bossPas) {
             const dose = ent.venom ? ` ${ent.venomStacks || 0}/${ent.venom.max}` : '';
-            tagText = `${bossPas.name.toUpperCase()}${dose}`; tagTitle = bossPas.desc;
+            let live = '';
+            try { live = bossPas.state ? (bossPas.state(ent) || '') : ''; } catch (e) { live = ''; }
+            tagText = `${bossPas.name.toUpperCase()}${dose}${live}`; tagTitle = bossPas.desc;
         }
         if (!ent.isPlayer && !isDead && sigOf(ent)) {
             const s = sigOf(ent);
@@ -6184,6 +6209,13 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
         }
     } else if (target.isPlayer) { addMomentum(5); }
 
+    // Bloodletter: the chieftain's kit is all serrated, so every blow it lands keeps bleeding.
+    // Steady pressure rather than a spike - it is answered by cleansing, not by armour.
+    if (attacker.bossPassive === 'BLOODLETTER' && netDmg > 0 && target.hp > 0 && target.isPlayer) {
+        target.bleedingTurns = Math.max(target.bleedingTurns || 0, 2);
+        setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed);
+    }
+
     // Carrion Feast: the Matriarch grows on what it opens up.
     if (attacker.bossPassive === 'FEAST' && attacker.hp > 0 && netDmg > 0 && attacker.hp < attacker.maxHp) {
         const fed = Math.max(1, Math.floor(netDmg * 0.3));
@@ -6824,7 +6856,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    GRUDGE, RISEN_MARK, grudgeOn, noteGrudge, risenName, risenShort, openGrudgePhase,
+    bossRetinueUp, GRUDGE, RISEN_MARK, grudgeOn, noteGrudge, risenName, risenShort, openGrudgePhase,
     BLEED_OUT, DRAGGED_CLEAR, REACHES_THE_DOWN, isDown, bleedingOut, goDown, tickBleedOut,
     loseOperator, recoverDowned, closeRanks,
     RECRUIT_POOL, RECRUIT_COST, RECRUIT_HEALTH, recruitCost, recruitables, recruitById, recruitReach,

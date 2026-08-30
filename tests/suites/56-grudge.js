@@ -234,6 +234,72 @@ module.exports = {
     ok(`so felling a risen one pays for it (${paid.cold} / ${paid.one} / ${paid.three} skulls)`,
       paid.one === paid.cold + 1 && paid.three === paid.cold + 3);
 
+    // ---- every commander says what it does, while you are in the fight ----
+    // Four of the seven used to show no tag at all. Three of those had a mechanic that was the
+    // whole shape of the fight and no line on the card saying so.
+    const passives = await page.evaluate(async () => {
+      const src = await (await fetch('game.js')).text();
+      const missing = BOSS_POOL.filter(b => !b.passive).map(b => b.id);
+      const undeclared = BOSS_POOL.filter(b => b.passive && !BOSS_PASSIVES[b.passive]).map(b => b.id);
+      const vague = Object.entries(BOSS_PASSIVES).filter(([, v]) => !v.name || !v.desc || v.desc.length < 40).map(([k]) => k);
+      // A passive that claims a mechanic nothing implements is a tag that lies. Backed means
+      // one of three things: the engine branches on it by name, it reports live state, or the
+      // commanders carrying it declare the data field it runs on (the Vatborn's `venom`).
+      const inert = Object.keys(BOSS_PASSIVES).filter(k => {
+        if (src.includes(`bossPassive === '${k}'`)) return false;
+        if (BOSS_PASSIVES[k].state) return false;
+        const carriers = BOSS_POOL.filter(b => b.passive === k);
+        return !(carriers.length && carriers.every(b => b[k.toLowerCase()] !== undefined));
+      });
+      return { total: BOSS_POOL.length, declared: Object.keys(BOSS_PASSIVES).length,
+               missing, undeclared, vague, inert,
+               used: new Set(BOSS_POOL.map(b => b.passive)).size };
+    });
+    ok(`all ${passives.total} commanders declare a passive`, passives.missing.length === 0);
+    ok('each one a real entry in the table', passives.undeclared.length === 0);
+    ok('no two share one, so the tag identifies the fight', passives.used === passives.total);
+    ok('each named and explained', passives.vague.length === 0);
+    ok('and none of them describes a mechanic nothing implements', passives.inert.length === 0);
+    if (passives.inert.length) console.log('        inert:', passives.inert.join(', '));
+
+    // A tag that goes on claiming a ward that is down is worse than no tag at all.
+    const live = await page.evaluate(() => {
+      const read = id => {
+        const boss = window.__stage(id, 0);
+        const tagOf = () => { renderField(); const el = document.getElementById(boss.id);
+          const t = el && el.querySelector('.sig-tag, .boss-tag, [class*="tag"]');
+          return t ? t.innerText.trim() : (el ? el.innerText : ''); };
+        const up = tagOf();
+        activeEntities.filter(e => !e.isPlayer && e.id !== boss.id).forEach(e => { e.hp = 0; });
+        const down = tagOf();
+        return { up, down, name: BOSS_PASSIVES[boss.bossPassive].name.toUpperCase() };
+      };
+      return { marshal: read('MARSHAL'), bastion: read('BASTION'), warlord: read('WARLORD') };
+    });
+    ok(`the Marshal's card says whether the hound still stands (${live.marshal.up.includes('HOUND UP') ? 'HOUND UP' : '?'})`,
+      live.marshal.up.includes('HOUND UP') && live.marshal.down.includes('ALONE'));
+    ok(`and the Bastion's whether the ward does (${live.bastion.up.includes('WARD UP') ? 'WARD UP' : '?'})`,
+      live.bastion.up.includes('WARD UP') && live.bastion.down.includes('WARD DOWN'));
+    ok('a commander with nothing to lose reports no state at all',
+      live.warlord.up.includes(live.warlord.name) && live.warlord.up === live.warlord.down);
+
+    // The Warlord's is the one that is genuinely new, so it has to actually happen.
+    const bleeds = await page.evaluate(() => {
+      const boss = window.__stage('WARLORD', 0);
+      const hero = activeEntities.find(e => e.isPlayer && e.hp > 0);
+      hero.maxHp = 99999; hero.hp = 99999; hero.bleedingTurns = 0;
+      applyDamageHit(boss, hero, 40, 'phys', 'BASIC');
+      const after = hero.bleedingTurns;
+      // and a commander without it does not
+      const other = window.__stage('BASTION', 0);
+      const h2 = activeEntities.find(e => e.isPlayer && e.hp > 0);
+      h2.maxHp = 99999; h2.hp = 99999; h2.bleedingTurns = 0;
+      applyDamageHit(other, h2, 40, 'phys', 'BASIC');
+      return { warlord: after, bastion: h2.bleedingTurns };
+    });
+    ok(`the Warlord opens a wound with every blow (${bleeds.warlord} turns)`, bleeds.warlord === 2);
+    ok('and a commander without the passive does not', bleeds.bastion === 0);
+
     // ---- a new expedition does not wipe the ledger ----
     const kept = await page.evaluate(() => {
       grudges = {}; noteGrudge('BASTION');

@@ -50,8 +50,15 @@ module.exports = {
     ok('it deals bio damage', built.MATRIARCH.dmgType === 'bio');
     ok('it stalks on the ground rather than hovering', !built.MATRIARCH.hover);
     ok('it is fragile to bullets', built.MATRIARCH.res.phys < 0);
-    ok('each carries its own passive',
-      built.COLOSSUS.passive === 'PLATING' && built.MATRIARCH.passive === 'FEAST' && !built.WARLORD.passive);
+    // This used to name three passives and assert the Warlord had none, which was the state of
+    // the table written down as a rule rather than a claim about it. Every commander declares
+    // one now, and what matters is that no two share it - the tag on the card is meant to say
+    // which fight this is.
+    ok('each carries its own passive, and no two the same',
+      Object.values(built).every(b => !!b.passive)
+      && new Set(Object.values(built).map(b => b.passive)).size === Object.keys(built).length);
+    ok('the Colossus is the one that re-plates', built.COLOSSUS.passive === 'PLATING');
+    ok('and the Matriarch the one that feeds', built.MATRIARCH.passive === 'FEAST');
 
     // ---- their art loads ----
     await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 2; currentTier = 6; initiateCombat('BOSS', false); });
