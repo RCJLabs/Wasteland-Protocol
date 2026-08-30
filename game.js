@@ -757,6 +757,8 @@ function terrainName(id) { return (TERRAIN[id] || TERRAIN.OPEN_ROAD).name; }
 
 
 let sectorMap = null; let currentNodeId = null; let clearedNodeIds = []; let forecastWeather = null;
+// What the node said was waiting, carried into the fight it opens - see FORMATIONS.
+let forecastFormation = null; let currentFormation = null;
 
 // The factions the roads can draw from. These used to be enumerated by hand in five places -
 // the weather forecast, two map validators, the node whitelist and the backdrop switch - so a
@@ -903,7 +905,7 @@ function generateSectorMap(rng = Math.random) {
         const tierNodes = cols.map(c => ({
             id: `n${t}_${c}`, tier: t, col: c,
             type: t === TOTAL_TIERS ? 'BOSS' : rollNodeFaction(t, rng),
-            elite: false, weather: 'CLEAR', terrain: 'OPEN_ROAD', edges: []
+            elite: false, weather: 'CLEAR', terrain: 'OPEN_ROAD', formation: null, edges: []
         }));
         byTier.push(tierNodes); nodes.push(...tierNodes);
     }
@@ -973,6 +975,10 @@ function generateSectorMap(rng = Math.random) {
             const choices = FACTIONS[n.type].ground || [];
             if (choices.length && rng() < GROUND_CHANCE) n.terrain = choices[Math.floor(rng() * choices.length)];
         }
+        // Who is standing there, decided now so the node can say so. The opening fight of the
+        // run is a plain patrol for the same reason its sky and its ground are plain.
+        if (FIGHT_NODES.includes(n.type) && !(currentSector === 1 && n.tier === 1))
+            n.formation = rollFormation(n.type, n.tier + (currentSector - 1) * SECTOR_TIER_BONUS, rng);
     });
 
     return { nodes, cols: 3 };
@@ -1038,12 +1044,13 @@ function reachableNodeIds() {
 
 function enterNode(id) {
     const node = nodeById(id);
-    if (!node) { forecastWeather = null; return null; }
+    if (!node) { forecastWeather = null; forecastFormation = null; return null; }
     currentNodeId = node.id;
     retreatNode = null;
     if (!clearedNodeIds.includes(node.id)) clearedNodeIds.push(node.id);
     forecastWeather = (FIGHT_NODES.includes(node.type) || node.type === 'BOSS') ? (node.weather || 'CLEAR') : null;
     forecastTerrain = (FIGHT_NODES.includes(node.type) || node.type === 'BOSS') ? (node.terrain || 'OPEN_ROAD') : null;
+    forecastFormation = FIGHT_NODES.includes(node.type) ? (node.formation || null) : null;
     return node;
 }
 const SECTOR_TIER_BONUS = 3;
@@ -1284,6 +1291,12 @@ const CODEX = [
     { id: 'HOSTILES', title: 'KNOW THE HOSTILES', body: () => [
         'Every hostile carries a signature. A passive one is always running; an action is telegraphed by its own icon a turn before it lands, so there is always an answer.',
         ...Object.values(ENEMY_SIGS).map(s => `${s.name} (${s.kind === 'action' ? 'telegraphed' : s.kind}) \u2014 ${s.desc}`)
+    ] },
+    { id: 'FORMATIONS', title: 'FORMATIONS', body: () => [
+        'Some hostile squads are compositions rather than patrols: a fixed line-up built so its signatures work together. The map names one before you take it, and the same name always brings the same shape - so a formation you have fought once is a problem you already know the answer to.',
+        'A node showing a faction name instead is a loose patrol, drawn fresh. Shallow formations retire as the deeper ones open.',
+        ...Object.entries(FORMATIONS).flatMap(([fac, list]) =>
+            list.map(f => `${fac} \u00B7 ${f.name} \u2014 ${f.note} (${f.units.length} strong)`))
     ] },
     { id: 'ASCENSION', title: 'ASCENSION PROTOCOLS', body: () => [
         'The ladder after the game is beaten in the ordinary sense: named protocols unlocked by your deepest sector ever, chosen on the contract board, each rung stacking every twist below it - with a score multiplier above what contracts give.',
@@ -2630,7 +2643,7 @@ function regroupSquad() {
     tuneUpBattles = Math.max(tuneUpBattles, 3);
     currentTier = 1;
     // The sector keeps its map; the squad walks back in at the bottom of it.
-    currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null;
+    currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null; forecastFormation = null;
     momentum = 0; addMomentum(0);
     combatActive = false; activeEntities = []; turnQueue = []; pendingCombat = null;
     saveGameState();
@@ -3294,7 +3307,7 @@ function buildNewRun(diff) {
     bonds = {}; bondSavesUsed = new Set();
     playerRoster.forEach(c => { c.weaponMod = null; c.trinket = null; });
     sectorFront = rollFront(seededRng('front:1'), 1); frontBannerPending = true;
-    sectorMap = generateSectorMap(seededRng('map:1')); currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null;
+    sectorMap = generateSectorMap(seededRng('map:1')); currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null; forecastFormation = null;
     odChoices = {}; pendingOverdrive = null; momentumFocus = 0; pressExtra = false;
     const kept = heirloomRelic();
     activeRelics = kept ? [kept] : [];
@@ -3336,6 +3349,7 @@ function continueGame() {
 function resumeCombat(c) {
     currentNodeType = c.nodeType; isCurrentNodeElite = c.isElite; currentWeather = c.weather || 'CLEAR';
     currentTerrain = c.terrain || 'OPEN_ROAD';
+    currentFormation = c.formation || null;
     let players = (c.playerIds || []).map(id => playerRoster.find(p => p.id === id)).filter(Boolean);
     activeEntities = [...players, ...(c.enemies || [])];
     turnQueue = (c.queueIds || []).map(id => activeEntities.find(e => e.id === id)).filter(Boolean);
@@ -3352,7 +3366,7 @@ function resumeCombat(c) {
 function buildCombatSnapshot() {
     if (!combatActive || turnQueue.length === 0) return null;
     return {
-        nodeType: currentNodeType, isElite: isCurrentNodeElite, weather: currentWeather, terrain: currentTerrain, bgFile: combatBgFile,
+        nodeType: currentNodeType, isElite: isCurrentNodeElite, weather: currentWeather, terrain: currentTerrain, formation: currentFormation, bgFile: combatBgFile,
         activeIndex,
         playerIds: activeEntities.filter(e => e.isPlayer).map(e => e.id),
         enemies: activeEntities.filter(e => !e.isPlayer),
@@ -3401,7 +3415,7 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         sectorMap = (d.sectorMap && Array.isArray(d.sectorMap.nodes)) ? d.sectorMap : generateSectorMap();
         currentNodeId = d.currentNodeId || null;
         clearedNodeIds = Array.isArray(d.clearedNodeIds) ? d.clearedNodeIds : [];
-        forecastWeather = null; activeRelics = migrateRelics(d.activeRelics); pendingRelicOffer = migrateRelics((d.relicOffer || []).map(id => ({ id }))); if (!pendingRelicOffer.length) pendingRelicOffer = null; pendingCombat = d.combat || null; pursuit = (d.pursuit && Array.isArray(d.pursuit.units)) ? d.pursuit : null; retreatNode = d.retreatNode || null;
+        forecastWeather = null; forecastFormation = null; activeRelics = migrateRelics(d.activeRelics); pendingRelicOffer = migrateRelics((d.relicOffer || []).map(id => ({ id }))); if (!pendingRelicOffer.length) pendingRelicOffer = null; pendingCombat = d.combat || null; pursuit = (d.pursuit && Array.isArray(d.pursuit.units)) ? d.pursuit : null; retreatNode = d.retreatNode || null;
         if (pendingCombat) {
             migrateAssetPaths(pendingCombat.enemies);
             if (typeof pendingCombat.bgFile === 'string') pendingCombat.bgFile = pendingCombat.bgFile.replace(/\.png$/, '.webp');
@@ -3474,7 +3488,7 @@ function devJump(deltaSector, deltaTier) {
     currentTier = Math.min(TOTAL_TIERS, Math.max(1, currentTier + deltaTier));
     // A jump breaks route continuity on purpose: the whole target tier opens up.
     if (deltaSector !== 0 || !sectorMap) { sectorMap = generateSectorMap(); clearedNodeIds = []; }
-    currentNodeId = null; forecastWeather = null; forecastTerrain = null;
+    currentNodeId = null; forecastWeather = null; forecastTerrain = null; forecastFormation = null;
     noteDepth(); saveGameState(); renderDev();
 }
 
@@ -3690,10 +3704,18 @@ function renderMap() {
     let m = `<div class="map-graph" style="height:${TOTAL_TIERS * MAP_ROW_H}px">`;
     m += `<svg class="map-edges" aria-hidden="true">${edges}</svg>`;
     sectorMap.nodes.forEach(n => {
-        let icon = '🎯', lbl = n.type;
+        let icon = '🎯', lbl = n.type, hint = '';
+        // A node holding a known composition says which one. A plain faction label is a loose
+        // patrol, and the difference is the information the player is routing on.
+        const nf = formationById(n.formation);
+        if (nf) { lbl = nf.name.toUpperCase(); hint = `${n.type} \u2014 ${nf.name}: ${nf.note}`; }
         if (n.type === 'BOSS') { const bb = bossForSector(); icon = '💀'; lbl = risenShort(bb, grudgeOn(bb.id)); }
         else if (n.type === 'BEASTS') icon = '☣️';
         else if (n.type === 'MECH') icon = '⚙️';
+        // Three factions shared the default target icon, which was already thin; now that the
+        // label can be a formation name rather than the faction, the icon has to carry it.
+        else if (n.type === 'CHOIR') icon = '📿';
+        else if (n.type === 'CARRION') icon = '🦴';
         else if (n.type === 'EVENT') { icon = '❓'; lbl = 'UNKNOWN'; }
         else if (n.type === 'CAMP') icon = '⛺';
         else if (n.type === 'SHOP') { icon = '◇'; lbl = 'ARMORY'; }
@@ -3708,7 +3730,7 @@ function renderMap() {
                   : `data-action="node-combat" data-type="${n.type}" data-elite="${n.elite ? 1 : 0}"`;
         const wx = WEATHER_DOTS[n.weather] || '';
         const gr = (n.terrain && n.terrain !== 'OPEN_ROAD') ? TERRAIN[n.terrain] : null;
-        m += `<button class="map-node node-${status} ${cutoff} ${eCls} ${(n.type === 'BOSS' && status === 'active') ? 'boss-node' : ''}" style="left:${MAP_COL_X[n.col]}%; top:${(TOTAL_TIERS - n.tier) * MAP_ROW_H + (MAP_ROW_H - 75) / 2}px" ${status === 'active' ? '' : 'disabled'} ${act} data-node="${n.id}"><span class="node-icon">${icon}</span><span class="node-lbl">${lbl}${n.elite ? ' (ELITE)' : ''}</span>${wx ? `<span class="node-weather ${wx}" title="Forecast: ${n.weather.replace('_', ' ')}"></span>` : ''}${gr ? `<span class="node-ground ${gr.dot}" title="Ground: ${gr.name} \u2014 ${gr.desc}">${gr.short[0]}</span>` : ''}</button>`;
+        m += `<button class="map-node node-${status} ${cutoff} ${eCls} ${nf ? 'formation-node' : ''} ${(n.type === 'BOSS' && status === 'active') ? 'boss-node' : ''}"${hint ? ` title="${hint}"` : ''} style="left:${MAP_COL_X[n.col]}%; top:${(TOTAL_TIERS - n.tier) * MAP_ROW_H + (MAP_ROW_H - 75) / 2}px" ${status === 'active' ? '' : 'disabled'} ${act} data-node="${n.id}"><span class="node-icon">${icon}</span><span class="node-lbl">${lbl}${n.elite ? ' (ELITE)' : ''}</span>${wx ? `<span class="node-weather ${wx}" title="Forecast: ${n.weather.replace('_', ' ')}"></span>` : ''}${gr ? `<span class="node-ground ${gr.dot}" title="Ground: ${gr.name} \u2014 ${gr.desc}">${gr.short[0]}</span>` : ''}</button>`;
     });
     m += `</div>`; mapC.innerHTML = m;
     const focusY = (TOTAL_TIERS - currentTier) * MAP_ROW_H - mapC.clientHeight * 0.45;
@@ -3721,7 +3743,7 @@ function advanceSector() {
     checkBountyProgress('SECTOR');
     currentSector++; currentTier = 1;
     sectorFront = rollFront(seededRng('front:' + currentSector), currentSector); frontBannerPending = true;
-    sectorMap = generateSectorMap(seededRng('map:' + currentSector)); currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null;
+    sectorMap = generateSectorMap(seededRng('map:' + currentSector)); currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null; forecastFormation = null;
     noteDepth(); saveGameState();
     resolveConsequence();
 }
@@ -4606,6 +4628,7 @@ const PROMPTS = [
     { id: 'RECRUIT',   title: 'SOMEONE WORTH SIGNING', body: 'The seven you start with are not everyone out here. A survivor brings a verb none of them has - a grinder for the front rank, a decontaminator for the middle, or a line that can haul what is hiding at the back of the enemy out where you can reach it. They cost Scrap, they arrive hurt, and there are only three in the whole wasteland. They join the bench: put them in the line at the Outpost.' },
     { id: 'ARMORY',    title: 'THE ARMORY',      body: 'A trader on the route. Gear, a marked-up relic, stims, a quirk do-over, and a bond that prepays your next regroup. Prices climb with the sector, so scrap spent early is worth more.' },
     { id: 'THREAT',    title: 'SOMEONE IS ABOUT TO DIE', body: 'The red figure over that operator is what lands on them this round if nothing changes, and it is more than they have left. Kill the thing aimed at them, brace in front of them, spend a STIM, or move them - but not nothing.' },
+    { id: 'FORMATION', title: 'THIS IS A KNOWN SHAPE', body: 'That was not a patrol - it is a composition, and the node named it before you took it. The units in it were put together on purpose: plate to break with something calling for help behind it, a swarm that shrugs off damage until you thin it, a singer making something else dangerous. The same name always brings the same shape, so a formation you have fought once is a problem you already know the answer to. Plain faction nodes are still loose patrols.' },
     { id: 'REGROUP',   title: 'THE SQUAD BROKE', body: 'A wipe is not the end of the expedition. Regrouping costs half your scrap and sends you back to the start of this sector with the squad on its feet. You have a limited number - felling a warlord earns one back.' }
 ];
 let seenPrompts = [];      // ids already shown, meta-persisted
@@ -4771,7 +4794,126 @@ const ENEMY_POOL = {
     ]
 };
 
-function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
+// ── Formations ──────────────────────────────────────────────────────────────────────────
+// Seventeen enemy signatures exist and several are built to combine - plate that has to be
+// broken first, a caller standing behind it, a swarm that shrugs off damage until it is
+// thinned, something that raises the fallen. Measured over 1,122 drawn squads, the pairs that
+// were designed to work together turned up at 3-12%: whatever chance allowed, never on
+// purpose. A fight was a difficulty roll rather than a problem with a shape.
+//
+// A formation is a composition drawn whole instead of unit by unit, and named on the node
+// before you take it - so the counter-play the signatures already support becomes something
+// you can learn and route around rather than rediscover every time. Loose patrols still
+// happen; a wasteland where every fight is a named set-piece has no texture either.
+//
+// `units` names pool entries, and the order is the order they are built in. `minTier` is the
+// EFFECTIVE tier (tier + 3 per sector past the first) - a formation is never offered before
+// every unit in it has unlocked, and validateFormations proves that at boot.
+//
+// `fadeAt` retires a shallow formation once the faction's deeper ones have opened. Without it
+// a four-dog pack stays a third of your Beast fights into sector five, and - measured - a
+// fixed shallow composition crowds OUT the pairings a loose draw from a small deep pool would
+// have found: pack-and-drag-down fell from 54% to 46% before these bands went in.
+const FORMATION_CHANCE = 0.55;
+const FORMATIONS = {
+    RAIDERS: [
+        { id: 'MOB', name: 'The Mob', minTier: 4, fadeAt: 11,
+          note: 'Numbers and a whistle. One of them is always calling for more.',
+          units: ['Raider', 'Raider', 'Psycho'] },
+        { id: 'CROSSFIRE', name: 'Crossfire', minTier: 5,
+          note: 'Two rifles ranging your back rank while the third holds the road.',
+          units: ['Sniper', 'Sniper', 'Raider'] },
+        { id: 'ROADBLOCK', name: 'Roadblock', minTier: 12,
+          note: 'Plate across the road, and whistles behind it.',
+          units: ['Juggernaut', 'Raider', 'Raider'] },
+        { id: 'PRESS_GANG', name: 'Press Gang', minTier: 12,
+          note: 'Break the plate while you are being ranged - and it hits harder as it dies.',
+          units: ['Juggernaut', 'Sniper', 'Psycho'] }
+    ],
+    BEASTS: [
+        { id: 'THE_PACK', name: 'The Pack', minTier: 4, fadeAt: 10,
+          note: 'Each one hits harder for every other one still standing.',
+          units: ['Attack Dog', 'Attack Dog', 'Attack Dog'] },
+        { id: 'RUN_DOWN', name: 'Run Down', minTier: 9,
+          note: 'It hauls someone out of your back rank. The pack is already there.',
+          units: ['Mutant', 'Attack Dog', 'Attack Dog'] },
+        { id: 'BLOOM', name: 'Bloom', minTier: 11,
+          note: 'Killing them is the trap: each one bursts.',
+          units: ['Chem Fiend', 'Chem Fiend', 'Attack Dog'] }
+    ],
+    MECH: [
+        { id: 'AIR_COVER', name: 'Air Cover', minTier: 4, fadeAt: 11,
+          note: 'Nothing on the ground reaches them properly.',
+          units: ['Drone', 'Drone', 'Drone'] },
+        { id: 'KILL_BOX', name: 'Kill Box', minTier: 5,
+          note: 'Two guns holding the field. Moving is what gets you shot.',
+          units: ['Turret', 'Turret', 'Drone'] },
+        { id: 'CONVOY', name: 'The Convoy', minTier: 14,
+          note: 'Plating projected over the guns already holding you down.',
+          units: ['War Rig', 'Turret', 'Turret'] }
+    ],
+    CHOIR: [
+        { id: 'PROCESSION', name: 'The Procession', minTier: 6, fadeAt: 12,
+          note: 'Two singing over the third while it strips your armour.',
+          units: ['Acolyte', 'Acolyte', 'Censer Bearer'] },
+        { id: 'RELIQUARY_GUARD', name: 'Reliquary Guard', minTier: 10,
+          note: 'Kill the wrong one and the rest of them come back up off the floor.',
+          units: ['Reliquary', 'Acolyte', 'Acolyte'] },
+        { id: 'THE_RITE', name: 'The Full Rite', minTier: 14,
+          note: 'It dies loudly, and then something raises it.',
+          units: ['Hierophant', 'Reliquary', 'Acolyte'] }
+    ],
+    CARRION: [
+        { id: 'THE_SWARM', name: 'The Swarm', minTier: 4, fadeAt: 10,
+          note: 'Thin it to two before it stops shrugging everything off.',
+          units: ['Carrion Rat', 'Carrion Rat', 'Carrion Rat', 'Carrion Rat'] },
+        { id: 'RISING_FLIGHT', name: 'Rising Flight', minTier: 5,
+          note: 'A swarm you cannot reach, and cannot hurt while it is thick.',
+          units: ['Blight Moth', 'Blight Moth', 'Blight Moth', 'Carrion Rat', 'Carrion Rat'] },
+        { id: 'UNDERTOW', name: 'Undertow', minTier: 9,
+          note: 'They go under the swarm and come up in your front rank.',
+          units: ['Gorge Worm', 'Gorge Worm', 'Carrion Rat', 'Carrion Rat', 'Carrion Rat'] },
+        { id: 'THE_NEST', name: 'The Nest', minTier: 12,
+          note: 'She keeps laying. The swarm never thins on its own.',
+          units: ['Brood Mother', 'Carrion Rat', 'Carrion Rat', 'Carrion Rat', 'Carrion Rat'] }
+    ]
+};
+const ALL_FORMATIONS = Object.values(FORMATIONS).flat();
+function formationById(id) { return id ? ALL_FORMATIONS.find(f => f.id === id) || null : null; }
+function unitByName(faction, name) { return (ENEMY_POOL[faction] || []).find(u => u.name === name) || null; }
+function formationsFor(faction, effTier) {
+    return (FORMATIONS[faction] || []).filter(f => effTier >= f.minTier && !(f.fadeAt && effTier > f.fadeAt));
+}
+// Rolled when the map is drawn, not when the fight starts, because the node has to be able to
+// say what it is holding before you commit to walking into it.
+function rollFormation(faction, effTier, rng = Math.random) {
+    const open = formationsFor(faction, effTier);
+    if (!open.length || rng() >= FORMATION_CHANCE) return null;
+    return open[Math.floor(rng() * open.length)].id;
+}
+// A formation naming a unit that does not exist, or one gated below a unit it fields, would
+// quietly fall back to a loose draw and nobody would notice. The suite runs this.
+function validateFormations() {
+    const bad = [];
+    Object.entries(FORMATIONS).forEach(([faction, list]) => list.forEach(f => {
+        if (!f.id || !f.name || !f.note || !Array.isArray(f.units) || !f.units.length)
+            { bad.push(`${faction}/${f.id || '?'}: malformed`); return; }
+        f.units.forEach(n => {
+            const u = unitByName(faction, n);
+            if (!u) { bad.push(`${faction}/${f.id}: no unit named "${n}"`); return; }
+            if (u.minTier > f.minTier) bad.push(`${faction}/${f.id}: fields ${n} (tier ${u.minTier}) at tier ${f.minTier}`);
+        });
+        if (f.fadeAt && f.fadeAt <= f.minTier) bad.push(`${faction}/${f.id}: fades at ${f.fadeAt}, before it opens at ${f.minTier}`);
+        // A composition is built straight from its list, so the loose draw's uniqueness guard
+        // never runs on it - two Brood Mothers laying into the same swarm would just ship.
+        f.units.filter(n => (unitByName(faction, n) || {}).unique)
+               .forEach((n, _, all) => { if (all.filter(x => x === n).length > 1 && !bad.some(b => b.includes(`${f.id}: two `))) bad.push(`${faction}/${f.id}: two ${n}, which is unique`); });
+    }));
+    if (ALL_FORMATIONS.length !== new Set(ALL_FORMATIONS.map(f => f.id)).size) bad.push('duplicate formation id');
+    return bad;
+}
+
+function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationId = null) {
 
     let bossBaseHp = currentSector === 1 ? 100 : 300;
     // Eased from 30/40 when the simulator showed the wall had just moved to tier 10: squads
@@ -4854,21 +4996,32 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     // recruits, and a turret standing among a pack of dogs just reads as a bug.
     const allies = (FACTION_ALLIES[nodeType] || []).filter(t => ENEMY_POOL[t]);
 
+    // A named composition, if the node promised one and every unit in it still exists. The
+    // gate is checked again here rather than trusted: a save carrying a formation from an
+    // older build must not field a unit this one no longer has.
+    const form = formationById(formationId);
+    const roster = (form && effTier >= form.minTier)
+        ? form.units.map(n => unitByName(nodeType, n)).filter(Boolean)
+        : null;
+    const composed = !!(roster && roster.length === (form.units || []).length);
+
     let sZ = effTier >= 9 ? (Math.random() < 0.25 ? 4 : 3)
            : effTier >= 4 ? (Math.random() < 0.5 ? 3 : 2)
            : 2;
     // A swarm that turns up two-strong is not a swarm. The row is fitted to what it holds, so
     // a wide field is a rendering problem the layout already solves rather than a hard cap.
     sZ += (FACTIONS[nodeType] && FACTIONS[nodeType].swarm) || 0;
+    if (composed) sZ = roster.length;
     let squad = [];
     for (let i = 0; i < sZ; i++) {
-        // Above mid-game, squads can pick up an attached specialist from another faction.
+        // Above mid-game, loose squads can pick up an attached specialist from another faction.
+        // A formation is what it is - the whole point is that the shape is the same every time.
         let usePool = homePool;
-        if (allies.length && effTier >= 6 && i > 0 && Math.random() < 0.25) usePool = poolFor(allies[Math.floor(Math.random() * allies.length)]);
+        if (!composed && allies.length && effTier >= 6 && i > 0 && Math.random() < 0.25) usePool = poolFor(allies[Math.floor(Math.random() * allies.length)]);
         // Some units compound with themselves - one that lays more of itself, one that raises
         // the fallen - and a second is not twice the fight, it is a different one.
-        let pick = usePool[Math.floor(Math.random() * usePool.length)];
-        if (pick.unique && squad.some(s => s.name === pick.name)) {
+        let pick = composed ? roster[i] : usePool[Math.floor(Math.random() * usePool.length)];
+        if (!composed && pick.unique && squad.some(s => s.name === pick.name)) {
             const rest = usePool.filter(e => !e.unique || !squad.some(s => s.name === e.name));
             if (rest.length) pick = rest[Math.floor(Math.random() * rest.length)];
         }
@@ -5182,6 +5335,7 @@ function initiateCombat(nodeType, isEliteNode) {
     // (dev tools, suites) still rolls as before.
     if (forecastWeather) { currentWeather = forecastWeather; forecastWeather = null; }
     currentTerrain = forecastTerrain || 'OPEN_ROAD'; forecastTerrain = null;
+    currentFormation = forecastFormation || null; forecastFormation = null;
     if (currentTerrain !== 'OPEN_ROAD') firePrompt('GROUND');
     if (hasContract('HARSH_SKIES') && currentWeather === 'CLEAR') {
         currentWeather = ['TOXIC_SMOG', 'SANDSTORM', 'SHRAPNEL_WINDS'][Math.floor(Math.random() * 3)];
@@ -5208,7 +5362,7 @@ function initiateCombat(nodeType, isEliteNode) {
     const mult = difficultyMult * (1 + ((currentTier - 1) * TIER_HP_GROWTH)) * Math.pow(SECTOR_HP_SCALE, currentSector - 1);
     const dmgMult = difficultyMult * (1 + ((currentTier - 1) * TIER_DMG_GROWTH)) * Math.pow(SECTOR_DMG_SCALE, currentSector - 1);
     
-    activeEntities = [...deployedRoster, ...generateEnemies(nodeType, mult, isEliteNode, dmgMult)];
+    activeEntities = [...deployedRoster, ...generateEnemies(nodeType, mult, isEliteNode, dmgMult, currentFormation)];
     // Whoever the squad ran from is here, carrying the wounds it already put on them. They are
     // spent the moment they arrive, so running twice does not stack a mob.
     if (pursuit && pursuit.units && pursuit.units.length) {
@@ -5231,7 +5385,7 @@ function initiateCombat(nodeType, isEliteNode) {
         const addFaction = { RAIDER_WARBAND: 'RAIDERS', MACHINE_UPRISING: 'MECH', BLOOD_MOON: 'BEASTS',
                              THE_CHOIR: 'CHOIR', CARRION_BLOOM: 'CARRION' }[sectorFront];
         if (addFaction) {
-            const escort = generateEnemies(addFaction, mult, false, dmgMult)[0];
+            const escort = generateEnemies(addFaction, mult, false, dmgMult, null)[0];
             escort.id = 'front_escort';
             activeEntities.push(escort);
             log(`> The warlord does not come alone: ${escort.name} rides with them.`, 'log-dmg');
@@ -5241,7 +5395,12 @@ function initiateCombat(nodeType, isEliteNode) {
     // showed up. This has to run after the line is built, escort and all.
     [...new Set(activeEntities.filter(e => !e.isPlayer).map(typeNameOf))].forEach(n => noteBestiary(n, 'met'));
     saveMeta();
+    // The fight names itself as it opens, so what the node promised and what walked onto the
+    // field are recognisably the same thing.
+    const openForm = formationById(currentFormation);
+    if (openForm) log(`> ${openForm.name.toUpperCase()}. ${openForm.note}`, 'log-dmg');
     firePrompt('INTENT');
+    if (openForm) firePrompt('FORMATION');
     if (activeEntities.some(e => !e.isPlayer && sigOf(e))) firePrompt('SIGNATURE');
     // The Lead-Lined Coat weighs on the turn order without touching the sheet.
     const queueSpeed = e => e.speed - (e.isPlayer && hasRelic('LEAD_LINED_COAT') ? 3 : 0);
@@ -6974,7 +7133,7 @@ globalThis.WP = {
     RECRUIT_POOL, RECRUIT_COST, RECRUIT_HEALTH, recruitCost, recruitables, recruitById, recruitReach,
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
@@ -7058,6 +7217,8 @@ globalThis.WP = {
     get recentEvents() { return recentEvents; }, set recentEvents(v) { recentEvents = v; },
     get currentTerrain() { return currentTerrain; }, set currentTerrain(v) { currentTerrain = v; },
     get forecastTerrain() { return forecastTerrain; }, set forecastTerrain(v) { forecastTerrain = v; },
+    get forecastFormation() { return forecastFormation; }, set forecastFormation(v) { forecastFormation = v; },
+    get currentFormation() { return currentFormation; }, set currentFormation(v) { currentFormation = v; },
     get castState() { return castState; }, set castState(v) { castState = v; },
     get firedEvents() { return firedEvents; }, set firedEvents(v) { firedEvents = v; },
     get activeChoices() { return activeChoices; }, set activeChoices(v) { activeChoices = v; },

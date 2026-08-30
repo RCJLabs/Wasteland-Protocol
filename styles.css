@@ -719,3 +719,9 @@ button.reach-short { border-color: #7a5a20; }
 .camp-walk-go { border-color: #6B8E23; color: #6B8E23; font-weight: bold; }
 .chronicle-walked { border-color: #3d5216; }
 .chronicle-walked .chronicle-epitaph b { color: #6B8E23; letter-spacing: 1px; }
+
+/* A node holding a known composition rather than a loose patrol. The name in the label is the
+   information; the colour is what makes it scannable against a map of plain faction nodes.
+   A border tint would not read - the node is a circle. */
+.map-node.formation-node .node-lbl { color: #B8860B; }
+.map-node.formation-node.node-locked .node-lbl { color: #8a6a2a; }

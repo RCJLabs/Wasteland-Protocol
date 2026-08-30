@@ -58,7 +58,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
-                 extracted: false, walkedAt: 0 };
+                 extracted: false, walkedAt: 0, formations: {}, loose: 0 };
 
   activeContracts = [...contracts];
   currentSlot = 1;
@@ -220,6 +220,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const fight = (nodeType, elite) => {
     initiateCombat(nodeType, elite);
     stat.fights++;
+    // A sim that never met a formation would report a game without them and read identically
+    // to one that did, so what walked on is counted rather than assumed.
+    if (currentFormation) stat.formations[currentFormation] = (stat.formations[currentFormation] || 0) + 1;
+    else stat.loose++;
     // Counted at the door rather than at the end: a fight that is run from still happened, and
     // the squad still had to look at whatever was in it.
     activeEntities.filter(e => !e.isPlayer && e.sig).forEach(e => {
@@ -444,10 +448,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   });
   const page = await context.newPage();
   const errors = [];
+  let ALL_FORMATION_IDS = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(`http://127.0.0.1:${port}/index.html`);
   await page.waitForTimeout(800);
   await page.evaluate(() => { globalSettings.sfx = false; });
+  ALL_FORMATION_IDS = await page.evaluate(() => ALL_FORMATIONS.map(f => f.id));
 
   console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}` +
               (CONTRACTS.length ? ` under ${CONTRACTS.join(', ')}` : '') +
@@ -532,6 +538,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   }
   line('nodes cleared, median', pct(nums('nodes'), 0.5));
   line('score, median', pct(nums('score'), 0.5).toLocaleString());
+
+  console.log('\n── FORMATIONS ' + '─'.repeat(43));
+  const forms = {};
+  results.forEach(r => Object.entries(r.formations).forEach(([k, v]) => { forms[k] = (forms[k] || 0) + v; }));
+  const namedN = Object.values(forms).reduce((a, v) => a + v, 0);
+  const looseN = results.reduce((a, r) => a + r.loose, 0);
+  line('fights that were a named shape', `${namedN} of ${namedN + looseN} (${(100 * namedN / Math.max(1, namedN + looseN)).toFixed(0)}%)`);
+  Object.entries(forms).sort((a, b) => b[1] - a[1]).forEach(([k, v]) => line('  ' + k, v));
+  const unseen = ALL_FORMATION_IDS.filter(id => !forms[id]);
+  line('never met', unseen.length ? unseen.join(', ') : 'none');
 
   console.log('\n── FIGHTS ' + '─'.repeat(48));
   const roundsPerFight = results.map(r => r.fights ? r.rounds / r.fights : 0).sort((a, b) => a - b);
