@@ -160,9 +160,12 @@ module.exports = {
       __line(['BRUISER', 'SCAVENGER', 'PYROMANIAC']);
       takeDoctrine('FIELD_SURGERY'); musterDeploy();
       deployedLine().forEach(c => { c.hp = Math.floor(c.maxHp * 0.4); });
-      const hurt = deployedLine().map(c => c.hp);
       currentSector = 2; currentTier = 3;
       initiateCombat('RAIDERS', false);
+      // Read the line AFTER the fight has opened, not before: the weather chips whoever is
+      // fragile as combat starts, and on a Scavenger that lands harder than the heal does. The
+      // claim is that winning patches the line, so the fight is where the comparison starts.
+      const hurt = deployedLine().map(c => c.hp);
       activeEntities.filter(e => !e.isPlayer).forEach(e => { e.hp = 0; });
       checkWinState();
       const patched = deployedLine().map(c => c.hp);
