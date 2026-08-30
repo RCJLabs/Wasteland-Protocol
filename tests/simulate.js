@@ -51,6 +51,12 @@ const WITHDRAW_POLICY = flag('withdraw', 'on') !== 'off';
 // what a player with a free multiplier on the table actually does. It is not the default: the
 // default is left alone so runs measured before doctrines existed stay comparable.
 const DRAFT = flag('draft', 'line');
+// Momentum has three tactics and this simulator only ever bought one of them: spendTactic was
+// called exactly once in the whole file, always with STIM, and the strings FOCUS and PRESS did
+// not appear at all. So "a third of every action was STIM" was this policy reporting itself
+// back. `--tactics focus|press|none|smart` buys something else, so the shelf can be compared
+// rather than assumed. `stim` is the old behaviour and stays the default.
+const TACTICS = flag('tactics', 'stim');
 // A sim that never walks out measures a game with one ending. `--extract N` gives it the
 // player who leaves once the run is worth banking: from sector N on, it takes the camp's door
 // when the squad is worn down. `off` (the default) is the old behaviour, for comparison.
@@ -59,7 +65,7 @@ const EXTRACT_AT = EXTRACT_RAW === 'off' ? 99 : Number(EXTRACT_RAW);
 
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy }) => {
   const stat = { sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, ground: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
@@ -181,9 +187,28 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       stat.moves.OVERDRIVE = (stat.moves.OVERDRIVE || 0) + 1;
       pendingAction = 'OVERDRIVE'; resolveAction(foes[0].id); return true;
     }
-    // Tactics first: a STIM is free tempo when someone is hurting, and it costs no action.
-    // With somebody bleeding out it is not tempo, it is the answer, so it goes first.
-    if (momentum >= 30 && stimTarget()) { stat.moves.STIM = (stat.moves.STIM || 0) + 1; spendTactic('STIM'); }
+    // Tactics. None of the three costs an action, so the only question is what the bar buys.
+    const buy = id => {
+      const before = momentum;
+      spendTactic(id);
+      if (momentum !== before) stat.moves[id] = (stat.moves[id] || 0) + 1;
+    };
+    if (tacticPolicy === 'stim') {
+      if (momentum >= 30 && stimTarget()) buy('STIM');
+    } else if (tacticPolicy === 'focus') {
+      if (momentum >= 25) buy('FOCUS');
+    } else if (tacticPolicy === 'press') {
+      if (momentum >= 40) buy('PRESS');
+    } else if (tacticPolicy === 'smart') {
+      // Somebody on the floor is what a bar is for; otherwise take the extra action when it is
+      // affordable, and sharpen the hit when it is not.
+      const down = bleedingOut().length > 0;
+      const hurt = stimTarget();
+      if (down && momentum >= 30) buy('STIM');
+      else if (momentum >= 40) buy('PRESS');
+      else if (hurt && momentum >= 30 && hurt.hp < hurt.maxHp * 0.5) buy('STIM');
+      else if (momentum >= 25) buy('FOCUS');
+    }
 
     // Somebody on the floor is the turn. A Med-Stim, then the medic's hands - anything else
     // is measuring a squad that watches its own people bleed out, which is not a squad.
@@ -297,6 +322,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (actor.isPlayer && fightLog) fightLog.turns++;   // processTurn does this in the real loop
       if (actor.isPlayer) { if (!takeTurn()) { activeIndex = (activeIndex + 1) % turnQueue.length; continue; } }
       else { actor.intent = rollIntent(actor); executeEnemyAi(actor); }
+      // A pressed operator holds the floor - nextTurn does this in the real loop, and without
+      // it PRESS is momentum spent on nothing and would measure as worthless.
+      if (pressExtra && actor.isPlayer && actor.hp > 0) { pressExtra = false; continue; }
       activeIndex = (activeIndex + 1) % turnQueue.length;
     }
     // Whoever the fight ended without is on the record.
@@ -497,13 +525,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   await page.evaluate(() => { globalSettings.sfx = false; });
   ALL_FORMATION_IDS = await page.evaluate(() => ALL_FORMATIONS.map(f => f.id));
 
-  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}` +
+  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}, tactics ${TACTICS}` +
               (CONTRACTS.length ? ` under ${CONTRACTS.join(', ')}` : '') +
               (WITHDRAW_POLICY ? ', running from fights it is losing' : ', fighting every node to a finish') + '\n');
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
