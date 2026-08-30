@@ -144,3 +144,27 @@ each faction its own place, but nothing is wrong without them.
    the same scale reads much larger than a tall one. A commander that arrives with a
    retinue shares its row, and `fitEnemyRow` narrows the pair to fit, so check both units
    are legible together rather than only the commander alone.
+
+### `hero_fiend.webp` — Trench Fiend
+*The front-rank grinder. Spends his own blood to swing harder.*
+
+> A wasteland trench soldier: a battered steel helmet over a riveted gas mask with a corrugated
+> hose, a spiked pauldron lashed to one shoulder, a long patched greatcoat over layered rag
+> armour, a serrated bayonet in one hand and a hand-cranked circular saw in the other, boots
+> wrapped in filthy bandages. Hunched forward, mid-advance. Accent colour: dried blood brown.
+
+### `hero_hazmat.webp` — Hazmat
+*The mid-rank decontaminator. Corrodes what it hits and scrubs the squad clean.*
+
+> A sealed chemical-warfare suit in faded olive, a twin-filter respirator with round glass
+> lenses, a pair of pressurised tanks on the back with one glowing luminous green through a
+> viewport, thick ribbed hoses running from the tanks to a drum-fed spray gun held across the
+> body, gauges at the belt. Heavy, deliberate stance. Accent colour: toxic bioluminescent green.
+
+### `hero_harpooner.webp` — Harpooner
+*The back-rank line. Hauls whatever is hiding at the back of the enemy out to the front.*
+
+> A wasteland marksman kneeling to fire: a burlap-and-netting ghillie hood strewn with frayed
+> scrim, a scarf over the lower face, one glowing red optical implant where an eye should be,
+> a long scoped rifle with a barbed harpoon head and a coiled cable running back to a spool, a
+> pressurised cylinder strapped across the chest. Accent colour: signal red.

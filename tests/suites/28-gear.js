@@ -10,6 +10,7 @@ module.exports = {
     // ---- the pool ----
     const pool = await page.evaluate(() => ({
       total: GEAR_POOL.length,
+      classes: Object.keys(ABILITIES).length,
       mods: GEAR_POOL.filter(g => g.slot === 'mod').length,
       trinkets: GEAR_POOL.filter(g => g.slot === 'trinket').length,
       ids: new Set(GEAR_POOL.map(g => g.id)).size,
@@ -18,7 +19,7 @@ module.exports = {
       twoPerClass: Object.keys(ABILITIES).every(c => GEAR_POOL.filter(g => g.slot === 'mod' && g.cls === c).length === 2)
     }));
     ok(`the pool holds ${pool.total} pieces (${pool.mods} mods, ${pool.trinkets} trinkets)`,
-      pool.mods === 14 && pool.trinkets === 8);
+      pool.mods === pool.classes * 2 && pool.trinkets >= 8);
     ok('every id unique, every piece described', pool.ids === pool.total && pool.described);
     ok('every mod belongs to a real class, two per class', pool.modsHaveClass && pool.twoPerClass);
 

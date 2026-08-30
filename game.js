@@ -13,6 +13,7 @@ const PENDING_ART = [
 const ASSET_LIST = [
     "bg_title.webp", "bg_combat.webp", "bg_thunderdome.webp", "bg_refinery.webp", "bg_highway.webp", "bg_canyon.webp", "bg_foundry.webp", "bg_nest.webp",
     "hero_bruiser.webp", "hero_medic.webp", "hero_scavenger.webp", "hero_pyro.webp", "hero_shotgunner.webp", "hero_sniper.webp", "hero_hound.webp",
+    "hero_fiend.webp", "hero_hazmat.webp", "hero_harpooner.webp",
     "enemy_dog.webp", "enemy_hound_bulldog.webp", "enemy_mutant.webp", "enemy_chem.webp", "enemy_raider.webp", "enemy_psycho.webp", "enemy_sniper.webp", "enemy_juggernaut.webp", "enemy_drone.webp", "enemy_turret.webp", "enemy_warrig.webp", "enemy_boss.webp", "enemy_boss_mech.webp", "enemy_boss_vulture.webp",
     "enemy_boss_vatborn.webp", "enemy_boss_marshal.webp", "enemy_boss_stormcaller.webp", "enemy_boss_bastion.webp",
     "enemy_choir_acolyte.webp", "enemy_choir_censer.webp", "enemy_choir_reliquary.webp", "enemy_choir_hierophant.webp",
@@ -145,6 +146,12 @@ const GEAR_POOL = [
     { id: 'SPOTTING_SCOPE',   slot: 'mod', cls: 'SNIPER',     name: 'Spotting Scope',   desc: "Spotter's Mark lasts 4 turns and cools down in 2." },
     { id: 'BLOOD_TRACKER',    slot: 'mod', cls: 'HOUND',      name: 'Blood Tracker',    desc: 'Snap deals +30% to bleeding targets.' },
     { id: 'WAR_HARNESS',      slot: 'mod', cls: 'HOUND',      name: 'War Harness',      desc: 'Rip and Tear cools down in 2 turns, not 3.' },
+    { id: 'SERRATED_EDGE',    slot: 'mod', cls: 'TRENCH_FIEND',name: 'Serrated Edge',    desc: 'Bayonet Thrust opens a 2-turn bleed.' },
+    { id: 'CHAIN_OILER',      slot: 'mod', cls: 'TRENCH_FIEND',name: 'Chain Oiler',      desc: 'Ripsaw cools down in 2 turns, not 3.' },
+    { id: 'HIGH_PRESSURE',    slot: 'mod', cls: 'HAZMAT',      name: 'High-Pressure Line',desc: 'Spray Gun corrodes for 2 turns.' },
+    { id: 'SCRUBBER_UNIT',    slot: 'mod', cls: 'HAZMAT',      name: 'Scrubber Unit',    desc: 'Purge Valve heals 15 more.' },
+    { id: 'SWIVEL_MOUNT',     slot: 'mod', cls: 'HARPOONER',   name: 'Swivel Mount',     desc: 'Drag Line cools down in 2 turns, not 3.' },
+    { id: 'TOGGLE_HEAD',      slot: 'mod', cls: 'HARPOONER',   name: 'Toggle Head',      desc: 'Harpoon deals +30% to bleeding targets.' },
     // trinkets, anyone can wear one
     { id: 'PLATED_VEST',   slot: 'trinket', name: 'Plated Vest',    desc: '+15 max HP.',            apply: c => { c.maxHp += 15; c.hp += 15; }, remove: c => { c.maxHp -= 15; c.hp = Math.min(c.hp, c.maxHp); } },
     { id: 'REFLEX_WRAP',   slot: 'trinket', name: 'Reflex Wrap',    desc: '+2 SPD.',                apply: c => { c.speed += 2; }, remove: c => { c.speed -= 2; } },
@@ -172,7 +179,8 @@ function moveReachFor(move, ent) {
 // A cooldown mod shaves a turn off the listed price, never below 1.
 function cdFor(ent, id, base) {
     const mods = { COUNTERWEIGHT: 'heavy_wrench', PRESSURE_SYRINGE: 'cauterize',
-                   SPOTTING_SCOPE: 'spotters_mark', WAR_HARNESS: 'rip_and_tear' };
+                   SPOTTING_SCOPE: 'spotters_mark', WAR_HARNESS: 'rip_and_tear',
+                   CHAIN_OILER: 'ripsaw', SWIVEL_MOUNT: 'drag_line' };
     for (const [mod, key] of Object.entries(mods)) {
         if (key === id && hasMod(ent, mod)) return Math.max(1, base - 1);
     }
@@ -233,6 +241,16 @@ function quirkDmgMult(actEnt, target, dist) {
 // while both stand; at II, once per fight one steps in front of a killing blow aimed at
 // the other; at III the pair shares an overdrive discount. Rotating the squad resets
 // nothing but costs the pairs their momentum - the tension the muster is built on.
+// Over The Top: the Fiend spends his own health for two turns of everything hitting harder.
+// Not called frenzy anywhere: FRENZY is already the Psycho's signature and FRENZIED an elite
+// affix, and all three would have shown the same word on the same screen.
+const FIEND_CHARGE_COST = 0.12;   // share of his max health
+const CHARGE_TURNS = 2;
+const CHARGE_MULT = 1.5;
+// Drag Line hauls a target out of the enemy back line to the front of it, where melee can
+// reach it and where the ground rules stop protecting it.
+const HAUL_TO = 0;
+
 const BOND_LEVELS = [4, 10, 18];   // fights together for I / II / III
 const BOND_NAMES = {
     'BRUISER|MEDIC':        'Meat and Mender',
@@ -255,7 +273,32 @@ const BOND_NAMES = {
     'HOUND|PYROMANIAC':     'Singed Fur',
     'SHOTGUNNER|SNIPER':    'Close and Far',
     'HOUND|SHOTGUNNER':     'Point and Flush',
-    'HOUND|SNIPER':         'Spotter and Fang'
+    'HOUND|SNIPER':         'Spotter and Fang',
+    // the three found on the road
+    'BRUISER|TRENCH_FIEND':    'Two Walls',
+    'HAZMAT|TRENCH_FIEND':     'Filter and Fume',
+    'HARPOONER|TRENCH_FIEND':  'Hook and Hack',
+    'MEDIC|TRENCH_FIEND':      'Wound and Ward',
+    'SCAVENGER|TRENCH_FIEND':  'Scrap and Sawdust',
+    'PYROMANIAC|TRENCH_FIEND': 'Smoke and Steel',
+    'SHOTGUNNER|TRENCH_FIEND': 'Both Doors',
+    'SNIPER|TRENCH_FIEND':     'Long and Short of It',
+    'HOUND|TRENCH_FIEND':      'Teeth and Teeth',
+    'BRUISER|HAZMAT':          'Shield and Seal',
+    'HAZMAT|MEDIC':            'Clean Hands',
+    'HAZMAT|SCAVENGER':        'Rust and Rinse',
+    'HAZMAT|PYROMANIAC':       'Two Kinds of Burn',
+    'HAZMAT|SHOTGUNNER':       'Breach and Bleach',
+    'HAZMAT|SNIPER':           'Downwind',
+    'HAZMAT|HOUND':            'Muzzle and Mask',
+    'HARPOONER|HAZMAT':        'Barb and Bile',
+    'BRUISER|HARPOONER':       'Drag and Drop',
+    'HARPOONER|MEDIC':         'Line and Lifeline',
+    'HARPOONER|SCAVENGER':     'Grapple and Grab',
+    'HARPOONER|PYROMANIAC':    'Reel and Roast',
+    'HARPOONER|SHOTGUNNER':    'Pulled Close',
+    'HARPOONER|SNIPER':        'Two Long Guns',
+    'HARPOONER|HOUND':         'Leash and Lunge'
 };
 
 let bonds = {};                  // pair key -> fights survived together, this run
@@ -821,7 +864,7 @@ function generateSectorMap(rng = Math.random) {
 
     const swapOne = (type, tierLo, tierHi) => {
         const pool = nodes.filter(n => !n.elite && n.type !== 'BOSS' && n.type !== 'CAMP' && n.type !== 'EVENT'
-            && n.type !== 'SHOP' && n.tier > 1 && n.tier >= tierLo && n.tier <= tierHi);
+            && n.type !== 'SHOP' && n.type !== 'RECRUIT' && n.tier > 1 && n.tier >= tierLo && n.tier <= tierHi);
         if (pool.length) pool[Math.floor(rng() * pool.length)].type = type;
     };
     swapOne('CAMP', 4, 7);
@@ -832,6 +875,9 @@ function generateSectorMap(rng = Math.random) {
     // The Armory is uncommon on purpose: a shop on most maps but not all, so finding one on
     // the route ahead is a reason to steer, not a fixture to tick off.
     if (rng() < 0.65) swapOne('SHOP', 3, 9);
+    // Someone worth signing on, if there is anyone left out there to sign. Rarer than the
+    // Armory: three exist in a whole run, and a route that passes one is worth steering for.
+    if (recruitables().length && rng() < 0.55) swapOne('RECRUIT', 2, 9);
     // Quiet Roads trades two more fights away for strange encounters.
     if (sectorFront === 'QUIET_ROADS') { swapOne('EVENT', 2, 9); swapOne('EVENT', 2, 9); }
 
@@ -1534,6 +1580,47 @@ const ROSTER_TEMPLATE = [
     { id: 'p7', name: "War Hound", classType: "HOUND", maxHp: 35, hp: 35, speed: 19, armor: 0, isPlayer: true, dmgBase: 16, img: "hero_hound.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { feral_bite: 0, rip_and_tear: 0 } }
 ];
 
+// ── Recruits ────────────────────────────────────────────────────────────────────────────
+// The squad used to be the same seven every expedition: the muster chose who deployed, never
+// who existed. These three are not in the template. You find them on the road, out there on
+// their own, and what you get for the scrap is a body with a verb none of the seven has - a
+// grinder for the front, a decontaminator for the middle, and something that can reach into
+// the enemy back line and drag what is hiding there out where the squad can reach it.
+const RECRUIT_POOL = [
+    { id: 'p8', name: "Trench Fiend", classType: "TRENCH_FIEND", rank: 1,
+      pitch: "Dug in at the bottom of somebody else's trench, still holding the saw.",
+      maxHp: 72, hp: 72, speed: 7, armor: 3, isPlayer: true, dmgBase: 21, img: "hero_fiend.webp", scale: 1.15, hpDrop: 0,
+      stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, chargeTurns: 0,
+      resistances: { phys: 5, bio: 5, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100,
+      perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { ripsaw: 0, over_the_top: 0 } },
+    { id: 'p9', name: "Hazmat", classType: "HAZMAT", rank: 2,
+      pitch: "Walked out of the refinery alone, suit still sealed, tanks still green.",
+      maxHp: 58, hp: 58, speed: 10, armor: 0, isPlayer: true, dmgBase: 13, img: "hero_hazmat.webp", scale: 1.15, hpDrop: 0,
+      stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
+      resistances: { phys: 0, bio: 25, energy: 5 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100,
+      perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { caustic_burst: 0, purge_valve: 0 } },
+    { id: 'p10', name: "Harpooner", classType: "HARPOONER", rank: 3,
+      pitch: "Sat in the same patch of scrub for two days waiting for something worth the shot.",
+      maxHp: 42, hp: 42, speed: 14, armor: 0, isPlayer: true, dmgBase: 25, img: "hero_harpooner.webp", scale: 1.0, hpDrop: -15,
+      stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
+      resistances: { phys: 0, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100,
+      perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { drag_line: 0, barbed_shot: 0 } }
+];
+// Signing one on is the cost. It rides the sector, because a body is worth more the deeper you
+// are and because a free one this late would be a reward for surviving rather than a decision.
+// Priced off the measured purse, not off a feeling. At 110 + 22 a tier the median ask across
+// sixty expeditions was 506 against a median purse of 324 at the moment of the offer: five of
+// sixty-nine offers were affordable at all and nobody was ever signed on. This lands the median
+// ask near 200, which is most of what a squad is carrying at that depth without being all of it.
+const RECRUIT_COST = { base: 90, perDepth: 6 };
+function recruitCost() { return RECRUIT_COST.base + RECRUIT_COST.perDepth * depthIndex(); }
+// They have been out here on their own, and it shows.
+const RECRUIT_HEALTH = 0.6;
+let pendingRecruit = null;      // { id, cost, taken } for the node currently being stood in
+
+function recruitables() { return RECRUIT_POOL.filter(r => !playerRoster.some(c => c.id === r.id)); }
+function recruitById(id) { return RECRUIT_POOL.find(r => r.id === id) || null; }
+
 let playerRoster = []; let activeEntities = []; let turnQueue = []; let activeIndex = -1; let combatActive = false; let pendingAction = null;
 
 window.addEventListener('click', initAudio, { once: true });
@@ -1589,6 +1676,7 @@ const ACTIONS = {
     'node-event':       el => { enterNode(el.dataset.node); initiateEvent(); },
     'node-camp':        el => { enterNode(el.dataset.node); initiateCamp(); },
     'node-shop':        el => { enterNode(el.dataset.node); initiateShop(); },
+    'node-recruit':     el => { enterNode(el.dataset.node); initiateRecruit(); },
     'shop-buy':         el => buyShopItem(Number(el.dataset.index)),
     'shop-reroll':      el => shopRerollQuirk(el.dataset.id),
     'shop-reroll-cancel': () => { shopRerollPick = false; renderShop(); },
@@ -1610,6 +1698,8 @@ const ACTIONS = {
     'node-combat':      el => { enterNode(el.dataset.node); initiateCombat(el.dataset.type, el.dataset.elite === '1'); },
 
     'outpost-tab':      el => setOutpostTab(el.dataset.tab),
+    'recruit-sign':     () => signOnRecruit(),
+    'recruit-leave':    () => leaveRecruit(),
     'breakdown':        () => breakdownScrap(),
     'craft':            el => craftItem(el.dataset.item),
     'augment':          el => installAugment(el.dataset.id, el.dataset.kind),
@@ -1709,9 +1799,12 @@ const SFX = {
 // Which voice an ability speaks with. Derived from the same ABILITIES table the deck and the
 // reach rules read, so a new ability cannot end up silent by omission.
 const CLASS_VOICE = { BRUISER: 'blade', MEDIC: 'pistol', SCAVENGER: 'rifle',
-    PYROMANIAC: 'flame', SHOTGUNNER: 'shotgun', SNIPER: 'rifle', HOUND: 'beast' };
+    PYROMANIAC: 'flame', SHOTGUNNER: 'shotgun', SNIPER: 'rifle', HOUND: 'beast',
+    TRENCH_FIEND: 'blade', HAZMAT: 'flame', HARPOONER: 'rifle' };
 const MOVE_VOICE_OVERRIDE = { HEAVY_WRENCH: 'heavy', SCRAP_BLADE: 'blade', SLUG_SHOT: 'rifle',
-    MOLOTOV: 'flame', THERMITE: 'flame', ACID_FLASK: 'flame', SNAP: 'beast' };
+    MOLOTOV: 'flame', THERMITE: 'flame', ACID_FLASK: 'flame', SNAP: 'beast',
+    RIPSAW: 'heavy', TRENCH_SWEEP: 'heavy', CAUSTIC_BURST: 'flame', TANK_RUPTURE: 'blast',
+    HARPOON: 'rifle', DRAG_LINE: 'heavy', WHALE_LINE: 'shotgun' };
 
 function voiceFor(move) {
     if (MOVE_VOICE_OVERRIDE[move]) return MOVE_VOICE_OVERRIDE[move];
@@ -2264,6 +2357,29 @@ function executeSelfAction(type) {
         log(`> ${actEnt.name} braces and covers the line behind (+15 ARMOR).`, "log-status");
         spawnFCT(actEnt.id, "+ARMOR", "fct-heal"); playSFX('heal');
     }
+    // The Fiend's opposite of bracing: he climbs out of the hole and pays for it in blood.
+    if (type === 'OVER_THE_TOP') {
+        const cost = hasTrait(actEnt, 'SECOND_LUNG') ? 0 : Math.max(1, Math.floor(actEnt.maxHp * FIEND_CHARGE_COST));
+        actEnt.hp = Math.max(1, actEnt.hp - cost);
+        actEnt.chargeTurns = CHARGE_TURNS + 1;   // spent down at the start of his own next turn
+        actEnt.cooldowns.over_the_top = 4;
+        log(cost > 0
+            ? `> ${actEnt.name} goes over the top. -${cost} HP, and everything hits harder.`
+            : `> ${actEnt.name} goes over the top without breaking stride.`, "log-status");
+        spawnFCT(actEnt.id, "OVER THE TOP", "fct-combo"); playSFX('enrage', 0.7); triggerShake();
+    }
+    // The Hazmat's suit is a squad asset: the valve vents it over everyone standing.
+    if (type === 'PURGE_VALVE') {
+        const heal = 10 + (hasMod(actEnt, 'SCRUBBER_UNIT') ? 15 : 0);
+        activeEntities.filter(e => e.isPlayer && e.hp > 0).forEach(a => {
+            a.bleedingTurns = 0; a.oiledTurns = 0; a.corrodedTurns = 0;
+            a.hp = Math.min(a.maxHp, a.hp + heal);
+            spawnFCT(a.id, `+${heal}`, "fct-heal");
+        });
+        actEnt.cooldowns.purge_valve = hasTrait(actEnt, 'SPARE_FILTERS') ? 2 : 3;
+        log(`> ${actEnt.name} vents the tanks. The squad is scrubbed clean and patched for ${heal}.`, "log-heal");
+        playSFX('heal', 1.4);
+    }
     pendingAction = null; checkWinState();
 }
 
@@ -2573,7 +2689,7 @@ let bestScore = 0; let bestSector = 0;
 
 function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, mastery, bestiary, seenPrompts })); }
 
-function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
+function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, recruited: 0, deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
 
 // Endless scoring: depth is worth far more than any single haul, so pushing one sector
 // deeper always beats farming the one you are on.
@@ -2923,6 +3039,8 @@ function buildNewRun(diff) {
     castState = {}; firedEvents = [];
     currentTerrain = 'OPEN_ROAD'; forecastTerrain = null;
     activeShop = null; regroupInsured = false; shopRerollPick = false;
+    // Nobody carries over. Every expedition starts with the seven and finds the rest again.
+    pendingRecruit = null;
     bossSalt = 'w' + Math.floor(Math.random() * 1e9);
     pursuit = null; armedExit = null; retreatNode = null;
     bonds = {}; bondSavesUsed = new Set();
@@ -2961,6 +3079,7 @@ function continueGame() {
     if (pendingRelicOffer && pendingRelicOffer.length) return renderRelicOffer();
     if (pendingPerkOffers.length) return renderPerkOffer();
     if (activeShop) return renderShop();
+    if (pendingRecruit && !pendingRecruit.taken) return renderRecruit();
     renderMap();
 }
 
@@ -2994,7 +3113,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, bonds, sectorFront, runSeed, ascension, bossSalt, pendingConsequences, recentEvents, castState, firedEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, retreatNode, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, pendingRecruit, regroupInsured, bonds, sectorFront, runSeed, ascension, bossSalt, pendingConsequences, recentEvents, castState, firedEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, retreatNode, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -3007,6 +3126,7 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         pendingPerkOffers = Array.isArray(d.pendingPerkOffers) ? d.pendingPerkOffers : [];
         // A shop mid-haggle survives the reload; stock lines whose ids no longer exist are culled.
         activeShop = (d.activeShop && Array.isArray(d.activeShop.stock)) ? d.activeShop : null;
+        pendingRecruit = (d.pendingRecruit && d.pendingRecruit.nodeId) ? d.pendingRecruit : null;
         if (activeShop) activeShop.stock = activeShop.stock.filter(it =>
             (it.kind !== 'GEAR' || gearById(it.id)) && (it.kind !== 'RELIC' || RELIC_POOL.some(r => r.id === it.id)));
         regroupInsured = !!d.regroupInsured; shopRerollPick = false;
@@ -3477,11 +3597,14 @@ function renderMap() {
         else if (n.type === 'EVENT') { icon = '❓'; lbl = 'UNKNOWN'; }
         else if (n.type === 'CAMP') icon = '⛺';
         else if (n.type === 'SHOP') { icon = '◇'; lbl = 'ARMORY'; }
+        else if (n.type === 'RECRUIT') { icon = '⛑'; lbl = 'SURVIVOR'; }
         const status = cleared.has(n.id) ? 'cleared' : avail.has(n.id) ? 'active' : 'locked';
         const cutoff = (status === 'locked' && !reach.has(n.id)) ? 'node-cutoff' : '';
-        const eCls = n.elite ? 'elite-node' : n.type === 'EVENT' ? 'event-node' : n.type === 'CAMP' ? 'camp-node' : n.type === 'SHOP' ? 'shop-node' : '';
+        const eCls = n.elite ? 'elite-node' : n.type === 'EVENT' ? 'event-node' : n.type === 'CAMP' ? 'camp-node'
+                   : n.type === 'SHOP' ? 'shop-node' : n.type === 'RECRUIT' ? 'recruit-node' : '';
         const act = n.type === 'EVENT' ? `data-action="node-event"` : n.type === 'CAMP' ? `data-action="node-camp"`
                   : n.type === 'SHOP' ? `data-action="node-shop"`
+                  : n.type === 'RECRUIT' ? `data-action="node-recruit"`
                   : `data-action="node-combat" data-type="${n.type}" data-elite="${n.elite ? 1 : 0}"`;
         const wx = WEATHER_DOTS[n.weather] || '';
         const gr = (n.terrain && n.terrain !== 'OPEN_ROAD') ? TERRAIN[n.terrain] : null;
@@ -3618,7 +3741,19 @@ const SIG_PERKS = [
     { id: 'GO_FOR_THE_THROAT', cls: 'HOUND',   name: 'Go For The Throat',desc: 'Feral Bite deals +30% to bleeding targets.' },
     { id: 'RELENTLESS',     cls: 'HOUND',      name: 'Relentless',       desc: 'A Feral Bite kill refunds its cooldown.' },
     { id: 'LEAD_THE_PACK',  cls: 'HOUND',      name: 'Lead The Pack',    desc: "The hound's attacks build +5 momentum." },
-    { id: 'THICK_FUR',      cls: 'HOUND',      name: 'Thick Fur',        desc: '+8 physical resist.', apply: c => { c.resistances.phys += 8; } }
+    { id: 'THICK_FUR',      cls: 'HOUND',      name: 'Thick Fur',        desc: '+8 physical resist.', apply: c => { c.resistances.phys += 8; } },
+    { id: 'SECOND_LUNG',    cls: 'TRENCH_FIEND',name: 'Second Lung',     desc: 'Over The Top costs him nothing.' },
+    { id: 'SAWBONES',       cls: 'TRENCH_FIEND',name: 'Sawbones',        desc: "Ripsaw's bleed runs 5 turns instead of 3." },
+    { id: 'TRENCH_FOOT',    cls: 'TRENCH_FIEND',name: 'Trench Foot',     desc: '+20% damage while standing in the front rank.' },
+    { id: 'NO_MANS_LAND',   cls: 'TRENCH_FIEND',name: "No Man's Land",   desc: 'Cannot be made to bleed.' },
+    { id: 'CLOSED_CIRCUIT', cls: 'HAZMAT',     name: 'Closed Circuit',   desc: '+40 bio resist.', apply: c => { c.resistances.bio += 40; } },
+    { id: 'WIDE_NOZZLE',    cls: 'HAZMAT',     name: 'Wide Nozzle',      desc: 'Caustic Burst reaches a third enemy.' },
+    { id: 'CATALYST',       cls: 'HAZMAT',     name: 'Catalyst',         desc: '+25% damage against anything corroded.' },
+    { id: 'SPARE_FILTERS',  cls: 'HAZMAT',     name: 'Spare Filters',    desc: 'Purge Valve cools down in 2 turns, not 3.' },
+    { id: 'WINCH_ARM',      cls: 'HARPOONER',  name: 'Winch Arm',        desc: 'Drag Line hauls the enemy behind the target forward too.' },
+    { id: 'DEEP_HOOK',      cls: 'HARPOONER',  name: 'Deep Hook',        desc: "Barbed Shot's bleed runs 5 turns instead of 3." },
+    { id: 'SLACK_LINE',     cls: 'HARPOONER',  name: 'Slack Line',       desc: '+25% damage against whatever stands at the enemy front.' },
+    { id: 'HAND_OVER_HAND', cls: 'HARPOONER',  name: 'Hand Over Hand',   desc: 'A Drag Line kill hands the cooldown straight back.' }
 ];
 
 function hasTrait(ent, id) { return !!(ent && ent.isPlayer && Array.isArray(ent.traits) && ent.traits.includes(id)); }
@@ -3875,6 +4010,104 @@ function initiateShop() {
     renderShop();
 }
 
+// ── Signing someone on ──────────────────────────────────────────────────────────────────
+// Rolled once per node and persisted, so reloading mid-decision resumes the same face rather
+// than rerolling until a better one turns up.
+function initiateRecruit() {
+    if (!pendingRecruit || pendingRecruit.nodeId !== currentNodeId) {
+        const open = recruitables();
+        pendingRecruit = open.length
+            ? { nodeId: currentNodeId, id: open[Math.floor(Math.random() * open.length)].id, cost: recruitCost(), taken: false }
+            : { nodeId: currentNodeId, id: null, cost: 0, taken: false };
+    }
+    saveGameState();
+    renderRecruit();
+}
+
+// What the squad gets for the scrap, in the terms the muster and the outpost already use, so
+// the decision can be made from this screen rather than from memory.
+// How they fight, read off their own deck rather than written down twice.
+function recruitReach(tpl) {
+    const reaches = (ABILITIES[tpl.classType] || []).map(a => a.reach).filter(r => r !== 'self');
+    if (!reaches.length) return 'SUPPORT';
+    return reaches.every(r => r === 'melee') ? 'MELEE'
+         : reaches.every(r => r === 'ranged') ? 'RANGED' : 'MIXED';
+}
+
+function recruitCardHtml(tpl) {
+    const deck = [...(ABILITIES[tpl.classType] || [])];
+    const verbs = deck.map(a => `<li><b>${a.label}</b> — ${a.reach === 'self' ? 'self' : a.reach}</li>`).join('');
+    const res = Object.entries(tpl.resistances).filter(([, v]) => v !== 0)
+        .map(([k, v]) => `${v > 0 ? '+' : ''}${v}% ${k}`).join(' · ');
+    return `<div class="recruit-card">
+        <img class="recruit-portrait portrait" src="${tpl.img}" alt="${tpl.name}">
+        <div class="recruit-info">
+            <div class="recruit-name">${tpl.name}</div>
+            <div class="recruit-class">${RANK_LABELS[tpl.rank]} RANK · ${recruitReach(tpl)}</div>
+            <div class="recruit-pitch">${tpl.pitch}</div>
+            <div class="recruit-stats">HP ${tpl.maxHp} · DMG ${tpl.dmgBase} · SPD ${tpl.speed}${tpl.armor ? ` · ARM ${tpl.armor}` : ''}</div>
+            ${res ? `<div class="recruit-res">${res}</div>` : ''}
+            <ul class="recruit-verbs">${verbs}</ul>
+        </div>
+    </div>`;
+}
+
+function renderRecruit() {
+    firePrompt('RECRUIT');
+    if (!pendingRecruit) { renderMap(); return; }
+    switchScreen('screen-recruit');
+    const tpl = recruitById(pendingRecruit.id);
+    const body = document.getElementById('recruit-body');
+    const note = document.getElementById('recruit-note');
+    if (!tpl) {
+        // Everyone who was out here is already with you. The camp is still worth stripping.
+        note.innerText = 'Cold ashes and a bedroll nobody is coming back for. Whoever was here has already thrown in with you.';
+        body.innerHTML = '';
+        document.getElementById('recruit-sign').style.display = 'none';
+        document.getElementById('recruit-leave').innerText = `TAKE WHAT IS LEFT (+${EMPTY_POOL_SCRAP} SCRAP)`;
+        return;
+    }
+    note.innerText = 'Somebody has been holding this position on their own. They will come, for a price.';
+    body.innerHTML = recruitCardHtml(tpl);
+    const btn = document.getElementById('recruit-sign');
+    btn.style.display = 'block';
+    btn.disabled = scrap < pendingRecruit.cost;
+    btn.innerText = `SIGN THEM ON — ${pendingRecruit.cost} SCRAP`;
+    document.getElementById('recruit-leave').innerText = 'LEAVE THEM TO IT';
+}
+
+function signOnRecruit() {
+    const tpl = pendingRecruit && recruitById(pendingRecruit.id);
+    if (!tpl || pendingRecruit.taken || scrap < pendingRecruit.cost) return;
+    if (playerRoster.some(c => c.id === tpl.id)) return;
+    scrap -= pendingRecruit.cost;
+    const ch = migrateTraits([JSON.parse(JSON.stringify(tpl))])[0];
+    delete ch.rank; delete ch.pitch;
+    // They arrive hurt, carrying a quirk like anyone the muster rolls, and levelled to the
+    // squad they are joining - a fresh recruit six sectors deep would be a body, not a hand.
+    ch.hp = Math.max(1, Math.floor(ch.maxHp * RECRUIT_HEALTH));
+    const pool = quirkPoolFor(ch.classType);
+    ch.quirk = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+    if (ch.quirk) { ch.maxHp += ch.quirk.hp; ch.dmgBase += ch.quirk.dmg; ch.speed += ch.quirk.spd; ch.hp = Math.min(ch.hp, ch.maxHp); }
+    const par = Math.max(1, Math.round(playerRoster.reduce((a, c) => a + c.level, 0) / Math.max(1, playerRoster.length)));
+    while (ch.level < par) { ch.level++; ch.perkPoints++; ch.xpToNext = Math.floor(ch.xpToNext * 1.5); }
+    playerRoster.push(ch);
+    pendingRecruit.taken = true;
+    if (runStats) runStats.recruited = (runStats.recruited || 0) + 1;
+    playSFX('heal', 1.5);
+    saveGameState(); renderMap();
+}
+
+function leaveRecruit() {
+    // An empty camp still pays out, the same way an exhausted relic pool does.
+    if (pendingRecruit && !recruitById(pendingRecruit.id)) {
+        scrap += EMPTY_POOL_SCRAP;
+        if (runStats) runStats.scrapEarned += EMPTY_POOL_SCRAP;
+    }
+    pendingRecruit = null;
+    saveGameState(); renderMap();
+}
+
 function shopItemLabel(it) {
     if (it.kind === 'GEAR') {
         const g = gearById(it.id);
@@ -3947,7 +4180,7 @@ function shopRerollQuirk(charId) {
 }
 
 function finishShop() {
-    activeShop = null; shopRerollPick = false;
+    activeShop = null; shopRerollPick = false; pendingRecruit = null;
     currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap();
 }
 
@@ -4218,6 +4451,7 @@ const PROMPTS = [
     { id: 'RELIC',     title: "THE COMMANDER'S CACHE", body: 'Relics last the whole expedition and stack with everything. Take the one that suits how this squad already fights, not the rarest card on the table.' },
     { id: 'CURSE',     title: 'A CURSED RELIC',  body: 'Cursed relics carry a real upside and a real cost, and they are never dealt at random - this one is on the table because you can refuse it. Read the second half of the line before you take it.' },
     { id: 'ROUTE',     title: 'THE ROUTE IS A PLAN', body: 'Taking a node commits you to what it connects to. Elites and warlords pay the most; camps and the Armory cost you a node but keep the squad standing. Look two tiers ahead before you step.' },
+    { id: 'RECRUIT',   title: 'SOMEONE WORTH SIGNING', body: 'The seven you start with are not everyone out here. A survivor brings a verb none of them has - a grinder for the front rank, a decontaminator for the middle, or a line that can haul what is hiding at the back of the enemy out where you can reach it. They cost Scrap, they arrive hurt, and there are only three in the whole wasteland. They join the bench: put them in the line at the Outpost.' },
     { id: 'ARMORY',    title: 'THE ARMORY',      body: 'A trader on the route. Gear, a marked-up relic, stims, a quirk do-over, and a bond that prepays your next regroup. Prices climb with the sector, so scrap spent early is worth more.' },
     { id: 'THREAT',    title: 'SOMEONE IS ABOUT TO DIE', body: 'The red figure over that operator is what lands on them this round if nothing changes, and it is more than they have left. Kill the thing aimed at them, brace in front of them, spend a STIM, or move them - but not nothing.' },
     { id: 'REGROUP',   title: 'THE SQUAD BROKE', body: 'A wipe is not the end of the expedition. Regrouping costs half your scrap and sends you back to the start of this sector with the squad on its feet. You have a limited number - felling a warlord earns one back.' }
@@ -4515,7 +4749,11 @@ const COMBOS = [
     { move: 'SCRAP_BLADE',  needs: 'stunnedTurns',  name: 'EXECUTE',   mult: 1.5 },
     { move: 'THERMITE',     needs: 'corrodedTurns', name: 'MELTDOWN',  mult: 2.0 },
     { move: 'EXECUTE_SHOT', needs: 'markedTurns',   name: 'CONFIRMED', mult: 2.0, consumes: 'markedTurns' },
-    { move: 'RIP_AND_TEAR', needs: 'bleedingTurns', name: 'REND',      mult: 1.8 }
+    { move: 'RIP_AND_TEAR', needs: 'bleedingTurns', name: 'REND',      mult: 1.8 },
+    { move: 'BAYONET_THRUST', needs: 'bleedingTurns', name: 'GORE',    mult: 1.7 },
+    { move: 'SPRAY_GUN',    needs: 'corrodedTurns', name: 'DISSOLVE',  mult: 1.8 },
+    // The barb goes through plate that has already been eaten - which is the Hazmat's job.
+    { move: 'HARPOON',      needs: 'corrodedTurns', name: 'PUNCH-THROUGH', mult: 1.7 }
 ];
 
 // One row per ability: who fields it, what the button reads, and which cooldown key it burns.
@@ -4541,7 +4779,17 @@ const ABILITIES = {
                  { move: 'SPOTTERS_MARK', label: "Spotter's Mark",       reach: 'ranged', cd: 'spotters_mark' }],
     HOUND:      [{ move: 'SNAP',          label: 'Snap',                 reach: 'melee' },
                  { move: 'FERAL_BITE',    label: 'Feral Bite (Bleed)',   reach: 'melee', cd: 'feral_bite' },
-                 { move: 'RIP_AND_TEAR',  label: 'Rip and Tear (Bleed)', reach: 'melee', cd: 'rip_and_tear' }]
+                 { move: 'RIP_AND_TEAR',  label: 'Rip and Tear (Bleed)', reach: 'melee', cd: 'rip_and_tear' }],
+    // The three you find on the road rather than start with.
+    TRENCH_FIEND:[{ move: 'BAYONET_THRUST', label: 'Bayonet Thrust',     reach: 'melee' },
+                 { move: 'RIPSAW',        label: 'Ripsaw (Bleed)',       reach: 'melee', cd: 'ripsaw' },
+                 { move: 'OVER_THE_TOP',  label: 'Over The Top',         reach: 'self',  cd: 'over_the_top', act: 'self' }],
+    HAZMAT:     [{ move: 'SPRAY_GUN',     label: 'Spray Gun',            reach: 'ranged' },
+                 { move: 'CAUSTIC_BURST', label: 'Caustic Burst (Two)',  reach: 'ranged', cd: 'caustic_burst', aoe: true },
+                 { move: 'PURGE_VALVE',   label: 'Purge Valve',          reach: 'self',  cd: 'purge_valve', act: 'self' }],
+    HARPOONER:  [{ move: 'HARPOON',       label: 'Harpoon',              reach: 'ranged' },
+                 { move: 'DRAG_LINE',     label: 'Drag Line (Pull)',     reach: 'ranged', cd: 'drag_line' },
+                 { move: 'BARBED_SHOT',   label: 'Barbed Shot (Bleed)',  reach: 'ranged', cd: 'barbed_shot' }]
 };
 
 // Formation used to be decided at the Outpost and then mean nothing once the shooting started.
@@ -4560,7 +4808,8 @@ const FRONT_RANKS = 2;
 const MASTERY_RANKS = [0, 1500, 4000, 8000];
 const MASTERY_TITLES = {
     BRUISER: 'Wall of the Waste', MEDIC: 'Last Light', SCAVENGER: 'Magpie Prime',
-    PYROMANIAC: 'Firekeeper', SHOTGUNNER: 'The Doorman', SNIPER: 'One Round', HOUND: 'Alpha'
+    PYROMANIAC: 'Firekeeper', SHOTGUNNER: 'The Doorman', SNIPER: 'One Round', HOUND: 'Alpha',
+    TRENCH_FIEND: 'The Last Man Over', HAZMAT: 'Decontaminator', HARPOONER: 'The Line Holder'
 };
 let mastery = {};   // classType -> lifetime XP, meta-persisted
 function masteryXp(cls) { return mastery[cls] || 0; }
@@ -4579,7 +4828,10 @@ const CLASS_QUIRKS = {
     PYROMANIAC: { id: 'ACCELERANT_BLOOD',name:'Accelerant Blood',desc: 'Burns from the inside. +4 DMG, -10 HP.', dmg: 4, hp: -10, spd: 0 },
     SHOTGUNNER: { id: 'POINT_BLANK_NERVES',name:'Point-Blank Nerves',desc:'Flinches at nothing. +3 DMG, -1 SPD.', dmg: 3, hp: 0, spd: -1 },
     SNIPER:     { id: 'ICE_VEINS',      name: 'Ice Veins',      desc: 'A pulse that never spikes. +5 DMG, -2 SPD, -5 HP.', dmg: 5, hp: -5, spd: -2 },
-    HOUND:      { id: 'WAR_BRED',       name: 'War-Bred',       desc: 'Raised on the road. +4 SPD, -5 HP.', dmg: 0, hp: -5, spd: 4 }
+    HOUND:      { id: 'WAR_BRED',       name: 'War-Bred',       desc: 'Raised on the road. +4 SPD, -5 HP.', dmg: 0, hp: -5, spd: 4 },
+    TRENCH_FIEND:{ id: 'SHELL_SHOCKED', name: 'Shell-Shocked',  desc: 'Long past caring. +4 DMG, -8 HP.', dmg: 4, hp: -8, spd: 0 },
+    HAZMAT:     { id: 'SEALED_SUIT',    name: 'Sealed Suit',    desc: 'Nothing gets in, nothing gets out. +12 HP, -2 SPD.', dmg: 0, hp: 12, spd: -2 },
+    HARPOONER:  { id: 'STEADY_LINE',    name: 'Steady Line',    desc: 'Hands that do not shake. +6 DMG, -6 HP, -1 SPD.', dmg: 6, hp: -6, spd: -1 }
 };
 function quirkPoolFor(cls) {
     const extra = masteryRank(cls) >= 2 && CLASS_QUIRKS[cls] ? [CLASS_QUIRKS[cls]] : [];
@@ -4594,7 +4846,10 @@ const FOURTH_ABILITIES = {
     PYROMANIAC: { move: 'HEAT_WAVE',       label: 'Heat Wave (Two)',        reach: 'ranged', cd: 'heat_wave', aoe: true },
     SHOTGUNNER: { move: 'RIOT_BUTT',       label: 'Riot Butt',              reach: 'melee',  cd: 'riot_butt' },
     SNIPER:     { move: 'PIERCING_VOLLEY', label: 'Piercing Volley (Two)',  reach: 'ranged', cd: 'piercing_volley', aoe: true },
-    HOUND:      { move: 'HARRY',           label: 'Harry (Twice)',          reach: 'melee',  cd: 'harry' }
+    HOUND:      { move: 'HARRY',           label: 'Harry (Twice)',          reach: 'melee',  cd: 'harry' },
+    TRENCH_FIEND:{ move: 'TRENCH_SWEEP',   label: 'Trench Sweep (Two)',     reach: 'melee',  cd: 'trench_sweep', aoe: true },
+    HAZMAT:     { move: 'TANK_RUPTURE',   label: 'Tank Rupture',           reach: 'ranged', cd: 'tank_rupture' },
+    HARPOONER:  { move: 'WHALE_LINE',     label: 'Whale Line (Two)',       reach: 'ranged', cd: 'whale_line', aoe: true }
 };
 // The deck an operator actually brings: the classic three below rank III; at III, four
 // minus whichever one the muster benched (the fourth sits out by default).
@@ -4669,7 +4924,16 @@ const OVERDRIVES = {
         { id: 'OVERWATCH', name: 'OVERWATCH', desc: 'Hit everything for 1.2x and mark it all for 3 turns.' }],
     HOUND: [
         { id: 'APEX_PREDATOR', name: 'APEX PREDATOR', desc: 'Heal to full, savage one target for 2.5x bio.' },
-        { id: 'BLOOD_SCENT', name: 'BLOOD SCENT', desc: 'Hit everything for 1.5x bio and open bleeds.' }]
+        { id: 'BLOOD_SCENT', name: 'BLOOD SCENT', desc: 'Hit everything for 1.5x bio and open bleeds.' }],
+    TRENCH_FIEND: [
+        { id: 'MEATGRINDER', name: 'MEATGRINDER', desc: 'Hit everything for 1.6x and open bleeds.' },
+        { id: 'LAST_CHARGE', name: 'LAST CHARGE', desc: 'One target: 3.4x, and it costs him a fifth of his health.' }],
+    HAZMAT: [
+        { id: 'FULL_PURGE', name: 'FULL PURGE', desc: 'Hit everything for 1.5x bio and corrode it all.' },
+        { id: 'CLEAN_ROOM', name: 'CLEAN ROOM', desc: 'Cleanse and heal the squad 45%, and corrode the field.' }],
+    HARPOONER: [
+        { id: 'FULL_HAUL', name: 'FULL HAUL', desc: 'Drag the whole line forward and hit it for 1.3x.' },
+        { id: 'IRON_BARB', name: 'IRON BARB', desc: 'One target: 3.5x, hauled to the front and bleeding.' }]
 };
 let odChoices = {}; let pendingOverdrive = null;
 
@@ -4682,7 +4946,21 @@ function overdriveFor(classType) {
 const MARK_BONUS = 1.5;
 const DAMAGING_MOVES = ['SCRAP_BLADE','HEAVY_WRENCH','PISTOL','RAD_SHOT','PIPE_RIFLE','FLASHBANG','FLARE_GUN',
     'MOLOTOV','SLUG_SHOT','BUCKSHOT','QUICK_SHOT','DEADEYE','SNAP','FERAL_BITE',
-    'ACID_FLASK','THERMITE','EXECUTE_SHOT','SPOTTERS_MARK','RIP_AND_TEAR'];
+    'ACID_FLASK','THERMITE','EXECUTE_SHOT','SPOTTERS_MARK','RIP_AND_TEAR',
+    'BAYONET_THRUST','RIPSAW','SPRAY_GUN','CAUSTIC_BURST','HARPOON','DRAG_LINE','BARBED_SHOT'];
+
+// The enemy line is the order they sit in activeEntities: index 0 of the living ones is the
+// front. Hauling moves the target there, which is the whole of the Harpooner's verb - every
+// reach, ground and targeting rule already reads that order, so nothing else has to change.
+function haulForward(ent) {
+    if (!ent || ent.isPlayer) return false;
+    const foes = activeEntities.filter(e => !e.isPlayer);
+    const at = foes.indexOf(ent);
+    if (at <= HAUL_TO) return false;
+    foes.splice(at, 1); foes.splice(HAUL_TO, 0, ent);
+    activeEntities = [...activeEntities.filter(e => e.isPlayer), ...foes];
+    return true;
+}
 
 function comboFor(move, target) {
     if (!target || target.isPlayer) return null;
@@ -5147,6 +5425,9 @@ function applyTurnStartEffects(ent) {
     if (currentWeather === 'TOXIC_SMOG') { let sDmg = Math.floor(2 * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - sDmg); log(`> ${ent.name} choked by Smog for ${sDmg} DMG.`, "log-dmg"); spawnFCT(ent.id, `-${sDmg}`, "fct-status"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SMOG'); }
     if (currentWeather === 'SHRAPNEL_WINDS' && Math.random() < 0.3) { let shrapDmg = Math.floor(5 * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - shrapDmg); log(`> Shrapnel struck ${ent.name} for ${shrapDmg} DMG!`, "log-dmg"); spawnFCT(ent.id, `-${shrapDmg}`, "fct-dmg"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SHRAPNEL'); }
 
+    // Over The Top runs on the Fiend's own turns, so it is spent here rather than on the clock.
+    if ((ent.chargeTurns || 0) > 0) { ent.chargeTurns--; chg = true; if (ent.chargeTurns > 0) spawnFCT(ent.id, "OVER THE TOP", "fct-combo"); }
+    if (hasTrait(ent, 'NO_MANS_LAND')) ent.bleedingTurns = 0;
     if (ent.bleedingTurns > 0) { let b = Math.max(1, Math.floor(ent.maxHp * 0.08));
         if (ent.isPlayer && hasRelic('FIELD_DRESSING')) b = Math.max(1, Math.floor(b / 2));
         if (ent.isPlayer && relicSetActive('Field Surgery')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 1);
@@ -5406,6 +5687,31 @@ function resolveAction(targetId) {
             actEnt.hp = actEnt.maxHp; applyDamageHit(actEnt, target, actEnt.dmgBase * 2.5, 'bio', null); target.bleedingTurns = 3;
         } else if (variant.id === 'BLOOD_SCENT') {
             all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.5, 'bio', null); if (e.hp > 0) e.bleedingTurns = Math.max(e.bleedingTurns, 3); });
+        } else if (variant.id === 'MEATGRINDER') {
+            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.6, 'phys', null); if (e.hp > 0) { e.bleedingTurns = Math.max(e.bleedingTurns, 3); spawnFCT(e.id, "BLEED", "fct-status"); } });
+        } else if (variant.id === 'LAST_CHARGE') {
+            applyDamageHit(actEnt, target, actEnt.dmgBase * 3.4, 'phys', null);
+            const paid = Math.max(1, Math.floor(actEnt.maxHp * 0.2));
+            actEnt.hp = Math.max(1, actEnt.hp - paid);
+            log(`> The charge costs ${actEnt.name} ${paid} HP.`, "log-dmg"); spawnFCT(actEnt.id, `-${paid}`, "fct-dmg");
+        } else if (variant.id === 'FULL_PURGE') {
+            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.5, 'bio', null); if (e.hp > 0) { e.corrodedTurns = 3; spawnFCT(e.id, "CORRODED", "fct-weak"); } });
+        } else if (variant.id === 'CLEAN_ROOM') {
+            activeEntities.filter(e => e.isPlayer && e.hp > 0).forEach(a => {
+                a.hp = Math.min(a.maxHp, a.hp + Math.floor(a.maxHp * 0.45));
+                a.bleedingTurns = 0; a.stunnedTurns = 0; a.oiledTurns = 0; a.corrodedTurns = 0;
+                spawnFCT(a.id, "SCRUBBED", "fct-heal");
+            });
+            all(e => { if (e.hp > 0) { e.corrodedTurns = 3; spawnFCT(e.id, "CORRODED", "fct-weak"); } });
+            playSFX('heal');
+        } else if (variant.id === 'FULL_HAUL') {
+            // Hauled from the back forward, so the order they arrive in is the order they stood.
+            [...livingEnemies].reverse().forEach(e => haulForward(e));
+            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.3, 'phys', null); if (e.hp > 0) spawnFCT(e.id, "HAULED", "fct-status"); });
+        } else if (variant.id === 'IRON_BARB') {
+            haulForward(target);
+            applyDamageHit(actEnt, target, actEnt.dmgBase * 3.5, 'phys', null);
+            if (target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns, 3); spawnFCT(target.id, "BLEED", "fct-status"); }
         }
         // The Overclocked Reactor's teeth: every overdrive vents through whoever holds the front.
         if (hasRelic('OVERCLOCKED_REACTOR')) {
@@ -5446,7 +5752,7 @@ function resolveAction(targetId) {
         actEnt.cooldowns.stim_dart = cdFor(actEnt, 'stim_dart', 2);
         log(`> ${actEnt.name} darts ${target.name} for ${heal}.`, "log-heal"); spawnFCT(target.id, `+${heal}`, "fct-heal"); playSFX('heal');
     } else {
-        let atkType = 'phys'; if(['RAD_SHOT', 'FERAL_BITE', 'RIP_AND_TEAR'].includes(pendingAction)) atkType = 'bio'; if(['FLASHBANG', 'MOLOTOV', 'FLARE_GUN', 'ACID_FLASK', 'THERMITE', 'HEAT_WAVE'].includes(pendingAction)) atkType = 'energy';
+        let atkType = 'phys'; if(['RAD_SHOT', 'FERAL_BITE', 'RIP_AND_TEAR', 'SPRAY_GUN', 'CAUSTIC_BURST', 'TANK_RUPTURE'].includes(pendingAction)) atkType = 'bio'; if(['FLASHBANG', 'MOLOTOV', 'FLARE_GUN', 'ACID_FLASK', 'THERMITE', 'HEAT_WAVE'].includes(pendingAction)) atkType = 'energy';
         let tuneUpBonus = tuneUpBattles > 0 ? 4 : 0;
         let baseDmg = actEnt.dmgBase + tuneUpBonus + Math.floor(Math.random() * 6); 
         let dmgMult = 1.0; let isCombo = false; let comboType = '';
@@ -5474,6 +5780,16 @@ function resolveAction(targetId) {
         if (pendingAction === 'RIOT_BUTT') { dmgMult *= 0.85; actEnt.cooldowns.riot_butt = cdFor(actEnt, 'riot_butt', 2); }
         if (pendingAction === 'PIERCING_VOLLEY') { dmgMult *= 0.75; actEnt.cooldowns.piercing_volley = cdFor(actEnt, 'piercing_volley', 3); }
         if (pendingAction === 'HARRY') { dmgMult *= 0.6; actEnt.cooldowns.harry = cdFor(actEnt, 'harry', 2); }
+        // The three found on the road.
+        if (pendingAction === 'RIPSAW') { dmgMult *= 1.5; actEnt.cooldowns.ripsaw = cdFor(actEnt, 'ripsaw', 3); }
+        if (pendingAction === 'CAUSTIC_BURST') { dmgMult *= 0.6; actEnt.cooldowns.caustic_burst = cdFor(actEnt, 'caustic_burst', 3); }
+        // Hauling something out of the back line is most of the point; the hit is the smaller half.
+        if (pendingAction === 'DRAG_LINE') { dmgMult *= 0.8; actEnt.cooldowns.drag_line = cdFor(actEnt, 'drag_line', 3); }
+        if (pendingAction === 'BARBED_SHOT') { dmgMult *= 1.35; actEnt.cooldowns.barbed_shot = cdFor(actEnt, 'barbed_shot', 3); }
+        if (pendingAction === 'TRENCH_SWEEP') { dmgMult *= 0.7; actEnt.cooldowns.trench_sweep = cdFor(actEnt, 'trench_sweep', 3); }
+        if (pendingAction === 'TANK_RUPTURE') { dmgMult *= 1.8; actEnt.cooldowns.tank_rupture = cdFor(actEnt, 'tank_rupture', 4); }
+        if (pendingAction === 'WHALE_LINE') { dmgMult *= 0.75; actEnt.cooldowns.whale_line = cdFor(actEnt, 'whale_line', 3); }
+        if (pendingAction === 'HARPOON' && hasMod(actEnt, 'TOGGLE_HEAD') && (target.bleedingTurns || 0) > 0) { dmgMult *= 1.3; }
         if (pendingAction === 'SNAP' && hasMod(actEnt, 'BLOOD_TRACKER') && (target.bleedingTurns || 0) > 0) { dmgMult *= 1.3; }
         // The Bayonet turns the rifle into a spear: front-rank bonus in, reach penalties honest.
         if (pendingAction === 'PIPE_RIFLE' && hasMod(actEnt, 'BAYONET') && actEnt.gridPos === 1) { dmgMult *= 1.25; }
@@ -5488,7 +5804,14 @@ function resolveAction(targetId) {
         if (hasTrait(actEnt, 'SHRAPNEL_LOAD') && pendingAction === 'PIPE_RIFLE' && target.armor > 0) dmgMult *= 1.2;
         if (hasTrait(actEnt, 'GO_FOR_THE_THROAT') && pendingAction === 'FERAL_BITE' && (target.bleedingTurns || 0) > 0) dmgMult *= 1.3;
         if (hasTrait(actEnt, 'IRONSIGHTS') && pendingAction === 'SLUG_SHOT') dmgMult *= 1.2;
+        if (hasTrait(actEnt, 'TRENCH_FOOT') && actEnt.gridPos === 1) dmgMult *= 1.2;
+        if (hasTrait(actEnt, 'CATALYST') && (target.corrodedTurns || 0) > 0) dmgMult *= 1.25;
+        if (hasTrait(actEnt, 'SLACK_LINE') && dist === 0) dmgMult *= 1.25;
         snap('perks, quirks & bonds');
+        // Over The Top, still burning. Its own layer in the breakdown, because the whole point
+        // is that you can see it and time the turns you spend under it.
+        if ((actEnt.chargeTurns || 0) > 0) dmgMult *= CHARGE_MULT;
+        snap('over the top');
         if (hasTrait(actEnt, 'PYROPHILIA')) {
             const oiled = Math.min(3, livingEnemies.filter(e => (e.oiledTurns || 0) > 0).length);
             dmgMult *= 1 + oiled * 0.1;
@@ -5621,6 +5944,46 @@ function resolveAction(targetId) {
         if (pendingAction === 'SHIELD_SLAM') {
             actEnt.armor += 8; actEnt.armorTurns = Math.max(actEnt.armorTurns || 0, 2);
             spawnFCT(actEnt.id, "+ARMOR", "fct-heal");
+        }
+
+        // ── the three found on the road ──────────────────────────────────────────────
+        if (pendingAction === 'RIPSAW' && target.hp > 0) {
+            target.bleedingTurns = Math.max(target.bleedingTurns, hasTrait(actEnt, 'SAWBONES') ? 5 : 3);
+            setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400);
+        }
+        if (pendingAction === 'BAYONET_THRUST' && hasMod(actEnt, 'SERRATED_EDGE') && target.hp > 0) {
+            target.bleedingTurns = Math.max(target.bleedingTurns, 2);
+            setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400);
+        }
+        if (pendingAction === 'BARBED_SHOT' && target.hp > 0) {
+            target.bleedingTurns = Math.max(target.bleedingTurns, hasTrait(actEnt, 'DEEP_HOOK') ? 5 : 3);
+            setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400);
+        }
+        if (pendingAction === 'SPRAY_GUN' && hasMod(actEnt, 'HIGH_PRESSURE') && target.hp > 0) {
+            target.corrodedTurns = Math.max(target.corrodedTurns, 2);
+            setTimeout(() => spawnFCT(target.id, "CORRODED", "fct-weak"), 400);
+        }
+        if (pendingAction === 'CAUSTIC_BURST') {
+            // The cloud eats plate on everything it touches, the second and third body included.
+            const caught = [target, livingEnemies[dist + 1], hasTrait(actEnt, 'WIDE_NOZZLE') ? livingEnemies[dist + 2] : null];
+            caught.forEach(e => { if (e && e.hp > 0) { e.corrodedTurns = Math.max(e.corrodedTurns, 3); setTimeout(() => spawnFCT(e.id, "CORRODED", "fct-weak"), 450); } });
+            const third = hasTrait(actEnt, 'WIDE_NOZZLE') ? livingEnemies[dist + 2] : null;
+            if (third && third.hp > 0) applyDamageHit(actEnt, third, Math.floor(baseDmg * dmgMult * 0.6), atkType, null);
+        }
+        if (pendingAction === 'TANK_RUPTURE') {
+            const vent = Math.max(1, Math.floor(actEnt.maxHp * 0.10));
+            actEnt.hp = Math.max(1, actEnt.hp - vent);
+            log(`> The tank vents through ${actEnt.name}. -${vent} HP.`, "log-dmg");
+            spawnFCT(actEnt.id, `-${vent}`, "fct-dmg");
+        }
+        if (pendingAction === 'DRAG_LINE') {
+            const behind = hasTrait(actEnt, 'WINCH_ARM') ? livingEnemies[dist + 1] : null;
+            if (target.hp > 0 && haulForward(target)) {
+                log(`> ${actEnt.name} hauls ${target.name} to the front of the line.`, "log-status");
+                spawnFCT(target.id, "HAULED", "fct-status");
+            }
+            if (behind && behind.hp > 0 && haulForward(behind)) spawnFCT(behind.id, "HAULED", "fct-status");
+            if (hasTrait(actEnt, 'HAND_OVER_HAND') && target.hp <= 0) actEnt.cooldowns.drag_line = 0;
         }
     }
     pendingAction = null; checkWinState();
@@ -6260,6 +6623,9 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
+    RECRUIT_POOL, RECRUIT_COST, RECRUIT_HEALTH, recruitCost, recruitables, recruitById, recruitReach,
+    initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
+    haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
@@ -6304,6 +6670,7 @@ globalThis.WP = {
     get pendingOverdrive() { return pendingOverdrive; }, set pendingOverdrive(v) { pendingOverdrive = v; },
     get activeRelics() { return activeRelics; }, set activeRelics(v) { activeRelics = v; },
     get activeShop() { return activeShop; }, set activeShop(v) { activeShop = v; },
+    get pendingRecruit() { return pendingRecruit; }, set pendingRecruit(v) { pendingRecruit = v; },
     get bonds() { return bonds; }, set bonds(v) { bonds = v; },
     get bondSavesUsed() { return bondSavesUsed; }, set bondSavesUsed(v) { bondSavesUsed = v; },
     get sectorFront() { return sectorFront; }, set sectorFront(v) { sectorFront = v; },

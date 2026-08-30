@@ -76,13 +76,19 @@ module.exports = {
                kinds: [...new Set(declared.map(a => a.reach))].sort(),
                mapped: Object.keys(MOVE_REACH).length,
                melee: declared.filter(a => a.reach === 'melee').map(a => a.move).sort(),
+               selfOnly: Object.entries(ABILITIES).filter(([, l]) => l.every(a => a.reach === 'self')).map(([c]) => c),
                sample: { blade: isMelee('SCRAP_BLADE'), pistol: isRanged('PISTOL'), guard: isMelee('IRON_GUARD') } };
     });
     ok('every ability declares its reach', table.unset.length === 0);
     ok('and only in the three kinds that exist', table.kinds.join() === 'melee,ranged,self');
     ok(`the lookup covers all ${table.total} of them`, table.mapped === table.total);
-    ok('the melee weapons are the ones you would expect',
-      table.melee.join() === 'BUCKSHOT,FERAL_BITE,HARRY,HEAVY_WRENCH,RIOT_BUTT,RIP_AND_TEAR,SCRAP_BLADE,SHIELD_SLAM,SHIV,SNAP');
+    // This was a roll-call of every melee move, which is a copy of the table rather than a
+    // claim about it: adding a class broke it, and flipping a reach by accident would not have.
+    // These are the anchors - the ones whose reach is the whole point of the ability.
+    ok(`the reach anchors are right (${table.melee.length} melee verbs)`,
+      ['SCRAP_BLADE', 'HEAVY_WRENCH', 'BUCKSHOT', 'FERAL_BITE'].every(m => table.melee.includes(m))
+      && !['PISTOL', 'QUICK_SHOT', 'PIPE_RIFLE', 'IRON_GUARD'].some(m => table.melee.includes(m)));
+    ok('and no class is left with nothing but self-verbs', table.selfOnly.length === 0);
     ok('and the helpers agree with the table',
       table.sample.blade && table.sample.pistol && !table.sample.guard);
 

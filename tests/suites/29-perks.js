@@ -9,12 +9,15 @@ module.exports = {
     // ---- the signature table ----
     const table = await page.evaluate(() => ({
       count: SIG_PERKS.length,
+      classes: Object.keys(ABILITIES).length,
       ids: new Set(SIG_PERKS.map(p => p.id)).size,
       described: SIG_PERKS.every(p => p.name && p.desc),
       perClass: Object.keys(ABILITIES).every(c => SIG_PERKS.filter(p => p.cls === c).length === 4)
     }));
-    ok(`there are ${table.count} signature perks`, table.count === 28);
-    ok('four per class, each unique and described', table.perClass && table.ids === 28 && table.described);
+    ok(`there are ${table.count} signature perks, four for each of ${table.classes} classes`,
+      table.count === table.classes * 4);
+    ok('four per class, each unique and described',
+      table.perClass && table.ids === table.count && table.described);
 
     const wired = await page.evaluate(async () => {
       const src = await (await fetch('game.js')).text();

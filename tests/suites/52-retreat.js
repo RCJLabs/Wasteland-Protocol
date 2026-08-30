@@ -11,7 +11,14 @@ module.exports = {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null; armedExit = null; retreatNode = null;
       currentSector = o.sector || 2; currentTier = o.tier || 6;
       sectorMap = generateSectorMap(seededRng('rt' + (o.seed || 1)));
-      const node = sectorMap.nodes.find(n => n.tier === currentTier && FIGHT_NODES.includes(n.type));
+      // A tier can have every one of its nodes swapped out for a camp, an event, the Armory
+      // or a survivor, and this then read `.id` off undefined and aborted the whole suite.
+      // Take the nearest tier that still has a fight standing on it.
+      const fightAt = t => sectorMap.nodes.find(n => n.tier === t && FIGHT_NODES.includes(n.type));
+      let node = null;
+      for (let d = 0; d < TOTAL_TIERS && !node; d++) node = fightAt(currentTier - d) || fightAt(currentTier + d);
+      if (!node) throw new Error('this map has no fight node on it at all');
+      currentTier = node.tier;
       enterNode(node.id);
       currentNodeType = node.type;
       forecastWeather = 'CLEAR';
@@ -75,6 +82,10 @@ module.exports = {
     const honest = await page.evaluate(() => {
       const real = Math.random;
       const run = (offset) => {
+        // Staging has to happen under the real RNG: the second call used to run with the stub
+        // from the first still installed, so the map it built - and the tier it staged on -
+        // came out of a constant. The odds roll is the only thing that wants rigging.
+        Math.random = real;
         __stage();
         const shown = retreatOdds();           // read off the fight that is about to be rolled
         const before = scrap;

@@ -52,7 +52,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
-                 endedBy: 'cap', score: 0, contractMult: 1 };
+                 endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [] };
 
   activeContracts = [...contracts];
   currentSlot = 1;
@@ -277,6 +277,27 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
       currentTier++; stat.nodes++; noteDepth(); runStats.nodes++;
       continue;
     }
+    if (node.type === 'RECRUIT') {
+      // Signs anyone it can afford while keeping enough back for triage, and then actually
+      // fields them - a recruit measured only as a purchase is a recruit nobody ever swung.
+      initiateRecruit();
+      const tpl = recruitById(pendingRecruit && pendingRecruit.id);
+      if (tpl) stat.recruitOffers.push({ cost: pendingRecruit.cost, purse: scrap });
+      if (tpl && scrap >= pendingRecruit.cost + 80) {
+        signOnRecruit();
+        stat.recruited.push(tpl.classType);
+        // Put them in the line if their rank is open, so their verbs get used rather than
+        // sitting on the bench for the rest of the run.
+        const sitting = playerRoster.find(c => c.gridPos === tpl.rank && c.id !== tpl.id);
+        const me = playerRoster.find(c => c.id === tpl.id);
+        if (me) { if (sitting) sitting.gridPos = 0; me.gridPos = tpl.rank; }
+      } else {
+        leaveRecruit();
+      }
+      pendingRecruit = null;
+      currentTier++; stat.nodes++; noteDepth(); runStats.nodes++;
+      continue;
+    }
     if (node.type === 'SHOP') {
       stat.shops++;
       initiateShop();
@@ -387,6 +408,25 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
   const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
   const pct = (a, p) => a[Math.min(a.length - 1, Math.floor(a.length * p))];
   const line = (label, v) => console.log(`  ${String(label).padEnd(26)} ${v}`);
+
+  const signed = {};
+  let withRecruits = 0;
+  results.forEach(r => { if (r.recruited.length) withRecruits++; r.recruited.forEach(c => { signed[c] = (signed[c] || 0) + 1; }); });
+  console.log('\n── RECRUITS ' + '─'.repeat(48));
+  const offers = results.flatMap(r => r.recruitOffers);
+  const sawOne = results.filter(r => r.recruitOffers.length).length;
+  line('runs that walked past one', `${sawOne} of ${n}`);
+  line('offers seen in total', offers.length);
+  if (offers.length) {
+    const afford = offers.filter(o => o.purse >= o.cost).length;
+    line('  affordable at the time', `${afford} of ${offers.length}`);
+    const med = a => a.sort((x, y) => x - y)[Math.floor(a.length / 2)];
+    line('  median price asked', med(offers.map(o => o.cost)));
+    line('  median purse on hand', med(offers.map(o => o.purse)));
+  }
+  line('runs that signed anyone', `${withRecruits} of ${n}`);
+  Object.entries(signed).sort((a, b) => b[1] - a[1]).forEach(([k, v]) => line('  ' + k, `${v} runs`));
+  if (!Object.keys(signed).length) line('  none', 'nobody was ever signed on');
 
   console.log('\n── WHERE RUNS END ' + '─'.repeat(40));
   const sectors = nums('sector');

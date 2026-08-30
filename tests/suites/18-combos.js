@@ -12,8 +12,17 @@ module.exports = {
     // ability can be measured without the rest of the squad or the enemy AI interfering.
     const duel = () => page.evaluate(() => {
       window.__duel = (classType, setup) => {
-        currentSlot = 1; confirmNewGame(1.0); sectorFront = null; initiateCombat('RAIDERS', false);
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+        // Three classes are recruits rather than starters, so a duel with one signs them on
+        // first. Reading the class off the table and finding no body is the failure this
+        // avoids, and it is silent: the setup below writes to undefined and the suite aborts.
+        if (!playerRoster.some(h => h.classType === classType)) {
+          const tpl = RECRUIT_POOL.find(r => r.classType === classType);
+          if (tpl) { const c = JSON.parse(JSON.stringify(tpl)); delete c.rank; delete c.pitch; playerRoster.push(c); }
+        }
+        initiateCombat('RAIDERS', false);
         const hero = playerRoster.find(h => h.classType === classType);
+        if (!hero) throw new Error(`no operator of class ${classType} could be fielded`);
         const foe = activeEntities.find(e => !e.isPlayer);
         hero.gridPos = 1; hero.maxHp = 9999; hero.hp = 9999; hero.dmgBase = 100; hero.stunnedTurns = 0; hero.quirk = null; sectorFront = null;
         Object.keys(hero.cooldowns).forEach(k => hero.cooldowns[k] = 0);
@@ -81,9 +90,12 @@ module.exports = {
     // ---- the combo table is the single source of truth ----
     const table = await page.evaluate(() => ({
       rows: COMBOS.map(c => ({ move: c.move, needs: c.needs, name: c.name, mult: c.mult, consumes: c.consumes || null })),
-      names: [...new Set(COMBOS.map(c => c.name))]
+      names: [...new Set(COMBOS.map(c => c.name))],
+      orphans: COMBOS.filter(c => !Object.values(ABILITIES).flat().concat(Object.values(FOURTH_ABILITIES))
+        .some(a => a.move === c.move)).map(c => c.move)
     }));
-    ok(`the table declares ${table.rows.length} pairings`, table.rows.length === 7);
+    ok(`the table declares ${table.rows.length} pairings`, table.rows.length >= 7);
+    ok('every pairing names a move some class actually fields', table.orphans.length === 0);
     ok('each pairing names a status a unit actually carries',
       table.rows.every(r => ['oiledTurns', 'bleedingTurns', 'stunnedTurns', 'corrodedTurns', 'markedTurns'].includes(r.needs)));
     ok('every pairing is a damage increase', table.rows.every(r => r.mult > 1));
@@ -283,9 +295,12 @@ module.exports = {
     // The prompt is only worth having if it predicts the outcome. Every declared pairing is
     // checked both ways: the hint must appear, and the damage must actually rise.
     const truthful = await page.evaluate(() => {
-      const owner = { SCRAP_BLADE: 'BRUISER', PIPE_RIFLE: 'SCAVENGER', BUCKSHOT: 'SHOTGUNNER',
-                      MOLOTOV: 'PYROMANIAC', THERMITE: 'PYROMANIAC', EXECUTE_SHOT: 'SHOTGUNNER',
-                      RIP_AND_TEAR: 'HOUND' };
+      // Who fields each move is read off the ability table rather than kept here. The
+      // hand-written map went stale the moment a class was added, and the way it failed was a
+      // suite abort rather than a failed assertion.
+      const owner = {};
+      for (const [cls, list] of Object.entries(ABILITIES)) list.forEach(a => { owner[a.move] = cls; });
+      for (const [cls, a] of Object.entries(FOURTH_ABILITIES)) owner[a.move] = cls;
       return COMBOS.map(c => {
         const cls = owner[c.move];
         let { hero, foe } = window.__duel(cls);

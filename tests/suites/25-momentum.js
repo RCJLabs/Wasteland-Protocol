@@ -165,12 +165,15 @@ module.exports = {
     // ---- every class carries two overdrives ----
     const pairs = await page.evaluate(() => ({
       classes: Object.keys(OVERDRIVES).length,
+      playable: Object.keys(ABILITIES).length,
+      unarmed: Object.keys(ABILITIES).filter(c => !(OVERDRIVES[c] || []).length),
       allPaired: Object.values(OVERDRIVES).every(p => p.length === 2),
       allNamed: Object.values(OVERDRIVES).flat().every(o => o.id && o.name && o.desc),
       allDistinct: new Set(Object.values(OVERDRIVES).flat().map(o => o.id)).size ===
                    Object.values(OVERDRIVES).flat().length
     }));
-    ok(`all ${pairs.classes} classes carry two overdrives`, pairs.classes === 7 && pairs.allPaired);
+    ok(`all ${pairs.playable} playable classes carry two overdrives`,
+      pairs.unarmed.length === 0 && pairs.classes === pairs.playable && pairs.allPaired);
     ok('each named and described', pairs.allNamed);
     ok('with no id shared', pairs.allDistinct);
 

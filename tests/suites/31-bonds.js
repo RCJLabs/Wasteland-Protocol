@@ -9,7 +9,9 @@ module.exports = {
 
     // ---- every pair has a name ----
     const names = await page.evaluate(() => {
-      const classes = [...new Set(ROSTER_TEMPLATE.map(c => c.classType))];
+      // Every class anyone can field, recruits included - the starting seven was the roster
+      // once, and a pair that falls through to the generic name is a pair nobody named.
+      const classes = [...new Set([...ROSTER_TEMPLATE, ...RECRUIT_POOL].map(c => c.classType))];
       const missing = [];
       for (let i = 0; i < classes.length; i++)
         for (let j = i + 1; j < classes.length; j++) {
@@ -20,8 +22,10 @@ module.exports = {
                stray: BOND_NAMES['HOUND|MEDIC'],
                unique: new Set(Object.values(BOND_NAMES)).size };
     });
-    ok(`all ${names.count} pairings of ${names.classes} classes are named`, names.count === 21 && names.missing.length === 0);
-    ok('every name unique', names.unique === 21);
+    const want = names.classes * (names.classes - 1) / 2;
+    ok(`all ${want} pairings of ${names.classes} classes are named`,
+      names.count === want && names.missing.length === 0);
+    ok('every name unique', names.unique === names.count);
     ok('the Medic and the Hound are "Stray"', names.stray === 'Stray');
 
     // ---- levels come from fights together ----
