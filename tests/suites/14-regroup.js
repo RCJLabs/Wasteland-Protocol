@@ -133,11 +133,14 @@ module.exports = {
 
     // ---- the Citadel can buy another ----
     const citadel = await page.evaluate(() => {
-      bossSkulls = 4; metaUpgrades.extraRegroups = 0; saveMeta(); renderCitadel();
+      bossSkulls = 4; metaUpgrades.extraRegroups = 0; saveMeta();
+      citadelView = 'list'; renderCitadel();
       const before = totalRegroups();
       buyMetaUpgrade('REGROUP');
-      return { before, after: totalRegroups(), skulls: bossSkulls,
-               label: document.getElementById('meta-lbl-regroup').innerText };
+      // The ledger is generated from CITADEL_SPOTS now, so the state is read off the card
+      // rather than off an id that used to be written into the markup by hand.
+      const sp = CITADEL_SPOTS.find(o => o.kind === 'REGROUP');
+      return { before, after: totalRegroups(), skulls: bossSkulls, label: spotState(sp) };
     });
     ok('Fallback Protocol adds a regroup for 4 skulls',
       citadel.before === 2 && citadel.after === 3 && citadel.skulls === 0 && /LVL 1/.test(citadel.label));

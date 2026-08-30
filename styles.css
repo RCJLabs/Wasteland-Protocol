@@ -88,6 +88,12 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
    well as a colour, for the same reason the status marks do. */
 /* The standing contract is one of the board's rows but not one of its three: a rule above it
    and a warmer colour say it is a different kind of promise. */
+/* A spot whose prerequisite is not standing yet: still visible on the hill, clearly not yours
+   to buy. Dimmed rather than hidden, so the tree is legible before it is affordable. */
+.cit-spot.spot-sealed { opacity: 0.42; }
+.cit-spot.spot-sealed .cit-spot-lvl { color: #7a6a4a; }
+.upgrade-card.upg-sealed { opacity: 0.55; border-color: #3a3a3a; }
+.upgrade-pitch { color: #8a8a8a; font-size: calc(11px * var(--text-scale, 1)); line-height: 1.4; margin-top: 4px; }
 .bounty-standing { border-top: 1px solid #3a3a2a; margin-top: 6px; padding-top: 8px; color: #d2a24c; }
 .event-cast { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 12px; }
 .event-cast .cast-name { color: #B8860B; font-size: calc(11px * var(--text-scale, 1)); letter-spacing: 1.5px; }

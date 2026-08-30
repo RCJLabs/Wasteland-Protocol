@@ -337,10 +337,12 @@ module.exports = {
     ok('it cannot be bought twice', carried.skullsAfterSecond === 10);
 
     const card = await page.evaluate(() => {
-      renderCitadel();
-      return { label: document.getElementById('meta-lbl-vault').innerText,
-               desc: document.getElementById('meta-vault-desc').innerText,
-               btnOff: document.querySelector('[data-kind="VAULT"]').disabled };
+      citadelView = 'list'; renderCitadel();
+      const sp = CITADEL_SPOTS.find(o => o.kind === 'VAULT');
+      const row = document.querySelector('#citadel-list [data-kind="VAULT"]').closest('.upgrade-card');
+      return { label: spotState(sp),
+               desc: row.querySelector('.upgrade-stats').innerText,
+               btnOff: document.querySelector('#citadel-list [data-kind="VAULT"]').disabled };
     });
     ok(`the Citadel says what is in the Vault (${card.label})`, /ARMED/.test(card.label));
     ok('and names it', /Ammo Hoist|Vulture|Chem|Bulwark|Signal|Overcharged/.test(card.desc));
@@ -354,12 +356,15 @@ module.exports = {
       const list = screen.querySelector('.outpost-roster');
       const back = screen.querySelector('.return-btn').getBoundingClientRect();
       const cards = screen.querySelectorAll('.upgrade-card').length;
-      return { cards, backOnScreen: back.bottom <= window.innerHeight + 1 && back.top >= 0 && back.height > 0,
+      return { cards, declared: CITADEL_SPOTS.length,
+               backOnScreen: back.bottom <= window.innerHeight + 1 && back.top >= 0 && back.height > 0,
                listScrolls: list.scrollHeight > list.clientHeight,
                screenScrolls: screen.scrollHeight > screen.clientHeight,
                sideways: document.body.scrollWidth - window.innerWidth };
     });
-    ok(`the Citadel carries ${cit.cards} upgrades`, cit.cards === 5);
+    // The count is the table's to decide; what this check is for is that the way out stays on
+    // screen however many there are, which is the bug it was written for.
+    ok(`the Citadel carries ${cit.cards} upgrades`, cit.cards === cit.declared && cit.cards >= 5);
     await page.evaluate(() => { citadelView = 'scene'; });
     ok('the way out stays on screen', cit.backOnScreen);
     ok('the list scrolls rather than the screen', cit.listScrolls && !cit.screenScrolls);

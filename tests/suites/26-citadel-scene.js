@@ -21,11 +21,15 @@ module.exports = {
                buttons: spots.every(b => b.tagName === 'BUTTON'),
                labelled: spots.every(b => (b.getAttribute('aria-label') || '').length > 3),
                skulls: document.querySelector('.cit-skulls').innerText,
-               drawn: spots.every(b => b.querySelector('svg') !== null) };
+               drawn: spots.every(b => b.querySelector('svg') !== null),
+               declared: CITADEL_SPOTS.length,
+               declaredKinds: CITADEL_SPOTS.map(s => s.kind).sort() };
     });
     ok('the scene is the default Citadel view', scene.visible === 'block' && scene.listHidden === 'none');
-    ok(`every upgrade is a structure on the hill (${scene.spots})`, scene.spots === 5);
-    ok('covering all five kinds', scene.kinds.join() === 'INV,LEVEL,REGROUP,SCRAP,VAULT');
+    // Counts belong in the table, not in here: the hill has to show what the table declares,
+    // whatever that is, or a building added to one and not the other goes unnoticed.
+    ok(`every upgrade is a structure on the hill (${scene.spots})`, scene.spots === scene.declared);
+    ok('covering exactly the kinds the table declares', scene.kinds.join() === scene.declaredKinds.join());
     ok('each a real button with a spoken label', scene.buttons && scene.labelled);
     ok('each actually drawn', scene.drawn);
     ok(`the skull bank is on the hillside (${scene.skulls})`, /6/.test(scene.skulls));
@@ -48,13 +52,20 @@ module.exports = {
     const afford = await page.evaluate(() => {
       bossSkulls = 1; renderCitadel();
       const marked = [...document.querySelectorAll('.spot-afford')].map(b => b.dataset.spot);
-      bossSkulls = 20; renderCitadel();
-      const flush = document.querySelectorAll('.spot-afford').length;
-      return { marked, flush };
+      bossSkulls = 200; renderCitadel();
+      const flush = [...document.querySelectorAll('.spot-afford')].map(b => b.dataset.spot).sort();
+      // With skulls to burn, everything standing open is buyable and everything sealed is not.
+      const open = CITADEL_SPOTS.filter(sp => spotUnlocked(sp) && !spotMaxed(sp)).map(sp => sp.kind).sort();
+      const sealed = CITADEL_SPOTS.filter(sp => !spotUnlocked(sp)).map(sp => sp.kind).sort();
+      const cheapest = CITADEL_SPOTS.filter(sp => sp.cost === 1 && spotUnlocked(sp)).map(sp => sp.kind).sort();
+      return { marked, flush, open, sealed, cheapest };
     });
-    ok('only what the skulls can buy is marked (1 skull -> SCRAP alone)',
-      afford.marked.join() === 'SCRAP');
-    ok('a full purse marks everything buyable', afford.flush === 5);
+    ok(`one skull marks only what one skull buys (${afford.marked.join() || 'nothing'})`,
+      afford.marked.sort().join() === afford.cheapest.join());
+    ok(`a full purse marks everything standing open (${afford.flush.length})`,
+      afford.flush.join() === afford.open.join());
+    ok(`and never a sealed one (${afford.sealed.join(', ')})`,
+      afford.sealed.length > 0 && afford.sealed.every(k => !afford.flush.includes(k)));
 
     // ---- a structure opens its sheet, and the sheet buys ----
     await page.evaluate(() => { bossSkulls = 3; metaUpgrades.startScrap = 0; citadelSpot = null; renderCitadel(); });
@@ -108,12 +119,16 @@ module.exports = {
       list: getComputedStyle(document.getElementById('citadel-list')).display,
       scene: getComputedStyle(document.getElementById('citadel-scene')).display,
       cards: document.querySelectorAll('#citadel-list .upgrade-card').length,
-      labels: ['meta-lbl-scrap', 'meta-lbl-level', 'meta-lbl-inv', 'meta-lbl-regroup', 'meta-lbl-vault']
-        .every(id => document.getElementById(id) !== null)
+      declared: CITADEL_SPOTS.length,
+      // Each card carries the building's own state and its own buy button - the five label ids
+      // that used to be hand-written into the markup are gone with the hand-written cards.
+      stated: [...document.querySelectorAll('#citadel-list .upgrade-card')]
+        .every(c => c.querySelector('.upgrade-header span:last-child').innerText.length > 2
+                 && c.querySelector('[data-action="buy-meta"]') !== null)
     }));
-    ok('the ledger view lists the classic cards', ledger.list !== 'none' && ledger.scene === 'none');
-    ok('all five of them', ledger.cards === 5);
-    ok('with every legacy label id intact', ledger.labels);
+    ok('the ledger view lists the cards', ledger.list !== 'none' && ledger.scene === 'none');
+    ok(`one per building on the hill (${ledger.cards})`, ledger.cards === ledger.declared);
+    ok('each stating where it stands and how to raise it', ledger.stated);
 
     await page.click('[data-action="citadel-view"]');
     await page.waitForTimeout(200);

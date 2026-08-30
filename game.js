@@ -81,7 +81,8 @@ let globalSettings = { combatSpeed: 1.0, sfx: true, sfxVol: 1, ambVol: 0.7, moti
 function volName(v) { const i = VOL_STEPS.indexOf(v); return VOL_NAMES[i < 0 ? VOL_STEPS.length - 1 : i]; }
 function cycleVol(v) { const i = VOL_STEPS.indexOf(v); return VOL_STEPS[(i < 0 ? 0 : i + 1) % VOL_STEPS.length]; }
 
-let bossSkulls = 0; let metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0, vault: 0, heirloom: null };
+let bossSkulls = 0; let metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0, vault: 0, heirloom: null,
+                                         rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0 };
 let scrap = 0; let currentTier = 1; let currentSector = 1; let difficultyMult = 1.0; 
 let inventory = []; let materials = { parts: 0, chems: 0, tech: 0 }; 
 let tuneUpBattles = 0; 
@@ -1123,6 +1124,7 @@ const CODEX = [
         `Some of the people out here come back. ${Object.keys(CAST).length} of them remember what you did last time - pay them, save them, rob them - and what they offer next changes with it. Standing lasts one expedition and starts over on the next.`,
         `Before deploying, the muster shows every operator's quirk. ${MUSTER_REROLLS} reroll tokens per expedition swap the ones that do not fit the plan.`,
         `The board carries three contracts and rotates one in whenever it is settled, plus one standing contract that runs the whole expedition. ${BOUNTY_POOL.length} kinds in the rotation - most of them are ways to win a fight rather than counts of what you were doing anyway.`,
+        `Skulls taken from commanders build the Citadel, and it has ${CITADEL_SPOTS.length} places to spend them - two of which need something else standing first.`,
         'Depth is worth far more than any single haul: pushing one sector deeper always beats farming the one you are on.'
     ] },
     { id: 'PROMOTIONS', title: 'FIELD PROMOTIONS', body: () => [
@@ -2005,9 +2007,10 @@ function rollStanding(rng = Math.random, exclude = []) {
 
 // The opening slate is seeded (a daily is the same board for everyone); the replacements
 // that rotate in mid-run depend on play, so they stay on live dice.
+function boardSlots() { return BOARD_SLOTS + (metaUpgrades.warRoom ? 1 : 0); }
 function generateBounties(rng = Math.random) {
     let out = [];
-    for (let i = 0; i < 3; i++) out.push(rollBounty(out.map(b => b.type), rng));
+    for (let i = 0; i < boardSlots(); i++) out.push(rollBounty(out.map(b => b.type), rng));
     return out;
 }
 
@@ -2732,6 +2735,11 @@ function buildNewRun(diff) {
     odChoices = {}; pendingOverdrive = null; momentumFocus = 0; pressExtra = false;
     const kept = heirloomRelic();
     activeRelics = kept ? [kept] : [];
+    // The Cache stocks a relic of its own, and never a second copy of what the Vault held.
+    if (metaUpgrades.cache) {
+        const stocked = rollRelic(0);
+        if (stocked && !activeRelics.some(r => r.id === stocked.id)) activeRelics.push(stocked);
+    }
 
     const qRng = seededRng('quirks');
     playerRoster.forEach(p => {
@@ -2746,7 +2754,7 @@ function buildNewRun(diff) {
     // The back rank stays empty, and stays empty - the Outpost refuses to fill it below.
     if (hasContract('SHORT_HANDED')) playerRoster.forEach(p => { if (p.gridPos === 3) p.gridPos = 0; });
 
-    musterRerolls = MUSTER_REROLLS;
+    musterRerolls = MUSTER_REROLLS + (metaUpgrades.rerolls || 0);
     saveGameState(); 
 }
 
@@ -2943,28 +2951,82 @@ function devResolve(win) {
 // the ledger view - same element ids, same actions - one toggle away.
 let citadelView = 'scene'; let citadelSpot = null;
 
+const ARMORY_CUT = 8;      // percent off Armory stock per level of the contract
+const BOARD_SLOTS = 3;     // contracts on the board before the War Room
+// Every spot declares its own price, its own ceiling, what buying it does, and what has to be
+// standing before it can be built. The ledger, the hillside and the purchase all read this one
+// table - the cost used to be written here and again in the buy handler and a third time in the
+// markup, where the names had already drifted apart from these.
 const CITADEL_SPOTS = [
-    { kind: 'SCRAP',   name: 'SCRAP CRANE',     x: 16, y: 54, cost: 1,
+    { kind: 'SCRAP',   name: 'SCRAP CRANE',     x: 14, y: 56, cost: 1,
       level: () => (metaUpgrades.startScrap || 0) / 50,
+      apply: () => { metaUpgrades.startScrap = (metaUpgrades.startScrap || 0) + 50; },
       effect: l => `Expeditions start with +${l * 50} Scrap.`,
       pitch: 'Start new expeditions with +50 initial Scrap per level.' },
-    { kind: 'LEVEL',   name: 'BARRACKS',        x: 50, y: 42, cost: 2,
+    { kind: 'LEVEL',   name: 'BARRACKS',        x: 50, y: 22, cost: 2,
       level: () => (metaUpgrades.startLevel || 1) - 1,
+      apply: () => { metaUpgrades.startLevel = (metaUpgrades.startLevel || 1) + 1; },
       effect: l => `Operators start ${l ? `+${l} level${l > 1 ? 's' : ''} higher` : 'at level 1'}.`,
       pitch: 'All operators permanently start +1 Level higher (grants early Perk point).' },
-    { kind: 'INV',     name: 'RIGGING BAY',     x: 84, y: 55, cost: 3,
+    { kind: 'INV',     name: 'RIGGING BAY',     x: 86, y: 56, cost: 3,
       level: () => (metaUpgrades.invMax || 4) - 4,
+      apply: () => { metaUpgrades.invMax = (metaUpgrades.invMax || 4) + 1; },
       effect: l => `${4 + l} tactical inventory slots.`,
       pitch: 'Increase maximum tactical inventory slots by +1.' },
-    { kind: 'REGROUP', name: 'FALLBACK BUNKER', x: 30, y: 76, cost: 4,
+    { kind: 'REGROUP', name: 'FALLBACK BUNKER', x: 50, y: 82, cost: 4,
       level: () => metaUpgrades.extraRegroups || 0,
+      apply: () => { metaUpgrades.extraRegroups = (metaUpgrades.extraRegroups || 0) + 1; },
       effect: l => `${BASE_REGROUPS + l} regroups per expedition.`,
       pitch: 'Carry +1 extra regroup into every expedition.' },
-    { kind: 'VAULT',   name: 'THE VAULT',       x: 68, y: 79, cost: 5, max: 1,
+    { kind: 'VAULT',   name: 'THE VAULT',       x: 74, y: 74, cost: 5, max: 1,
       level: () => metaUpgrades.vault ? 1 : 0,
+      apply: () => { metaUpgrades.vault = 1; },
       effect: () => vaultDescText(),
-      pitch: 'Your best relic survives the expedition and arms the next one.' }
+      pitch: 'Your best relic survives the expedition and arms the next one.' },
+
+    // Five more, and a shallow tree: two of them need something else standing first.
+    { kind: 'MUSTER',  name: 'MUSTER TENT',     x: 26, y: 74, cost: 2, max: 3,
+      level: () => metaUpgrades.rerolls || 0,
+      apply: () => { metaUpgrades.rerolls = (metaUpgrades.rerolls || 0) + 1; },
+      effect: l => `${MUSTER_REROLLS + l} quirk rerolls at the muster.`,
+      pitch: 'One more reroll token at every muster, for the quirks that do not fit the plan.' },
+    { kind: 'TRADE',   name: 'ARMORY CONTRACT', x: 50, y: 52, cost: 3, max: 3,
+      level: () => metaUpgrades.discount || 0,
+      apply: () => { metaUpgrades.discount = (metaUpgrades.discount || 0) + 1; },
+      effect: l => l ? `Armory stock costs ${l * ARMORY_CUT}% less.` : 'Armory stock at full price.',
+      pitch: `A standing arrangement: every Armory price drops ${ARMORY_CUT}% per level.` },
+    { kind: 'ARCHIVE', name: 'THE ARCHIVE',     x: 18, y: 38, cost: 4, max: 1,
+      level: () => metaUpgrades.archive ? 1 : 0,
+      apply: () => { metaUpgrades.archive = 1; },
+      effect: l => l ? 'Every hostile file reads as already met.' : 'Files stay sealed until you have met the thing.',
+      pitch: 'Files on every hostile in the wasteland, open from the first time you see one.' },
+    { kind: 'WARROOM', name: 'WAR ROOM',        x: 82, y: 38, cost: 5, max: 1, needs: 'ARCHIVE',
+      level: () => metaUpgrades.warRoom ? 1 : 0,
+      apply: () => { metaUpgrades.warRoom = 1; },
+      effect: l => `${BOARD_SLOTS + (l ? 1 : 0)} contracts on the board at once.`,
+      pitch: 'A fourth contract on the board. Needs the Archive: you cannot run what you cannot read.' },
+    { kind: 'CACHE',   name: 'RELIC CACHE',     x: 22, y: 90, cost: 7, max: 1, needs: 'VAULT',
+      level: () => metaUpgrades.cache ? 1 : 0,
+      apply: () => { metaUpgrades.cache = 1; },
+      effect: l => l ? 'Every expedition deploys already holding a relic.' : 'Expeditions deploy with nothing.',
+      pitch: 'Every expedition starts holding a relic. Needs the Vault - somewhere to keep them first.' }
 ];
+
+// Whether a spot's prerequisite is standing. A spot with no `needs` is always available.
+function spotUnlocked(sp) {
+    if (!sp || !sp.needs) return true;
+    const req = CITADEL_SPOTS.find(o => o.kind === sp.needs);
+    return !!req && req.level() > 0;
+}
+function spotMaxed(sp) { return sp.max !== undefined && sp.level() >= sp.max; }
+// What the hillside and the ledger print next to a name. A one-shot building reads as built or
+// not; anything that stacks reads as a level.
+function spotState(sp) {
+    if (sp.kind === 'VAULT') return metaUpgrades.vault ? (metaUpgrades.heirloom ? 'ARMED' : 'EMPTY') : 'LOCKED';
+    if (!spotUnlocked(sp)) return 'SEALED';
+    if (sp.max === 1) return sp.level() ? 'BUILT' : 'LOCKED';
+    return `LVL ${sp.level()}`;
+}
 
 function vaultDescText() {
     const kept = heirloomRelic();
@@ -3028,6 +3090,61 @@ function spotArt(kind, lvl) {
           ${!metaUpgrades.vault ? '<rect class="bar" x="34" y="50" width="4" height="32"></rect><rect class="bar" x="48" y="48" width="4" height="36"></rect><rect class="bar" x="62" y="50" width="4" height="32"></rect>' : ''}
           ${armed ? glow(50, 66, 3.4) : ''}</svg>`;
     }
+    if (kind === 'MUSTER') {
+        // A tent and a fire: the smallest thing on the hill, and the first one most runs buy.
+        let g = ''; for (let i = 0; i < lit(lvl); i++) g += glow(30 + i * 20, 72, 2.2);
+        return `<svg viewBox="0 0 100 100" aria-hidden="true">
+          <rect class="sil" x="6" y="84" width="88" height="6"></rect>
+          <polygon class="sil" points="20,84 46,44 72,84"></polygon>
+          <polygon class="void" points="38,84 46,62 54,84"></polygon>
+          <line class="wire" x1="46" y1="44" x2="46" y2="34"></line>
+          <polygon class="accent" points="46,34 58,37 46,40"></polygon>${g}</svg>`;
+    }
+    if (kind === 'TRADE') {
+        // A loading dock with a shutter, and one crate on the apron per level of the contract.
+        let g = ''; for (let i = 0; i < lit(lvl); i++) g += `<rect class="glow" x="${16 + i * 13}" y="76" width="9" height="8"></rect>`;
+        return `<svg viewBox="0 0 100 100" aria-hidden="true">
+          <rect class="sil" x="14" y="46" width="72" height="38"></rect>
+          <rect class="sil" x="8" y="84" width="84" height="6"></rect>
+          <rect class="void" x="54" y="56" width="26" height="28"></rect>
+          <line class="wire" x1="54" y1="56" x2="80" y2="56"></line>
+          <polygon class="accent" points="20,46 50,34 80,46"></polygon>${g}</svg>`;
+    }
+    if (kind === 'ARCHIVE') {
+        // A stack of shelving behind glass; lit right through once the files are open.
+        const on = lvl >= 1;
+        return `<svg viewBox="0 0 100 100" aria-hidden="true">
+          <rect class="sil" x="18" y="34" width="64" height="50"></rect>
+          <rect class="sil" x="10" y="84" width="80" height="6"></rect>
+          <rect class="${on ? 'glowring' : 'void'}" x="26" y="42" width="48" height="34"></rect>
+          <line class="wire" x1="26" y1="53" x2="74" y2="53"></line>
+          <line class="wire" x1="26" y1="64" x2="74" y2="64"></line>
+          <polygon class="accent" points="46,34 50,26 54,34"></polygon>
+          ${on ? glow(50, 59, 3) : ''}</svg>`;
+    }
+    if (kind === 'WARROOM') {
+        // A dish and a low bunker. Sealed until the Archive is standing, so it draws the bars.
+        const on = lvl >= 1, sealed = !spotUnlocked({ kind: 'WARROOM', needs: 'ARCHIVE' });
+        return `<svg viewBox="0 0 100 100" aria-hidden="true">
+          <rect class="sil" x="16" y="60" width="68" height="24"></rect>
+          <rect class="sil" x="10" y="84" width="80" height="6"></rect>
+          <path class="sil2" d="M34,58 A22,22 0 0 1 78,58 Z" transform="rotate(-24 56 58)"></path>
+          <line class="wire" x1="56" y1="58" x2="56" y2="72"></line>
+          <rect class="void" x="24" y="68" width="10" height="16"></rect>
+          ${sealed ? '<rect class="bar" x="30" y="56" width="4" height="30"></rect><rect class="bar" x="62" y="56" width="4" height="30"></rect>' : ''}
+          ${on ? glow(58, 44, 3.2) : ''}</svg>`;
+    }
+    if (kind === 'CACHE') {
+        // A buried strongbox with its lid open once it is stocked.
+        const on = lvl >= 1, sealed = !spotUnlocked({ kind: 'CACHE', needs: 'VAULT' });
+        return `<svg viewBox="0 0 100 100" aria-hidden="true">
+          <ellipse class="sil" cx="50" cy="86" rx="42" ry="8"></ellipse>
+          <rect class="sil" x="26" y="58" width="48" height="28"></rect>
+          <polygon class="${on ? 'accent' : 'sil2'}" points="26,58 50,${on ? 40 : 50} 74,58"></polygon>
+          <rect class="${on ? 'glowring' : 'void'}" x="42" y="66" width="16" height="14"></rect>
+          ${sealed ? '<rect class="bar" x="36" y="54" width="4" height="34"></rect><rect class="bar" x="60" y="54" width="4" height="34"></rect>' : ''}
+          ${on ? glow(50, 73, 2.8) : ''}</svg>`;
+    }
     return '<svg viewBox="0 0 100 100"></svg>';
 }
 
@@ -3037,10 +3154,10 @@ function renderCitadelScene() {
     let html = `<div class="cit-sky"></div><div class="cit-ridge"></div><div class="cit-ridge cit-ridge-2"></div>`;
     CITADEL_SPOTS.forEach(sp => {
         const lvl = sp.level();
-        const maxed = sp.max !== undefined && lvl >= sp.max;
-        const afford = !maxed && bossSkulls >= sp.cost;
-        const state = sp.kind === 'VAULT' ? (metaUpgrades.vault ? (metaUpgrades.heirloom ? 'ARMED' : 'EMPTY') : 'LOCKED') : `LVL ${lvl}`;
-        html += `<button class="cit-spot spot-${sp.kind} ${afford ? 'spot-afford' : ''} ${citadelSpot === sp.kind ? 'spot-open' : ''}"
+        const maxed = spotMaxed(sp), open = spotUnlocked(sp);
+        const afford = !maxed && open && bossSkulls >= sp.cost;
+        const state = spotState(sp);
+        html += `<button class="cit-spot spot-${sp.kind} ${afford ? 'spot-afford' : ''} ${open ? '' : 'spot-sealed'} ${citadelSpot === sp.kind ? 'spot-open' : ''}"
             style="left:${sp.x}%; top:${sp.y}%" data-action="citadel-spot" data-spot="${sp.kind}"
             aria-label="${sp.name}, ${state}">${spotArt(sp.kind, lvl)}
             <span class="cit-spot-name">${sp.name}</span><span class="cit-spot-lvl">${state}</span></button>`;
@@ -3052,30 +3169,44 @@ function renderCitadelScene() {
     const sp = CITADEL_SPOTS.find(x => x.kind === citadelSpot);
     if (!sp) { sheet.style.display = 'none'; sheet.innerHTML = ''; return; }
     const lvl = sp.level();
-    const maxed = sp.max !== undefined && lvl >= sp.max;
+    const maxed = spotMaxed(sp), open = spotUnlocked(sp);
+    const req = open ? null : CITADEL_SPOTS.find(o => o.kind === sp.needs);
     sheet.style.display = 'block';
-    sheet.innerHTML = `<div class="sheet-head"><span>${sp.name}</span><span>${sp.kind === 'VAULT' ? (metaUpgrades.vault ? '♦ UNLOCKED' : 'LOCKED') : `LVL ${lvl}`}</span></div>
+    sheet.innerHTML = `<div class="sheet-head"><span>${sp.name}</span><span>${spotState(sp)}</span></div>
         <div class="sheet-effect">${typeof sp.effect === 'function' ? sp.effect(lvl) : ''}</div>
         <div class="sheet-pitch">${sp.pitch}</div>
         <div class="sheet-row">
-            <button class="upg-btn btn-meta" ${maxed || bossSkulls < sp.cost ? 'disabled' : ''} data-action="buy-meta" data-kind="${sp.kind}">${maxed ? 'BUILT' : `${sp.kind === 'VAULT' ? 'UNLOCK' : 'UPGRADE'} [${sp.cost} 💀]`}</button>
+            <button class="upg-btn btn-meta" ${maxed || !open || bossSkulls < sp.cost ? 'disabled' : ''} data-action="buy-meta" data-kind="${sp.kind}">${maxed ? 'BUILT' : !open ? `NEEDS ${req ? req.name : sp.needs}` : `${sp.max === 1 ? 'UNLOCK' : 'UPGRADE'} [${sp.cost} 💀]`}</button>
             <button class="upg-btn" data-action="citadel-close">CLOSE</button>
         </div>`;
 }
 
-function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`; document.getElementById('meta-lbl-scrap').innerText = `LVL ${metaUpgrades.startScrap / 50}`; document.getElementById('meta-lbl-level').innerText = `LVL ${metaUpgrades.startLevel - 1}`; document.getElementById('meta-lbl-inv').innerText = `LVL ${metaUpgrades.invMax - 4}`; document.getElementById('meta-lbl-regroup').innerText = `LVL ${metaUpgrades.extraRegroups || 0}`;
-    const kept = heirloomRelic();
-    document.getElementById('meta-lbl-vault').innerText = metaUpgrades.vault ? (kept ? '♦ ARMED' : 'EMPTY') : 'LOCKED';
-    document.getElementById('meta-vault-desc').innerText = vaultDescText();
-    const vBtn = document.querySelector('#citadel-list [data-kind="VAULT"]');
-    if (vBtn) { vBtn.disabled = !!metaUpgrades.vault; vBtn.innerText = metaUpgrades.vault ? 'UNLOCKED' : 'UNLOCK [COST: 5 💀]'; }
+function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`;
+    document.getElementById('citadel-list').innerHTML = CITADEL_SPOTS.map(sp => {
+        const lvl = sp.level(), maxed = spotMaxed(sp), open = spotUnlocked(sp);
+        const req = open ? null : CITADEL_SPOTS.find(o => o.kind === sp.needs);
+        const label = maxed ? 'BUILT' : !open ? `NEEDS ${req ? req.name : sp.needs}` : `${sp.max === 1 ? 'UNLOCK' : 'UPGRADE'} [${sp.cost} 💀]`;
+        return `<div class="upgrade-card ${open ? '' : 'upg-sealed'}">
+            <div class="upgrade-header"><span>${sp.name}</span><span>${spotState(sp)}</span></div>
+            <div class="upgrade-stats">${typeof sp.effect === 'function' ? sp.effect(lvl) : ''}</div>
+            <div class="upgrade-pitch">${sp.pitch}</div>
+            <button class="upg-btn btn-meta" ${maxed || !open || bossSkulls < sp.cost ? 'disabled' : ''} data-action="buy-meta" data-kind="${sp.kind}">${label}</button>
+        </div>`;
+    }).join('');
     document.getElementById('citadel-scene').style.display = citadelView === 'scene' ? 'block' : 'none';
     document.getElementById('citadel-list').style.display = citadelView === 'scene' ? 'none' : 'grid';
     if (citadelView !== 'scene') { document.getElementById('citadel-sheet').style.display = 'none'; }
     else renderCitadelScene();
     const toggle = document.querySelector('.citadel-view-toggle');
     if (toggle) toggle.innerText = citadelView === 'scene' ? '📜 LEDGER VIEW' : '🏔 SCENE VIEW'; }
-function buyMetaUpgrade(type) { if (type === 'SCRAP' && bossSkulls >= 1) { bossSkulls -= 1; metaUpgrades.startScrap += 50; } else if (type === 'LEVEL' && bossSkulls >= 2) { bossSkulls -= 2; metaUpgrades.startLevel += 1; } else if (type === 'INV' && bossSkulls >= 3) { bossSkulls -= 3; metaUpgrades.invMax += 1; } else if (type === 'REGROUP' && bossSkulls >= 4) { bossSkulls -= 4; metaUpgrades.extraRegroups = (metaUpgrades.extraRegroups || 0) + 1; } else if (type === 'VAULT' && bossSkulls >= 5 && !metaUpgrades.vault) { bossSkulls -= 5; metaUpgrades.vault = 1; } saveMeta(); renderCitadel(); }
+function buyMetaUpgrade(type) {
+    const sp = CITADEL_SPOTS.find(o => o.kind === type);
+    if (sp && !spotMaxed(sp) && spotUnlocked(sp) && bossSkulls >= sp.cost) {
+        bossSkulls -= sp.cost;
+        sp.apply();
+    }
+    saveMeta(); renderCitadel();
+}
 
 function renderMap() {
     switchScreen('screen-map');
@@ -3518,7 +3649,9 @@ let activeShop = null;        // { nodeId, stock } while a trader holds the curr
 let regroupInsured = false;   // one prepaid regroup: the next one takes no scrap
 let shopRerollPick = false;   // the quirk-therapy row is waiting on an operator pick
 
-const shopPrice = base => Math.floor(base * sectorRewardMult());
+// The Armory contract comes off the top, after the sector's markup, so the discount is on what
+// the stock actually costs here rather than on its list price somewhere else.
+const shopPrice = base => Math.max(1, Math.floor(base * sectorRewardMult() * (1 - ARMORY_CUT / 100 * (metaUpgrades.discount || 0))));
 
 function rollShopStock() {
     const stock = [];
@@ -3945,7 +4078,8 @@ function noteBestiary(name, field) {
     if (!bestiary[name]) bestiary[name] = { met: 0, killed: 0, felled: 0 };
     bestiary[name][field] = (bestiary[name][field] || 0) + 1;
 }
-function hasMet(name) { return bestiaryEntry(name).met > 0; }
+// The Archive is a standing file on everything out here, so nothing reads as a stranger.
+function hasMet(name) { return !!metaUpgrades.archive || bestiaryEntry(name).met > 0; }
 
 // Every hostile that exists, ordinary stock first and then the commanders.
 function bestiaryRoster() {
@@ -5845,7 +5979,7 @@ globalThis.WP = {
     // entry points and pure helpers the suites exercise
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
