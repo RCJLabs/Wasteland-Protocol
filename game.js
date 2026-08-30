@@ -865,6 +865,12 @@ function protocolMult() { return ascension > 0 ? PROTOCOLS[Math.min(ascension, P
 // answer is right, but because every answer is equally fine. Nothing in the game cares what
 // shape the line is, so nothing makes it worth varying.
 //
+// One shape is not cheap, and it was cut rather than shipped. "Deploy two, leave a rank empty"
+// measured at median sector 1 and 1,885 points against 11,085, with withdrawals tripled: losing
+// a third of your actions costs about six times the run, and no multiplier this table could
+// carry would cover it. Worth knowing that the SHORT HANDED contract sells the same trade for
+// +20% and measures the same way - that one is shipped, and is a trap.
+//
 // A doctrine is a promise about that shape, made at the muster and kept for the whole run. It
 // is what creates the consequence the muster lacks. It pays a score multiplier - priced low,
 // against the contract table, because the constraint measures cheap and the real draw is the
@@ -884,14 +890,6 @@ const DOCTRINES = [
       rule: 'Nobody in the line owns a melee ability.',
       edge: 'Enemy melee that reaches your front rank lands at 80%.',
       holds: line => line.length > 0 && line.every(c => !carriesMelee(c)) },
-    { id: 'SKELETON_CREW', name: 'SKELETON CREW', bonus: 0.15,
-      // The contract board sells one fewer operator for +20% with nothing given back; this
-      // asks the same and hands 30% health over, so it prices under it.
-      rule: 'Deploy two. One rank stays empty all run.',
-      edge: 'Both carry 30% more health.',
-      // At most two, not exactly two: losing one is a price already paid, and should not also
-      // cost the doctrine.
-      holds: line => line.length > 0 && line.length <= 2 },
     { id: 'LIGHT_ORDER', name: 'LIGHT ORDER', bonus: 0.12,
       rule: 'Nobody in the line starts above 55 health.',
       edge: 'Every deployed operator moves 3 faster.',
@@ -1476,6 +1474,12 @@ function renderCodex() {
 // being the same shape every time, and a leaderboard entry says how it was earned.
 const CONTRACT_POOL = [
     { id: 'NO_CONSUMABLES', name: "DRY RUN",       bonus: 0.15, desc: "Deploy with an empty bag. Nothing can be carried or crafted into it." },
+    // MEASURED AND MISPRICED, left alone here because repricing it is its own piece of work:
+    // sixty expeditions under this contract came in at median sector 1 and 2,178 points against
+    // 11,085 without it, with withdrawals up from 2.3 to 5.6 a run. Losing a third of the
+    // squad's actions costs about five times the run, and +20% does not begin to cover it. The
+    // honest fix is not a bigger number - it is making two operators viable, which means giving
+    // the action economy back rather than paying for its absence.
     { id: 'SHORT_HANDED',   name: "SHORT HANDED",  bonus: 0.20, desc: "One fewer operator deploys. The back rank stays empty." },
     { id: 'THEY_MOVE_FIRST',name: "SECOND WATCH",  bonus: 0.15, desc: "The enemy takes the first turn of every fight." },
     { id: 'HARSH_SKIES',    name: "HARSH SKIES",   bonus: 0.20, desc: "Every node carries weather. It is never clear." },
@@ -3462,11 +3466,6 @@ function applyDoctrineEdge() {
         // Once each: someone who steps up out of the bench mid-run gets it, and nobody gets it
         // twice for being benched and re-deployed.
         if (c.doctrineEdged) return;
-        if (hasDoctrine('SKELETON_CREW')) {
-            const add = Math.floor(c.maxHp * 0.30);
-            c.maxHp += add; c.hp += add;
-            c.doctrineEdged = true;
-        }
         if (hasDoctrine('LIGHT_ORDER')) { c.speed += 3; c.doctrineEdged = true; }
     });
 }

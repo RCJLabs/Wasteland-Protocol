@@ -126,44 +126,54 @@ module.exports = {
       !ranks.medicIn && ranks.held && ranks.mult > 1 && ranks.filled.length === 0);
 
     // ---- and losing someone is a price already paid, not a second one ----
-    const skeleton = await page.evaluate(() => {
+    const thinned = await page.evaluate(() => {
       __run();
-      doctrineOffer = ['SKELETON_CREW'];
-      __line(['BRUISER', 'MEDIC']);
-      takeDoctrine('SKELETON_CREW'); musterDeploy();
+      doctrineOffer = ['NO_HANDS'];
+      __line(['MEDIC', 'SCAVENGER', 'SNIPER']);
+      takeDoctrine('NO_HANDS'); musterDeploy();
+      const three = doctrineMult();
+      playerRoster.find(c => c.gridPos === 3).gridPos = 0;
+      checkDoctrine();
       const two = doctrineMult();
       playerRoster.find(c => c.gridPos === 2).gridPos = 0;
       checkDoctrine();
-      return { two, one: doctrineMult() };
+      return { three, two, one: doctrineMult() };
     });
-    ok('a two-strong doctrine survives going down to one', skeleton.two > 1 && skeleton.one === skeleton.two);
+    ok('a doctrine survives the line being thinned by losses',
+      thinned.three > 1 && thinned.two === thinned.three && thinned.one === thinned.three);
 
     // ---- the edges arrive ----
     const edges = await page.evaluate(() => {
-      __run();
-      doctrineOffer = ['SKELETON_CREW'];
-      __line(['BRUISER', 'MEDIC']);
-      const beforeHp = deployedLine().map(c => c.maxHp);
-      takeDoctrine('SKELETON_CREW'); musterDeploy();
-      const afterHp = deployedLine().map(c => c.maxHp);
-      // and only once, however many times the muster is re-rendered
-      applyDoctrineEdge(); applyDoctrineEdge();
-      const twice = deployedLine().map(c => c.maxHp);
-
       __run();
       doctrineOffer = ['LIGHT_ORDER'];
       __line(['MEDIC', 'SCAVENGER', 'SNIPER']);
       const beforeSpd = deployedLine().map(c => c.speed);
       takeDoctrine('LIGHT_ORDER'); musterDeploy();
       const afterSpd = deployedLine().map(c => c.speed);
-      return { beforeHp, afterHp, twice, beforeSpd, afterSpd };
+      // and only once, however many times the muster is re-rendered
+      applyDoctrineEdge(); applyDoctrineEdge();
+      const twice = deployedLine().map(c => c.speed);
+
+      // FIELD SURGERY's edge is not on the sheet - it arrives between fights.
+      __run();
+      doctrineOffer = ['FIELD_SURGERY'];
+      __line(['BRUISER', 'SCAVENGER', 'PYROMANIAC']);
+      takeDoctrine('FIELD_SURGERY'); musterDeploy();
+      deployedLine().forEach(c => { c.hp = Math.floor(c.maxHp * 0.4); });
+      const hurt = deployedLine().map(c => c.hp);
+      currentSector = 2; currentTier = 3;
+      initiateCombat('RAIDERS', false);
+      activeEntities.filter(e => !e.isPlayer).forEach(e => { e.hp = 0; });
+      checkWinState();
+      const patched = deployedLine().map(c => c.hp);
+      return { beforeSpd, afterSpd, twice, hurt, patched };
     });
-    ok('SKELETON CREW puts health on the two who deploy',
-      edges.afterHp.every((h, i) => h > edges.beforeHp[i]));
-    ok('and does it once, not once per render',
-      JSON.stringify(edges.twice) === JSON.stringify(edges.afterHp));
     ok('LIGHT ORDER puts speed on a light line',
       edges.afterSpd.every((v, i) => v === edges.beforeSpd[i] + 3));
+    ok('and does it once, not once per render',
+      JSON.stringify(edges.twice) === JSON.stringify(edges.afterSpd));
+    ok('FIELD SURGERY patches the line off the back of a win',
+      edges.patched.every((h, i) => h > edges.hurt[i]));
 
     // CONSCRIPTS pays in the currency the problem is made of.
     const xp = await page.evaluate(() => {
@@ -201,7 +211,7 @@ module.exports = {
     // ---- the muster will not deploy into a broken promise ----
     const ui = await page.evaluate(() => {
       __run();
-      doctrineOffer = ['FIELD_SURGERY', 'SKELETON_CREW', 'NO_HANDS'];
+      doctrineOffer = ['FIELD_SURGERY', 'LIGHT_ORDER', 'NO_HANDS'];
       __line(['BRUISER', 'SCAVENGER', 'PYROMANIAC']);
       renderMuster();
       const cards = document.querySelectorAll('.doctrine-card').length;
@@ -247,7 +257,7 @@ module.exports = {
     // ---- it survives a reload ----
     const saved = await page.evaluate(() => {
       __run();
-      doctrineOffer = ['FIELD_SURGERY', 'SKELETON_CREW'];
+      doctrineOffer = ['FIELD_SURGERY', 'NO_HANDS'];
       __line(['BRUISER', 'SCAVENGER', 'PYROMANIAC']);
       takeDoctrine('FIELD_SURGERY'); musterDeploy();
       saveGameState();
