@@ -394,7 +394,10 @@ const BOSS_POOL = [
         enrage: { cry: 'WARLORD ENRAGED - THE PACK ANSWERS!', dmgScale: 1.5,
                   summon: { name: 'War Hound', classType: 'BEAST', range: 'melee', hp: 30, dmg: 12, speed: 18,
                             img: 'enemy_dog.webp', scale: 0.8, resistances: { phys: -2, bio: 0, energy: 0 } },
-                  summonCount: 2 }
+                  summonCount: 2 },
+        // It learned what killing its pack costs you, and started charging for it.
+        grudge: { cry: 'BLOOD DEBT - THE PACK FEEDS IT!', name: 'BLOOD DEBT',
+                  tell: 'Every hostile that dies now heals it.', bloodDebt: 0.12 }
     },
     {
         id: 'COLOSSUS', threat: 2, name: 'Siege Colossus', short: 'COLOSSUS', img: 'enemy_boss_mech.webp', scale: 2.4,
@@ -405,6 +408,9 @@ const BOSS_POOL = [
         bg: 'bg_foundry.webp',
         banner: '\uD83D\uDD25 FOUNDRY HEAT: All units deal +20% DMG \uD83D\uDD25',
         intents: [['AOE', 0.35], ['ATTACK', 0.30], ['DEFEND', 0.20], ['HEAVY', 0.15]],
+        // Last time you out-lasted the salvoes. It stopped spacing them out.
+        grudge: { cry: 'OVERLOAD - BATTERIES CHARGING', name: 'OVERLOAD',
+                  tell: 'Charges a turn, then fires on the whole line.', charge: { turns: 1, mult: 1.1 } },
         enrage: { cry: 'SIEGE PROTOCOL ENGAGED - ALL BATTERIES', dmgScale: 1.15, armorBonus: 20, forceAoe: true,
                   summon: { name: 'Sentry Drone', classType: 'DRONE', range: 'ranged', hp: 25, dmg: 8, speed: 18,
                             img: 'enemy_drone.webp', scale: 0.7, isHovering: true,
@@ -420,7 +426,13 @@ const BOSS_POOL = [
         bg: 'bg_nest.webp',
         banner: '\u2620\uFE0F CARRION REEK: All units deal +20% DMG \u2620\uFE0F',
         intents: [['STATUS', 0.35], ['HEAVY', 0.25], ['ATTACK', 0.25], ['AOE', 0.15]],
-        enrage: { cry: 'THE MATRIARCH SHRIEKS - PLAGUE WIND!', dmgScale: 1.25, speedBonus: 4, plague: true }
+        enrage: { cry: 'THE MATRIARCH SHRIEKS - PLAGUE WIND!', dmgScale: 1.25, speedBonus: 4, plague: true },
+        // You killed her once. This time she does not intend to be the last of them.
+        grudge: { cry: 'SHE IS LAYING - THE NEST ANSWERS!', name: 'SPAWNING',
+                  tell: 'Lays another of them every other turn.',
+                  spawn: { every: 2, name: 'Carrion Brood', classType: 'BEAST', range: 'melee',
+                           hp: 26, dmg: 11, speed: 15, img: 'enemy_boss_vulture.webp', scale: 0.75,
+                           resistances: { phys: -4, bio: 40, energy: 0 } } }
     },
     // Four more, so a deep run stops meeting the same three in the same order. Each carries a
     // mechanic rather than a different set of intent weights: something the squad has to answer
@@ -440,7 +452,11 @@ const BOSS_POOL = [
         venom: { every: 2, dmg: 0.14, speed: 2, armorLoss: 4, taken: 0.15, max: 5 },
         // No damage step at the enrage: the two doses it takes are the enrage.
         enrage: { cry: 'THE VATBORN CRANKS THE TANK WIDE OPEN!', venomBurst: 2,
-                  backbreaker: { mult: 1.5, stun: 1 } }
+                  backbreaker: { mult: 1.5, stun: 1 } },
+        // The tank goes past wide open. It is not trying to survive this one.
+        grudge: { cry: 'THE TANK RUPTURES - IT IS VENTING!', name: 'RUPTURE',
+                  tell: 'Bleeds toxin over the front rank every turn.',
+                  venomBurst: 9, aura: { share: 0.06, type: 'bio', rank: 1 } }
     },
     {
         id: 'MARSHAL', threat: 3, name: 'The Marshal', short: 'MARSHAL', img: 'enemy_boss_marshal.webp', scale: 2.2,
@@ -455,7 +471,11 @@ const BOSS_POOL = [
                   img: 'enemy_hound_bulldog.webp', scale: 1.5, armor: 5, sig: 'RIOT_PLATE',
                   resistances: { phys: 10, bio: 0, energy: -5 } },
         escortArmor: 22,
-        enrage: { cry: 'THE MARSHAL CALLS THE COLUMN IN!', dmgScale: 1.3, speedBonus: 3 }
+        enrage: { cry: 'THE MARSHAL CALLS THE COLUMN IN!', dmgScale: 1.3, speedBonus: 3 },
+        // You went through the hound to get to it. It brought a second hound.
+        grudge: { cry: 'THE COLUMN ARRIVES - ANOTHER HOUND!', name: 'THE COLUMN',
+                  tell: 'A fresh hound off the wagon, and the plate goes back up.',
+                  reEscort: true, armorBonus: 14 }
     },
     {
         id: 'STORMCALLER', threat: 2, name: 'The Stormcaller', short: 'STORM', img: 'enemy_boss_stormcaller.webp', scale: 2.3,
@@ -468,7 +488,11 @@ const BOSS_POOL = [
         intents: [['AOE', 0.30], ['ATTACK', 0.30], ['STATUS', 0.25], ['HEAVY', 0.15]],
         // Every third turn the weather changes under everyone, squad and warlord alike.
         stormTurn: 3,
-        enrage: { cry: 'THE STORMCALLER OPENS THE SKY!', dmgScale: 1.2, speedBonus: 2 }
+        enrage: { cry: 'THE STORMCALLER OPENS THE SKY!', dmgScale: 1.2, speedBonus: 2 },
+        // It waited out your last squad. It is not waiting for this one.
+        grudge: { cry: 'THE SKY BREAKS - IT WILL NOT HOLD!', name: 'THE SKY BREAKS',
+                  tell: 'The weather turns every turn, and every turn of it hurts.',
+                  stormTurn: 1, skyToll: 0.05 }
     },
     {
         id: 'BASTION', threat: 3, name: 'The Bastion', short: 'BASTION', img: 'enemy_boss_bastion.webp', scale: 2.25,
@@ -483,9 +507,39 @@ const BOSS_POOL = [
                 img: 'enemy_turret.webp', scale: 1.2, armor: 6,
                 resistances: { phys: 5, bio: 100, energy: -20 } },
         wardSoak: 0.12,
-        enrage: { cry: 'BASTION WARD COLLAPSING - FULL BATTERIES!', dmgScale: 1.35, forceAoe: true }
+        enrage: { cry: 'BASTION WARD COLLAPSING - FULL BATTERIES!', dmgScale: 1.35, forceAoe: true },
+        // The generator you shot out was the spare.
+        grudge: { cry: 'SECONDARY WARD ONLINE - IT BROUGHT TWO!', name: 'SECOND WARD',
+                  tell: 'A second generator drops in, and the soak comes back with it.',
+                  reWard: true }
     }
 ];
+
+// ── The grudge ──────────────────────────────────────────────────────────────────────────
+// A commander you have killed does not forget it. Every warlord felled is written down against
+// its name and kept across expeditions, and the next time that one is drawn it comes back
+// heavier, faster and holding something it did not use the first time: a third phase that only
+// opens for somebody it already lost to.
+//
+// The point is not that it is harder. It is that the meta has an enemy in it - felling the
+// Marshal is a thing that happened to you both, and the version that turns up in your next run
+// is the version you made.
+const GRUDGE = {
+    hp: 0.20,        // per grudge, compounding with the sector scale it already carries
+    dmg: 0.12,
+    armor: 4,
+    speed: 1,
+    cap: 3,          // beyond this it stops growing; a wall you cannot pass is not a nemesis
+    phaseAt: 0.25    // the grudge phase opens under a quarter health, below the ordinary enrage
+};
+const RISEN_MARK = ['', 'Risen', 'Twice-Risen', 'Thrice-Risen'];
+let grudges = {};    // bossId -> times you have put it down, meta-persisted
+
+function grudgeOn(id) { return Math.min(GRUDGE.cap, grudges[id] || 0); }
+function noteGrudge(id) { if (id) grudges[id] = (grudges[id] || 0) + 1; }
+function risenName(b, g) { return g > 0 ? `${b.name}, ${RISEN_MARK[g] || `Risen ×${g}`}` : b.name; }
+// What the map promises before you take the node, so a re-match is a routing decision.
+function risenShort(b, g) { return g > 0 ? `${b.short} †${g}` : b.short; }
 
 // Rotates by sector so a run meets a different commander each time rather than the same one
 // ten times over.
@@ -2793,7 +2847,7 @@ function takeRelic(index) {
 
 let bestScore = 0; let bestSector = 0;
 
-function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, mastery, bestiary, seenPrompts })); }
+function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, mastery, bestiary, seenPrompts, grudges })); }
 
 function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, recruited: 0, fallen: [], deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
 
@@ -2822,6 +2876,7 @@ function loadMeta() {
         metaUpgrades = { ...metaUpgrades, ...(d.metaUpgrades || {}) };
         bestScore = d.bestScore || 0; bestSector = d.bestSector || 0;
         mastery = (d.mastery && typeof d.mastery === 'object') ? d.mastery : {};
+        grudges = (d.grudges && typeof d.grudges === 'object' && !Array.isArray(d.grudges)) ? d.grudges : {};
         bestiary = (d.bestiary && typeof d.bestiary === 'object' && !Array.isArray(d.bestiary)) ? d.bestiary : {};
         seenPrompts = Array.isArray(d.seenPrompts) ? d.seenPrompts.filter(id => typeof id === 'string') : [];
         return;
@@ -3549,7 +3604,7 @@ function renderMap() {
     m += `<svg class="map-edges" aria-hidden="true">${edges}</svg>`;
     sectorMap.nodes.forEach(n => {
         let icon = '🎯', lbl = n.type;
-        if (n.type === 'BOSS') { icon = '💀'; lbl = bossForSector().short; }
+        if (n.type === 'BOSS') { const bb = bossForSector(); icon = '💀'; lbl = risenShort(bb, grudgeOn(bb.id)); }
         else if (n.type === 'BEASTS') icon = '☣️';
         else if (n.type === 'MECH') icon = '⚙️';
         else if (n.type === 'EVENT') { icon = '❓'; lbl = 'UNKNOWN'; }
@@ -4412,6 +4467,7 @@ const PROMPTS = [
     { id: 'RELIC',     title: "THE COMMANDER'S CACHE", body: 'Relics last the whole expedition and stack with everything. Take the one that suits how this squad already fights, not the rarest card on the table.' },
     { id: 'CURSE',     title: 'A CURSED RELIC',  body: 'Cursed relics carry a real upside and a real cost, and they are never dealt at random - this one is on the table because you can refuse it. Read the second half of the line before you take it.' },
     { id: 'ROUTE',     title: 'THE ROUTE IS A PLAN', body: 'Taking a node commits you to what it connects to. Elites and warlords pay the most; camps and the Armory cost you a node but keep the squad standing. Look two tiers ahead before you step.' },
+    { id: 'GRUDGE',    title: 'IT REMEMBERS YOU', body: 'You have felled this commander before, and it has come back for it - heavier, faster, better armoured, and holding a move it never needed against you the first time. That move opens under a quarter health, after the enrage you already know about, and the fight log names it at the door so you can plan around it. A warlord is the one fight you cannot walk away from, so it pays for the trouble: felling a risen one banks an extra Skull for every grudge it was carrying.' },
     { id: 'BLEEDOUT',  title: 'THEY ARE BLEEDING OUT', body: 'That operator is on the floor with a clock over them, counted in their own turns. Run it out and they are gone for the rest of the expedition - there is no reviving them at the Outpost any more. Heal them where they lie (Cauterize, a Med-Stim, the STIM tactic), or end the fight: winning it, running from it and being dragged off it all get them clear. Only the clock kills.' },
     { id: 'RECRUIT',   title: 'SOMEONE WORTH SIGNING', body: 'The seven you start with are not everyone out here. A survivor brings a verb none of them has - a grinder for the front rank, a decontaminator for the middle, or a line that can haul what is hiding at the back of the enemy out where you can reach it. They cost Scrap, they arrive hurt, and there are only three in the whole wasteland. They join the bench: put them in the line at the Outpost.' },
     { id: 'ARMORY',    title: 'THE ARMORY',      body: 'A trader on the route. Gear, a marked-up relic, stims, a quirk do-over, and a bond that prepays your next regroup. Prices climb with the sector, so scrap spent early is worth more.' },
@@ -4590,14 +4646,19 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult) {
     
     if (nodeType === 'BOSS') {
         const b = bossForSector();
+        // Everything it took from you last time, it kept.
+        const g = grudgeOn(b.id);
+        const gHp = 1 + GRUDGE.hp * g, gDmg = 1 + GRUDGE.dmg * g;
         const boss = {
-            id: 'b1', name: b.name, bossId: b.id, classType: 'BOSS', range: b.range,
-            maxHp: Math.floor(bossBaseHp * b.hpMult * mult), hp: Math.floor(bossBaseHp * b.hpMult * mult),
-            speed: b.speed, armor: b.armor, baseArmor: b.armor, isPlayer: false,
-            dmgBase: Math.floor(bossBaseDmg * b.dmgMult * dmgMult),
+            id: 'b1', name: risenName(b, g), bossId: b.id, classType: 'BOSS', range: b.range,
+            maxHp: Math.floor(bossBaseHp * b.hpMult * mult * gHp), hp: Math.floor(bossBaseHp * b.hpMult * mult * gHp),
+            speed: b.speed + GRUDGE.speed * g, armor: b.armor + GRUDGE.armor * g,
+            baseArmor: b.armor + GRUDGE.armor * g,
+            dmgBase: Math.floor(bossBaseDmg * b.dmgMult * dmgMult * gDmg),
             img: b.img, scale: b.scale, hpDrop: 0,
             stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
             resistances: { ...b.resistances }, phase: 1,
+            grudge: g, grudgeMove: g > 0 ? (b.grudge || null) : null,
             intents: b.intents, bossPassive: b.passive || null, enrage: b.enrage
         };
         if (b.isHovering) boss.isHovering = true;
@@ -5058,7 +5119,15 @@ function initiateCombat(nodeType, isEliteNode) {
         if (firstFoe > 0) activeIndex = firstFoe;
     }
     log("> COMBAT INITIATED.", "log-turn");
-    if (nodeType === 'BOSS') { const b = bossForSector(); log(`> ${b.name.toUpperCase()}: ${b.blurb}`, "log-combo"); } processTurn();
+    if (nodeType === 'BOSS') {
+        const b = bossForSector(); const g = grudgeOn(b.id);
+        log(`> ${risenName(b, g).toUpperCase()}: ${b.blurb}`, "log-combo");
+        if (g > 0) {
+            firePrompt('GRUDGE');
+            log(`> You have put this one down ${g === 1 ? 'once' : `${g} times`}. It came back for it.`, "log-dmg");
+            if (b.grudge) log(`> Held in reserve: ${b.grudge.name} — ${b.grudge.tell}`, "log-status");
+        }
+    } processTurn();
 }
 
 const logEl = document.getElementById('log');
@@ -6071,6 +6140,16 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
         spawnFCT(target.id, 'SECOND WIND', 'fct-heal'); playSFX('heal', 1.2);
     }
     if (target.hp <= 0 && !target.isPlayer && !target.tallied) { target.tallied = true; noteBestiary(typeNameOf(target), 'killed'); }
+    // Blood Debt: a risen Warlord feeds on its own dead, so clearing the pack off it costs.
+    if (target.hp <= 0 && !target.isPlayer) {
+        const owed = activeEntities.find(e => e.classType === 'BOSS' && e.hp > 0 && e.bloodDebt && e.id !== target.id);
+        if (owed) {
+            const fed = Math.max(1, Math.floor(owed.maxHp * owed.bloodDebt));
+            owed.hp = Math.min(owed.maxHp, owed.hp + fed);
+            log(`> ${owed.name} feeds on ${target.name}. +${fed} HP.`, 'log-dmg');
+            setTimeout(() => spawnFCT(owed.id, `+${fed}`, 'fct-heal'), 260);
+        }
+    }
     if (target.hp <= 0 && target.isPlayer && !attacker.isPlayer) noteBestiary(typeNameOf(attacker), 'felled');
     // The chronicle's witness: whoever lands the blow that drops an operator is on record.
     if (target.hp <= 0 && target.isPlayer && runStats)
@@ -6155,6 +6234,57 @@ function pickTarget(enemy, candidates, intent) {
 
 // One dose of the pump. Loud on the field on purpose: the whole mechanic is a trade the
 // player has to be able to read, so each dose says both halves of it at once.
+// The third gear. Each commander's is its own answer to how you beat it last time, so this
+// is a switchboard rather than a formula: the shared parts (a cry, a tell, armour) are handled
+// here and the move itself is whatever that warlord learned.
+function openGrudgePhase(enemy) {
+    const gm = enemy.grudgeMove; if (!gm || enemy.phase >= 3) return;
+    enemy.phase = 3;
+    playSFX('enrage', 1.6); triggerShake(); triggerGlitch();
+    log(`> ${gm.cry}`, 'log-dmg');
+    if (gm.tell) log(`> ${gm.tell}`, 'log-status');
+    spawnFCT(enemy.id, gm.name || 'GRUDGE', 'fct-weak');
+
+    if (gm.armorBonus) { enemy.armor += gm.armorBonus; enemy.baseArmor = (enemy.baseArmor || 0) + gm.armorBonus; }
+    // The Warlord charges you for every one of its pack you put down.
+    if (gm.bloodDebt) enemy.bloodDebt = gm.bloodDebt;
+    // The Colossus stops spacing its salvoes and starts winding them up.
+    if (gm.charge) { enemy.charging = 0; enemy.chargeSpec = gm.charge; }
+    // The Matriarch lays.
+    if (gm.spawn) { enemy.spawnSpec = gm.spawn; enemy.spawnClock = 0; }
+    // The Vatborn opens the tank all the way and vents over whoever is holding the front.
+    if (gm.venomBurst && enemy.venom) {
+        for (let i = 0; i < gm.venomBurst && enemy.venomStacks < enemy.venom.max; i++) venomDose(enemy, true);
+    }
+    if (gm.aura) enemy.aura = gm.aura;
+    // The Stormcaller stops waiting for the sky.
+    if (gm.stormTurn) { enemy.stormTurn = gm.stormTurn; enemy.stormClock = 0; }
+    if (gm.skyToll) enemy.skyToll = gm.skyToll;
+    // The Marshal's second hound, and the Bastion's second generator: both are the retinue
+    // the fight opened with, put back on the field.
+    if (gm.reEscort || gm.reWard) {
+        const src = BOSS_POOL.find(x => x.id === enemy.bossId) || {};
+        const spec = gm.reEscort ? src.escort : src.ward;
+        if (spec) {
+            const m = 1 + ((currentTier - 1) * 0.4);
+            const unit = {
+                id: `grudge_${Date.now()}`, name: spec.name, classType: spec.classType, range: spec.range,
+                maxHp: Math.floor(spec.hp * m), hp: Math.floor(spec.hp * m),
+                speed: spec.speed, armor: spec.armor || 0, baseArmor: spec.armor || 0, isPlayer: false,
+                dmgBase: Math.floor(spec.dmg * m), img: spec.img, scale: spec.scale, hpDrop: 0,
+                stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
+                resistances: { ...spec.resistances }
+            };
+            if (spec.sig) unit.sig = spec.sig;
+            if (gm.reWard) { enemy.wardId = unit.id; enemy.wardSoak = src.wardSoak || 0.15; }
+            if (gm.reEscort) { enemy.escortId = unit.id; enemy.escortArmor = src.escortArmor || 20; }
+            unit.intent = rollIntent(unit);
+            activeEntities.push(unit); turnQueue.push(unit);
+            log(`> ${spec.name} takes the field.`, 'log-dmg');
+        }
+    }
+}
+
 function venomDose(enemy, quiet) {
     const v = enemy.venom;
     if (!v || enemy.venomStacks >= v.max) return;
@@ -6197,7 +6327,67 @@ function executeEnemyAi(enemy) {
         log(`> ${enemy.name} turns the sky over: ${currentWeather.replace(/_/g, ' ')}.`, 'log-status');
         spawnFCT(enemy.id, 'THE SKY TURNS', 'fct-status');
         applyCombatScenery(combatBgFile, null);
+        // A grudge-phase Stormcaller does not just change the sky, it drops it on you.
+        if (enemy.skyToll) {
+            activeEntities.filter(t => t.isPlayer && t.hp > 0).forEach(t => {
+                const toll = Math.max(1, Math.floor(t.maxHp * enemy.skyToll));
+                t.hp = Math.max(0, t.hp - toll);
+                spawnFCT(t.id, `-${toll}`, 'fct-status'); triggerHitFlash(t.id);
+                if (t.hp <= 0) { goDown(t); if (runStats) runStats.lastKiller = { name: enemy.name, boss: true, sector: currentSector, tier: currentTier, cause: 'COMBAT' }; }
+            });
+            log(`> The sky comes down on the squad.`, 'log-dmg');
+        }
         playSFX('enrage'); triggerShake(); renderField();
+    }
+
+    // ── the grudge phases that run on a clock ────────────────────────────────────────
+    // The Matriarch lays while you are still trying to finish her.
+    if (enemy.spawnSpec && enemy.hp > 0 && ++enemy.spawnClock >= enemy.spawnSpec.every) {
+        enemy.spawnClock = 0;
+        const sp = enemy.spawnSpec, m = 1 + ((currentTier - 1) * 0.4);
+        const brood = {
+            id: `brood_${Date.now()}`, name: sp.name, classType: sp.classType, range: sp.range,
+            maxHp: Math.floor(sp.hp * m), hp: Math.floor(sp.hp * m), speed: sp.speed,
+            armor: 0, baseArmor: 0, isPlayer: false, dmgBase: Math.floor(sp.dmg * m),
+            img: sp.img, scale: sp.scale, hpDrop: 0,
+            stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
+            resistances: { ...sp.resistances }
+        };
+        brood.intent = rollIntent(brood);
+        activeEntities.push(brood); turnQueue.push(brood);
+        log(`> ${enemy.name} lays another. ${sp.name} takes the field.`, 'log-dmg');
+        spawnFCT(enemy.id, 'LAYING', 'fct-weak'); renderField();
+    }
+
+    // The Vatborn vents over whoever is holding the rank it named.
+    if (enemy.aura && enemy.hp > 0) {
+        const caught = activeEntities.filter(t => t.isPlayer && t.hp > 0 && t.gridPos <= (enemy.aura.rank || 1));
+        caught.forEach(t => {
+            const burn = Math.max(1, Math.floor(t.maxHp * enemy.aura.share));
+            t.hp = Math.max(0, t.hp - burn);
+            spawnFCT(t.id, `-${burn}`, 'fct-status'); triggerHitFlash(t.id);
+            if (t.hp <= 0) { goDown(t); if (runStats) runStats.lastKiller = { name: enemy.name, boss: true, sector: currentSector, tier: currentTier, cause: 'COMBAT' }; }
+        });
+        if (caught.length) log(`> The vents open over the front rank.`, 'log-dmg');
+    }
+
+    // The Colossus winds a salvo up in front of you, then lets it go.
+    if (enemy.chargeSpec && enemy.hp > 0) {
+        if (enemy.charging >= (enemy.chargeSpec.turns || 1)) {
+            enemy.charging = 0;
+            const hit = activeEntities.filter(t => t.isPlayer && t.hp > 0);
+            log(`> ${enemy.name} FIRES. The whole line is under it.`, 'log-dmg');
+            spawnFCT(enemy.id, 'SALVO', 'fct-weak'); triggerShake();
+            hit.forEach(t => applyDamageHit(enemy, t,
+                Math.floor(enemy.dmgBase * (enemy.chargeSpec.mult || 1.1) * enemyDmgMult(enemy)),
+                enemy.dmgType || 'phys', 'SALVO'));
+            enemy.intent = rollIntent(enemy); checkWinState(); return;
+        }
+        enemy.charging++;
+        log(`> ${enemy.name} is charging its batteries.`, 'log-status');
+        spawnFCT(enemy.id, 'CHARGING', 'fct-status'); renderField();
+        enemy.intent = rollIntent(enemy);
+        setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return;
     }
     
     // The Vatborn buys strength with skin. Each dose is worth more damage and more speed, and
@@ -6207,6 +6397,15 @@ function executeEnemyAi(enemy) {
         ++enemy.venomClock >= enemy.venom.every) {
         enemy.venomClock = 0;
         venomDose(enemy);
+    }
+
+    // A commander that has lost to you before has one more gear, and it only ever shows it
+    // to somebody who has already beaten it. Runs after the ordinary enrage, not instead.
+    if (enemy.classType === 'BOSS' && enemy.phase === 2 && enemy.grudgeMove &&
+        enemy.hp <= enemy.maxHp * GRUDGE.phaseAt) {
+        openGrudgePhase(enemy);
+        enemy.intent = rollIntent(enemy); renderField();
+        setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return;
     }
 
     if (enemy.classType === 'BOSS' && enemy.phase === 1 && enemy.hp <= enemy.maxHp * (ascension >= 2 ? 0.6 : 0.5)) {
@@ -6501,7 +6700,24 @@ function checkWinState() {
     if (!pA) { document.getElementById('command-deck').innerHTML = `<button data-action="squad-down">SQUAD DOWN</button>`; combatActive = false; stopAmbience(); } 
     else if (!eA) { 
         if (currentNodeType === 'BOSS') {
-            bossSkulls++; if (runStats) runStats.bosses++; saveMeta(); log(`> VICTORY! Warlord Skull acquired!`, "log-heal");
+            bossSkulls++; if (runStats) runStats.bosses++;
+            // It remembers this. The next one of these you meet is the one you made.
+            const felled = activeEntities.find(e => e.classType === 'BOSS');
+            if (felled && felled.bossId) {
+                // A commander is the one node on a sector you cannot withdraw from or fall back
+                // out of, so a risen one is a gate rather than a fight you can route around.
+                // What it took from you it also pays: a skull for every grudge it was carrying.
+                const owed = felled.grudge || 0;
+                if (owed > 0) {
+                    bossSkulls += owed;
+                    log(`> It came back for you ${owed === 1 ? 'once' : `${owed} times`} and you put it down anyway. +${owed} extra 💀.`, "log-heal");
+                }
+                noteGrudge(felled.bossId);
+                const g = grudgeOn(felled.bossId);
+                log(g > 1 ? `> That is ${g} times you have put it down. It will be worse.`
+                          : `> It goes down hard. It will remember that.`, "log-status");
+            }
+            saveMeta(); log(`> VICTORY! Warlord Skull acquired!`, "log-heal");
             checkBountyProgress('BOSS');
             // Felling a commander refunds a fallback, up to the allowance. Measured before this,
             // squads entered every new sector with their regroups already spent and died holding
@@ -6608,6 +6824,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
+    GRUDGE, RISEN_MARK, grudgeOn, noteGrudge, risenName, risenShort, openGrudgePhase,
     BLEED_OUT, DRAGGED_CLEAR, REACHES_THE_DOWN, isDown, bleedingOut, goDown, tickBleedOut,
     loseOperator, recoverDowned, closeRanks,
     RECRUIT_POOL, RECRUIT_COST, RECRUIT_HEALTH, recruitCost, recruitables, recruitById, recruitReach,
@@ -6632,6 +6849,7 @@ globalThis.WP = {
     get currentSlot() { return currentSlot; }, set currentSlot(v) { currentSlot = v; },
     get globalSettings() { return globalSettings; }, set globalSettings(v) { globalSettings = v; },
     get bossSkulls() { return bossSkulls; }, set bossSkulls(v) { bossSkulls = v; },
+    get grudges() { return grudges; }, set grudges(v) { grudges = v; },
     get metaUpgrades() { return metaUpgrades; }, set metaUpgrades(v) { metaUpgrades = v; },
     get scrap() { return scrap; }, set scrap(v) { scrap = v; },
     get currentTier() { return currentTier; }, set currentTier(v) { currentTier = v; },

@@ -88,10 +88,10 @@ module.exports = {
         Math.random = real;
         __stage();
         const shown = retreatOdds();           // read off the fight that is about to be rolled
-        const before = scrap;
+        const before = scrap, cost = retreatCost();
         Math.random = () => shown + offset;
         retreat(); retreat();
-        const out = { broke: !combatActive, paid: before - scrap, shown };
+        const out = { broke: !combatActive, paid: before - scrap, shown, cost };
         combatActive = false;
         return out;
       };
@@ -102,7 +102,13 @@ module.exports = {
     });
     ok(`a roll under the stated odds breaks clean, one over does not (${Math.round(honest.shown * 100)}%)`,
       honest.under.broke && !honest.over.broke);
-    ok('and the Scrap goes either way', honest.under.paid > 0 && honest.over.paid === honest.under.paid);
+    // Each staging is checked against its own quoted price rather than against the other one's.
+    // generateSectorMap here is fed seededRng, which falls back to Math.random when no daily
+    // seed is set - so the two stagings can build different maps, land on different tiers and
+    // quote different prices. Measured at 3 divergences in 120.
+    ok(`and the Scrap goes either way (${honest.under.paid} of ${honest.under.cost}, ${honest.over.paid} of ${honest.over.cost})`,
+      honest.under.paid > 0 && honest.under.paid === honest.under.cost
+      && honest.over.paid > 0 && honest.over.paid === honest.over.cost);
 
     // ---- a clean break ----
     const clean = await page.evaluate(() => {

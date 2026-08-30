@@ -52,7 +52,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
-                 endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [] };
+                 endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [] };
 
   activeContracts = [...contracts];
   currentSlot = 1;
@@ -344,10 +344,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
       continue;
     }
 
+    if (node.type === 'BOSS') {
+      const b = bossForSector();
+      stat.bossMet.push({ id: b.id, grudge: grudgeOn(b.id) });
+    }
     currentNodeType = node.type; isCurrentNodeElite = !!node.elite;
     stat.ground[node.terrain || 'OPEN_ROAD'] = (stat.ground[node.terrain || 'OPEN_ROAD'] || 0) + 1;
     noteBoard();
     const outcome = fight(node.type, !!node.elite);
+    if (node.type === 'BOSS') {
+      const met = stat.bossMet[stat.bossMet.length - 1];
+      if (met) met.won = outcome === 'won';
+    }
     stat.nodes++;
 
     // Leaving already advanced the tier and left the node behind - and the engine deliberately
@@ -364,6 +372,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
 
     if (node.type === 'BOSS') {
       stat.bosses++; runStats.bosses++; bossSkulls++;
+      const felled = activeEntities.find(e => e.classType === 'BOSS');
+      if (felled && felled.bossId) noteGrudge(felled.bossId);
       const offer = rollRelicOffer();
       if (offer.length) { const pick = offer.find(r => r.tier === 'RARE') || offer[0]; activeRelics.push(pick); }
     }
@@ -441,6 +451,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
   const signed = {};
   let withRecruits = 0;
   results.forEach(r => { if (r.recruited.length) withRecruits++; r.recruited.forEach(c => { signed[c] = (signed[c] || 0) + 1; }); });
+  const met = results.flatMap(r => r.bossMet).filter(m => m.won !== undefined);
+  const cold = met.filter(m => !m.grudge), risen = met.filter(m => m.grudge > 0);
+  const rate = a => a.length ? (a.filter(m => m.won).length / a.length * 100).toFixed(0) + '%' : '-';
+  console.log('\n── COMMANDERS ' + '─'.repeat(46));
+  line('fights reached, total', met.length);
+  line('met for the first time', `${cold.length} fought, ${rate(cold)} won`);
+  line('met again, carrying a grudge', `${risen.length} fought, ${rate(risen)} won`);
+  [1, 2, 3].forEach(g => { const a = met.filter(m => m.grudge === g);
+    if (a.length) line(`  risen ×${g}`, `${a.length} fought, ${rate(a)} won`); });
+
   console.log('\n── THE DEAD ' + '─'.repeat(48));
   const downs = results.reduce((a, r) => a + r.downs, 0);
   const saves = results.reduce((a, r) => a + r.saves, 0);
