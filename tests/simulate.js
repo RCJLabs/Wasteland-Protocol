@@ -48,7 +48,7 @@ const WITHDRAW_POLICY = flag('withdraw', 'on') !== 'off';
 const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
   const stat = { sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
-                 wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, ground: {}, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
+                 wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, ground: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
@@ -80,6 +80,14 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
   draft.forEach((p, i) => { p.gridPos = slots[i]; });
   stat.deployed = playerRoster.filter(p => p.gridPos > 0).map(p => p.classType);
   const bountiesAtStart = () => activeBounties.map(b => b.desc).join('|');
+  // Which contracts a run actually settles, so one nobody can finish shows as a zero.
+  let lastBoard = null;
+  const noteBoard = () => {
+    const now = activeBounties.map(b => b.type);
+    if (lastBoard) lastBoard.forEach((t, i) => { if (now[i] !== t) stat.settled[t] = (stat.settled[t] || 0) + 1; });
+    lastBoard = now;
+    stat.posted = standingBounty ? standingBounty.type : null;
+  };
   let boardBefore = bountiesAtStart();
 
   // A squad that never spends scrap dies to arithmetic rather than to play, so the sim shops
@@ -208,6 +216,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
         fled = true;
         break;
       }
+      if (actor.isPlayer && fightLog) fightLog.turns++;   // processTurn does this in the real loop
       if (actor.isPlayer) { if (!takeTurn()) { activeIndex = (activeIndex + 1) % turnQueue.length; continue; } }
       else { actor.intent = rollIntent(actor); executeEnemyAi(actor); }
       activeIndex = (activeIndex + 1) % turnQueue.length;
@@ -217,8 +226,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
     const survived = activeEntities.some(e => e.isPlayer && e.hp > 0);
     const foesLeft = activeEntities.filter(e => !e.isPlayer && e.hp > 0).length;
     stat.kills += activeEntities.filter(e => !e.isPlayer && e.hp <= 0).length;
+    const won = survived && foesLeft === 0;
+    // checkWinState does this in the real loop, and without it the board's fight-end contracts
+    // would read as content nobody ever settles.
+    if (won) noteFightWon();
     combatActive = false;
-    return (survived && foesLeft === 0) ? 'won' : 'lost';
+    return won ? 'won' : 'lost';
   };
 
   while (stat.nodes < capNodes) {
@@ -283,6 +296,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
 
     currentNodeType = node.type; isCurrentNodeElite = !!node.elite;
     stat.ground[node.terrain || 'OPEN_ROAD'] = (stat.ground[node.terrain || 'OPEN_ROAD'] || 0) + 1;
+    noteBoard();
     const outcome = fight(node.type, !!node.elite);
     stat.nodes++;
 
@@ -315,6 +329,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
     currentTier++; noteDepth();
     spend();
 
+    noteBoard();
     const boardNow = bountiesAtStart();
     if (boardNow !== boardBefore) { stat.bountiesDone++; boardBefore = boardNow; }
   }
@@ -457,6 +472,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
 
   console.log('\n── THE BOARD ' + '─'.repeat(45));
   line('bounties completed, mean', mean(nums('bountiesDone')).toFixed(2));
+  const settled = {};
+  results.forEach(r => Object.entries(r.settled || {}).forEach(([k, v]) => { settled[k] = (settled[k] || 0) + v; }));
+  const allTypes = await page.evaluate(() => BOUNTY_POOL.map(b => b.type));
+  line('contracts settled', allTypes.map(t => `${t} ${settled[t] || 0}`).join(', '));
+  const unsettled = allTypes.filter(t => !settled[t]);
+  line('never settled', unsettled.length ? unsettled.join(', ') : 'none');
   line('consequences resolved, mean', mean(nums('consequences')).toFixed(2));
   line('events seen, mean', mean(nums('events')).toFixed(1));
 

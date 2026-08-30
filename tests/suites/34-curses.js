@@ -146,6 +146,9 @@ module.exports = {
         activeRelics = (relicIds || []).map(id => RELIC_POOL.find(r => r.id === id));
         sectorFront = null;
         activeEntities.filter(e => !e.isPlayer).forEach(e => { e.hp = 0; });
+        // Clear the board: a contract settling on this same win pays into scrap, and this
+        // check is about what the relic takes, not about what else happened to land.
+        activeBounties = []; standingBounty = null;
         Math.random = () => 0;
         scrap = 1000;
         checkWinState();

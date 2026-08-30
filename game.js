@@ -297,8 +297,10 @@ function recordBonds() {
             const before = bondLevel(a.id, b.id);
             bonds[bondKey(a.id, b.id)] = bondCount(a.id, b.id) + 1;
             const after = bondLevel(a.id, b.id);
-            if (after > before)
+            if (after > before) {
                 log(`> Bond deepened: ${a.name} & ${b.name} are "${bondName(a, b)}" ${['', 'I', 'II', 'III'][after]}.`, 'log-heal');
+                if (after === 3) checkBountyProgress('BOND');
+            }
         }
 }
 // The strongest ties an operator holds, for the roster cards.
@@ -974,7 +976,10 @@ function meetCast(id) {
 function noteCast(id, delta) {
     if (!CAST[id]) return 0;
     const c = castOf(id);
+    const was = standingBand(id).key;
     c.standing = Math.max(-3, Math.min(3, c.standing + delta));
+    // Crossing into trust is a thing the board can be paid for, and it can only be crossed once.
+    if (was !== 'TRUSTS' && standingBand(id).key === 'TRUSTS') checkBountyProgress('TRUSTED');
     return c.standing;
 }
 // The deepest band the standing has reached. Below the lowest band it stays at the lowest.
@@ -1117,6 +1122,7 @@ const CODEX = [
         `No fight but a commander's has to be finished. Withdrawing forfeits the node - no scrap, no relic, no experience - for a wound of ${Math.round(WITHDRAW.wound * 100)}% health on everyone, eased to ${Math.round(WITHDRAW.floor * 100)}% by a full momentum bar, which it spends. Nobody dies of it, and the ${WITHDRAW.pursuers} toughest survivors follow you to the next fight.`,
         `Some of the people out here come back. ${Object.keys(CAST).length} of them remember what you did last time - pay them, save them, rob them - and what they offer next changes with it. Standing lasts one expedition and starts over on the next.`,
         `Before deploying, the muster shows every operator's quirk. ${MUSTER_REROLLS} reroll tokens per expedition swap the ones that do not fit the plan.`,
+        `The board carries three contracts and rotates one in whenever it is settled, plus one standing contract that runs the whole expedition. ${BOUNTY_POOL.length} kinds in the rotation - most of them are ways to win a fight rather than counts of what you were doing anyway.`,
         'Depth is worth far more than any single haul: pushing one sector deeper always beats farming the one you are on.'
     ] },
     { id: 'PROMOTIONS', title: 'FIELD PROMOTIONS', body: () => [
@@ -1932,19 +1938,69 @@ function addMomentum(amt) {
     if (txt) txt.innerText = momentum >= overdriveAt() ? 'MOMENTUM: FULL — OVERDRIVE READY' : `MOMENTUM: ${momentum}%`;
 }
 
+// What the fight currently being fought has cost and how long it has run. The board reads it
+// at the win; nothing else does.
+let fightLog = null;
+let chasedIn = false;      // set while the chase is being placed, read when the log is opened
+let comboKill = false;     // true only while a combo's own blow is landing
+let odKills = null;        // counts kills inside one overdrive, null when none is resolving
+const BLITZ_TURNS = 6;     // squad turns, not actor turns - measured at a median of 9
+const OVERKILL_AT = 2;     // kills in one overdrive
+function newFightLog() { return { turns: 0, hurt: false, spent: false, chased: false }; }
+
+// The original four counted what a squad was going to do anyway: kill things, craft things,
+// trigger combos. None of them ever changed a decision. These ask for a fight won a particular
+// way, a road taken on purpose, or a resource held that you would rather have spent - and the
+// ones that need a system the opening sector has not shown yet wait until it has.
 const BOUNTY_POOL = [
     { type: 'CRAFT', label: n => `CRAFT ${n} ITEMS`,        range: [2, 3], reward: 20 },
     { type: 'COMBO', label: n => `TRIGGER ${n} COMBOS`,     range: [3, 5], reward: 18 },
     { type: 'ELITE', label: n => `DEFEAT ${n} ELITE SQUAD${n > 1 ? 'S' : ''}`, range: [1, 2], reward: 75 },
-    { type: 'KILL',  label: n => `DEFEAT ${n} HOSTILES`,    range: [6, 12], reward: 8 }
+    { type: 'KILL',  label: n => `DEFEAT ${n} HOSTILES`,    range: [6, 12], reward: 8 },
+
+    { type: 'FLAWLESS', label: n => `WIN ${n} FIGHT${n > 1 ? 'S' : ''} UNTOUCHED`,            range: [1, 2], reward: 90 },
+    { type: 'BLITZ',    label: n => `WIN ${n} FIGHT${n > 1 ? 'S' : ''} IN UNDER ${BLITZ_TURNS} TURNS`, range: [1, 2], reward: 80 },
+    { type: 'FRUGAL',   label: n => `WIN ${n} FIGHT${n > 1 ? 'S' : ''} SPENDING NOTHING`,     range: [2, 3], reward: 50 },
+    { type: 'OVERKILL', label: n => `TAKE ${OVERKILL_AT}+ WITH ONE OVERDRIVE, ${n} TIME${n > 1 ? 'S' : ''}`, range: [1, 2], reward: 85 },
+    { type: 'EXECUTE',  label: n => `FINISH ${n} HOSTILES WITH A COMBO`,                      range: [3, 5], reward: 22 },
+    { type: 'HEAVY',    label: n => `BRING DOWN ${n} HEAV${n > 1 ? 'IES' : 'Y'}`,             range: [2, 3], reward: 45 },
+    { type: 'GROUND',   label: n => `WIN ${n} FIGHT${n > 1 ? 'S' : ''} ON BROKEN GROUND`,     range: [2, 3], reward: 40, minSector: 1 },
+    { type: 'CHASED',   label: n => `TURN AND BREAK ${n} CHASE${n > 1 ? 'S' : ''}`,           range: [1, 2], reward: 95, minSector: 2 },
+    // Always one, never two: measured at thirty expeditions the two-stranger version settled
+    // once, which is a contract nobody will see. Earning one person's trust is already a run's
+    // worth of deliberate choices.
+    { type: 'TRUSTED',  label: () => `EARN A STRANGER'S TRUST`,                               range: [1, 1], reward: 280, minSector: 2 },
+    { type: 'REACH',    label: n => `LAND ${n} MELEE BLOWS AT FULL REACH`,                    range: [4, 6], reward: 25 }
 ];
 
+// One contract that runs the length of an expedition rather than the length of a node. Rarer,
+// richer, and flat rather than sector-scaled: it is paid for the whole run, not for where the
+// run happened to be standing when it finished.
+const STANDING_POOL = [
+    { type: 'S_BOSS',     label: n => `FELL ${n} COMMANDERS`,                 range: [2, 3], reward: 550 },
+    { type: 'S_SECTOR',   label: n => `PUSH THROUGH ${n} SECTORS`,            range: [3, 4], reward: 420 },
+    { type: 'S_BOND',     label: n => `TAKE A PAIRING TO RANK III`,           range: [1, 1], reward: 900 },
+    { type: 'S_ELITE',    label: n => `BREAK ${n} ELITE SQUADS`,              range: [5, 7], reward: 130 },
+    { type: 'S_FLAWLESS', label: n => `WIN ${n} FIGHTS UNTOUCHED`,            range: [4, 5], reward: 160 }
+];
+let standingBounty = null;
+
 function rollBounty(exclude, rng = Math.random) {
-    let choices = BOUNTY_POOL.filter(b => !exclude.includes(b.type));
+    const deep = b => (b.minSector || 1) <= currentSector;
+    let choices = BOUNTY_POOL.filter(b => !exclude.includes(b.type) && deep(b));
+    if (choices.length === 0) choices = BOUNTY_POOL.filter(deep);
     if (choices.length === 0) choices = BOUNTY_POOL;
     let pick = choices[Math.floor(rng() * choices.length)];
     let target = pick.range[0] + Math.floor(rng() * (pick.range[1] - pick.range[0] + 1));
     return { type: pick.type, desc: pick.label(target), current: 0, target, reward: pick.reward * target * currentSector, claimed: false };
+}
+
+function rollStanding(rng = Math.random, exclude = []) {
+    let choices = STANDING_POOL.filter(b => !exclude.includes(b.type));
+    if (!choices.length) choices = STANDING_POOL;
+    const pick = choices[Math.floor(rng() * choices.length)];
+    const target = pick.range[0] + Math.floor(rng() * (pick.range[1] - pick.range[0] + 1));
+    return { type: pick.type, desc: pick.label(target), current: 0, target, reward: pick.reward * target, standing: true };
 }
 
 // The opening slate is seeded (a daily is the same board for everyone); the replacements
@@ -1955,9 +2011,11 @@ function generateBounties(rng = Math.random) {
     return out;
 }
 
-function checkBountyProgress(type) {
-    if (!activeBounties) return;
-    activeBounties.forEach((b, idx) => {
+function checkBountyProgress(type, times = 1) {
+    for (let i = 0; i < times; i++) advanceBounties(type);
+}
+function advanceBounties(type) {
+    if (activeBounties) activeBounties.forEach((b, idx) => {
         if (b.type !== type || b.claimed) return;
         b.current++;
         if (b.current < b.target) return;
@@ -1968,6 +2026,29 @@ function checkBountyProgress(type) {
         // handed straight back and the board rotates through the pool.
         activeBounties[idx] = rollBounty(activeBounties.map(o => o.type));
     });
+    // A standing contract shadows the board's vocabulary - ELITE on the board is S_ELITE here -
+    // so one hook feeds both and no call site has to remember to fire twice. A moment with no
+    // board twin (a commander felled, a sector crossed) simply matches nothing above.
+    if (standingBounty && standingBounty.type === 'S_' + type) {
+        standingBounty.current++;
+        if (standingBounty.current >= standingBounty.target) {
+            scrap += standingBounty.reward;
+            log(`> STANDING CONTRACT SETTLED: ${standingBounty.desc} (+${standingBounty.reward} SCRAP)`, 'log-combo');
+            firePrompt('STANDING');
+            standingBounty = rollStanding(Math.random, [standingBounty.type]);
+        }
+    }
+}
+
+// What the board reads off a fight that has just been won. Every one of these is a way the
+// fight was won rather than a thing that happened during it, which is the whole point of them.
+function noteFightWon() {
+    const f = fightLog || newFightLog();
+    if (!f.hurt) checkBountyProgress('FLAWLESS');
+    if (f.turns > 0 && f.turns < BLITZ_TURNS) checkBountyProgress('BLITZ');
+    if (!f.spent) checkBountyProgress('FRUGAL');
+    if (f.chased) checkBountyProgress('CHASED');
+    if (currentTerrain && currentTerrain !== 'OPEN_ROAD') checkBountyProgress('GROUND');
 }
 
 function nextTurn() {
@@ -2010,6 +2091,7 @@ function resolveConsumableItem(targetId) {
     if (!itemKey || !target) { pendingAction = null; renderField(); return; }
     let idx = inventory.indexOf(itemKey); if (idx === -1) { pendingAction = null; renderField(); return; }
     inventory.splice(idx, 1);
+    if (fightLog) fightLog.spent = true;
     if (pendingAction === 'ITEM_MED') {
         let heal = 30; target.hp = Math.min(target.maxHp, target.hp + heal);
         log(`> ${actEnt.name} injects ${target.name} with a Med-Stim (+${heal} HP).`, "log-heal"); spawnFCT(target.id, `+${heal}`, "fct-heal"); playSFX('heal');
@@ -2634,7 +2716,8 @@ function buildNewRun(diff) {
     difficultyMult = diff; currentSector = 1; currentTier = 1; tuneUpBattles = 0; momentum = 0;
     scrap = metaUpgrades.startScrap || 0; inventory = hasContract('NO_CONSUMABLES') ? [] : ['MED_STIM']; materials = { parts: 0, chems: 0, tech: 0 }; 
     playerRoster = migrateTraits(JSON.parse(JSON.stringify(ROSTER_TEMPLATE)));
-    activeBounties = generateBounties(seededRng('bounties')); runStats = newRunStats(); pendingRelicOffer = null;
+    activeBounties = generateBounties(seededRng('bounties')); standingBounty = rollStanding(seededRng('standing'));
+    runStats = newRunStats(); pendingRelicOffer = null;
     pendingConsequences = []; recentEvents = []; gearStash = []; pendingPerkOffers = [];
     // Nobody out here carries a grudge between expeditions. Every run starts among strangers.
     castState = {}; firedEvents = [];
@@ -2706,7 +2789,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, bonds, sectorFront, runSeed, ascension, bossSalt, pendingConsequences, recentEvents, castState, firedEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, regroupInsured, bonds, sectorFront, runSeed, ascension, bossSalt, pendingConsequences, recentEvents, castState, firedEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -2714,7 +2797,7 @@ function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify
 function migrateRelics(saved) {
     return (saved || []).map(r => RELIC_POOL.find(p => p.id === (r && r.id))).filter(Boolean);
 }
-function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = migrateAssetPaths(migrateTraits(d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)))); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); momentum = d.momentum || 0; odChoices = d.odChoices || {};
+function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); if (d && d !== CORRUPT) { scrap = d.scrap || 0; currentTier = d.tier || 1; currentSector = d.currentSector || 1; difficultyMult = d.difficultyMult || 1.0; playerRoster = migrateAssetPaths(migrateTraits(d.roster || JSON.parse(JSON.stringify(ROSTER_TEMPLATE)))); inventory = d.inventory || ['MED_STIM']; materials = d.materials || { parts: 0, chems: 0, tech: 0 }; tuneUpBattles = d.tuneUpBattles || 0; activeBounties = d.activeBounties || generateBounties(); standingBounty = d.standingBounty || rollStanding(); momentum = d.momentum || 0; odChoices = d.odChoices || {};
         gearStash = (Array.isArray(d.gearStash) ? d.gearStash : []).filter(id => gearById(id));
         pendingPerkOffers = Array.isArray(d.pendingPerkOffers) ? d.pendingPerkOffers : [];
         // A shop mid-haggle survives the reload; stock lines whose ids no longer exist are culled.
@@ -3019,6 +3102,11 @@ function renderMap() {
     let bHtml = '';
     if(!activeBounties || activeBounties.length === 0) activeBounties = generateBounties();
     activeBounties.forEach(b => { let cls = b.claimed ? 'bounty-complete' : ''; bHtml += `<div class="bounty-item ${cls}"><span>${b.desc}</span><span>[${b.current}/${b.target}]</span></div>`; });
+    // The run-long contract sits under the three, marked as its own thing: it does not rotate
+    // when a node is cleared and it pays a great deal more.
+    if (!standingBounty) standingBounty = rollStanding();
+    bHtml += `<div class="bounty-item bounty-standing" title="A standing contract: it runs the length of the expedition and pays ${standingBounty.reward} Scrap.">`
+           + `<span>\u2726 ${standingBounty.desc}</span><span>[${standingBounty.current}/${standingBounty.target}]</span></div>`;
     document.getElementById('bounty-list').innerHTML = bHtml;
 
     let rHtml = '';
@@ -3079,6 +3167,7 @@ function renderMap() {
 function advanceSector() {
     // A sector's worth of road between you and them is enough. Nothing follows across.
     pursuit = null;
+    checkBountyProgress('SECTOR');
     currentSector++; currentTier = 1;
     sectorFront = rollFront(seededRng('front:' + currentSector), currentSector); frontBannerPending = true;
     sectorMap = generateSectorMap(seededRng('map:' + currentSector)); currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null;
@@ -3787,6 +3876,7 @@ const PROMPTS = [
     { id: 'COMBO',     title: 'A COMBO IS LIVE', body: 'That glowing ability finishes a status something is already carrying. Combos hit far harder and build momentum - lead with the status, then cash it in.' },
     { id: 'INTENT',    title: 'THEY TELEGRAPH',  body: 'The icon over each hostile is what it intends to do next turn. A heavy blow, an area attack, a flank around your line - all of it is announced a turn early, so all of it has an answer.' },
     { id: 'SIGNATURE', title: 'EVERY HOSTILE HAS A TRICK', body: 'The tag under a hostile names what it does - plate that must be broken, a shot it is lining up, a pack that grows stronger together. Tap any hostile when you are not aiming to read its full file.' },
+    { id: 'STANDING',  title: 'A CONTRACT SETTLED', body: 'The standing contract at the foot of the board runs the length of an expedition rather than the length of a node, and pays accordingly. A fresh one is posted the moment one is settled, so there is always a long game to play toward.' },
     { id: 'GROUND',    title: 'THE GROUND COUNTS', body: 'This fight is not on open road, and the banner says what that changes. Tunnels put everything in arm\u2019s reach and make area attacks worse for both sides; open flats favour rifles and expose your back rank; ruins give whoever holds the front rank cover. The ground is marked on every node before you take it.' },
     { id: 'FACES',     title: 'THEY REMEMBER YOU', body: 'You have met this one before, and the tag above them says what they made of it. Paying, sparing and trading raise their standing; robbing them lowers it. What they offer next - and what turns up further down the road because of them - follows from that. It lasts one expedition.' },
     { id: 'WITHDRAW',  title: 'YOU CAN LEAVE',   body: 'A fight going badly is not a fight you have to finish. WITHDRAW forfeits this node entirely, wounds everyone on the way out, and the survivors follow you to the next one - but the squad lives. Momentum spent on the way out makes the parting wound lighter.' },
@@ -4338,6 +4428,7 @@ function initiateCombat(nodeType, isEliteNode) {
     playerRoster.forEach(ent => { ent.stunnedTurns = 0; ent.bleedingTurns = 0; ent.armorTurns = 0; ent.armor = 0;
         ent.oiledTurns = 0; ent.corrodedTurns = 0; ent.markedTurns = 0; ent.guardTurns = 0; });
     momentumFocus = 0; pressExtra = false; pendingOverdrive = null;
+    fightLog = newFightLog(); fightLog.chased = chasedIn; chasedIn = false;
     playerRoster.forEach(ent => { ent.secondWindUsed = false; ent.deadRendered = ent.hp <= 0; });
     inspecting = null;
     bondSavesUsed = new Set();
@@ -4363,6 +4454,7 @@ function initiateCombat(nodeType, isEliteNode) {
         activeEntities.push(...caught);
         log(`> They caught up. ${caught.length} from the last fight ${caught.length === 1 ? 'is' : 'are'} here.`, 'log-dmg');
         pursuit = null;
+        chasedIn = true;
     }
     // The front's fingerprints on the fight itself: a warband's elites hit harder, and a
     // faction front's warlord does not arrive alone.
@@ -4676,6 +4768,7 @@ function renderCommandDeck() {
 
 function processTurn() {
     if (!combatActive) return; pendingAction = null; let aE = turnQueue[activeIndex]; if (aE.hp <= 0) { nextTurn(); return; }
+    if (aE.isPlayer && fightLog) fightLog.turns++;
     saveGameState();
     renderField(); applyTurnStartEffects(aE); if (!combatActive) return; if (!aE.hp > 0) return checkWinState(); 
     if (aE.stunnedTurns > 0) { if (!aE.isPlayer) { log(`> ${aE.name} stunned.`, "log-status"); spawnFCT(aE.id, "STUNNED", "fct-status"); aE.stunnedTurns--; setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return; } else return; }
@@ -4802,6 +4895,7 @@ function spendTactic(kind) {
     if (!actor || !actor.isPlayer) return;
     if (kind === 'STIM' && !stimTarget()) return;
     momentum -= tacticCost(tactic); addMomentum(0);
+    if (fightLog) fightLog.spent = true;
     if (kind === 'FOCUS') {
         momentumFocus = 1;
         log('> FOCUS: the next attack hits harder.', 'log-combo');
@@ -4846,6 +4940,7 @@ function resolveAction(targetId) {
     let dist = livingEnemies.findIndex(e => e.id === targetId);
 
     if (pendingAction === 'OVERDRIVE') {
+        odKills = 0;
         const cls = actEnt.classType;
         const pair = OVERDRIVES[cls] || [];
         const variant = pair.find(o => o.id === pendingOverdrive) || overdriveFor(cls);
@@ -4904,6 +4999,10 @@ function resolveAction(targetId) {
                 log(`> The reactor vents through ${frontman.name}. -10 HP.`, "log-dmg");
             }
         }
+        // Everything the overdrive killed is counted before the fight is allowed to end, so a
+        // sweep that wins the node still books the kills it made on the way.
+        if (odKills >= OVERKILL_AT) checkBountyProgress('OVERKILL');
+        odKills = null;
         pendingAction = null; checkWinState(); return;
     }
 
@@ -5033,7 +5132,10 @@ function resolveAction(targetId) {
             checkBountyProgress('COMBO'); addMomentum(25); triggerShake();
         }
 
+        if (effReach === 'melee' && reach >= 1) checkBountyProgress('REACH');
+        comboKill = isCombo;
         applyDamageHit(actEnt, target, Math.floor(baseDmg * dmgMult), atkType, pendingAction);
+        comboKill = false;
 
         if (actEnt.quirk && actEnt.quirk.id === 'VAMPIRIC' && actEnt.hp < actEnt.maxHp) {
              actEnt.hp = Math.min(actEnt.maxHp, actEnt.hp + 2);
@@ -5173,6 +5275,7 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
         }
     }
     target.hp = Math.max(0, target.hp - netDmg);
+    if (target.isPlayer && netDmg > 0 && fightLog) fightLog.hurt = true;
     if (netDmg > 0) flashClass(target.id, target.isPlayer ? 'anim-recoil-left' : 'anim-recoil-right', 320);
     // The first time a fight is genuinely going badly is the only moment worth telling someone
     // they are allowed to leave one.
@@ -5227,7 +5330,17 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     
     log(logMsg, logStyle, hitId);
 
-    if (target.hp <= 0) { addMomentum(15); if (!target.isPlayer) { checkBountyProgress('KILL'); if (runStats) runStats.kills++; } } else if (target.isPlayer) { addMomentum(5); }
+    if (target.hp <= 0) {
+        addMomentum(15);
+        if (!target.isPlayer) {
+            checkBountyProgress('KILL'); if (runStats) runStats.kills++;
+            // How it died, not just that it did: a combo finish and a heavy brought down are
+            // both things the board can ask for, and both are known right here.
+            if (comboKill) checkBountyProgress('EXECUTE');
+            if (target.isHeavy) checkBountyProgress('HEAVY');
+            if (odKills !== null) odKills++;
+        }
+    } else if (target.isPlayer) { addMomentum(5); }
 
     // Carrion Feast: the Matriarch grows on what it opens up.
     if (attacker.bossPassive === 'FEAST' && attacker.hp > 0 && netDmg > 0 && attacker.hp < attacker.maxHp) {
@@ -5626,6 +5739,7 @@ function checkWinState() {
     else if (!eA) { 
         if (currentNodeType === 'BOSS') {
             bossSkulls++; if (runStats) runStats.bosses++; saveMeta(); log(`> VICTORY! Warlord Skull acquired!`, "log-heal");
+            checkBountyProgress('BOSS');
             // Felling a commander refunds a fallback, up to the allowance. Measured before this,
             // squads entered every new sector with their regroups already spent and died holding
             // nothing - a cleared sector should buy a breath.
@@ -5668,6 +5782,8 @@ function checkWinState() {
             materials[m]++; log(`> ${e.name} pockets 1 ${m.toUpperCase()}.`, 'log-heal');
         });
         if (tuneUpBattles > 0) tuneUpBattles--;
+        // How the fight was won, before the log is cleared by the next one.
+        noteFightWon();
         recordBonds();
         saveMeta();   // mastery accrues per fight and survives whatever the run does next
 
@@ -5727,7 +5843,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, renderCitadelScene, vaultDescText, spotArt, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     // engine constants
     Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
@@ -5753,6 +5869,9 @@ globalThis.WP = {
     get materials() { return materials; }, set materials(v) { materials = v; },
     get tuneUpBattles() { return tuneUpBattles; }, set tuneUpBattles(v) { tuneUpBattles = v; },
     get activeBounties() { return activeBounties; }, set activeBounties(v) { activeBounties = v; },
+    get standingBounty() { return standingBounty; }, set standingBounty(v) { standingBounty = v; },
+    get fightLog() { return fightLog; }, set fightLog(v) { fightLog = v; },
+    get chasedIn() { return chasedIn; }, set chasedIn(v) { chasedIn = v; },
     get momentum() { return momentum; }, set momentum(v) { momentum = v; },
     get momentumFocus() { return momentumFocus; }, set momentumFocus(v) { momentumFocus = v; },
     get pressExtra() { return pressExtra; }, set pressExtra(v) { pressExtra = v; },

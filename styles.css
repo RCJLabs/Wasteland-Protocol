@@ -86,6 +86,9 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .event-desc { color: #ccc; font-size: 14px; line-height: 1.6; margin-bottom: 15px; }
 /* Who this is and what they make of you, above their own words. The standing carries a word as
    well as a colour, for the same reason the status marks do. */
+/* The standing contract is one of the board's rows but not one of its three: a rule above it
+   and a warmer colour say it is a different kind of promise. */
+.bounty-standing { border-top: 1px solid #3a3a2a; margin-top: 6px; padding-top: 8px; color: #d2a24c; }
 .event-cast { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 12px; }
 .event-cast .cast-name { color: #B8860B; font-size: calc(11px * var(--text-scale, 1)); letter-spacing: 1.5px; }
 .event-cast .cast-band { font-size: calc(10px * var(--text-scale, 1)); letter-spacing: 1px; padding: 3px 8px; border: 1px solid; }
