@@ -91,7 +91,12 @@ const SUITES = fs.readdirSync(path.join(__dirname, 'suites')).filter(f => f.ends
     try {
       await suite.run({ page, context, ok, base });
     } catch (e) {
-      failed++; console.log(`  FAIL  suite threw: ${e.message}`);
+      // The suite's name goes on the throw line itself. It is printed above too, but an
+      // intermittent abort is usually read back out of a filtered log where that line is gone.
+      failed++; console.log(`  FAIL  [${suite.name}] suite threw: ${e.message}`);
+      // Where it threw, not just what: an intermittent throw is otherwise a whole battery of
+      // guessing, because the message alone does not say which assertion was in flight.
+      if (e.stack) console.log('        ' + String(e.stack).split('\n').slice(0, 6).join('\n        '));
     }
     if (errors.length) {
       failed++; console.log(`  FAIL  ${errors.length} uncaught page error(s): ${errors[0]}`);

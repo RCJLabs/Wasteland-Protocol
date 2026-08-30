@@ -283,6 +283,9 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
    choices rather than an alarm - until it is armed, when it says exactly what it will cost. */
 .btn-withdraw { border-color: #6b6f5a; color: #a7ad8e; }
 .btn-withdraw-back { border-color: #4a4a4a; color: #8a8a8a; }
+/* Retreat is the paid way out, so it reads in the scrap colour rather than the leaving one. */
+.btn-retreat { border-color: #7a6a3a; color: #d2a24c; }
+.btn-retreat:disabled { border-color: #33302a; color: #6b6355; }
 .withdraw-cost { font-size: calc(11px * var(--text-scale, 1)); line-height: 1.5; color: #d9b26a;
   border: 1px dashed #6b5a2a; background: rgba(30,22,6,0.6); padding: 8px 10px; margin-bottom: 6px; }
 

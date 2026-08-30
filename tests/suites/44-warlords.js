@@ -114,6 +114,9 @@ module.exports = {
         activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
         let s = 1;
         while (s <= 200 && bossForSector(s).id !== id) s++;
+        // If the walk ran out, the pack below is some other commander's and every assertion
+        // about this one is meaningless - say so rather than measuring the wrong warlord.
+        if (s > 200) return { notFound: id };
         currentSector = s; currentTier = TOTAL_TIERS;
         const pack = generateEnemies('BOSS', 1, false, 1);
         currentSector = 1; currentTier = 1;
@@ -122,17 +125,24 @@ module.exports = {
       const marshal = stage('MARSHAL');
       const bastion = stage('BASTION');
       const lone = stage('WARLORD');
-      return {
+      const missing = [marshal, bastion, lone].filter(p => p.notFound).map(p => p.notFound);
+      if (missing.length) return { missing };
+      return { missing: [],
         marshalSize: marshal.length, escort: marshal[1] && marshal[1].name,
-        escortLinked: marshal[0].escortId === marshal[1].id,
+        // Guarded like every other read on this line: an absent retinue is a finding, and it
+        // should arrive as one named assertion failing rather than the whole suite aborting on
+        // a TypeError that says nothing about which commander came up short.
+        escortLinked: !!marshal[1] && marshal[0].escortId === marshal[1].id,
         escortPlated: marshal[1] && marshal[1].sig === 'RIOT_PLATE' && marshal[1].plate > 0,
         escortImg: marshal[1] && marshal[1].img, escortClass: marshal[1] && marshal[1].classType,
         escortSpeed: marshal[1] && marshal[1].speed,
         bastionSize: bastion.length, ward: bastion[1] && bastion[1].name,
-        wardLinked: bastion[0].wardId === bastion[1].id,
+        wardLinked: !!bastion[1] && bastion[0].wardId === bastion[1].id,
         loneSize: lone.length
       };
     });
+    ok(`the rotation reaches every commander under test (${retinue.missing.join(', ') || 'all found'})`,
+      retinue.missing.length === 0);
     ok(`the Marshal rides in with ${retinue.escort}`,
       retinue.marshalSize === 2 && retinue.escort === 'Bulldog' && retinue.escortLinked);
     ok('and the lieutenant carries its own plate', retinue.escortPlated);
