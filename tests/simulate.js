@@ -52,7 +52,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
-                 endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [] };
+                 endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [] };
 
   activeContracts = [...contracts];
   currentSlot = 1;
@@ -134,7 +134,26 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
       pendingAction = 'OVERDRIVE'; resolveAction(foes[0].id); return true;
     }
     // Tactics first: a STIM is free tempo when someone is hurting, and it costs no action.
+    // With somebody bleeding out it is not tempo, it is the answer, so it goes first.
     if (momentum >= 30 && stimTarget()) { stat.moves.STIM = (stat.moves.STIM || 0) + 1; spendTactic('STIM'); }
+
+    // Somebody on the floor is the turn. A Med-Stim, then the medic's hands - anything else
+    // is measuring a squad that watches its own people bleed out, which is not a squad.
+    const down = bleedingOut();
+    if (down.length) {
+      const worst = down.sort((a, b) => (a.downTurns || 0) - (b.downTurns || 0))[0];
+      if (inventory.includes('MED_STIM')) {
+        stat.items.MED_STIM = (stat.items.MED_STIM || 0) + 1;
+        stat.saves++;
+        pendingAction = 'ITEM_MED'; resolveConsumableItem(worst.id); return true;
+      }
+      const patch = deck.find(a => a.move === 'CAUTERIZE' || a.move === 'STIM_DART');
+      if (patch) {
+        stat.moves[patch.move] = (stat.moves[patch.move] || 0) + 1;
+        stat.saves++;
+        pendingAction = patch.move; resolveAction(worst.id); return true;
+      }
+    }
 
     // A ranged operator caught holding the front rank swaps out - the one formation fix
     // that actually changes what enemy melee reaches.
@@ -205,6 +224,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
     while (combatActive && rounds < 400) {
       rounds++;
       const actor = turnQueue[activeIndex];
+      // The real loop ticks the bleed-out clock as the queue passes a downed operator; this
+      // loop walks the queue itself, so it has to do the same. It has to come before the hp
+      // check below, which is where the first version of this sat - and measured zero deaths
+      // across sixty runs because it was never reached.
+      if (isDown(actor)) { tickBleedOut(actor); activeIndex = (activeIndex + 1) % turnQueue.length; continue; }
       if (!actor || actor.hp <= 0) { activeIndex = (activeIndex + 1) % turnQueue.length; continue; }
       if (actor.stunnedTurns > 0) { actor.stunnedTurns--; activeIndex = (activeIndex + 1) % turnQueue.length; continue; }
       applyTurnStartEffects(actor);
@@ -216,11 +240,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
         fled = true;
         break;
       }
+      // Count a fall the first time it happens to each operator in this fight.
+      activeEntities.forEach(e => { if (isDown(e) && !e.__counted) { e.__counted = true; stat.downs++; } });
       if (actor.isPlayer && fightLog) fightLog.turns++;   // processTurn does this in the real loop
       if (actor.isPlayer) { if (!takeTurn()) { activeIndex = (activeIndex + 1) % turnQueue.length; continue; } }
       else { actor.intent = rollIntent(actor); executeEnemyAi(actor); }
       activeIndex = (activeIndex + 1) % turnQueue.length;
     }
+    // Whoever the fight ended without is on the record.
+    (runStats.fallen || []).slice(stat.lost.length).forEach(f => stat.lost.push(f.name));
+    activeEntities.forEach(e => { delete e.__counted; });
     stat.rounds += rounds;
     if (fled) { stat.withdrawals++; return 'fled'; }
     const survived = activeEntities.some(e => e.isPlayer && e.hp > 0);
@@ -412,6 +441,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
   const signed = {};
   let withRecruits = 0;
   results.forEach(r => { if (r.recruited.length) withRecruits++; r.recruited.forEach(c => { signed[c] = (signed[c] || 0) + 1; }); });
+  console.log('\n── THE DEAD ' + '─'.repeat(48));
+  const downs = results.reduce((a, r) => a + r.downs, 0);
+  const saves = results.reduce((a, r) => a + r.saves, 0);
+  const lost = results.reduce((a, r) => a + r.lost.length, 0);
+  const lostPer = results.map(r => r.lost.length).sort((a, b) => a - b);
+  line('operators put on the floor', `${downs} (${(downs / n).toFixed(1)} per run)`);
+  line('turns spent saving them', saves);
+  line('lost for good', `${lost} (${(lost / n).toFixed(2)} per run)`);
+  line('  median / worst run', `${lostPer[Math.floor(n / 2)]} / ${lostPer[n - 1]}`);
+  line('runs that lost nobody', `${results.filter(r => !r.lost.length).length} of ${n}`);
+  line('runs that ran out of squad', results.filter(r => r.endedBy === 'wiped-out').length);
+
   console.log('\n── RECRUITS ' + '─'.repeat(48));
   const offers = results.flatMap(r => r.recruitOffers);
   const sawOne = results.filter(r => r.recruitOffers.length).length;

@@ -732,3 +732,18 @@ button.reach-short { border-color: #7a5a20; }
 .ex-row.ex-soak { color: #9fb6c9; }
 .ex-row.ex-total { border-bottom: 0; border-top: 1px solid #6b5a2a; margin-top: 3px; padding-top: 7px;
   color: #d9a93d; font-size: 13px; font-weight: bold; }
+
+/* An operator on the floor with a clock over them. It reads like the threat tag because it is
+   the same question asked from the other side: who is about to be lost. */
+.down-tag { background: rgba(20, 0, 0, 0.92); border: 1px solid #B22222; color: #ff6b6b; font-size: 11px;
+  font-weight: bold; padding: 2px 7px; letter-spacing: 1px; white-space: nowrap; animation: down-pulse 1s ease-in-out infinite; }
+.down-tag.down-lost { border-color: #4a4a4a; color: #6e6e6e; animation: none; letter-spacing: 2px; }
+@keyframes down-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { .down-tag { animation: none; } }
+/* Somebody still savable is not a corpse. The .dead dimming above (0.55 opacity, 90% grey) is
+   right for a body and wrong for the thing the player is supposed to act on this turn - it took
+   the tag down with it and left an empty patch of rubble where an operator was. */
+.entity.dead.bleeding-out { opacity: 1; filter: none; }
+.entity.bleeding-out .portrait { filter: grayscale(0.35) drop-shadow(0 0 10px rgba(200, 30, 30, 0.9)); }
+.down-tag { font-size: 12px; }
+:root.motion-off .down-tag { animation: none; }

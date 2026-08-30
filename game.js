@@ -2340,11 +2340,107 @@ function noteFightWon() {
     if (currentTerrain && currentTerrain !== 'OPEN_ROAD') checkBountyProgress('GROUND');
 }
 
+// ── The dead stay dead ──────────────────────────────────────────────────────────────────
+// An operator at zero used to be an inconvenience: fifty Scrap at the Outpost and they were
+// back. Nothing in a run was ever actually lost, so no fight was ever actually dangerous -
+// only expensive. They bleed out now.
+//
+// The shape of it is one rule rather than a table of them: going down starts a clock measured
+// in that operator's own turns, and if nobody stops it before it runs out they are gone from
+// the expedition. Winning the fight stops it - the squad holds the field and can get to them -
+// and so does losing it, because the squad is being dragged off either way. So the danger is
+// not "somebody fell", it is "somebody fell and this fight is still going", which is a thing
+// the player can see coming and spend a turn on.
+const BLEED_OUT = 3;          // their own turns, from falling to gone
+const DRAGGED_CLEAR = 0.2;    // the share of health they come round on when the fight ends
+
+// downTurns is only ever read while hp <= 0 and is set fresh on every fall, so any heal that
+// lifts them above zero is a save without needing to know about any of this.
+function isDown(e) { return !!e && e.isPlayer && !e.fallen && e.hp <= 0; }
+// What can be pointed at somebody who is already on the floor. Everything else still stops at
+// the living, so a downed operator is not a target for a swing or a swap.
+const REACHES_THE_DOWN = ['CAUTERIZE', 'STIM_DART', 'ITEM_MED', 'ITEM_ADRENALINE'];
+function bleedingOut() { return activeEntities.filter(e => isDown(e) && (e.downTurns || 0) > 0); }
+
+function goDown(ent) {
+    if (!ent || !ent.isPlayer || ent.fallen || (ent.downTurns || 0) > 0) return;
+    ent.downTurns = BLEED_OUT;
+    log(`> ${ent.name} is down and bleeding out - ${BLEED_OUT} turns.`, 'log-dmg');
+}
+
+// Their turn comes round and they spend it dying.
+function tickBleedOut(ent) {
+    if (!isDown(ent) || (ent.downTurns || 0) <= 0) return;
+    ent.downTurns--;
+    if (ent.downTurns > 0) {
+        log(`> ${ent.name} is bleeding out. ${ent.downTurns} turn${ent.downTurns === 1 ? '' : 's'}.`, 'log-dmg');
+        spawnFCT(ent.id, `${ent.downTurns}`, 'fct-dmg');
+        return;
+    }
+    loseOperator(ent, 'BLED_OUT');
+}
+
+// Out of the roster, not out of the world: the body stays on the field for the rest of the
+// fight, because everything that reads the field already gates on hp and because a squad that
+// loses someone should have to look at it.
+// A rank nobody is standing in is a hole the next fight walks straight through. Losses are
+// replaced one for one from the bench once the fight is over - not to the cap, because running
+// two on purpose to deepen a single bond is a real choice and this must not undo it.
+let vacatedRanks = [];
+function closeRanks() {
+    const filled = [];
+    const ranks = [...new Set(vacatedRanks)].sort();
+    vacatedRanks = [];
+    ranks.forEach(pos => {
+        if (!pos || pos <= 0 || playerRoster.some(c => c.gridPos === pos)) return;
+        const next = playerRoster.filter(c => c.gridPos === 0)
+            .sort((a, b) => (b.hp / b.maxHp) - (a.hp / a.maxHp))[0];
+        if (!next) return;
+        next.gridPos = pos;
+        filled.push(next.name);
+        log(`> ${next.name} steps up into the ${(RANK_LABELS[pos] || '').toLowerCase()} rank.`, 'log-status');
+    });
+    return filled;
+}
+
+function loseOperator(ent, cause) {
+    if (!ent || ent.fallen) return;
+    ent.fallen = true; ent.downTurns = 0;
+    if (ent.gridPos > 0) vacatedRanks.push(ent.gridPos);
+    // Their kit is not buried with them.
+    if (ent.trinket) { const g = gearById(ent.trinket); if (g && g.remove) g.remove(ent); gearStash.push(ent.trinket); ent.trinket = null; }
+    if (ent.weaponMod) { gearStash.push(ent.weaponMod); ent.weaponMod = null; }
+    playerRoster = playerRoster.filter(c => c.id !== ent.id);
+    if (runStats) {
+        runStats.fallen = runStats.fallen || [];
+        runStats.fallen.push({ name: ent.name, classType: ent.classType, level: ent.level || 1,
+                               sector: currentSector, tier: currentTier, cause,
+                               killer: cause === 'BLED_OUT' && runStats.lastKiller ? runStats.lastKiller.name : null });
+    }
+    log(`> ${ent.name} is gone.`, 'log-dmg');
+    spawnFCT(ent.id, 'LOST', 'fct-dmg');
+    playSFX('fallen', 1.6); triggerShake();
+}
+
+// The fight is over, however it ended. Whoever was still on the clock is dragged clear.
+function recoverDowned(how) {
+    const saved = bleedingOut();
+    saved.forEach(e => { e.hp = Math.max(1, Math.floor(e.maxHp * DRAGGED_CLEAR)); e.downTurns = 0; });
+    if (saved.length) log(`> ${saved.map(e => e.name).join(' and ')} dragged clear${how ? ' ' + how : ''}.`, 'log-heal');
+    return saved.map(e => e.id);
+}
+
 function nextTurn() {
     if (!combatActive || turnQueue.length === 0) return;
     let guard = 0;
-    do { activeIndex = (activeIndex + 1) % turnQueue.length; guard++; } while (turnQueue[activeIndex].hp <= 0 && guard <= turnQueue.length);
-    if (turnQueue[activeIndex].hp <= 0) { checkWinState(); return; }
+    do {
+        activeIndex = (activeIndex + 1) % turnQueue.length;
+        guard++;
+        // A downed operator keeps their place in the order. Their turn is the clock.
+        const at = turnQueue[activeIndex];
+        if (isDown(at)) tickBleedOut(at);
+    } while (turnQueue[activeIndex] && turnQueue[activeIndex].hp <= 0 && guard <= turnQueue.length);
+    if (!turnQueue[activeIndex] || turnQueue[activeIndex].hp <= 0) { checkWinState(); return; }
     processTurn();
 }
 
@@ -2425,6 +2521,12 @@ function resolveConsumableItem(targetId) {
 // run actually end - so a defeat never destroys a session the player did not choose to end.
 function handleSquadWipe() {
     if (!runStats) runStats = newRunStats();
+    // Being dragged off the field is still being off the field: the clock stops for whoever is
+    // still on it. Throwing a fight to save somebody bleeding out is therefore a real move, and
+    // it costs half the scrap, a fallback and the sector - which is a price, not an exploit.
+    recoverDowned('as the squad is dragged off');
+    // Nobody left to regroup is the one ending a fallback cannot buy back.
+    if (!playerRoster.length) { endRun(); return; }
     if (regroupsLeft() > 0) renderSquadBroken();
     else endRun();
 }
@@ -2442,6 +2544,7 @@ function totalRegroups() { return hasContract('NO_REGROUPS') ? 0 : BASE_REGROUPS
 function regroupSquad() {
     if (regroupsLeft() <= 0) { endRun(); return; }
     runStats.regroups--;
+    closeRanks();
     playerRoster.forEach(p => { p.hp = p.maxHp; p.stunnedTurns = 0; p.bleedingTurns = 0; p.armorTurns = 0; p.armor = 0; p.oiledTurns = 0; });
     // A Regroup Bond from the Armory prepays exactly one of these.
     if (regroupInsured) regroupInsured = false;
@@ -2580,6 +2683,7 @@ function endRun() {
         kills: runStats.kills || 0, nodes: runStats.nodes || 0, withdrawals: runStats.withdrawals || 0,
         contracts: runStats.contracts || [], relics: activeRelics.map(r => r.name),
         seed: runSeed, epitaph: epitaphFor(runStats),
+        fallen: (runStats.fallen || []).map(f => ({ name: f.name, sector: f.sector, tier: f.tier })),
         deployed: playerRoster.filter(p => p.gridPos > 0).map(p => p.classType)
     });
     stashHeirloom();
@@ -2621,6 +2725,10 @@ function renderRunOver(score, isBest, seedPrev = null) {
         ['SCRAP SALVAGED', st.scrapEarned],
         ['SKULLS BANKED', `\uD83D\uDC80 ${bossSkulls}`]
     ];
+    // The names first, above the tally. An expedition that came home short says so before it
+    // says how much scrap it made.
+    if ((st.fallen || []).length) lines.splice(1, 0, ['OPERATORS LOST',
+        st.fallen.map(f => `${f.name} (S${f.sector}\u00B7T${f.tier})`).join(', ')]);
     if (st.withdrawals > 0) lines.splice(2, 0, ['FIGHTS ABANDONED', st.withdrawals]);
     if (st.retreats > 0) lines.splice(2, 0, ['FALLBACKS BOUGHT',
         `${st.retreats}${st.retreatsFailed ? ` (${st.retreatsFailed} failed)` : ''}`]);
@@ -2649,6 +2757,7 @@ function renderRunOver(score, isBest, seedPrev = null) {
 
 function collectLoot(amount, abandoned) {
     disarmWithdraw();
+    closeRanks();
     // A node you ran from is not a node you cleared, and the run summary should not claim it was.
     scrap += amount;
     if (runStats) {
@@ -2689,7 +2798,7 @@ let bestScore = 0; let bestSector = 0;
 
 function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, mastery, bestiary, seenPrompts })); }
 
-function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, recruited: 0, deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
+function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, recruited: 0, fallen: [], deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
 
 // Endless scoring: depth is worth far more than any single haul, so pushing one sector
 // deeper always beats farming the one you are on.
@@ -3042,7 +3151,7 @@ function buildNewRun(diff) {
     // Nobody carries over. Every expedition starts with the seven and finds the rest again.
     pendingRecruit = null;
     bossSalt = 'w' + Math.floor(Math.random() * 1e9);
-    pursuit = null; armedExit = null; retreatNode = null;
+    pursuit = null; armedExit = null; retreatNode = null; vacatedRanks = [];
     bonds = {}; bondSavesUsed = new Set();
     playerRoster.forEach(c => { c.weaponMod = null; c.trinket = null; });
     sectorFront = rollFront(seededRng('front:1'), 1); frontBannerPending = true;
@@ -3632,7 +3741,10 @@ function setOutpostTab(tab) { document.getElementById('tab-roster').className = 
 // scene serves the same card as a sheet when a sprite is tapped.
 function operatorCardHtml(char) {
         let cost = 30 + (char.upgradeCount * 25); let canUpg = scrap >= cost; let isDead = char.hp <= 0; let isInj = char.hp < char.maxHp && char.hp > 0;
-        let medHtml = isDead ? `<button class="upg-btn revive-btn" ${scrap < 50 ? 'disabled' : ''} data-action="medbay" data-id="${char.id}" data-mode="REVIVE">DEFIB (50)</button>` : `<button class="upg-btn med-btn" ${!isInj || scrap < 10 ? 'disabled' : ''} data-action="medbay" data-id="${char.id}" data-mode="HEAL">TRIAGE (10)</button>`;
+        // The Outpost used to sell a resurrection for fifty Scrap, which is what made every
+        // death in the game a bill rather than a loss. Nobody on this roster is at zero any more:
+        // they are either dragged clear by the end of the fight or they are not on it.
+        let medHtml = `<button class="upg-btn med-btn" ${!isInj || scrap < 10 ? 'disabled' : ''} data-action="medbay" data-id="${char.id}" data-mode="HEAL">TRIAGE (10)</button>`;
         
         // Unspent points always win the slot, however many perks the character already has.
         let traitDisplay = char.perkPoints > 0
@@ -3868,7 +3980,7 @@ function buyUpgrade(charId, type, cost) { if (scrap < cost) return; scrap -= cos
 function medBay(charId, action) { 
     let c = playerRoster.find(c => c.id === charId); 
     if (action === 'HEAL' && scrap >= 10 && c.hp > 0 && c.hp < c.maxHp) { scrap -= 10; c.hp = Math.min(c.maxHp, c.hp + Math.floor(c.maxHp * 0.4)); playSFX('heal'); } 
-    else if (action === 'REVIVE' && scrap >= 50 && c.hp <= 0) { scrap -= 50; c.hp = Math.floor(c.maxHp * 0.25); playSFX('heal'); } 
+
     saveGameState(); renderOutpost(); 
 }
 
@@ -4451,6 +4563,7 @@ const PROMPTS = [
     { id: 'RELIC',     title: "THE COMMANDER'S CACHE", body: 'Relics last the whole expedition and stack with everything. Take the one that suits how this squad already fights, not the rarest card on the table.' },
     { id: 'CURSE',     title: 'A CURSED RELIC',  body: 'Cursed relics carry a real upside and a real cost, and they are never dealt at random - this one is on the table because you can refuse it. Read the second half of the line before you take it.' },
     { id: 'ROUTE',     title: 'THE ROUTE IS A PLAN', body: 'Taking a node commits you to what it connects to. Elites and warlords pay the most; camps and the Armory cost you a node but keep the squad standing. Look two tiers ahead before you step.' },
+    { id: 'BLEEDOUT',  title: 'THEY ARE BLEEDING OUT', body: 'That operator is on the floor with a clock over them, counted in their own turns. Run it out and they are gone for the rest of the expedition - there is no reviving them at the Outpost any more. Heal them where they lie (Cauterize, a Med-Stim, the STIM tactic), or end the fight: winning it, running from it and being dragged off it all get them clear. Only the clock kills.' },
     { id: 'RECRUIT',   title: 'SOMEONE WORTH SIGNING', body: 'The seven you start with are not everyone out here. A survivor brings a verb none of them has - a grinder for the front rank, a decontaminator for the middle, or a line that can haul what is hiding at the back of the enemy out where you can reach it. They cost Scrap, they arrive hurt, and there are only three in the whole wasteland. They join the bench: put them in the line at the Outpost.' },
     { id: 'ARMORY',    title: 'THE ARMORY',      body: 'A trader on the route. Gear, a marked-up relic, stims, a quirk do-over, and a bond that prepays your next regroup. Prices climb with the sector, so scrap spent early is worth more.' },
     { id: 'THREAT',    title: 'SOMEONE IS ABOUT TO DIE', body: 'The red figure over that operator is what lands on them this round if nothing changes, and it is more than they have left. Kill the thing aimed at them, brace in front of them, spend a STIM, or move them - but not nothing.' },
@@ -5170,6 +5283,7 @@ function renderField() {
         let isDead = ent.hp <= 0; const isAct = (!isDead && turnQueue.length > 0 && turnQueue[activeIndex]?.id === ent.id) ? 'active' : '';
         // The first render after death plays the fall; every render after shows the settled corpse.
         const dCls = isDead ? (ent.deadRendered ? 'dead settled' : 'dead dying') : '';
+        const bleedCls = (isDown(ent) && (ent.downTurns || 0) > 0) ? 'bleeding-out' : '';
         if (isDead && !ent.deadRendered) ent.deadRendered = true;
         if (!isDead) ent.deadRendered = false;
         let tCls = ''; let clk = '';
@@ -5178,7 +5292,7 @@ function renderField() {
         if (pendingAction) {
             if (pendingAction === 'OVERDRIVE' && turnQueue[activeIndex].classType === 'MEDIC' && ent.isPlayer) {
                 tCls = 'targetable-ally'; clk = targetable(`data-action="target" data-id="${ent.id}"`);
-            } else if (!isDead && !ent.burrowed) {
+            } else if ((!isDead || (isDown(ent) && REACHES_THE_DOWN.includes(pendingAction))) && !ent.burrowed) {
                 if ((pendingAction === 'CAUTERIZE' || pendingAction === 'REPOSITION' || pendingAction === 'STIM_DART') && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="target" data-id="${ent.id}"`); }
                 else if (['ITEM_MED', 'ITEM_BOMB', 'ITEM_ADRENALINE', 'ITEM_EMP'].includes(pendingAction)) {
                     if (pendingAction === 'ITEM_MED' && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="use-item" data-id="${ent.id}"`); }
@@ -5188,6 +5302,15 @@ function renderField() {
                 }
                 else if (pendingAction !== 'CAUTERIZE' && pendingAction !== 'REPOSITION' && !ent.isPlayer) { tCls = 'targetable-enemy'; clk = targetable(`data-action="target" data-id="${ent.id}"`); }
             }
+        }
+        // Somebody on the floor with a number over them is the whole mechanic. It sits where
+        // the threat tag sits, because it is the same question: who is about to be lost.
+        let downTag = '';
+        if (isDown(ent) && (ent.downTurns || 0) > 0) {
+            firePrompt('BLEEDOUT');
+            downTag = `<div class="down-tag" title="Bleeding out. Heal them before the clock runs out, or win the fight.">\u2620 ${ent.downTurns}</div>`;
+        } else if (ent.isPlayer && ent.fallen) {
+            downTag = `<div class="down-tag down-lost" title="Gone for the rest of the expedition.">LOST</div>`;
         }
         // What is aimed at this operator this round, and whether they survive it.
         let threatTag = '';
@@ -5259,14 +5382,14 @@ function renderField() {
         let eliteGlow = ent.eliteType && !isDead ? 'filter: drop-shadow(0 0 15px #8B0000);' : '';
 
         const html = `
-            <div class="entity ${isAct} ${dCls} ${tCls} ${hint ? 'has-combo' : ''} ${farTag ? 'out-of-reach' : ''} ${guarding ? 'covering' : ''}" id="${ent.id}" ${clk} style="--sprite-scale: ${ent.scale || 1}; --sprite-sink: ${ent.sink || 0}px;">
+            <div class="entity ${isAct} ${dCls} ${bleedCls} ${tCls} ${hint ? 'has-combo' : ''} ${farTag ? 'out-of-reach' : ''} ${guarding ? 'covering' : ''}" id="${ent.id}" ${clk} style="--sprite-scale: ${ent.scale || 1}; --sprite-sink: ${ent.sink || 0}px;">
                 <div class="intent-icon" style="display:${ent.intent && !isDead && !ent.isPlayer ? 'flex' : 'none'}">${ent.intent ? (ascension >= 3 && ent.intent.type === 'HEAVY' ? '?' : ent.intent.icon) : ''}</div>
                 ${hint ? `<div class="combo-flag">${hint}</div>` : ''}
                 ${farTag ? `<div class="reach-flag">FAR</div>` : ''}
                 ${guarding ? `<div class="guard-flag">COVERING</div>` : ''}
                 <div style="width: 100%; position: relative; z-index: 10; transform: translateY(${ent.hpDrop || 0}px);">
                     ${rank ? `<div class="rank-chip rank-${ent.gridPos}">${rank}</div>` : ''}
-                    ${threatTag}${soakTag}${sigTag}
+                    ${downTag}${threatTag}${soakTag}${sigTag}
                     ${eff ? `<div class="status-badge">${eff}</div>` : ''}
                     <div class="hp-text">${ent.hp}/${ent.maxHp}</div>
                     <div class="hp-container"><div class="hp-fill ${ent.isPlayer ? 'player-hp' : 'enemy-hp'}" style="width: ${(ent.hp / ent.maxHp) * 100}%"></div></div>
@@ -5435,7 +5558,7 @@ function applyTurnStartEffects(ent) {
         if (hasTrinket(ent, 'TOURNIQUET')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 2); ent.hp = Math.max(0, ent.hp - b); log(`> ${ent.name} bleeds for ${b}.`, "log-dmg"); spawnFCT(ent.id, `-${b}`, "fct-dmg"); ent.bleedingTurns--; chg = true; if(ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('BLEED'); }
     // Bleeding out and choking are deaths too. Now that a unit going down has a voice, dying to
     // a status tick in silence is the odd one out rather than the norm.
-    if (wasAlive && ent.hp <= 0) playSFX(ent.isPlayer ? 'fallen' : 'downed');
+    if (wasAlive && ent.hp <= 0) { playSFX(ent.isPlayer ? 'fallen' : 'downed'); if (ent.isPlayer) goDown(ent); }
     // Expiring temporary armour used to zero the unit's innate plating too, so any armoured
     // enemy that braced permanently lost the armour it started with.
     if (ent.armorTurns > 0) { ent.armorTurns--; if (ent.armorTurns === 0) { ent.armor = ent.baseArmor || 0; } chg = true; }
@@ -5514,6 +5637,8 @@ function withdraw() {
     log(`> The squad breaks contact and runs. The node is left behind.`, 'log-status');
     if (pursuit) log(`> ${pursuit.units.length} of them come after you.`, 'log-dmg');
     playSFX('click'); triggerShake();
+    // Running is still the squad leaving together. Whoever was on the floor goes with them.
+    recoverDowned('as the squad breaks contact');
     combatActive = false; stopAmbience();
     collectLoot(0, true);
 }
@@ -5565,7 +5690,10 @@ function retreat() {
 }
 // Back to the map without advancing: the node is un-cleared, the tier does not move, and the
 // squad is put in front of the same node rather than back at the fork before it.
+// A break that works is the squad walking away, so it gets whoever was down out too.
 function fallBackToNode() {
+    recoverDowned('as the squad falls back');
+    closeRanks();
     clearedNodeIds = clearedNodeIds.filter(id => id !== currentNodeId);
     retreatNode = currentNodeId;
     activeEntities = []; turnQueue = []; pendingCombat = null;
@@ -5576,6 +5704,10 @@ function fallBackToNode() {
 }
 
 function stimTarget() {
+    // Somebody on the floor is the worst-off there is, and a squad with no medic in the line
+    // needs an answer to that which is not "hope". The tactic is it.
+    const down = bleedingOut();
+    if (down.length) return down.sort((a, b) => (a.downTurns || 0) - (b.downTurns || 0))[0];
     const hurt = activeEntities.filter(e => e.isPlayer && e.hp > 0 &&
         (e.hp < e.maxHp || e.bleedingTurns > 0 || e.stunnedTurns > 0 || e.oiledTurns > 0));
     return hurt.sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0] || null;
@@ -5731,6 +5863,7 @@ function resolveAction(targetId) {
 
     if (pendingAction === 'REPOSITION') {
         if (!target || !target.isPlayer || target.id === actEnt.id || target.hp <= 0) { pendingAction = null; renderField(); return; }
+
         const mine = actEnt.gridPos; actEnt.gridPos = target.gridPos; target.gridPos = mine;
         const order = (a, b) => (a.isPlayer && b.isPlayer) ? a.gridPos - b.gridPos : 0;
         activeEntities = [...activeEntities.filter(e => e.isPlayer).sort(order), ...activeEntities.filter(e => !e.isPlayer)];
@@ -6094,6 +6227,7 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     if (target.hp <= 0 && target.isPlayer && runStats)
         runStats.lastKiller = { name: attacker.name, elite: attacker.eliteType || null,
                                boss: attacker.classType === 'BOSS', sector: currentSector, tier: currentTier, cause: 'COMBAT' };
+    if (target.hp <= 0 && target.isPlayer) goDown(target);
     let logStyle = "log-dmg"; let logMsg = `> ${attacker.name} hits ${target.name} for ${netDmg}`;
     
     triggerHitFlash(target.id);
@@ -6562,6 +6696,8 @@ function checkWinState() {
             materials[m]++; log(`> ${e.name} pockets 1 ${m.toUpperCase()}.`, 'log-heal');
         });
         if (tuneUpBattles > 0) tuneUpBattles--;
+        // Holding the field is what buys the time to get to whoever is still on the floor.
+        recoverDowned('once the field is held');
         // How the fight was won, before the log is cleared by the next one.
         noteFightWon();
         recordBonds();
@@ -6623,6 +6759,8 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
+    BLEED_OUT, DRAGGED_CLEAR, REACHES_THE_DOWN, isDown, bleedingOut, goDown, tickBleedOut,
+    loseOperator, recoverDowned, closeRanks,
     RECRUIT_POOL, RECRUIT_COST, RECRUIT_HEALTH, recruitCost, recruitables, recruitById, recruitReach,
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
@@ -6671,6 +6809,7 @@ globalThis.WP = {
     get activeRelics() { return activeRelics; }, set activeRelics(v) { activeRelics = v; },
     get activeShop() { return activeShop; }, set activeShop(v) { activeShop = v; },
     get pendingRecruit() { return pendingRecruit; }, set pendingRecruit(v) { pendingRecruit = v; },
+    get vacatedRanks() { return vacatedRanks; }, set vacatedRanks(v) { vacatedRanks = v; },
     get bonds() { return bonds; }, set bonds(v) { bonds = v; },
     get bondSavesUsed() { return bondSavesUsed; }, set bondSavesUsed(v) { bondSavesUsed = v; },
     get sectorFront() { return sectorFront; }, set sectorFront(v) { sectorFront = v; },
