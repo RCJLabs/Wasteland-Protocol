@@ -42,17 +42,23 @@ const CONTRACTS = flag('contracts', '').split(',').filter(Boolean);
 // only one. With this on it also runs from fights it is losing, so the cost of leaving can be
 // measured against the cost of staying. `--withdraw off` is the old behaviour, for comparison.
 const WITHDRAW_POLICY = flag('withdraw', 'on') !== 'off';
+// A sim that never walks out measures a game with one ending. `--extract N` gives it the
+// player who leaves once the run is worth banking: from sector N on, it takes the camp's door
+// when the squad is worn down. `off` (the default) is the old behaviour, for comparison.
+const EXTRACT_RAW = flag('extract', 'off');
+const EXTRACT_AT = EXTRACT_RAW === 'off' ? 99 : Number(EXTRACT_RAW);
 
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT }) => {
   const stat = { sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, ground: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
-                 endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [] };
+                 endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
+                 extracted: false, walkedAt: 0 };
 
   activeContracts = [...contracts];
   currentSlot = 1;
@@ -302,6 +308,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
     }
     if (node.type === 'CAMP') {
       stat.camps++;
+      // The camp is where the door is, so it is where the decision gets made. This player walks
+      // once the run is deep enough to be worth banking AND the squad is in no shape to keep
+      // going: two of the line badly hurt, the bench gone, or nothing left to regroup with.
+      const worn = playerRoster.filter(p => p.gridPos > 0 && p.hp < p.maxHp * 0.5).length >= 2
+                || playerRoster.length <= 4
+                || regroupsLeft() === 0;
+      if (currentSector >= EXTRACT_AT && worn && canExtract()) {
+        stat.extracted = true; stat.walkedAt = currentSector;
+        stat.endedBy = 'extracted';
+        extractRun();
+        break;
+      }
       playerRoster.forEach(p => { if (p.gridPos > 0 && p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp * 0.35)); });
       currentTier++; stat.nodes++; noteDepth(); runStats.nodes++;
       continue;
@@ -437,7 +455,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -497,6 +515,21 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy }) => {
   const ends = {};
   results.forEach(r => { ends[r.endedBy] = (ends[r.endedBy] || 0) + 1; });
   line('ended by', Object.entries(ends).map(([k, v]) => `${k} ${v}`).join(', '));
+  const walked = results.filter(r => r.extracted);
+  line('walked out', `${walked.length} of ${n}`);
+  if (walked.length) {
+    const at = walked.map(r => r.walkedAt).sort((a, b) => a - b);
+    line('  sector walked at, median', pct(at, 0.5));
+    // Comparing walkers against every other run would compare deep runs against shallow ones and
+    // credit extraction for the depth. Only runs that got as far as the policy's door can answer
+    // the question, so only those are in the comparison.
+    const eligible = results.filter(r => r.sector >= EXTRACT_AT);
+    const pushedOn = eligible.filter(r => !r.extracted);
+    line(`  among runs that reached sector ${EXTRACT_AT}`, `${eligible.length} of ${n}, ${walked.length} walked`);
+    line('    walked out, median score', pct(walked.map(r => r.score).sort((a, b) => a - b), 0.5).toLocaleString());
+    if (pushedOn.length) line('    pushed on instead, median score',
+      pct(pushedOn.map(r => r.score).sort((a, b) => a - b), 0.5).toLocaleString());
+  }
   line('nodes cleared, median', pct(nums('nodes'), 0.5));
   line('score, median', pct(nums('score'), 0.5).toLocaleString());
 

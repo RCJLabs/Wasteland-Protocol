@@ -704,3 +704,18 @@ button.reach-short { border-color: #7a5a20; }
 .entity.bleeding-out .portrait { filter: grayscale(0.35) drop-shadow(0 0 10px rgba(200, 30, 30, 0.9)); }
 .down-tag { font-size: 12px; }
 :root.motion-off .down-tag { animation: none; }
+
+/* Walking out: the offer is a priced decision, so both halves of it are on the panel rather
+   than described in prose. Green because it is the one ending that is not a defeat. */
+.camp-walk { border-color: #6B8E23; color: #6B8E23; }
+.camp-walk-locked { font-size: 11px; color: #6a6a5a; text-align: center; padding: 10px 6px; font-style: italic; }
+.camp-extract-panel { border: 1px solid #6B8E23; background: #0b0f08; padding: 12px 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
+.camp-extract-head { color: #6B8E23; font-weight: bold; letter-spacing: 2px; font-size: 13px; }
+.camp-extract-line { font-size: 11px; color: #8a8578; line-height: 1.5; }
+.camp-extract-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 11px; color: #8a8578; letter-spacing: 1px; }
+.camp-extract-row b { color: #d5cfc0; font-size: 12px; text-align: right; }
+.camp-extract-row em { color: #6B8E23; font-style: normal; }
+.camp-extract-warn { font-size: 10px; color: #B22222; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+.camp-walk-go { border-color: #6B8E23; color: #6B8E23; font-weight: bold; }
+.chronicle-walked { border-color: #3d5216; }
+.chronicle-walked .chronicle-epitaph b { color: #6B8E23; letter-spacing: 1px; }

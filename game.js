@@ -82,7 +82,7 @@ let globalSettings = { combatSpeed: 1.0, sfx: true, sfxVol: 1, ambVol: 0.7, moti
 function volName(v) { const i = VOL_STEPS.indexOf(v); return VOL_NAMES[i < 0 ? VOL_STEPS.length - 1 : i]; }
 function cycleVol(v) { const i = VOL_STEPS.indexOf(v); return VOL_STEPS[(i < 0 ? 0 : i + 1) % VOL_STEPS.length]; }
 
-let bossSkulls = 0; let metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0, vault: 0, heirloom: null,
+let bossSkulls = 0; let metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0, vault: 0, heirloom: null, heirloomWalked: false,
                                          rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0 };
 let scrap = 0; let currentTier = 1; let currentSector = 1; let difficultyMult = 1.0; 
 let inventory = []; let materials = { parts: 0, chems: 0, tech: 0 }; 
@@ -1793,6 +1793,8 @@ const ACTIONS = {
     'consequence-ack':  () => resolveConsequence(),
     'event-finish':     () => finishEvent(),
     'camp-choice':      el => resolveCamp(el.dataset.kind),
+    'camp-extract':     () => armExtract(),
+    'camp-extract-go':  () => extractRun(),
     'camp-finish':      () => finishCamp(),
 
     'queue':            el => queueAction(el.dataset.move, el.dataset.variant),
@@ -2726,9 +2728,11 @@ function renderChronicle() {
          <div class="career-line"><span>HOSTILES KILLED</span><span>${merged.kills.toLocaleString()}</span></div>
          <div class="career-line"><span>DEEPEST EVER</span><span>SECTOR ${merged.deepestSector}</span></div>
          <div class="career-line"><span>MOST FIELDED</span><span>${most ? `${most[0]} (${most[1]})` : '—'}</span></div>`;
+    // Two kinds of ending are on this list now, so it has to be possible to tell at a glance
+    // which runs were walked out of and which the wasteland kept.
     document.getElementById('chronicle-list').innerHTML = entries.length ? entries.map(e =>
-        `<div class="chronicle-entry">
-            <div class="chronicle-epitaph">${e.epitaph || ''}</div>
+        `<div class="chronicle-entry${e.extracted ? ' chronicle-walked' : ''}">
+            <div class="chronicle-epitaph">${e.extracted ? '<b>EXTRACTED</b> \u00B7 ' : ''}${e.epitaph || ''}</div>
             <div class="chronicle-facts">
                 <span>${(e.score || 0).toLocaleString()} PTS</span>
                 <span>S${e.sector || 1}·T${e.tier || 1}</span>
@@ -2756,11 +2760,16 @@ function endRun() {
         when: Date.now(), score, sector: runStats.deepestSector, tier: runStats.deepestTier,
         kills: runStats.kills || 0, nodes: runStats.nodes || 0, withdrawals: runStats.withdrawals || 0,
         contracts: runStats.contracts || [], relics: activeRelics.map(r => r.name),
-        seed: runSeed, epitaph: epitaphFor(runStats),
+        seed: runSeed, extracted: !!runStats.extracted,
+        epitaph: runStats.extracted
+            ? `Walked out at Sector ${runStats.deepestSector}, Tier ${runStats.deepestTier}.`
+            : epitaphFor(runStats),
         fallen: (runStats.fallen || []).map(f => ({ name: f.name, sector: f.sector, tier: f.tier })),
         deployed: playerRoster.filter(p => p.gridPos > 0).map(p => p.classType)
     });
-    stashHeirloom();
+    // Walking out carries the relic; the Vault is what keeps one when you do not. One call site,
+    // so the two ways home cannot disagree about which relic came back.
+    stashHeirloom(!!runStats.extracted);
     saveMeta();
     Store.remove(BASE_SAVE_KEY + currentSlot);
     renderRunOver(score, isBest, seedPrev);
@@ -2773,20 +2782,31 @@ function heirloomFrom(relics) {
     if (!relics || relics.length === 0) return null;
     return relics.find(r => r.tier === 'RARE') || relics[0];
 }
-function stashHeirloom() {
-    if (!metaUpgrades.vault) return;
+function stashHeirloom(walkedOut) {
+    // The Vault keeps one through a wipe. Walking out keeps one because you are carrying it -
+    // and that has to be remembered, because the reader below gates on the Vault and would
+    // otherwise store a relic no Vault-less player could ever collect.
+    if (!metaUpgrades.vault && !walkedOut) return;
     const keep = heirloomFrom(activeRelics);
     metaUpgrades.heirloom = keep ? keep.id : null;
+    metaUpgrades.heirloomWalked = !!walkedOut && !!keep;
 }
 function heirloomRelic() {
-    if (!metaUpgrades.vault || !metaUpgrades.heirloom) return null;
+    if (!metaUpgrades.heirloom) return null;
+    if (!metaUpgrades.vault && !metaUpgrades.heirloomWalked) return null;
     return RELIC_POOL.find(r => r.id === metaUpgrades.heirloom) || null;
 }
 
 function renderRunOver(score, isBest, seedPrev = null) {
     switchScreen('screen-runover');
-    document.getElementById('runover-title').innerText = 'RUN OVER';
-    document.getElementById('runover-desc').innerText = 'The wasteland claimed them. What they salvaged reaches the Citadel.';
+    const walked = !!(runStats && runStats.extracted);
+    document.getElementById('runover-title').innerText = walked ? 'EXTRACTED' : 'RUN OVER';
+    document.getElementById('runover-title').style.color = walked ? '#6B8E23' : '#ff4444';
+    // The frame has to agree with the headline - a red box around EXTRACTED reads as a defeat.
+    document.getElementById('runover-box').style.borderColor = walked ? '#6B8E23' : '#8B0000';
+    document.getElementById('runover-desc').innerText = walked
+        ? 'They walked out of it. Everything the expedition earned is banked, and the squad is still standing.'
+        : 'The wasteland claimed them. What they salvaged reaches the Citadel.';
     const st = runStats;
     document.getElementById('runover-score').innerText = `${score.toLocaleString()} PTS`;
     document.getElementById('runover-best').innerText = isBest ? '\u2605 NEW PERSONAL BEST \u2605' : `BEST: ${bestScore.toLocaleString()} PTS`;
@@ -2801,6 +2821,8 @@ function renderRunOver(score, isBest, seedPrev = null) {
     ];
     // The names first, above the tally. An expedition that came home short says so before it
     // says how much scrap it made.
+    if (st.extracted) lines.splice(1, 0, ['WALKED OUT WITH',
+        `+${Math.round(extractBonus(st) * 100)}% SCORE \u00B7 \uD83D\uDC80 ${extractSkulls(st)} \u00B7 ${playerRoster.filter(p => p.hp > 0).length} STANDING`]);
     if ((st.fallen || []).length) lines.splice(1, 0, ['OPERATORS LOST',
         st.fallen.map(f => `${f.name} (S${f.sector}\u00B7T${f.tier})`).join(', ')]);
     if (st.withdrawals > 0) lines.splice(2, 0, ['FIGHTS ABANDONED', st.withdrawals]);
@@ -2872,10 +2894,50 @@ let bestScore = 0; let bestSector = 0;
 
 function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, mastery, bestiary, seenPrompts, grudges })); }
 
-function newRunStats() { return { kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, recruited: 0, fallen: [], deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
+function newRunStats() { return { extracted: false, kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, recruited: 0, fallen: [], deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
 
 // Endless scoring: depth is worth far more than any single haul, so pushing one sector
 // deeper always beats farming the one you are on.
+// ── Walking out ─────────────────────────────────────────────────────────────────────────
+// Sixty simulated expeditions ended sixty times the same way: the squad was wiped out. There
+// was no other ending in the game. A run could be long or short but never won, and no decision
+// anywhere in it was ever "is this enough?" - depth was something that happened to you rather
+// than a bet you were sizing.
+//
+// You can call it at a camp now. Everything the run earned banks with a bonus that grows the
+// deeper you went, the Citadel takes a skull for every sector you cleared, and whatever relic
+// you are holding comes home with you rather than being left in the dirt. The cost is the rest
+// of the run: extraction ends it, and score climbs far faster with depth than the bonus does,
+// so pushing on is always worth more if you survive. That is the whole of it - every camp asks
+// whether the squad in front of you is worth one more sector.
+const EXTRACT = {
+    bonusPerSector: 0.06,   // of the run's score, per sector reached beyond the first
+    maxBonus: 0.60,
+    skullsPerSector: 1,
+    minSector: 2            // nothing worth carrying home out of the first one
+};
+function extractBonus(st) {
+    const reached = Math.max(1, (st || runStats || {}).deepestSector || 1);
+    return Math.min(EXTRACT.maxBonus, EXTRACT.bonusPerSector * (reached - 1));
+}
+function extractSkulls(st) {
+    const reached = Math.max(1, (st || runStats || {}).deepestSector || 1);
+    return EXTRACT.skullsPerSector * (reached - 1);
+}
+// The offer is only ever made at a camp - the call is made at a fire, on a squad you can look
+// at, not from a menu. This is the depth gate; the camp screen is what puts the button in reach.
+function canExtract() {
+    return !!runStats && currentSector >= EXTRACT.minSector && !combatActive;
+}
+function extractRun() {
+    if (!canExtract()) return;
+    noteDepth();
+    runStats.extracted = true;
+    bossSkulls += extractSkulls(runStats);
+    playSFX('overdrive');
+    endRun();   // banks the score, carries the relic home, and closes the slot
+}
+
 function computeScore(st) {
     if (!st) return 0;
     const base = (st.deepestSector - 1) * 2500
@@ -2883,7 +2945,9 @@ function computeScore(st) {
          + st.bosses * 900 + st.elites * 250 + st.kills * 15 + Math.floor(st.scrapEarned / 2);
     // The multiplier is stored on the run rather than read live, so a score already banked is
     // not re-scored by whatever the next expedition signs up for.
-    return Math.floor(base * (st.contractMult || 1) * (st.protocolMult || 1));
+    // Walking out pays for itself; dying banks the raw figure.
+    const out = st.extracted ? 1 + extractBonus(st) : 1;
+    return Math.floor(base * (st.contractMult || 1) * (st.protocolMult || 1) * out);
 }
 
 function noteDepth() {
@@ -3989,13 +4053,59 @@ function resolveEvent(idx) {
 }
 function finishEvent() { currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap(); }
 
+let extractArmed = false;
+
 function initiateCamp() {
+    extractArmed = false;
     switchScreen('screen-camp');
+    renderCamp();
+}
+
+// The offer has to be priced in front of the player, not described. Both halves of the bet are
+// on the button: what walking out banks, and what the run is worth if it keeps going.
+function extractPitch() {
+    const now = computeScore({ ...runStats, extracted: true });
+    const raw = computeScore({ ...runStats, extracted: false });
+    return { now, raw, gain: now - raw, skulls: extractSkulls(runStats),
+             pct: Math.round(extractBonus(runStats) * 100),
+             relic: heirloomFrom(activeRelics) };
+}
+
+function renderCamp() {
     let cHtml = '';
+    if (extractArmed) {
+        const p = extractPitch();
+        cHtml += `<div class="camp-extract-panel">`
+            + `<div class="camp-extract-head">WALK OUT NOW</div>`
+            + `<div class="camp-extract-line">The expedition ends here and everything it earned is banked.</div>`
+            + `<div class="camp-extract-row"><span>SCORE</span><b>${formatStat(p.raw)} \u2192 ${formatStat(p.now)} <em>(+${p.pct}%)</em></b></div>`
+            + `<div class="camp-extract-row"><span>TO THE CITADEL</span><b>\uD83D\uDC80 +${p.skulls}</b></div>`
+            + `<div class="camp-extract-row"><span>CARRIED HOME</span><b>${p.relic ? p.relic.name : 'nothing worth keeping'}</b></div>`
+            + `<div class="camp-extract-warn">There is no coming back to this run.</div>`
+            + `</div>`
+            + `<button class="event-btn camp-walk-go" data-action="camp-extract-go">CONFIRM \u2014 WALK OUT</button>`
+            + `<button class="event-btn" data-action="camp-extract">STAY ON THE ROAD</button>`;
+        document.getElementById('camp-choices').innerHTML = cHtml;
+        return;
+    }
     cHtml += `<button class="event-btn" data-action="camp-choice" data-kind="TRIAGE">TRIAGE (Heal 35% HP to Deployed Squad)</button>`;
     cHtml += `<button class="event-btn" data-action="camp-choice" data-kind="TUNEUP">WEAPON TUNE-UP (+4 DMG for next 3 Battles)</button>`;
     cHtml += `<button class="event-btn" data-action="camp-choice" data-kind="FORAGE">FORAGE (+1 Parts, +1 Chems, +1 Tech)</button>`;
+    if (canExtract()) {
+        const p = extractPitch();
+        cHtml += `<button class="event-btn camp-walk" data-action="camp-extract">`
+            + `WALK OUT (bank ${formatStat(p.now)} PTS, +${p.pct}%, \uD83D\uDC80 ${p.skulls})</button>`;
+    } else if (runStats) {
+        cHtml += `<div class="camp-walk-locked">Nothing worth carrying home yet \u2014 the road out opens from Sector ${EXTRACT.minSector}.</div>`;
+    }
     document.getElementById('camp-choices').innerHTML = cHtml;
+}
+
+function armExtract() {
+    if (!extractArmed && !canExtract()) return;
+    extractArmed = !extractArmed;
+    if (extractArmed) firePrompt('EXTRACT');
+    renderCamp();
 }
 
 function resolveCamp(type) {
@@ -4490,6 +4600,7 @@ const PROMPTS = [
     { id: 'RELIC',     title: "THE COMMANDER'S CACHE", body: 'Relics last the whole expedition and stack with everything. Take the one that suits how this squad already fights, not the rarest card on the table.' },
     { id: 'CURSE',     title: 'A CURSED RELIC',  body: 'Cursed relics carry a real upside and a real cost, and they are never dealt at random - this one is on the table because you can refuse it. Read the second half of the line before you take it.' },
     { id: 'ROUTE',     title: 'THE ROUTE IS A PLAN', body: 'Taking a node commits you to what it connects to. Elites and warlords pay the most; camps and the Armory cost you a node but keep the squad standing. Look two tiers ahead before you step.' },
+    { id: 'EXTRACT',   title: 'YOU CAN WALK OUT', body: 'An expedition does not have to end with the squad on the floor. Calling it at a camp banks everything the run earned with a bonus that grows the deeper you got, sends a Skull to the Citadel for every sector you cleared, and brings whatever relic you are carrying home with you. It also ends the run - and score climbs far faster with depth than the bonus does, so pushing on is worth more if you survive it. That is the whole question: is the squad in front of you good for one more sector?' },
     { id: 'GRUDGE',    title: 'IT REMEMBERS YOU', body: 'You have felled this commander before, and it has come back for it - heavier, faster, better armoured, and holding a move it never needed against you the first time. That move opens under a quarter health, after the enrage you already know about, and the fight log names it at the door so you can plan around it. A warlord is the one fight you cannot walk away from, so it pays for the trouble: felling a risen one banks an extra Skull for every grudge it was carrying.' },
     { id: 'BLEEDOUT',  title: 'THEY ARE BLEEDING OUT', body: 'That operator is on the floor with a clock over them, counted in their own turns. Run it out and they are gone for the rest of the expedition - there is no reviving them at the Outpost any more. Heal them where they lie (Cauterize, a Med-Stim, the STIM tactic), or end the fight: winning it, running from it and being dragged off it all get them clear. Only the clock kills.' },
     { id: 'RECRUIT',   title: 'SOMEONE WORTH SIGNING', body: 'The seven you start with are not everyone out here. A survivor brings a verb none of them has - a grinder for the front rank, a decontaminator for the middle, or a line that can haul what is hiding at the back of the enemy out where you can reach it. They cost Scrap, they arrive hurt, and there are only three in the whole wasteland. They join the bench: put them in the line at the Outpost.' },
@@ -6856,6 +6967,7 @@ if ('serviceWorker' in navigator) {
 // Nothing in the game itself reads it - if you are adding a feature, you do not need it.
 globalThis.WP = {
     // entry points and pure helpers the suites exercise
+    EXTRACT, extractBonus, extractSkulls, canExtract, extractRun, extractPitch, armExtract, renderCamp,
     bossRetinueUp, GRUDGE, RISEN_MARK, grudgeOn, noteGrudge, risenName, risenShort, openGrudgePhase,
     BLEED_OUT, DRAGGED_CLEAR, REACHES_THE_DOWN, isDown, bleedingOut, goDown, tickBleedOut,
     loseOperator, recoverDowned, closeRanks,
@@ -6882,6 +6994,7 @@ globalThis.WP = {
     get globalSettings() { return globalSettings; }, set globalSettings(v) { globalSettings = v; },
     get bossSkulls() { return bossSkulls; }, set bossSkulls(v) { bossSkulls = v; },
     get grudges() { return grudges; }, set grudges(v) { grudges = v; },
+    get extractArmed() { return extractArmed; }, set extractArmed(v) { extractArmed = v; },
     get metaUpgrades() { return metaUpgrades; }, set metaUpgrades(v) { metaUpgrades = v; },
     get scrap() { return scrap; }, set scrap(v) { scrap = v; },
     get currentTier() { return currentTier; }, set currentTier(v) { currentTier = v; },
