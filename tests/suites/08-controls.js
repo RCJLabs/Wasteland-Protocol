@@ -36,9 +36,7 @@ module.exports = {
     await state(() => { localStorage.clear(); bossSkulls = 6; saveMeta(); renderTitleScreen(); });
     await click('[data-action="citadel"]');
     ok('citadel opens from the title', await shown('screen-citadel') === 'flex');
-    // The scene is the default view now: buying is tap the structure, then tap upgrade.
-    await click('[data-action="citadel-spot"][data-spot="SCRAP"]');
-    await click('#citadel-sheet [data-action="buy-meta"][data-kind="SCRAP"]');
+    await click('#citadel-list [data-action="buy-meta"][data-kind="SCRAP"]');
     ok('buy-meta spends a skull', await state(() => bossSkulls) === 5);
     await click('[data-action="title"]');
     ok('title returns from the citadel', await shown('screen-title') === 'flex');

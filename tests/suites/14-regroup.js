@@ -134,7 +134,7 @@ module.exports = {
     // ---- the Citadel can buy another ----
     const citadel = await page.evaluate(() => {
       bossSkulls = 4; metaUpgrades.extraRegroups = 0; saveMeta();
-      citadelView = 'list'; renderCitadel();
+      renderCitadel();
       const before = totalRegroups();
       buyMetaUpgrade('REGROUP');
       // The ledger is generated from CITADEL_SPOTS now, so the state is read off the card

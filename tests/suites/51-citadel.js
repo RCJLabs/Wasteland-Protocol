@@ -139,35 +139,9 @@ module.exports = {
     ok(`and the cache deploys holding one (${effects.bare} -> ${effects.stocked}: ${effects.named.join(', ')})`,
       effects.stocked === effects.bare + 1);
 
-    // ---- ten buildings have to fit the hillside ----
-    // Measured rather than eyeballed: the first placement of these five put four pairs on top
-    // of each other and pushed one off the edge entirely.
-    const hill = await page.evaluate(() => {
-      bossSkulls = 40; citadelView = 'scene'; renderCitadel();
-      const els = [...document.querySelectorAll('.cit-spot')];
-      const r = els.map(e => ({ n: e.getAttribute('aria-label').split(',')[0], b: e.getBoundingClientRect() }));
-      const hits = [];
-      for (let i = 0; i < r.length; i++) for (let j = i + 1; j < r.length; j++) {
-        const a = r[i].b, c = r[j].b;
-        const ox = Math.min(a.right, c.right) - Math.max(a.left, c.left);
-        const oy = Math.min(a.bottom, c.bottom) - Math.max(a.top, c.top);
-        if (ox > 4 && oy > 4) hits.push(`${r[i].n} over ${r[j].n}`);
-      }
-      const box = document.getElementById('citadel-scene').getBoundingClientRect();
-      const outside = r.filter(x => x.b.left < box.left - 2 || x.b.right > box.right + 2 ||
-                                    x.b.top < box.top - 2 || x.b.bottom > box.bottom + 2).map(x => x.n);
-      const art = els.filter(e => (e.querySelector('svg') || {}).innerHTML && e.querySelector('svg').innerHTML.length > 40).length;
-      return { spots: r.length, hits, outside, art, pageScroll: document.body.scrollWidth - window.innerWidth };
-    });
-    ok(`all ${hill.spots} stand on the hill without overlapping (${hill.hits.join('; ') || 'none overlap'})`,
-      hill.spots === table.spots.length && hill.hits.length === 0);
-    ok(`and none of them hangs off it (${hill.outside.join(', ') || 'all inside'})`,
-      hill.outside.length === 0 && hill.pageScroll <= 0);
-    ok('every one of them is actually drawn', hill.art === hill.spots);
-
-    // ---- both views agree, and the ledger can be reached ----
+    // ---- the ledger is the Citadel, and all of it can be reached ----
     const views = await page.evaluate(() => {
-      bossSkulls = 40; citadelView = 'list'; renderCitadel();
+      bossSkulls = 40; renderCitadel();
       const L = document.getElementById('citadel-list');
       const cards = [...L.querySelectorAll('.upgrade-card')];
       const costs = [...L.querySelectorAll('.upg-btn')].map(b => (b.innerText.match(/(\d+)\s*💀/) || [])[1]);

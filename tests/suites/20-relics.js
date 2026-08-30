@@ -337,7 +337,7 @@ module.exports = {
     ok('it cannot be bought twice', carried.skullsAfterSecond === 10);
 
     const card = await page.evaluate(() => {
-      citadelView = 'list'; renderCitadel();
+      renderCitadel();
       const sp = CITADEL_SPOTS.find(o => o.kind === 'VAULT');
       const row = document.querySelector('#citadel-list [data-kind="VAULT"]').closest('.upgrade-card');
       return { label: spotState(sp),
@@ -351,7 +351,7 @@ module.exports = {
     // A fifth upgrade card pushed RETURN TO TITLE below the fold, because the whole screen
     // scrolled rather than the list inside it. The way out has to stay on screen at any count.
     const cit = await page.evaluate(() => {
-      citadelView = 'list'; renderCitadel();
+      renderCitadel();
       const screen = document.getElementById('screen-citadel');
       const list = screen.querySelector('.outpost-roster');
       const back = screen.querySelector('.return-btn').getBoundingClientRect();
@@ -365,7 +365,6 @@ module.exports = {
     // The count is the table's to decide; what this check is for is that the way out stays on
     // screen however many there are, which is the bug it was written for.
     ok(`the Citadel carries ${cit.cards} upgrades`, cit.cards === cit.declared && cit.cards >= 5);
-    await page.evaluate(() => { citadelView = 'scene'; });
     ok('the way out stays on screen', cit.backOnScreen);
     ok('the list scrolls rather than the screen', cit.listScrolls && !cit.screenScrolls);
     ok('and nothing scrolls sideways', cit.sideways <= 0);
