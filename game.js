@@ -850,6 +850,122 @@ const PROTOCOLS = [
 let ascension = 0;   // the chosen rung, 0..unlockedProtocols(), persisted with the run
 function unlockedProtocols() { return PROTOCOLS.filter(p => bestSector >= p.gate).length; }
 function protocolMult() { return ascension > 0 ? PROTOCOLS[Math.min(ascension, PROTOCOLS.length) - 1].mult : 1; }
+
+// ── Doctrines ──────────────────────────────────────────────────────
+// Ten classes exist and the same handful deploy. The audit read that off the simulator, whose
+// draft was hardcoded to a front-liner plus a medic - so "which classes get deployed" was
+// reporting that policy back rather than anything about the game. Measured properly, three
+// draft policies over sixty expeditions each land on the same run:
+//
+//     line (front-liner + medic)     median sector 2, mean 2.8, 4.18 wipes, 11,085 pts
+//     the least-fielded class forced  median sector 2, mean 2.7, 4.10 wipes, 11,240 pts
+//     flat random, no shape at all    median sector 2, mean 2.7, 4.30 wipes, 11,010 pts
+//
+// So the muster IS a formality, for the opposite reason to the one assumed: not because one
+// answer is right, but because every answer is equally fine. Nothing in the game cares what
+// shape the line is, so nothing makes it worth varying.
+//
+// A doctrine is a promise about that shape, made at the muster and kept for the whole run. It
+// is what creates the consequence the muster lacks. It pays a score multiplier - priced low,
+// against the contract table, because the constraint measures cheap and the real draw is the
+// edge each one carries. A doctrine that only banned things would be "field a worse squad for
+// points"; the edge is what makes it a different way to play. Breaking it costs the bonus, and
+// the break is latched and shown rather than silent.
+//
+// `holds` reads the deployed line and nothing else, so it can be re-asked after every change:
+// the muster, a recruit signed on, an operator lost and the ranks closed behind them.
+const DOCTRINE_DRAW = 3;      // how many are offered
+const DOCTRINES = [
+    { id: 'FIELD_SURGERY', name: 'FIELD SURGERY', bonus: 0.12,
+      rule: 'No Medic in the line.',
+      edge: 'Winning a fight patches every deployed operator for 12% of their health.',
+      holds: line => line.length > 0 && line.every(c => c.classType !== 'MEDIC') },
+    { id: 'NO_HANDS', name: 'NO HANDS', bonus: 0.15,
+      rule: 'Nobody in the line owns a melee ability.',
+      edge: 'Enemy melee that reaches your front rank lands at 80%.',
+      holds: line => line.length > 0 && line.every(c => !carriesMelee(c)) },
+    { id: 'SKELETON_CREW', name: 'SKELETON CREW', bonus: 0.15,
+      // The contract board sells one fewer operator for +20% with nothing given back; this
+      // asks the same and hands 30% health over, so it prices under it.
+      rule: 'Deploy two. One rank stays empty all run.',
+      edge: 'Both carry 30% more health.',
+      // At most two, not exactly two: losing one is a price already paid, and should not also
+      // cost the doctrine.
+      holds: line => line.length > 0 && line.length <= 2 },
+    { id: 'LIGHT_ORDER', name: 'LIGHT ORDER', bonus: 0.12,
+      rule: 'Nobody in the line starts above 55 health.',
+      edge: 'Every deployed operator moves 3 faster.',
+      holds: line => line.length > 0 && line.every(c => baseHpOf(c) <= LIGHT_ORDER_HP) },
+    { id: 'CONSCRIPTS', name: 'CONSCRIPTS', bonus: 0.15,
+      rule: 'None of the three classes you field most often.',
+      edge: 'Everyone deployed earns double dossier XP.',
+      // Meaningless until there is a habit to break: on a save with no history every class is
+      // an unfamiliar one, and the doctrine would pay 35% for whatever you were going to do.
+      offerable: () => doctrineFavourites.length >= 3,
+      holds: line => line.length > 0 && line.every(c => !doctrineFavourites.includes(c.classType)) }
+];
+const LIGHT_ORDER_HP = 55;
+// Who is actually carrying something that swings, read off the operator's real deck rather
+// than asserted here. Two things a hand-kept list gets wrong: the Shotgunner reads as a
+// front-liner and is two-thirds ranged, and the Scavenger picks up a knife at dossier rank III
+// - which they can bench, so the answer depends on the loadout and not on the class.
+function carriesMelee(ch) {
+    return deckFor(ch).some(a => a.reach === 'melee');
+}
+function baseHpOf(ch) {
+    const t = ROSTER_TEMPLATE.find(r => r.classType === ch.classType)
+           || RECRUIT_POOL.find(r => r.classType === ch.classType);
+    return t ? t.maxHp : ch.maxHp;
+}
+
+let doctrineOffer = [];        // the ids drawn for this run
+let activeDoctrine = null;     // the one taken, or null
+let doctrineBroken = false;    // latched: a promise broken stays broken
+let doctrineFavourites = [];   // the three most-fielded classes, snapshotted at the muster
+
+function doctrineById(id) { return id ? DOCTRINES.find(d => d.id === id) || null : null; }
+function rollDoctrines(rng = Math.random) {
+    const pool = DOCTRINES.filter(d => !d.offerable || d.offerable());
+    const out = [];
+    while (out.length < Math.min(DOCTRINE_DRAW, DOCTRINES.length) && pool.length)
+        out.push(pool.splice(Math.floor(rng() * pool.length), 1)[0].id);
+    return out;
+}
+// Fielding history is per save slot, and it is snapshotted rather than read live: a run that
+// changed which classes you field most must not move its own goalposts halfway through.
+function noteFavourites() {
+    const fielded = readCareer().fielded || {};
+    doctrineFavourites = Object.entries(fielded).sort((a, b) => b[1] - a[1]).slice(0, 3).map(e => e[0]);
+}
+function deployedLine() { return playerRoster.filter(c => c.gridPos > 0); }
+function doctrineHolds() {
+    const d = doctrineById(activeDoctrine);
+    if (!d) return false;
+    return !!d.holds(deployedLine());
+}
+// Called wherever the line can change. Once broken it stays broken - the promise was for the
+// whole run, and un-breaking it by shuffling people back would make it worth nothing.
+function checkDoctrine() {
+    if (!activeDoctrine || doctrineBroken) return;
+    if (!doctrineHolds()) {
+        doctrineBroken = true;
+        const d = doctrineById(activeDoctrine);
+        log(`> ${d.name} is broken. The line no longer keeps it.`, 'log-dmg');
+    }
+}
+function doctrineMult() {
+    const d = doctrineById(activeDoctrine);
+    return (d && !doctrineBroken) ? 1 + d.bonus : 1;
+}
+function doctrineName() { const d = doctrineById(activeDoctrine); return d ? d.name : null; }
+function hasDoctrine(id) { return activeDoctrine === id && !doctrineBroken; }
+function takeDoctrine(id) {
+    if (!doctrineOffer.includes(id)) return;
+    activeDoctrine = activeDoctrine === id ? null : id;
+    doctrineBroken = false;
+    renderMuster();
+}
+
 function protocolName() { return ascension > 0 ? PROTOCOLS[Math.min(ascension, PROTOCOLS.length) - 1].name : null; }
 
 // ── Sector fronts ───────────────────────────────────────────────────────────────────────
@@ -1291,6 +1407,11 @@ const CODEX = [
     { id: 'HOSTILES', title: 'KNOW THE HOSTILES', body: () => [
         'Every hostile carries a signature. A passive one is always running; an action is telegraphed by its own icon a turn before it lands, so there is always an answer.',
         ...Object.values(ENEMY_SIGS).map(s => `${s.name} (${s.kind === 'action' ? 'telegraphed' : s.kind}) \u2014 ${s.desc}`)
+    ] },
+    { id: 'DOCTRINES', title: 'DOCTRINES', body: () => [
+        'Three are offered at every muster. Taking one is optional; it is a rule about who deploys, kept for the whole expedition, and it pays a score multiplier that stacks with contracts and protocols.',
+        'Each carries an edge as well as a rule, so an unusual line is a different way to play rather than a worse one. Breaking the rule loses the multiplier permanently - and the game will never break it for you when it closes ranks behind a loss.',
+        ...DOCTRINES.map(d => `${d.name} (+${Math.round(d.bonus * 100)}%) \u2014 ${d.rule} ${d.edge}`)
     ] },
     { id: 'FORMATIONS', title: 'FORMATIONS', body: () => [
         'Some hostile squads are compositions rather than patrols: a fixed line-up built so its signatures work together. The map names one before you take it, and the same name always brings the same shape - so a formation you have fought once is a problem you already know the answer to.',
@@ -1806,6 +1927,7 @@ const ACTIONS = {
     'consequence-ack':  () => resolveConsequence(),
     'event-finish':     () => finishEvent(),
     'camp-choice':      el => resolveCamp(el.dataset.kind),
+    'take-doctrine':    el => takeDoctrine(el.dataset.id),
     'camp-extract':     () => armExtract(),
     'camp-extract-go':  () => extractRun(),
     'camp-finish':      () => finishCamp(),
@@ -2478,17 +2600,29 @@ function tickBleedOut(ent) {
 let vacatedRanks = [];
 function closeRanks() {
     const filled = [];
+    // Whatever this does to the line, the promise is re-asked at the end of it.
+    const after = () => checkDoctrine();
     const ranks = [...new Set(vacatedRanks)].sort();
     vacatedRanks = [];
     ranks.forEach(pos => {
         if (!pos || pos <= 0 || playerRoster.some(c => c.gridPos === pos)) return;
-        const next = playerRoster.filter(c => c.gridPos === 0)
-            .sort((a, b) => (b.hp / b.maxHp) - (a.hp / a.maxHp))[0];
+        // A doctrine is a promise the player made; the game must not break it for them by
+        // stepping the one banned class into the gap. Better to leave the rank empty.
+        const bench = playerRoster.filter(c => c.gridPos === 0)
+            .sort((a, b) => (b.hp / b.maxHp) - (a.hp / a.maxHp));
+        const keeps = c => {
+            const d = doctrineById(activeDoctrine);
+            if (!d || doctrineBroken) return true;
+            return !!d.holds([...deployedLine(), c]);
+        };
+        const next = bench.find(keeps) || (activeDoctrine && !doctrineBroken ? null : bench[0]);
         if (!next) return;
         next.gridPos = pos;
         filled.push(next.name);
         log(`> ${next.name} steps up into the ${(RANK_LABELS[pos] || '').toLowerCase()} rank.`, 'log-status');
     });
+    applyDoctrineEdge();
+    after();
     return filled;
 }
 
@@ -2500,6 +2634,7 @@ function loseOperator(ent, cause) {
     if (ent.trinket) { const g = gearById(ent.trinket); if (g && g.remove) g.remove(ent); gearStash.push(ent.trinket); ent.trinket = null; }
     if (ent.weaponMod) { gearStash.push(ent.weaponMod); ent.weaponMod = null; }
     playerRoster = playerRoster.filter(c => c.id !== ent.id);
+    checkDoctrine();
     if (runStats) {
         runStats.fallen = runStats.fallen || [];
         runStats.fallen.push({ name: ent.name, classType: ent.classType, level: ent.level || 1,
@@ -2834,6 +2969,9 @@ function renderRunOver(score, isBest, seedPrev = null) {
     ];
     // The names first, above the tally. An expedition that came home short says so before it
     // says how much scrap it made.
+    const dOver = doctrineById(st.doctrine);
+    if (dOver) lines.splice(1, 0, ['DOCTRINE',
+        `${dOver.name} \u00B7 ${(st.doctrineMult || 1) > 1 ? `\u00D7${(st.doctrineMult).toFixed(2)}` : 'BROKEN, PAID NOTHING'}`]);
     if (st.extracted) lines.splice(1, 0, ['WALKED OUT WITH',
         `+${Math.round(extractBonus(st) * 100)}% SCORE \u00B7 \uD83D\uDC80 ${extractSkulls(st)} \u00B7 ${playerRoster.filter(p => p.hp > 0).length} STANDING`]);
     if ((st.fallen || []).length) lines.splice(1, 0, ['OPERATORS LOST',
@@ -2907,7 +3045,7 @@ let bestScore = 0; let bestSector = 0;
 
 function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, mastery, bestiary, seenPrompts, grudges })); }
 
-function newRunStats() { return { extracted: false, kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, recruited: 0, fallen: [], deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
+function newRunStats() { return { extracted: false, doctrine: null, doctrineMult: 1, kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, recruited: 0, fallen: [], deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
 
 // Endless scoring: depth is worth far more than any single haul, so pushing one sector
 // deeper always beats farming the one you are on.
@@ -2960,7 +3098,7 @@ function computeScore(st) {
     // not re-scored by whatever the next expedition signs up for.
     // Walking out pays for itself; dying banks the raw figure.
     const out = st.extracted ? 1 + extractBonus(st) : 1;
-    return Math.floor(base * (st.contractMult || 1) * (st.protocolMult || 1) * out);
+    return Math.floor(base * (st.contractMult || 1) * (st.protocolMult || 1) * (st.doctrineMult || 1) * out);
 }
 
 function noteDepth() {
@@ -3236,6 +3374,23 @@ function renderMuster() {
             ${loadout}
         </div>`;
     }).join('');
+    // The three on offer, and whether the line as it stands would keep each one. A doctrine you
+    // cannot currently field is shown and refused rather than hidden, so it reads as something
+    // to build toward rather than as a card that was never dealt.
+    const line = deployedLine();
+    document.getElementById('muster-doctrines').innerHTML = doctrineOffer.map(id => {
+        const d = doctrineById(id);
+        if (!d) return '';
+        const on = activeDoctrine === id;
+        const can = !!d.holds(line);
+        return `<button class="doctrine-card ${on ? 'doctrine-on' : ''} ${can ? '' : 'doctrine-unmet'}" data-action="take-doctrine" data-id="${d.id}">
+            <span class="doctrine-head"><span class="doctrine-name">${on ? '\u2611' : '\u2610'} ${d.name}</span><span class="doctrine-bonus">+${Math.round(d.bonus * 100)}%</span></span>
+            <span class="doctrine-rule">${d.rule}</span>
+            <span class="doctrine-edge">${d.edge}</span>
+            ${can ? '' : `<span class="doctrine-no">The line as it stands does not keep this.</span>`}
+        </button>`;
+    }).join('');
+
     const deployed = playerRoster.filter(c => c.gridPos > 0).length;
     const cap = hasContract('SHORT_HANDED') ? 2 : 3;
     // Every deployed pair is a bond waiting to happen; the muster names them up front so
@@ -3247,7 +3402,11 @@ function renderMuster() {
     document.getElementById('muster-note').innerText =
         `${deployed}/${cap} deployed. Melee earns full damage in FRONT; ranged fights the same from anywhere. Enemy fire hunts the BACK.` +
         (pairNames.length ? ` Bonds this draft would forge: ${pairNames.join(', ')}.` : '');
-    document.getElementById('muster-deploy').disabled = deployed < 1 || deployed > cap;
+    const kept = !activeDoctrine || !!doctrineById(activeDoctrine).holds(line);
+    document.getElementById('muster-deploy').disabled = deployed < 1 || deployed > cap || !kept;
+    document.getElementById('muster-deploy').innerText = !kept
+        ? `THE LINE DOES NOT KEEP ${doctrineName()}`
+        : activeDoctrine ? `DEPLOY UNDER ${doctrineName()}` : 'DEPLOY';
 }
 
 function musterRank(charId) {
@@ -3284,7 +3443,32 @@ function musterDeploy() {
     const deployed = playerRoster.filter(c => c.gridPos > 0).length;
     const cap = hasContract('SHORT_HANDED') ? 2 : 3;
     if (deployed < 1 || deployed > cap) return;
+    // A doctrine the line does not keep is not taken at all, rather than taken and instantly
+    // broken - the muster will not let you deploy into one, so this is the belt to that brace.
+    if (activeDoctrine && !doctrineHolds()) activeDoctrine = null;
+    if (activeDoctrine) {
+        applyDoctrineEdge();
+        firePrompt('DOCTRINE');
+        runStats.doctrine = activeDoctrine;
+    }
+    if (runStats) runStats.doctrineMult = doctrineMult();
     saveGameState(); renderMap();
+}
+
+// The edges that change a sheet are applied once, at deploy, so they read on the card and in
+// every forecast rather than being a hidden multiplier at the moment of the hit.
+function applyDoctrineEdge() {
+    deployedLine().forEach(c => {
+        // Once each: someone who steps up out of the bench mid-run gets it, and nobody gets it
+        // twice for being benched and re-deployed.
+        if (c.doctrineEdged) return;
+        if (hasDoctrine('SKELETON_CREW')) {
+            const add = Math.floor(c.maxHp * 0.30);
+            c.maxHp += add; c.hp += add;
+            c.doctrineEdged = true;
+        }
+        if (hasDoctrine('LIGHT_ORDER')) { c.speed += 3; c.doctrineEdged = true; }
+    });
 }
 
 function confirmNewGame(diff) { buildNewRun(diff); renderMap(); }
@@ -3309,6 +3493,8 @@ function buildNewRun(diff) {
     sectorFront = rollFront(seededRng('front:1'), 1); frontBannerPending = true;
     sectorMap = generateSectorMap(seededRng('map:1')); currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null; forecastFormation = null;
     odChoices = {}; pendingOverdrive = null; momentumFocus = 0; pressExtra = false;
+    doctrineOffer = rollDoctrines(seededRng('doctrine')); activeDoctrine = null; doctrineBroken = false;
+    noteFavourites();
     const kept = heirloomRelic();
     activeRelics = kept ? [kept] : [];
     // The Cache stocks a relic of its own, and never a second copy of what the Vault held.
@@ -3375,7 +3561,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, pendingRecruit, regroupInsured, bonds, sectorFront, runSeed, ascension, bossSalt, pendingConsequences, recentEvents, castState, firedEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, retreatNode, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, pendingRecruit, regroupInsured, bonds, sectorFront, runSeed, ascension, bossSalt, doctrineOffer, activeDoctrine, doctrineBroken, doctrineFavourites, pendingConsequences, recentEvents, castState, firedEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, retreatNode, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -3396,6 +3582,11 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         // A save from before fronts existed finishes its current sector without one.
         sectorFront = frontById(d.sectorFront) ? d.sectorFront : null;
         frontBannerPending = false;
+        // A save from before doctrines existed carries none, and finishes its run without one.
+        doctrineOffer = (Array.isArray(d.doctrineOffer) ? d.doctrineOffer : []).filter(doctrineById);
+        activeDoctrine = doctrineById(d.activeDoctrine) ? d.activeDoctrine : null;
+        doctrineBroken = !!d.doctrineBroken;
+        doctrineFavourites = Array.isArray(d.doctrineFavourites) ? d.doctrineFavourites : [];
         runSeed = (typeof d.runSeed === 'string' && d.runSeed) ? d.runSeed : null;
         ascension = Number.isInteger(d.ascension) ? Math.max(0, Math.min(d.ascension, PROTOCOLS.length)) : 0;
         bossSalt = (typeof d.bossSalt === 'string' && d.bossSalt) ? d.bossSalt : 'w0';
@@ -3651,6 +3842,16 @@ function renderMap() {
     const badge = document.getElementById('front-badge');
     badge.style.display = front ? 'flex' : 'none';
     if (front) { badge.innerHTML = `<span class="front-icon">${front.icon}</span><span>${front.name.toUpperCase()}</span>`; badge.title = front.desc; }
+    // The doctrine rides the header the way the front does: a promise you can see you are
+    // still keeping, or see that you have broken.
+    const dBadge = document.getElementById('doctrine-badge');
+    const dc = doctrineById(activeDoctrine);
+    dBadge.style.display = dc ? 'flex' : 'none';
+    if (dc) {
+        dBadge.className = `doctrine-badge${doctrineBroken ? ' doctrine-badge-broken' : ''}`;
+        dBadge.innerHTML = `<span>${doctrineBroken ? '\u2716' : '\u2714'} ${dc.name}</span><span class="doctrine-badge-mult">${doctrineBroken ? 'BROKEN' : `\u00D7${(1 + dc.bonus).toFixed(2)}`}</span>`;
+        dBadge.title = doctrineBroken ? `${dc.rule} The line stopped keeping it, so it pays nothing.` : `${dc.rule} ${dc.edge}`;
+    }
     const banner = document.getElementById('front-banner');
     if (front && frontBannerPending) {
         frontBannerPending = false;
@@ -3833,7 +4034,7 @@ function installAugment(charId, type) { let char = playerRoster.find(c => c.id =
 function assignSlot(charId, newSlot) {
     // Short Handed is a condition for the whole expedition, not just its first node.
     if (hasContract('SHORT_HANDED') && newSlot === 3) { activePosSelector = null; renderOutpost(); return; }
-    let char = playerRoster.find(c => c.id === charId); let oldSlot = char.gridPos; if (newSlot > 0) { let existingChar = playerRoster.find(c => c.gridPos === newSlot && c.id !== charId); if (existingChar) existingChar.gridPos = oldSlot; } char.gridPos = newSlot; activePosSelector = null; saveGameState(); renderOutpost(); }
+    let char = playerRoster.find(c => c.id === charId); let oldSlot = char.gridPos; if (newSlot > 0) { let existingChar = playerRoster.find(c => c.gridPos === newSlot && c.id !== charId); if (existingChar) existingChar.gridPos = oldSlot; } char.gridPos = newSlot; activePosSelector = null; checkDoctrine(); saveGameState(); renderOutpost(); }
 // ── Signature perks ─────────────────────────────────────────────────────────────────────
 // A level-up used to bank a point spent later on a flat stat. It is a moment now: three perks
 // offered on the spot, mixing the stat perks with class signatures that change what an
@@ -4628,6 +4829,7 @@ const PROMPTS = [
     { id: 'RECRUIT',   title: 'SOMEONE WORTH SIGNING', body: 'The seven you start with are not everyone out here. A survivor brings a verb none of them has - a grinder for the front rank, a decontaminator for the middle, or a line that can haul what is hiding at the back of the enemy out where you can reach it. They cost Scrap, they arrive hurt, and there are only three in the whole wasteland. They join the bench: put them in the line at the Outpost.' },
     { id: 'ARMORY',    title: 'THE ARMORY',      body: 'A trader on the route. Gear, a marked-up relic, stims, a quirk do-over, and a bond that prepays your next regroup. Prices climb with the sector, so scrap spent early is worth more.' },
     { id: 'THREAT',    title: 'SOMEONE IS ABOUT TO DIE', body: 'The red figure over that operator is what lands on them this round if nothing changes, and it is more than they have left. Kill the thing aimed at them, brace in front of them, spend a STIM, or move them - but not nothing.' },
+    { id: 'DOCTRINE',  title: 'YOU MADE A PROMISE', body: 'A doctrine is a rule about the shape of your line, taken at the muster and held for the whole expedition. It pays a score multiplier on top of contracts and protocols, and it carries an edge of its own - because a rule that only banned things would be fielding a worse squad for points. Break it and the multiplier is gone for good, so the badge on the map header says whether you are still keeping it. The game will not break it for you: a rank left empty by a loss is filled by someone your doctrine allows, or left empty.' },
     { id: 'FORMATION', title: 'THIS IS A KNOWN SHAPE', body: 'That was not a patrol - it is a composition, and the node named it before you took it. The units in it were put together on purpose: plate to break with something calling for help behind it, a swarm that shrugs off damage until you thin it, a singer making something else dangerous. The same name always brings the same shape, so a formation you have fought once is a problem you already know the answer to. Plain faction nodes are still loose patrols.' },
     { id: 'REGROUP',   title: 'THE SQUAD BROKE', body: 'A wipe is not the end of the expedition. Regrouping costs half your scrap and sends you back to the start of this sector with the squad on its feet. You have a limited number - felling a warlord earns one back.' }
 ];
@@ -6347,6 +6549,10 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     let cd = calcDmg;
     if (hasRelic('KINETIC_MESH') && t.isPlayer && t.gridPos === 1 && atkType === 'phys') cd = Math.floor(cd * 0.75);
     if (hasRelic('LEAD_LINED_COAT') && t.isPlayer) cd = Math.floor(cd * 0.8);
+    // NO HANDS: a line with nothing that swings has to be able to survive what walks into it.
+    // Melee only - the doctrine is about giving up reach, not about being harder to shoot.
+    if (hasDoctrine('NO_HANDS') && t.isPlayer && t.gridPos === 1 && attacker && !attacker.isPlayer
+        && attacker.range === 'melee') cd = Math.floor(cd * 0.8);
     if (hasRelic('CHEM_ETCHER') && !t.isPlayer && (t.corrodedTurns || 0) > 0) cd = Math.floor(cd * 1.25);
     if (hasQuirk(t, 'THICK_HIDE')) cd = Math.max(1, cd - 3);
     // Ruins are cover for whoever is standing in them, and the front rank is where the cover is.
@@ -6987,7 +7193,10 @@ function awardXp(char, amount) {
     if (amount <= 0) return;
     if (sectorFront === 'QUIET_ROADS') amount = Math.floor(amount * 0.85);
     if (hasTrinket(char, 'WAR_TROPHY')) amount = Math.floor(amount * 1.25);
-    noteMastery(char.classType, amount);
+    // CONSCRIPTS pays in the currency the problem is made of: the classes you never field are
+    // the ones with no dossier, and a dossier is what makes a class worth fielding again.
+    // Only the dossier doubles - the operator's own level curve is untouched.
+    noteMastery(char.classType, hasDoctrine('CONSCRIPTS') && char.gridPos > 0 ? amount * 2 : amount);
     char.xp += amount;
     while (char.xp >= char.xpToNext) {
         char.level++; char.xp -= char.xpToNext; char.xpToNext = Math.floor(char.xpToNext * XP_CURVE); char.perkPoints++;
@@ -7065,6 +7274,19 @@ function checkWinState() {
         if (tuneUpBattles > 0) tuneUpBattles--;
         // Holding the field is what buys the time to get to whoever is still on the floor.
         recoverDowned('once the field is held');
+        // FIELD SURGERY: no medic in the line, so the line patches itself between fights. It
+        // runs after the recovery above, which is what puts a downed operator back on their feet
+        // in the first place - a squad with no medic still gets them up, just not mid-fight.
+        if (hasDoctrine('FIELD_SURGERY')) {
+            let healed = 0;
+            deployedLine().forEach(c => {
+                if (c.hp <= 0 || c.hp >= c.maxHp) return;
+                const before = c.hp;
+                c.hp = Math.min(c.maxHp, c.hp + Math.max(1, Math.floor(c.maxHp * 0.12)));
+                healed += c.hp - before;
+            });
+            if (healed > 0) log(`> Field surgery, off the back of the truck. +${healed} across the line.`, 'log-heal');
+        }
         // How the fight was won, before the log is cleared by the next one.
         noteFightWon();
         recordBonds();
@@ -7133,7 +7355,7 @@ globalThis.WP = {
     RECRUIT_POOL, RECRUIT_COST, RECRUIT_HEALTH, recruitCost, recruitables, recruitById, recruitReach,
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
@@ -7218,6 +7440,10 @@ globalThis.WP = {
     get currentTerrain() { return currentTerrain; }, set currentTerrain(v) { currentTerrain = v; },
     get forecastTerrain() { return forecastTerrain; }, set forecastTerrain(v) { forecastTerrain = v; },
     get forecastFormation() { return forecastFormation; }, set forecastFormation(v) { forecastFormation = v; },
+    get doctrineOffer() { return doctrineOffer; }, set doctrineOffer(v) { doctrineOffer = v; },
+    get activeDoctrine() { return activeDoctrine; }, set activeDoctrine(v) { activeDoctrine = v; },
+    get doctrineBroken() { return doctrineBroken; }, set doctrineBroken(v) { doctrineBroken = v; },
+    get doctrineFavourites() { return doctrineFavourites; }, set doctrineFavourites(v) { doctrineFavourites = v; },
     get currentFormation() { return currentFormation; }, set currentFormation(v) { currentFormation = v; },
     get castState() { return castState; }, set castState(v) { castState = v; },
     get firedEvents() { return firedEvents; }, set firedEvents(v) { firedEvents = v; },

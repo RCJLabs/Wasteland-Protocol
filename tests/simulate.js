@@ -42,6 +42,15 @@ const CONTRACTS = flag('contracts', '').split(',').filter(Boolean);
 // only one. With this on it also runs from fights it is losing, so the cost of leaving can be
 // measured against the cost of staying. `--withdraw off` is the old behaviour, for comparison.
 const WITHDRAW_POLICY = flag('withdraw', 'on') !== 'off';
+// The draft policy was hardcoded to a front-liner, usually a medic, and one other - which meant
+// "which classes get deployed" reported that policy back rather than anything about the game.
+// `--draft random` fields three drawn flat from the roster; `--draft only:PYROMANIAC` forces one
+// class into the line and rolls the rest. The cost of an unusual squad is the number doctrines
+// have to be priced against, and it cannot be read off a policy that never fields one.
+// `--draft doctrine` takes one of the three offered and builds a line that keeps it, which is
+// what a player with a free multiplier on the table actually does. It is not the default: the
+// default is left alone so runs measured before doctrines existed stay comparable.
+const DRAFT = flag('draft', 'line');
 // A sim that never walks out measures a game with one ending. `--extract N` gives it the
 // player who leaves once the run is worth banking: from sector N on, it takes the camp's door
 // when the squad is worn down. `off` (the default) is the old behaviour, for comparison.
@@ -50,7 +59,7 @@ const EXTRACT_AT = EXTRACT_RAW === 'off' ? 99 : Number(EXTRACT_RAW);
 
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy }) => {
   const stat = { sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, ground: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
@@ -58,7 +67,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
-                 extracted: false, walkedAt: 0, formations: {}, loose: 0 };
+                 extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false };
 
   activeContracts = [...contracts];
   currentSlot = 1;
@@ -77,14 +86,47 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const byClass = c => playerRoster.filter(p => c.includes(p.classType));
   const pickFrom = list => list[Math.floor(Math.random() * list.length)];
   const draft = [];
-  draft.push(pickFrom(byClass(['BRUISER', 'SHOTGUNNER'])));
-  if (slots.length > 2 && Math.random() < 0.7) draft.push(pickFrom(byClass(['MEDIC'])));
+  if (draftPolicy === 'random') {
+    // No shape at all: whatever the roster hands you. This is the floor.
+  } else if (draftPolicy.startsWith('doctrine:')) {
+    // One named doctrine, every run, so a pool average cannot hide a single expensive one.
+    const want = draftPolicy.slice(9);
+    const d = doctrineById(want);
+    if (d) {
+      doctrineOffer = [want];
+      const shuffled = [...playerRoster].sort(() => Math.random() - 0.5);
+      shuffled.forEach(c => { if (draft.length < slots.length && d.holds([...draft, c])) draft.push(c); });
+      if (d.holds(draft)) { activeDoctrine = want; stat.doctrine = want; }
+    }
+  } else if (draftPolicy === 'doctrine' && doctrineOffer.length) {
+    // Take one at random and field a line that keeps it. Anything the doctrine will not have
+    // is simply not drafted, which is the whole of the constraint.
+    const want = doctrineOffer[Math.floor(Math.random() * doctrineOffer.length)];
+    const d = doctrineById(want);
+    const shuffled = [...playerRoster].sort(() => Math.random() - 0.5);
+    shuffled.forEach(c => { if (draft.length < slots.length && d.holds([...draft, c])) draft.push(c); });
+    if (d.holds(draft)) { activeDoctrine = want; stat.doctrine = want; }
+  } else if (draftPolicy.startsWith('only:')) {
+    const want = draftPolicy.slice(5);
+    const one = byClass([want])[0];
+    if (one) draft.push(one);
+  } else {
+    draft.push(pickFrom(byClass(['BRUISER', 'SHOTGUNNER'])));
+    if (slots.length > 2 && Math.random() < 0.7) draft.push(pickFrom(byClass(['MEDIC'])));
+  }
   while (draft.length < slots.length) {
     const rest = playerRoster.filter(p => !draft.includes(p));
-    draft.push(pickFrom(rest));
+    const d = doctrineById(activeDoctrine);
+    const legal = d ? rest.filter(c => d.holds([...draft, c])) : rest;
+    if (!legal.length) break;
+    draft.push(pickFrom(legal));
   }
   draft.forEach((p, i) => { p.gridPos = slots[i]; });
+  // The real deploy button is what applies a doctrine's edge and banks its multiplier, so the
+  // sim goes through it rather than around it.
+  musterDeploy();
   stat.deployed = playerRoster.filter(p => p.gridPos > 0).map(p => p.classType);
+  stat.doctrineKept = !!activeDoctrine && !doctrineBroken;
   const bountiesAtStart = () => activeBounties.map(b => b.desc).join('|');
   // Which contracts a run actually settles, so one nobody can finish shows as a zero.
   let lastBoard = null;
@@ -455,13 +497,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   await page.evaluate(() => { globalSettings.sfx = false; });
   ALL_FORMATION_IDS = await page.evaluate(() => ALL_FORMATIONS.map(f => f.id));
 
-  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}` +
+  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}` +
               (CONTRACTS.length ? ` under ${CONTRACTS.join(', ')}` : '') +
               (WITHDRAW_POLICY ? ', running from fights it is losing' : ', fighting every node to a finish') + '\n');
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -538,6 +580,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   }
   line('nodes cleared, median', pct(nums('nodes'), 0.5));
   line('score, median', pct(nums('score'), 0.5).toLocaleString());
+
+  const withDoc = results.filter(r => r.doctrine);
+  if (withDoc.length) {
+    console.log('\n── DOCTRINES ' + '─'.repeat(44));
+    line('runs that took one', `${withDoc.length} of ${n}`);
+    const kept = withDoc.filter(r => r.doctrineKept).length;
+    line('  still keeping it at the end', `${kept} of ${withDoc.length}`);
+    const byDoc = {};
+    withDoc.forEach(r => { byDoc[r.doctrine] = (byDoc[r.doctrine] || 0) + 1; });
+    Object.entries(byDoc).sort((a, b) => b[1] - a[1]).forEach(([k, v]) => line('  ' + k, v));
+  }
 
   console.log('\n── FORMATIONS ' + '─'.repeat(43));
   const forms = {};

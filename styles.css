@@ -725,3 +725,25 @@ button.reach-short { border-color: #7a5a20; }
    A border tint would not read - the node is a circle. */
 .map-node.formation-node .node-lbl { color: #B8860B; }
 .map-node.formation-node.node-locked .node-lbl { color: #8a6a2a; }
+
+/* Doctrines: a promise about the shape of the line, made at the muster and carried all run.
+   The card shows the rule and the edge together, because a rule with no edge is just a tax. */
+.doctrine-list { flex-shrink: 0; display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.doctrine-card { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 8px 10px;
+    border: 1px solid #3a3a2a; background: #0c0c08; color: #b9b4a6; font-family: inherit; cursor: pointer; }
+.doctrine-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.doctrine-name { font-size: 11px; font-weight: bold; letter-spacing: 2px; color: #d5cfc0; }
+.doctrine-bonus { font-size: 11px; font-weight: bold; color: #B8860B; font-variant-numeric: tabular-nums; }
+.doctrine-rule { font-size: 10px; color: #b9b4a6; line-height: 1.4; }
+.doctrine-edge { font-size: 10px; color: #6B8E23; line-height: 1.4; }
+.doctrine-no { font-size: 9.5px; color: #B22222; letter-spacing: 1px; }
+.doctrine-card.doctrine-on { border-color: #B8860B; background: #17130a; }
+.doctrine-card.doctrine-on .doctrine-name { color: #B8860B; }
+.doctrine-card.doctrine-unmet { opacity: 0.6; }
+
+/* Live on the map header, the way the front is: still keeping it, or visibly not. */
+#doctrine-badge { display: flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0;
+    border: 1px solid #6b5a20; background: #121006; color: #B8860B; font-size: 11px;
+    letter-spacing: 2px; padding: 5px 8px; }
+#doctrine-badge.doctrine-badge-broken { border-color: #6b2020; background: #140808; color: #B22222; }
+.doctrine-badge-mult { font-variant-numeric: tabular-nums; opacity: 0.85; }
