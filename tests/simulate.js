@@ -80,6 +80,22 @@ const EXTRACT_AT = EXTRACT_RAW === 'off' ? 99 : Number(EXTRACT_RAW);
 //   --relics curse   takes the curse every time one is offered                 (the ceiling)
 const RELICS = flag('relics', 'rare');
 
+// What this file measured about depth, before the player below could read a board:
+//
+//   player                                 median sector   nodes   ended
+//   random ability, always at foes[0]            2           49    wiped 60/60
+//   reads the board (below)                      2           50    wiped 60/60
+//   reads the board, and the tactic shelf too    2           50    wiped 60/60
+//
+// Three materially different players, one wall. Move selection reshaped hard - HEAVY_WRENCH
+// 3.9% to 7.0% of all actions, CAUTERIZE 3.3 to 6.5, FLASHBANG 2.0 to 4.5, DEADEYE 1.1 to 2.5
+// as specials stopped losing coin flips to basic attacks - and depth did not move at all. So
+// the wall is not a readout of this file's play, which is the one thing that had to be ruled
+// out before anything was concluded from it.
+//
+// Where it actually sits: wipes by tier read t8:7 t9:7 t10:238. The commander at tier 10 takes
+// 92% of every wipe in the run, and the nine tiers under it produced 20 across sixty runs.
+//
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
 const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy }) => {
@@ -236,7 +252,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     const actor = turnQueue[activeIndex];
     const foes = activeEntities.filter(e => !e.isPlayer && e.hp > 0);
     if (!foes.length) return false;
-    const deck = (ABILITIES[actor.classType] || []).filter(a => !a.cd || (actor.cooldowns[a.cd] || 0) === 0);
+    // deckFor, not ABILITIES: a class at mastery rank 3 fights with a fourth ability, and
+    // reading the raw table meant every one of those was measured as never used.
+    const deck = deckFor(actor).filter(a => !a.cd || (actor.cooldowns[a.cd] || 0) === 0);
     if (!deck.length) return false;
     if (momentum >= overdriveAt()) {
       stat.moves.OVERDRIVE = (stat.moves.OVERDRIVE || 0) + 1;
@@ -349,12 +367,55 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         }
     }
 
-    let chosen = null, target = foes[0];
+    // Attack selection used to be `deck[random]` swung at `foes[0]`, which is not a player, it
+    // is a coin. It ignored cooldowns, reach, crowds and health bars, and every depth figure
+    // this file has ever reported was a readout of that coin - the same defect that once had a
+    // throwaway probe reporting every formation hitting the turn cap.
+    //
+    // What follows is a competent player, not an optimal one, and deliberately reads only what
+    // the game already puts on screen: the health bars, the intent icons, the reach penalty
+    // printed on the deck button, and the combo tag. No damage formula is duplicated here - a
+    // second copy of the arithmetic would drift from the engine and become the next bad
+    // instrument.
+    const dist = f => foes.indexOf(f);
+    const soft = (mv, f) => reachMult(mv, actor, dist(f)) < 1;   // what the button says
+    // What a foe is about to do to you, which is what the intent icon shows.
+    const threat = f => {
+      const fc = forecastFor(f);
+      return fc && fc.hits ? fc.hits.reduce((a, h) => a + h.dmg, 0) : (f.dmgBase || 0);
+    };
+    // A health bar in the red is the whole reason focus fire exists: a foe removed stops acting,
+    // a foe half-removed does not.
+    const finishable = f => f.hp <= f.maxHp * 0.25;
+    const pickFoe = mv => {
+      const reachable = foes.filter(f => !soft(mv, f));
+      const pool = reachable.length ? reachable : foes;
+      const kill = pool.filter(finishable).sort((a, b) => a.hp - b.hp)[0];
+      if (kill) return kill;
+      return pool.slice().sort((a, b) => threat(b) - threat(a))[0] || foes[0];
+    };
+
+    let chosen = null, target = null;
+    // 1. A combo is the game's own signposted best move, and it is signposted on the button.
     for (const a of deck) {
-      const hit = foes.find(f => comboFor(a.move, f));
+      const hit = foes.find(f => comboFor(a.move, f) && !soft(a.move, f))
+               || foes.find(f => comboFor(a.move, f));
       if (hit) { chosen = a; target = hit; break; }
     }
-    if (!chosen) chosen = deck[Math.floor(Math.random() * deck.length)];
+    // 2. Three or more of them standing is what an AoE is for.
+    if (!chosen && foes.length >= 3) {
+      const blast = deck.find(a => isAoe(a.move));
+      if (blast) chosen = blast;
+    }
+    // 3. Otherwise the best thing available: a special off cooldown beats the basic attack (it
+    //    has a cooldown because it is worth more), and a swing that lands soft loses to one
+    //    that does not.
+    if (!chosen) {
+      const usable = deck.filter(a => a.act !== 'self');
+      const rank = a => (a.cd ? 2 : 1) + (foes.some(f => !soft(a.move, f)) ? 2 : 0);
+      chosen = usable.sort((a, b) => rank(b) - rank(a))[0] || deck[0];
+    }
+    if (!target) target = pickFoe(chosen.move);
     if (chosen.act === 'self') { stat.moves[chosen.move] = (stat.moves[chosen.move] || 0) + 1; executeSelfAction(chosen.move); return true; }
     if (chosen.move === 'CAUTERIZE') {
       const hurt = activeEntities.filter(e => e.isPlayer && e.hp > 0 && e.hp < e.maxHp)[0];
@@ -362,7 +423,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       else { stat.moves.CAUTERIZE = (stat.moves.CAUTERIZE || 0) + 1; pendingAction = 'CAUTERIZE'; resolveAction(hurt.id); return true; }
     }
     stat.moves[chosen.move] = (stat.moves[chosen.move] || 0) + 1;
-    pendingAction = chosen.move; resolveAction(target.id);
+    pendingAction = chosen.move; resolveAction((target || foes[0]).id);
     return true;
   };
 
