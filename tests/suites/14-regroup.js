@@ -1,12 +1,17 @@
 // Losing a fight must never destroy an expedition the player did not choose to end. A wipe
-// spends a regroup and puts them back at the start of the sector; only when regroups run out,
-// or they choose to stop, does the run end and the slot clear.
+// spends a regroup and gives up ground; only when regroups run out, or they choose to stop,
+// does the run end and the slot clear.
+//
+// The ground given up is the whole sector, and it stays that way on measured evidence rather
+// than by default. Falling back three tiers instead was built and reverted: every income
+// channel roughly halved (promotions 39.1 -> 21.9, elites 4.60 -> 1.98, relics 6.2 -> 2.9) and
+// depth fell with them (mean sector 2.9 -> 1.9, commanders felled 1.93 -> 0.92), because the
+// re-walk is not the punishment - it is the levelling curve. See regroupSquad.
 module.exports = {
   name: 'Regroup on defeat',
   run: async ({ page, ok, base }) => {
     await page.goto(`${base}/index.html`);
     await page.waitForTimeout(600);
-
     const wipe = () => page.evaluate(() => {
       initiateCombat('RAIDERS', false);
       playerRoster.forEach(c => c.hp = 0);
@@ -60,6 +65,43 @@ module.exports = {
     ok('the save survived the defeat', after.slotAlive);
     ok('and the squad comes back with tuned weapons, not just poorer',
       await page.evaluate(() => tuneUpBattles) >= 3);
+
+    // The sector's whole road opens again, which is what makes a re-walk possible - and the
+    // re-walk is where a squad that lost to the commander gets strong enough to take it.
+    const ground = await page.evaluate(() => {
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      currentSector = 2; currentTier = 1;
+      while (currentTier < TOTAL_TIERS) { const id = availableNodeIds()[0]; if (!id) break; enterNode(id); currentTier++; }
+      const walked = clearedNodeIds.length;
+      runStats.regroups = 2;
+      regroupSquad();
+      return { walked, cleared: clearedNodeIds.length, tier: currentTier,
+               node: currentNodeId, open: availableNodeIds().map(x => nodeById(x).tier) };
+    });
+    ok(`a sector's road is given back in full (${ground.walked} cleared -> ${ground.cleared})`,
+      ground.walked >= 8 && ground.cleared === 0 && ground.node === null);
+    ok('and the squad stands at the bottom of it with the tier-1 nodes on offer',
+      ground.tier === 1 && ground.open.length > 0 && ground.open.every(t => t === 1));
+
+    // A retreat is over the moment the squad is dragged off. Left set, it pinned the whole map
+    // to one node - and after a wipe that node can be nine tiers above where the fallback put
+    // them, which made the map offer a commander to a squad standing at tier 1.
+    const stale = await page.evaluate(() => {
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      currentSector = 2; currentTier = 1;
+      while (currentTier < TOTAL_TIERS) { const id = availableNodeIds()[0]; if (!id) break; enterNode(id); currentTier++; }
+      const id = availableNodeIds()[0]; enterNode(id);
+      fallBackToNode();                      // a retreat, which pins the map to this node
+      const pinned = retreatNode;
+      runStats.regroups = 2;
+      regroupSquad();
+      return { pinned, after: retreatNode, tier: currentTier,
+               open: availableNodeIds().map(x => nodeById(x).tier) };
+    });
+    ok('a retreat pins the map to its node', !!stale.pinned);
+    ok('but a wipe clears that pin', stale.after === null);
+    ok(`so the fallback is not handed a node from the tier it just left (offers tier ${[...new Set(stale.open)].join()})`,
+      stale.open.every(t => t === stale.tier));
 
     // ---- the last regroup, then the run really ends ----
     await wipe(); await page.waitForTimeout(200);

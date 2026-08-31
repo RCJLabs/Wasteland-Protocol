@@ -2925,6 +2925,31 @@ function totalRegroups() { return hasContract('NO_REGROUPS') ? 0 : BASE_REGROUPS
 
 // Revive the squad, take half the scrap, and put them back at the start of the sector. The
 // save is left intact - this is the outcome the player expects from losing a fight.
+//
+// The full re-walk looks like the obvious thing to shorten, and it is not. Measured against a
+// player that reads the board, 92% of every wipe is the commander at tier 10 and the nine
+// tiers under it produced 20 across sixty runs - so the road being re-walked is exactly the
+// part that was never dangerous, and giving up all ten tiers for losing one fight reads as
+// pure punishment. Falling back three tiers instead was built, measured, and reverted:
+//
+//                        sector reset   fall back 3
+//   deepest sector, mean        2.9           1.9
+//   commanders felled          1.93          0.92
+//   promotions per run         39.1          21.9
+//   elites broken              4.60          1.98
+//   relics held                 6.2           2.9
+//   items crafted              34.8          11.2
+//
+// Every income channel roughly halved, because the re-walk is not the punishment - it is the
+// levelling curve. Those nine tiers are where the scrap, the XP, the elite relics, the gear
+// and the materials come from, and a squad that skips them arrives at the commander weaker
+// than the one that ground through them. Wipes at tiers 8 and 9 went UP (7->9, 7->10): they
+// started dying on the approach, which they never did before, because they were under-levelled
+// for it.
+//
+// So the commander is gated on squad power, not on player skill - three materially different
+// players all wall at the same place - and the grind is what buys the power. Anything aimed at
+// this should move the commander's difficulty or the rate income arrives, not the retry cost.
 function regroupSquad() {
     if (regroupsLeft() <= 0) { endRun(); return; }
     runStats.regroups--;
@@ -2939,6 +2964,10 @@ function regroupSquad() {
     currentTier = 1;
     // The sector keeps its map; the squad walks back in at the bottom of it.
     currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null; forecastFormation = null;
+    // A retreat is over the moment the squad is dragged off the field. Left set, it pinned the
+    // whole map to the retreated node - availableNodeIds returns it and nothing else - so a
+    // squad put back at tier 1 was offered a node from the tier it had just been broken on.
+    retreatNode = null;
     momentum = 0; addMomentum(0);
     combatActive = false; activeEntities = []; turnQueue = []; pendingCombat = null;
     saveGameState();
