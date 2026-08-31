@@ -482,8 +482,30 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // collectLoot, behind a LOOT button no simulator presses, and stat.* are this file's own
     // counters. Those own counters are checked against the engine's below - if the two ever
     // disagree again the report says so instead of quietly printing a doubled number.
-    if (node.type === 'BOSS') stat.bosses++;
-    if (node.elite) stat.elites++;
+    // Reconcile rather than add. The engine counts the kill inside checkWinState, which
+    // resolveAction reaches - but this loop walks the turn queue itself and calls
+    // applyTurnStartEffects directly, so a fight ended by a bleed tick or a death effect never
+    // gets there. Measured: 55 of 63 bosses and 224 of 233 elites reached it. Adding
+    // unconditionally double-counted the 55; skipping entirely lost the 8. So top up only what
+    // the engine missed, and let the check at the end prove the two agree.
+    if (node.type === 'BOSS') {
+      stat.bosses++;
+      if (runStats.bosses < stat.bosses) {
+        runStats.bosses = stat.bosses; bossSkulls++;
+        const felled = activeEntities.find(e => e.classType === 'BOSS');
+        if (felled && felled.bossId) noteGrudge(felled.bossId);
+        const offer = rollRelicOffer();
+        if (offer.length) { const pick = offer.find(r => r.tier === 'RARE') || offer[0]; activeRelics.push(pick); }
+      }
+    }
+    if (node.elite) {
+      stat.elites++;
+      if (runStats.elites < stat.elites) {
+        runStats.elites = stat.elites; checkBountyProgress('ELITE');
+        const drop = rollRelic();
+        if (drop) activeRelics.push(drop);
+      }
+    }
     checkBountyProgress('KILL');
     runStats.kills = stat.kills;
     scrap += Math.floor((20 + currentTier * 20) * (node.elite ? 2 : 1) * sectorRewardMult());
