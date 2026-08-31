@@ -1,6 +1,6 @@
 // Wasteland Protocol service worker.
 // Bump CACHE on release so clients discard the previous build's assets.
-const CACHE = 'wasteland-v3';
+const CACHE = 'wasteland-v4';
 
 // Only the shell is precached. The game preloads its own art on boot, so the art set
 // populates the cache at runtime on the first visit - which keeps this file from having

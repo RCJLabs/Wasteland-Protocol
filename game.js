@@ -6,10 +6,7 @@
 // Art that is commissioned but not yet drawn. Anything listed here is kept out of the
 // preloader and the service worker cache so neither chases a file that does not exist, and
 // the portrait fallback covers it on the field. Empty is the healthy state.
-const PENDING_ART = [
-    "enemy_choir_acolyte.webp", "enemy_choir_censer.webp", "enemy_choir_reliquary.webp", "enemy_choir_hierophant.webp",
-    "enemy_carrion_rat.webp", "enemy_carrion_moth.webp", "enemy_carrion_worm.webp", "enemy_carrion_brood.webp"
-];
+const PENDING_ART = [];
 const ASSET_LIST = [
     "bg_title.webp", "bg_combat.webp", "bg_thunderdome.webp", "bg_refinery.webp", "bg_highway.webp", "bg_canyon.webp", "bg_foundry.webp", "bg_nest.webp",
     "hero_bruiser.webp", "hero_medic.webp", "hero_scavenger.webp", "hero_pyro.webp", "hero_shotgunner.webp", "hero_sniper.webp", "hero_hound.webp",
@@ -17,7 +14,8 @@ const ASSET_LIST = [
     "enemy_dog.webp", "enemy_hound_bulldog.webp", "enemy_mutant.webp", "enemy_chem.webp", "enemy_raider.webp", "enemy_psycho.webp", "enemy_sniper.webp", "enemy_juggernaut.webp", "enemy_drone.webp", "enemy_turret.webp", "enemy_warrig.webp", "enemy_boss.webp", "enemy_boss_mech.webp", "enemy_boss_vulture.webp",
     "enemy_boss_vatborn.webp", "enemy_boss_marshal.webp", "enemy_boss_stormcaller.webp", "enemy_boss_bastion.webp",
     "enemy_choir_acolyte.webp", "enemy_choir_censer.webp", "enemy_choir_reliquary.webp", "enemy_choir_hierophant.webp",
-    "enemy_carrion_rat.webp", "enemy_carrion_moth.webp", "enemy_carrion_worm.webp", "enemy_carrion_brood.webp"
+    "enemy_carrion_rat.webp", "enemy_carrion_moth.webp", "enemy_carrion_worm.webp", "enemy_carrion_brood.webp",
+    "bg_congregation.webp", "bg_carrionfield.webp"
 ];
 // The title art is fetched immediately; everything else waits until the menu is up so the
 // first screen is not stuck behind the whole art set.
@@ -817,10 +815,10 @@ const FACTIONS = {
     MECH:    { bg: 'bg_refinery.webp', weather: 'TOXIC_SMOG',     ground: ['RUINS', 'TUNNELS'], allies: [] },
     // Irradiated cultists: the first enemies in the game that spend a turn on each other
     // rather than on you. Standing next to one is what makes the rest dangerous.
-    CHOIR:   { bg: 'bg_refinery.webp', weather: 'TOXIC_SMOG',     ground: ['FLOODED', 'RUINS'], allies: ['BEASTS'], minSector: 2 },
+    CHOIR:   { bg: 'bg_congregation.webp', weather: 'TOXIC_SMOG', ground: ['FLOODED', 'RUINS'], allies: ['BEASTS'], minSector: 2 },
     // A swarm. Each one is trivial and the pile is not, and the answer is to spread damage
     // across it rather than pick them off one at a time.
-    CARRION: { bg: 'bg_canyon.webp',   weather: 'SANDSTORM',      ground: ['NEST', 'TUNNELS'], allies: [],         minSector: 2, swarm: 2, heavyCap: 2 }
+    CARRION: { bg: 'bg_carrionfield.webp', weather: 'SANDSTORM',  ground: ['NEST', 'TUNNELS'], allies: [],         minSector: 2, swarm: 2, heavyCap: 2 }
 };
 const FIGHT_NODES = Object.keys(FACTIONS);
 function factionsAt(sector) { return FIGHT_NODES.filter(f => (FACTIONS[f].minSector || 1) <= sector); }
@@ -5264,19 +5262,18 @@ const ENEMY_POOL = {
     { name: "Turret", sig: 'OVERWATCH', minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
     { name: "War Rig", sig: 'AEGIS', minTier: 14, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
     ],
-    // Two factions built to be answered rather than out-damaged. `stand` names the portrait to
-    // show until the real one is drawn - see PENDING_ART.
+    // Two factions built to be answered rather than out-damaged.
     'CHOIR': [
-    { name: "Acolyte", sig: 'LITANY', minTier: 4, isHeavy: false, classType: "CULTIST", range: 'melee', maxHp: 45, speed: 12, armor: 0, dmgBase: 12, img: "enemy_choir_acolyte.webp", stand: "enemy_chem.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 40, energy: -10 } },
-    { name: "Censer Bearer", sig: 'RAD_WASH', minTier: 6, isHeavy: false, classType: "CULTIST", range: 'ranged', maxHp: 55, speed: 10, armor: 4, dmgBase: 14, img: "enemy_choir_censer.webp", stand: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 55, energy: -10 } },
-    { name: "Reliquary", sig: 'MARTYR', minTier: 10, isHeavy: true, classType: "CULTIST", range: 'melee', maxHp: 85, speed: 7, armor: 6, dmgBase: 16, img: "enemy_choir_reliquary.webp", stand: "enemy_mutant.webp", scale: 1.4, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 60, energy: -15 } },
-    { name: "Hierophant", unique: true, sig: 'RESURGENCE', minTier: 13, isHeavy: true, classType: "CULTIST", range: 'ranged', maxHp: 75, speed: 13, armor: 4, dmgBase: 20, img: "enemy_choir_hierophant.webp", stand: "enemy_psycho.webp", scale: 1.3, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 70, energy: -5 } }
+    { name: "Acolyte", sig: 'LITANY', minTier: 4, isHeavy: false, classType: "CULTIST", range: 'melee', maxHp: 45, speed: 12, armor: 0, dmgBase: 12, img: "enemy_choir_acolyte.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 40, energy: -10 } },
+    { name: "Censer Bearer", sig: 'RAD_WASH', minTier: 6, isHeavy: false, classType: "CULTIST", range: 'ranged', maxHp: 55, speed: 10, armor: 4, dmgBase: 14, img: "enemy_choir_censer.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 55, energy: -10 } },
+    { name: "Reliquary", sig: 'MARTYR', minTier: 10, isHeavy: true, classType: "CULTIST", range: 'melee', maxHp: 85, speed: 7, armor: 6, dmgBase: 16, img: "enemy_choir_reliquary.webp", scale: 1.4, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 60, energy: -15 } },
+    { name: "Hierophant", unique: true, sig: 'RESURGENCE', minTier: 13, isHeavy: true, classType: "CULTIST", range: 'ranged', maxHp: 75, speed: 13, armor: 4, dmgBase: 20, img: "enemy_choir_hierophant.webp", scale: 1.3, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 70, energy: -5 } }
     ],
     'CARRION': [
-    { name: "Carrion Rat", sig: 'TEEMING', minTier: 3, isHeavy: false, classType: "VERMIN", range: 'melee', maxHp: 22, speed: 20, armor: 0, dmgBase: 9, img: "enemy_carrion_rat.webp", stand: "enemy_dog.webp", scale: 0.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -5, bio: 25, energy: 0 } },
-    { name: "Blight Moth", sig: 'TEEMING', minTier: 5, isHeavy: false, classType: "VERMIN", range: 'ranged', isHovering: true, maxHp: 26, speed: 22, armor: 0, dmgBase: 11, img: "enemy_carrion_moth.webp", stand: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -5, bio: 30, energy: -10 } },
-    { name: "Gorge Worm", sig: 'BURROW', minTier: 9, isHeavy: true, classType: "VERMIN", range: 'melee', maxHp: 70, speed: 9, armor: 2, dmgBase: 22, img: "enemy_carrion_worm.webp", stand: "enemy_mutant.webp", scale: 1.4, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 35, energy: -10 } },
-    { name: "Brood Mother", unique: true, sig: 'BROOD', minTier: 12, isHeavy: true, classType: "VERMIN", range: 'ranged', maxHp: 95, speed: 8, armor: 4, dmgBase: 15, img: "enemy_carrion_brood.webp", stand: "enemy_juggernaut.webp", scale: 1.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 45, energy: -15 } }
+    { name: "Carrion Rat", sig: 'TEEMING', minTier: 3, isHeavy: false, classType: "VERMIN", range: 'melee', maxHp: 22, speed: 20, armor: 0, dmgBase: 9, img: "enemy_carrion_rat.webp", scale: 0.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -5, bio: 25, energy: 0 } },
+    { name: "Blight Moth", sig: 'TEEMING', minTier: 5, isHeavy: false, classType: "VERMIN", range: 'ranged', isHovering: true, maxHp: 26, speed: 22, armor: 0, dmgBase: 11, img: "enemy_carrion_moth.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -5, bio: 30, energy: -10 } },
+    { name: "Gorge Worm", sig: 'BURROW', minTier: 9, isHeavy: true, classType: "VERMIN", range: 'melee', maxHp: 70, speed: 9, armor: 2, dmgBase: 22, img: "enemy_carrion_worm.webp", scale: 1.4, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 35, energy: -10 } },
+    { name: "Brood Mother", unique: true, sig: 'BROOD', minTier: 12, isHeavy: true, classType: "VERMIN", range: 'ranged', maxHp: 95, speed: 8, armor: 4, dmgBase: 15, img: "enemy_carrion_brood.webp", scale: 1.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 45, energy: -15 } }
     ]
 };
 

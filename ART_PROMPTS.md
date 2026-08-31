@@ -68,12 +68,12 @@ commander should read as roughly twice the bulk of a regular raider.
 
 ---
 
-## Commissioned, not yet drawn
+## Drawn — the Choir and the Carrion
 
-Eight hostiles across two new factions. All eight are playable now on stand-in art (named in
-`stand` on each `ENEMY_POOL` entry), so nothing is broken while these are outstanding — the
-stand-in is chosen at render time rather than after a failed load, so the missing files are
-never requested at all.
+Eight hostiles across two factions, all delivered and wired in: `PENDING_ART` is empty
+again, the `stand` keys are gone from `ENEMY_POOL`, and each faction fights on its own
+ground now (`bg_congregation.webp` and `bg_carrionfield.webp`, briefs at the end of this
+section). The briefs below are what each was drawn from.
 
 Ordinary hostiles are smaller in frame than a commander: a rat should read as knee-high next
 to an operator, an Acolyte as a person. Match the weight of `enemy_raider.webp` and
@@ -127,11 +127,23 @@ limbs, a colour palette of bile and dried blood. Accent colour: sallow yellow-gr
   > a cluster of glistening egg sacs along one flank, head far too small for the body. Grotesque
   > rather than fearsome — the thing you kill first.
 
-### Optional, lower priority
-The Choir currently fights on the refinery backdrop and the Carrion on the canyon, both
-borrowed from other factions. Dedicated grounds — `bg_congregation.webp` (a flooded reactor
-hall lit green) and `bg_carrionfield.webp` (a vast ribcage half-buried in dust) — would give
-each faction its own place, but nothing is wrong without them.
+### The grounds — also drawn
+Both factions used to borrow another faction's backdrop (the Choir the refinery, the Carrion
+the canyon). Each owns its ground now. Backdrops are opaque WebP, portrait orientation around
+768×1344, hard silhouette skyline in the upper two thirds and the lower third left as open
+ground for the line to stand on.
+
+- **`bg_congregation.webp`** — the Choir's ground.
+  > The flooded interior of a ruined reactor hall: a vast cracked containment dome open to a
+  > burnt-orange sky, broken gantries and bent rebar in hard silhouette, standing water across
+  > the floor throwing green light up the walls, hand-daubed cult symbols on the concrete,
+  > drifting motes of luminous vapour. Accent colour: sickly radium green.
+
+- **`bg_carrionfield.webp`** — the Carrion's ground.
+  > An enormous animal ribcage half-buried in a dust plain, ribs arching overhead like rafters
+  > in hard silhouette against a jaundiced sky, scraps of hide still stretched between them,
+  > smaller bones and burrow mouths scattered across the ground, a haze of flies. Accent
+  > colour: sallow yellow-green.
 
 ---
 

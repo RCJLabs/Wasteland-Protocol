@@ -22,11 +22,20 @@ module.exports = {
         sigs: both.map(e => e.sig),
         described: both.every(e => ENEMY_SIGS[e.sig] && ENEMY_SIGS[e.sig].desc),
         classes: [...new Set(both.map(e => e.classType))].sort(),
-        // Every new unit's art is commissioned but not drawn, so each has to name a stand-in.
-        stands: both.every(e => PENDING_ART.includes(e.img) && e.stand && !PENDING_ART.includes(e.stand)),
-        inAssets: both.every(e => ASSET_LIST.includes(e.img))
+        // The stand-in era is over: all eight portraits are drawn, so nothing here may be
+        // pending, nothing may still name a stand-in, and the field must show the real file.
+        drawn: both.every(e => !PENDING_ART.includes(e.img) && !e.stand && portraitFor(e) === e.img),
+        inAssets: both.every(e => ASSET_LIST.includes(e.img)),
+        imgs: both.map(e => e.img)
       };
     });
+    // And the files are genuinely there - a wired-in portrait that 404s would fall to the
+    // error-handler fallback and this suite would never know.
+    const served = await page.evaluate(async imgs => {
+      const out = [];
+      for (const f of imgs) { const r = await fetch(f, { method: 'HEAD' }); if (!r.ok) out.push(f); }
+      return out;
+    }, roster.imgs);
     ok(`eight new hostiles across two factions (${roster.choir} + ${roster.carrion})`,
       roster.choir === 4 && roster.carrion === 4);
     ok('each fully described', roster.complete);
@@ -34,7 +43,24 @@ module.exports = {
       roster.described && new Set(roster.sigs).size >= 6);
     ok(`and they file under their own classes (${roster.classes.join(', ')})`,
       roster.classes.includes('CULTIST') && roster.classes.includes('VERMIN'));
-    ok('every undrawn portrait names a stand-in that does exist', roster.stands && roster.inAssets);
+    ok('every portrait is drawn, listed, and shown for real - the stand-in era is over',
+      roster.drawn && roster.inAssets);
+    ok(`and every portrait file actually serves (${served.length ? 'missing: ' + served.join(', ') : 'all 8'})`,
+      served.length === 0);
+
+    // Both factions fight on their own ground now, not on another faction's backdrop.
+    const grounds = await page.evaluate(async () => {
+      const own = { CHOIR: FACTIONS.CHOIR.bg, CARRION: FACTIONS.CARRION.bg };
+      const borrowed = Object.values(FACTIONS).filter(f => f.bg === own.CHOIR || f.bg === own.CARRION).length;
+      const ok1 = (await fetch(own.CHOIR, { method: 'HEAD' })).ok;
+      const ok2 = (await fetch(own.CARRION, { method: 'HEAD' })).ok;
+      return { ...own, borrowed, served: ok1 && ok2,
+               listed: ASSET_LIST.includes(own.CHOIR) && ASSET_LIST.includes(own.CARRION) };
+    });
+    ok(`the Choir owns its ground (${grounds.CHOIR})`, grounds.CHOIR === 'bg_congregation.webp');
+    ok(`and the Carrion owns its own (${grounds.CARRION})`, grounds.CARRION === 'bg_carrionfield.webp');
+    ok('nobody else borrows either, both serve, and both are preloaded',
+      grounds.borrowed === 2 && grounds.served && grounds.listed);
 
     // ---- the roads only widen from sector 2 ----
     const roads = await page.evaluate(() => {
