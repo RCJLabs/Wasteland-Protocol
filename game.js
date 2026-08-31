@@ -1288,6 +1288,42 @@ const CONSEQUENCE_POOL = {
             return `Whoever left that cache was waiting for whoever took it. The squad fights clear, ${hit.length} of them bleeding.`;
         }
     },
+    // Two more, because a fuse that lands is only worth having if what lands on you varies.
+    // Measured at three kinds, eight of ten bookings across sixty expeditions were the same
+    // ambush - the system fired as one outcome wearing three names.
+    PURSUIT: {
+        title: "THEY FOUND YOU",
+        resolve: () => {
+            // Uses the machinery a withdrawal already leans on: they turn up in the next fight
+            // rather than as a screen you click past.
+            const fac = rollNodeFaction(currentTier, Math.random);
+            const hp = 0.75 * difficultyMult * Math.pow(SECTOR_HP_SCALE, currentSector - 1);
+            const dmg = 0.75 * difficultyMult * Math.pow(SECTOR_DMG_SCALE, currentSector - 1);
+            const hunters = generateEnemies(fac, hp, false, dmg, null).slice(0, 2);
+            hunters.forEach((u, i) => { u.id = `hunt_${Date.now()}_${i}`; });
+            pursuit = { units: hunters };
+            return `They have been walking since you took it, and they are not tired. ${hunters.length} of them will be waiting in the next fight.`;
+        }
+    },
+    RESUPPLY: {
+        title: "THE DROP LANDS",
+        resolve: () => {
+            // The one place the bag fills without a workbench - and it deals the two consumables
+            // nobody ever crafts, so they have a way into a run that is not a decision at a bench.
+            const pool = ['ADRENALINE', 'EMP_CHARGE', 'MED_STIM', 'SCRAP_BOMB'];
+            const got = [];
+            for (let i = 0; i < 2; i++) {
+                if (!canCarry()) break;
+                const pick = pool[Math.floor(Math.random() * pool.length)];
+                inventory.push(pick); got.push(pick.replace('_', '-').toLowerCase());
+            }
+            const cash = 70 + currentSector * 30;
+            scrap += cash;
+            return got.length
+                ? `The crate comes down hard and mostly intact: ${got.join(' and ')}, and ${cash} Scrap taped inside the lid.`
+                : `The crate comes down with a full bag already on your back. You take the ${cash} Scrap and leave the rest.`;
+        }
+    },
     SURVIVOR: {
         title: "A DEBT REPAID", cast: 'KESS',
         resolve: () => {
@@ -1310,7 +1346,7 @@ function deployed() { return playerRoster.filter(p => p.gridPos > 0 && p.hp > 0)
 //
 // Booked in NODES now, and lit when a node is done with rather than when a sector is. A term
 // of three to six nodes lands inside the run that lit it.
-const CONSEQUENCE_FUSE = { AMBUSH: 3, SURVIVOR: 5, DEBT: 6 };
+const CONSEQUENCE_FUSE = { AMBUSH: 3, PURSUIT: 4, SURVIVOR: 5, RESUPPLY: 5, DEBT: 6 };
 function nodesCleared() { return runStats ? (runStats.nodes || 0) : 0; }
 function bookConsequence(kind, inNodes, extra = {}) {
     pendingConsequences.push({ kind, dueAt: nodesCleared() + inNodes, ...extra });
@@ -1441,6 +1477,12 @@ const CODEX = [
         'Every hostile carries a signature. A passive one is always running; an action is telegraphed by its own icon a turn before it lands, so there is always an answer.',
         ...Object.values(ENEMY_SIGS).map(s => `${s.name} (${s.kind === 'action' ? 'telegraphed' : s.kind}) \u2014 ${s.desc}`)
     ] },
+    { id: 'CONSEQUENCES', title: 'WHAT COMES BACK', body: () => [
+        'Some event choices take something now and book what it costs for later. The debt is counted in NODES cleared, not sectors, so it lands inside the expedition that took it on - and the board on the map shows what is owed and how far off it is.',
+        'A booked outcome survives a reload and cannot be walked away from. Clearing the node it is due on is what fires it.',
+        ...Object.entries(CONSEQUENCE_POOL).map(([k, c]) =>
+            `${c.title} \u2014 ${CONSEQUENCE_FUSE[k] || '?'} nodes after the choice that booked it.`)
+    ] },
     { id: 'DOCTRINES', title: 'DOCTRINES', body: () => [
         'Three are offered at every muster. Taking one is optional; it is a rule about who deploys, kept for the whole expedition, and it pays a score multiplier that stacks with contracts and protocols.',
         'Each carries an edge as well as a rule, so an unusual line is a different way to play rather than a worse one. Breaking the rule loses the multiplier permanently - and the game will never break it for you when it closes ranks behind a loss.',
@@ -1535,7 +1577,7 @@ function contractNames() {
 }
 
 const EVENT_POOL = [
-    { title: "WRECKED CARAVAN", desc: "You stumble upon a destroyed merchant rig. The engine block is sparking dangerously, but the cargo hold is partially intact.", choices: [ { label: "Salvage Cargo (+30 Scrap)", canAfford: () => true, execute: () => { scrap += 30; playSFX('heal'); return "Salvaged 30 Scrap from the wreckage."; } }, { label: "Gut the Engine (+1 Tech, +2 Parts, -15 HP to random unit)", canAfford: () => true, execute: () => { materials.tech += 1; materials.parts += 2; let active = playerRoster.filter(p => p.gridPos > 0 && p.hp > 0); let target = active[Math.floor(Math.random() * active.length)]; target.hp = Math.max(1, target.hp - 15); playSFX('hit'); triggerHitFlash(target.id); return `Extracted parts, but an electrical surge shocked ${target.name} for 15 DMG.`; } }, { label: "Leave it", canAfford: () => true, execute: () => { return "You move on safely without risking the sparks."; } } ] },
+    { title: "WRECKED CARAVAN", desc: "You stumble upon a destroyed merchant rig. The engine block is sparking dangerously, but the cargo hold is partially intact.", choices: [ { label: "Salvage Cargo (+30 Scrap)", canAfford: () => true, execute: () => { scrap += 30; playSFX('heal'); return "Salvaged 30 Scrap from the wreckage."; } }, { label: "Gut the Engine (+1 Tech, +2 Parts, -15 HP to random unit)", canAfford: () => true, execute: () => { materials.tech += 1; materials.parts += 2; let active = playerRoster.filter(p => p.gridPos > 0 && p.hp > 0); let target = active[Math.floor(Math.random() * active.length)]; target.hp = Math.max(1, target.hp - 15); playSFX('hit'); triggerHitFlash(target.id); return `Extracted parts, but an electrical surge shocked ${target.name} for 15 DMG.`; } }, { label: `Take the whole rig (+90 Scrap, someone follows)`, canAfford: () => true, execute: () => { scrap += 90; bookConsequence('PURSUIT', CONSEQUENCE_FUSE.PURSUIT); playSFX('click'); return "You strip it to the frame. Ninety Scrap, and a set of tracks leading away that will lead back."; } }, { label: "Leave it", canAfford: () => true, execute: () => { return "You move on safely without risking the sparks."; } } ] },
     { title: "THE CHEM OASIS", desc: "A glowing pool of bio-luminescent fluid sits in a blast crater. It smells like synthetic ozone and iron.", choices: [ { label: "Extract Fluid (+2 Chems)", canAfford: () => true, execute: () => { materials.chems += 2; playSFX('heal'); return "Carefully extracted 2 Chems from the pool."; } }, { label: "Bathe Wounds (Heal All Deployed for 25 HP)", canAfford: () => true, execute: () => { playerRoster.forEach(p => { if(p.gridPos > 0 && p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + 25); }); playSFX('heal'); return "The fluid burned, but the wounds sealed rapidly."; } } ] },
     { title: "WANDERING TINKER", cast: 'ORRIN',
       desc: () => hasMetCast('ORRIN') && castOf('ORRIN').met > 1
@@ -1644,6 +1686,9 @@ const EVENT_POOL = [
         { label: "Send someone up (-15 HP, next fight starts at 50 momentum)", canAfford: () => deployed().length > 0,
           execute: () => { const u = deployed()[0]; u.hp = Math.max(1, u.hp - 15); momentum = Math.max(momentum, 50); addMomentum(0); playSFX('click');
             return `${u.name} makes the climb and comes down bleeding, with the shape of the next fight in their head.`; } },
+        { label: `Call in a drop (arrives in ${CONSEQUENCE_FUSE.RESUPPLY} nodes)`, canAfford: () => true,
+          execute: () => { bookConsequence('RESUPPLY', CONSEQUENCE_FUSE.RESUPPLY); playSFX('heal');
+            return "You put out coordinates and a rough count of what you need. Somebody a long way off writes it down."; } },
         { label: "Strip the transmitter (+2 Tech)", canAfford: () => true,
           execute: () => { materials.tech += 2; playSFX('click'); return "The relay goes dark. You are two Tech richer and slightly less welcome here."; } }
       ] },
@@ -1675,6 +1720,9 @@ const EVENT_POOL = [
           execute: () => { const front = deployed().sort((a, b) => a.gridPos - b.gridPos)[0];
             front.hp = Math.max(1, front.hp - 20); scrap += 90; playSFX('hit');
             return `${front.name} walks out alone and does not stop walking. They break, and leave 90 Scrap behind them.`; } },
+        { label: "Take everything they have (+140 Scrap, they follow)", canAfford: () => deployed().length > 0,
+          execute: () => { scrap += 140; bookConsequence('PURSUIT', CONSEQUENCE_FUSE.PURSUIT); playSFX('hit');
+            return "You leave them their boots. Their leader watches you go and does not spit this time."; } },
         { label: "Back out slowly", canAfford: () => true, execute: () => "Both crews walk backwards until the berm is out of sight." }
       ] },
 
@@ -1695,6 +1743,9 @@ const EVENT_POOL = [
         { label: "Work the vent (+120 Scrap, -12 HP to all deployed)", canAfford: () => true,
           execute: () => { deployed().forEach(u => { u.hp = Math.max(1, u.hp - 12); }); scrap += 120; playSFX('hit');
             return "Everyone comes away scalded and 120 Scrap heavier."; } },
+        { label: "Blow the cap (+220 Scrap, the noise carries)", canAfford: () => true,
+          execute: () => { scrap += 220; bookConsequence('AMBUSH', CONSEQUENCE_FUSE.AMBUSH); playSFX('hit');
+            return "The whole line goes up and throws a century of buried metal across the flat. Everything within a mile heard it."; } },
         { label: "Cap the line (+2 Parts, +1 Chems)", canAfford: () => true,
           execute: () => { materials.parts += 2; materials.chems += 1; playSFX('click');
             return "You seal it properly. Two Parts and a Chem out of the fittings, and the road stays walkable."; } }
