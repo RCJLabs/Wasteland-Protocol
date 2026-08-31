@@ -739,6 +739,18 @@ button.reach-short { border-color: #7a5a20; }
    than described in prose. Green because it is the one ending that is not a defeat. */
 .camp-walk { border-color: #6B8E23; color: #6B8E23; }
 .camp-walk-locked { font-size: 11px; color: #6a6a5a; text-align: center; padding: 10px 6px; font-style: italic; }
+/* The collector's cache: the one camp option that is not on the menu every time. Violet
+   rather than the camp's greens and golds, because it is not a service - it is a bargain, and
+   it should not read as another way to feel better. Both halves are on the button: a curse
+   whose cost is behind a hover is a trick, not a decision. */
+.camp-cache { border-color: #7a3f7a; background: #150a15; display: flex; flex-direction: column;
+  align-items: flex-start; gap: 4px; text-transform: none; padding: 10px 12px; }
+.camp-cache:hover:not(:disabled) { background: #241024; border-color: #a4508b; }
+.cache-head { color: #c07ac0; font-weight: bold; letter-spacing: 1px; font-size: 12px;
+  text-transform: uppercase; }
+.cache-gain { color: #8fa06a; font-size: 11px; }
+.cache-cost { color: #b05a5a; font-size: 11px; }
+.cache-price { color: #6a6a5a; font-size: 10px; font-style: italic; }
 .camp-extract-panel { border: 1px solid #6B8E23; background: #0b0f08; padding: 12px 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
 .camp-extract-head { color: #6B8E23; font-weight: bold; letter-spacing: 2px; font-size: 13px; }
 .camp-extract-line { font-size: 11px; color: #8a8578; line-height: 1.5; }

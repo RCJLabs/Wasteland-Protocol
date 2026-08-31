@@ -65,10 +65,24 @@ const AUGMENTS_ON = flag('augments', 'on') !== 'off';
 // when the squad is worn down. `off` (the default) is the old behaviour, for comparison.
 const EXTRACT_RAW = flag('extract', 'off');
 const EXTRACT_AT = EXTRACT_RAW === 'off' ? 99 : Number(EXTRACT_RAW);
+// A commander's offer deals three cards and sometimes one of them is cursed. This file took
+// `offer.find(RARE) || offer[0]`, which is two opinions dressed as one: prefer a rare, and
+// otherwise take whatever happens to sit first. "Cursed relics are refused" was that policy
+// reporting itself back, not a player declining anything - and once the curse moved into the
+// first slot the same policy started taking nearly all of them, which is no more a measurement
+// than the zero was. So the fallback picks at random now: no opinion between a common and a
+// curse, which is the only honest default.
+//
+// The range is what carries meaning, so both ends are nameable:
+//   --relics avoid   never takes a curse while any other card is on the table  (the floor)
+//   --relics rare    prefers a rare, otherwise picks blind                     (neutral)
+//   --relics random  picks blind always
+//   --relics curse   takes the curse every time one is offered                 (the ceiling)
+const RELICS = flag('relics', 'rare');
 
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy }) => {
   const stat = { sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, ground: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
@@ -77,7 +91,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
                  extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false,
-                 booked: 0, bookedKinds: {}, augments: 0 };
+                 booked: 0, bookedKinds: {}, augments: 0,
+                 relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0 };
 
   activeContracts = [...contracts];
   currentSlot = 1;
@@ -478,7 +493,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         extractRun();
         break;
       }
-      playerRoster.forEach(p => { if (p.gridPos > 0 && p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp * 0.35)); });
+      // The camp is the second door a curse can come through, and it only opens when the squad
+      // is in trouble. Counted whether or not this policy walks through it, so "how often was
+      // the bargain even on the table" has a denominator that does not depend on the taker.
+      const cache = cacheOffer();
+      if (cache) stat.cacheOffered++;
+      if (cache && (relicPolicy === 'curse' || (relicPolicy === 'random' && Math.random() < 0.5))) {
+        stat.cacheTaken++; stat.cursedTaken++;
+        resolveCamp('CACHE');           // takes the camp: no triage this stop
+      } else {
+        playerRoster.forEach(p => { if (p.gridPos > 0 && p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp * 0.35)); });
+      }
       currentTier++; stat.nodes++; noteDepth(); runStats.nodes++;
       continue;
     }
@@ -581,8 +606,27 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         runStats.bosses = stat.bosses; bossSkulls++;
         const felled = activeEntities.find(e => e.classType === 'BOSS');
         if (felled && felled.bossId) noteGrudge(felled.bossId);
-        const offer = rollRelicOffer();
-        if (offer.length) { const pick = offer.find(r => r.tier === 'RARE') || offer[0]; activeRelics.push(pick); }
+        // The engine did not count this kill, so it did not stage the offer either. Stage it.
+        if (!pendingRelicOffer) { const o = rollRelicOffer(); if (o.length) pendingRelicOffer = o; }
+      }
+      // The engine stages a commander's relic as pendingRelicOffer and waits for a player to
+      // pick a card. This file never touched pendingRelicOffer, so once the double-count fix
+      // made it defer to the engine's own count, every commander relic was staged and then
+      // dropped on the floor: 108 boss kills across sixty runs produced 11 relics. Everything
+      // read off "relics held" since then, the cursed tier included, was measuring that leak.
+      if (pendingRelicOffer && pendingRelicOffer.length) {
+        const offer = pendingRelicOffer;
+        stat.relicOffers++;
+        const curse = offer.find(r => r.tier === 'CURSED');
+        if (curse) stat.cursedOffered++;
+        const any = a => a[Math.floor(Math.random() * a.length)];
+        const clean = offer.filter(r => r.tier !== 'CURSED');
+        const pick = relicPolicy === 'curse'  ? (curse || offer.find(r => r.tier === 'RARE') || any(offer))
+                   : relicPolicy === 'avoid'  ? (offer.find(r => r.tier === 'RARE') || any(clean.length ? clean : offer))
+                   : relicPolicy === 'random' ? any(offer)
+                   : (offer.find(r => r.tier === 'RARE') || any(offer));
+        if (pick.tier === 'CURSED') stat.cursedTaken++;
+        takeRelic(offer.indexOf(pick));
       }
     }
     if (node.elite) {
@@ -647,13 +691,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   await page.evaluate(() => { globalSettings.sfx = false; });
   ALL_FORMATION_IDS = await page.evaluate(() => ALL_FORMATIONS.map(f => f.id));
 
-  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}, tactics ${TACTICS}` +
+  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}, tactics ${TACTICS}, relics ${RELICS}` +
               (CONTRACTS.length ? ` under ${CONTRACTS.join(', ')}` : '') +
               (WITHDRAW_POLICY ? ', running from fights it is losing' : ', fighting every node to a finish') + '\n');
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS, AUGMENTS_ON });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -823,6 +867,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('relics held, mean', (Object.values(relics).reduce((a, b) => a + b, 0) / n).toFixed(1));
   const unreachable = allRelics.filter(r => !relics[r.id]).map(r => r.id);
   line('never dropped', unreachable.length ? unreachable.join(', ') : 'none');
+  // A per-run percentage for a curse says nothing without knowing how often one was even on
+  // the table: a commander offer is the only place a curse can appear, and the median run
+  // does not reach many commanders. Counts, then rates off those counts.
+  const tot = k => results.reduce((a, r) => a + (r[k] || 0), 0);
+  const relOffers = tot('relicOffers'), cOff = tot('cursedOffered'), cTook = tot('cursedTaken');
+  line('relic offers seen', `${relOffers} across ${n} runs (${(relOffers / n).toFixed(2)} per run)`);
+  line('offers holding a curse', relOffers ? `${cOff} of ${relOffers} (${(cOff / relOffers * 100).toFixed(0)}%)` : '0 - no offers');
+  const cacheOff = tot('cacheOffered'), cacheTk = tot('cacheTaken');
+  line('camp caches offered', `${cacheOff} across ${n} runs (${(cacheOff / n).toFixed(2)} per run)`);
+  line('camp caches taken', `${cacheTk} (policy: ${RELICS})`);
+  line('curses taken', `${cTook} in total \u2014 ${cTook - cacheTk} from ${cOff} commander offers, ${cacheTk} from the camp (policy: ${RELICS})`);
 
   console.log('\n── THE BOARD ' + '─'.repeat(45));
   line('bounties completed, mean', mean(nums('bountiesDone')).toFixed(2));

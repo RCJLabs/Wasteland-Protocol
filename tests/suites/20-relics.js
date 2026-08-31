@@ -78,14 +78,28 @@ module.exports = {
       const held = RELIC_POOL.slice(0, 5);
       activeRelics = [...held];
       const filtered = rollRelicOffer();
+      const cursed = runs.filter(r => r.some(x => x.tier === 'CURSED'));
+      const clean = runs.filter(r => !r.some(x => x.tier === 'CURSED'));
       return { sizes: [...new Set(runs.map(r => r.length))],
                dupes: runs.filter(r => new Set(r.map(x => x.id)).size !== r.length).length,
                withRare: runs.filter(r => r.some(x => x.tier === 'RARE')).length,
+               cleanWithRare: clean.filter(r => r.some(x => x.tier === 'RARE')).length,
+               cleanN: clean.length,
+               cursedWithRare: cursed.filter(r => r.some(x => x.tier === 'RARE')).length,
+               cursedN: cursed.length,
                clash: filtered.filter(r => held.some(h => h.id === r.id)).length };
     });
     ok('a commander offers exactly three', offer.sizes.join() === '3');
     ok('never the same relic twice in one offer', offer.dupes === 0);
-    ok(`and always includes a rare while rares remain (${offer.withRare}/200)`, offer.withRare === 200);
+    // This used to read "always includes a rare while rares remain", and it was true because
+    // the curse overwrote the last COMMON - which is exactly why nobody ever took one: the
+    // bargain was dealt beside a free rare every time. A cursed table has no rare on it now,
+    // so the question is a big upside you pay for against two ordinary bonuses. An uncursed
+    // table is unchanged.
+    ok(`an uncursed offer always includes a rare (${offer.cleanWithRare}/${offer.cleanN})`,
+      offer.cleanN > 0 && offer.cleanWithRare === offer.cleanN);
+    ok(`a cursed offer never does - the curse takes the rare's place (${offer.cursedWithRare}/${offer.cursedN})`,
+      offer.cursedN > 0 && offer.cursedWithRare === 0);
     ok('nothing already held is ever offered', offer.clash === 0);
 
     // ---- owning everything pays out rather than dropping nothing ----
