@@ -199,14 +199,23 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (momentum >= 25) buy('FOCUS');
     } else if (tacticPolicy === 'press') {
       if (momentum >= 40) buy('PRESS');
+    } else if (tacticPolicy === 'hold') {
+      if (momentum >= 25) buy('HOLD');
+    } else if (tacticPolicy === 'break') {
+      if (momentum >= 35 && breakTarget()) buy('BREAK');
     } else if (tacticPolicy === 'smart') {
-      // Somebody on the floor is what a bar is for; otherwise take the extra action when it is
-      // affordable, and sharpen the hit when it is not.
-      const down = bleedingOut().length > 0;
+      // Survival first, in the order a player would read the board: somebody on the floor, then
+      // the blow that is about to land, then the line being ground down, then damage.
       const hurt = stimTarget();
-      if (down && momentum >= 30) buy('STIM');
+      const incoming = Object.values(threatBoard()).reduce((a, t) => a + t.dmg, 0);
+      const linePool = activeEntities.filter(e => e.isPlayer && e.hp > 0).reduce((a, e) => a + e.hp, 0);
+      const worst = breakTarget();
+      const worstHit = worst ? (forecastFor(worst)?.hits || []).reduce((a, h) => a + h.dmg, 0) : 0;
+      if (bleedingOut().length && momentum >= 30 && hurt) buy('STIM');
+      else if (momentum >= 35 && worst && worstHit > linePool * 0.22) buy('BREAK');
+      else if (momentum >= 30 && hurt && hurt.hp < hurt.maxHp * 0.5) buy('STIM');
+      else if (momentum >= 25 && incoming > linePool * 0.25) buy('HOLD');
       else if (momentum >= 40) buy('PRESS');
-      else if (hurt && momentum >= 30 && hurt.hp < hurt.maxHp * 0.5) buy('STIM');
       else if (momentum >= 25) buy('FOCUS');
     }
 

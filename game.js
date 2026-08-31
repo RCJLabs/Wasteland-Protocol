@@ -5405,11 +5405,52 @@ function isOutOfDepth(move, dist) { return isMelee(move) && dist >= FRONT_RANKS;
 // Momentum used to be a fuse: the bar filled, and at 100% there was exactly one thing to do
 // with it. It is a market now - three tactics at low prices, spendable on any operator's turn
 // without costing the action, with the full overdrive still waiting at the top.
+// The shelf had three things on it and one of them mattered. Measured across sixty expeditions
+// per policy, run outcome tracked STIM purchases almost monotonically:
+//
+//     buy STIM whenever affordable (31.5% of actions)   mean sector 2.8, 11,085 pts
+//     a mixed policy (STIM 6.7%)                        mean sector 1.6,  4,005 pts
+//     never spend at all                                mean sector 1.4,  2,895 pts
+//     buy PRESS whenever affordable                     mean sector 1.2,  2,300 pts
+//
+// Two things that reading says. FOCUS and PRESS both buy damage, and damage is not what the
+// run is short of - expeditions end by dying, so healing is worth more than hitting. And every
+// tactic competes with the Overdrive for one 100-point bar, which is why buying PRESS is worse
+// than buying nothing: it defers the Overdrive and hands back less. Spending on tactics drops
+// Overdrive from 11.5% of actions to 0.3%.
+//
+// So the shelf needed more answers on the axis that decides runs, not more ways to hit. HOLD
+// and BREAK both buy survival - one soaks the blow, the other stops it being thrown - and STIM
+// now pays out against how badly someone is hurt, so patching a scratch is no longer the
+// correct default at thirty momentum.
+const STIM_FLOOR = 0.08;   // of max health, on someone barely scratched
+const STIM_NEED = 0.26;    // added in proportion to what they are missing
 const MOMENTUM_TACTICS = [
-    { id: 'FOCUS', cost: 25, label: 'FOCUS',  desc: "The squad's next attack deals +30% damage." },
-    { id: 'STIM',  cost: 30, label: 'STIM',   desc: 'Cleanse and patch the worst-off operator for 20% health.' },
-    { id: 'PRESS', cost: 40, label: 'PRESS',  desc: 'The current operator acts twice this turn.' }
+    { id: 'FOCUS',   cost: 25, label: 'FOCUS',  desc: "The squad's next attack deals +30% damage." },
+    { id: 'HOLD',    cost: 25, label: 'HOLD',   desc: 'The whole line digs in: +12 armour for two turns.' },
+    { id: 'STIM',    cost: 30, label: 'STIM',   desc: 'Cleanse the worst-off operator and patch them - more the worse they are.' },
+    { id: 'BREAK',   cost: 35, label: 'BREAK',  desc: 'Whichever hostile is winding up the worst blow loses its next turn.' },
+    { id: 'PRESS',   cost: 40, label: 'PRESS',  desc: 'The current operator acts twice this turn.' }
 ];
+// What a STIM is worth on this target: a scratch is barely worth the bar, somebody on the floor
+// is worth more than it ever was.
+function stimHeal(t) {
+    if (!t || !t.maxHp) return 0;
+    const missing = Math.max(0, 1 - t.hp / t.maxHp);
+    return Math.max(1, Math.floor(t.maxHp * (STIM_FLOOR + STIM_NEED * missing)));
+}
+// BREAK answers the telegraph rather than the unit: whoever is about to do the most damage.
+function breakTarget() {
+    const foes = activeEntities.filter(e => !e.isPlayer && e.hp > 0 && (e.stunnedTurns || 0) <= 0);
+    if (!foes.length) return null;
+    const worth = e => {
+        const f = forecastFor(e);
+        if (!f) return 0;
+        if (f.kind === 'SIG') return 60;              // a signature going off is worth stopping
+        return (f.hits || []).reduce((a, h) => a + h.dmg, 0);
+    };
+    return foes.map(e => ({ e, n: worth(e) })).sort((a, b) => b.n - a.n)[0].e;
+}
 let momentumFocus = 0; let pressExtra = false;
 
 // Each class carries two overdrives. The first full bar of a run offers both; using one locks
@@ -5882,7 +5923,7 @@ function renderCommandDeck() {
     if (!pendingAction && MOMENTUM_TACTICS.some(t => momentum >= tacticCost(t))) {
         firePrompt('MOMENTUM');
         deckHtml += `<div class="tactic-row">` + MOMENTUM_TACTICS.map(t =>
-            `<button class="tactic-btn" ${momentum < tacticCost(t) ? 'disabled' : ''} ${t.id === 'STIM' && !stimTarget() ? 'disabled' : ''} data-action="tactic" data-kind="${t.id}" title="${t.desc}"><span class="tactic-name">${t.label}</span><span class="tactic-cost">⚡${tacticCost(t)}</span></button>`
+            `<button class="tactic-btn" ${momentum < tacticCost(t) ? 'disabled' : ''} ${(t.id === 'STIM' && !stimTarget()) || (t.id === 'BREAK' && !breakTarget()) ? 'disabled' : ''} data-action="tactic" data-kind="${t.id}" title="${t.desc}"><span class="tactic-name">${t.label}</span><span class="tactic-cost">⚡${tacticCost(t)}</span></button>`
         ).join('') + `</div>`;
     }
 
@@ -6138,6 +6179,7 @@ function spendTactic(kind) {
     const actor = turnQueue[activeIndex];
     if (!actor || !actor.isPlayer) return;
     if (kind === 'STIM' && !stimTarget()) return;
+    if (kind === 'BREAK' && !breakTarget()) return;
     momentum -= tacticCost(tactic); addMomentum(0);
     if (fightLog) fightLog.spent = true;
     if (kind === 'FOCUS') {
@@ -6147,10 +6189,22 @@ function spendTactic(kind) {
     } else if (kind === 'STIM') {
         const t = stimTarget() || actor;
         t.bleedingTurns = 0; t.stunnedTurns = 0; t.oiledTurns = 0;
-        const heal = Math.max(1, Math.floor(t.maxHp * 0.2));
+        const heal = stimHeal(t);
         t.hp = Math.min(t.maxHp, t.hp + heal);
         log(`> STIM: ${t.name} cleansed and patched for ${heal}.`, 'log-heal');
         spawnFCT(t.id, `+${heal}`, 'fct-heal'); playSFX('heal');
+    } else if (kind === 'HOLD') {
+        const line = activeEntities.filter(e => e.isPlayer && e.hp > 0);
+        line.forEach(e => { e.armor += 12; e.armorTurns = Math.max(e.armorTurns || 0, 2); spawnFCT(e.id, 'BRACED', 'fct-combo'); });
+        log(`> HOLD: the line digs in. +12 armour across ${line.length}.`, 'log-heal');
+        playSFX('click');
+    } else if (kind === 'BREAK') {
+        const t = breakTarget();
+        if (t) {
+            t.stunnedTurns = Math.max(t.stunnedTurns || 0, 1);
+            log(`> BREAK: ${t.name} is knocked off its wind-up.`, 'log-combo');
+            spawnFCT(t.id, 'BROKEN', 'fct-combo'); playSFX('combo');
+        }
     } else if (kind === 'PRESS') {
         pressExtra = true;
         log(`> PRESS: ${actor.name} will act twice.`, 'log-combo');
@@ -7358,7 +7412,7 @@ globalThis.WP = {
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },

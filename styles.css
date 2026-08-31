@@ -422,12 +422,15 @@ button.reach-short { border-color: #7a5a20; }
 #screen-codex .return-btn { flex-shrink: 0; margin-top: 12px; }
 
 /* The momentum market: cheap spends that never cost the action. */
-.tactic-row { display: flex; gap: 6px; min-width: 0; }
+.tactic-row { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 /* min-width:0 is load-bearing on both the deck and these buttons. A grid item and a flex
    item both default to min-width:auto, which refuses to shrink below their own text - so
    the third tactic pushed past the deck's edge and got clipped on a narrow phone. The
-   name and cost are two deliberate lines rather than an accidental wrap. */
-.tactic-btn { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; align-items: center;
+   name and cost are two deliberate lines rather than an accidental wrap.
+   The shelf went from three tactics to five, and the deck column is about 180px on a phone:
+   five across gave each button 27px and clipped every five-letter name, the old two included.
+   They wrap three-and-two now, with the basis picked so three fit a row rather than four. */
+.tactic-btn { flex: 1 1 28%; min-width: 0; display: flex; flex-direction: column; align-items: center;
   gap: 2px; padding: 7px 2px; border-color: #7a5c14; color: #d9a93d; overflow: hidden; }
 .tactic-name { font-size: 9.5px; letter-spacing: 0.5px; }
 .tactic-cost { font-size: 9px; letter-spacing: 0; color: #b8912f; }

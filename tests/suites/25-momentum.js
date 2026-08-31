@@ -30,7 +30,9 @@ module.exports = {
       described: MOMENTUM_TACTICS.every(t => t.label && t.desc),
       cheapest: Math.min(...MOMENTUM_TACTICS.map(t => t.cost))
     }));
-    ok(`there are ${market.count} tactics under the overdrive`, market.count === 3);
+    // Counted, not pinned: the shelf grew from three to five and a hardcoded 3 here just
+    // breaks on the next thing added without saying anything about the market.
+    ok(`there are ${market.count} tactics under the overdrive`, market.count >= 3);
     ok('each priced below the full bar', market.priced);
     ok('and each described', market.described);
 
@@ -41,15 +43,21 @@ module.exports = {
         const btns = [...document.querySelectorAll('.tactic-btn')];
         return { shown: btns.length, enabled: btns.filter(b => !b.disabled).map(b => b.dataset.kind) };
       };
-      return { broke: read(0), some: read(30), flush: read(100) };
+      return { broke: read(0), some: read(30), flush: read(100),
+               all: MOMENTUM_TACTICS.map(t => t.id),
+               under: MOMENTUM_TACTICS.filter(t => t.cost <= 30).map(t => t.id),
+               over: MOMENTUM_TACTICS.filter(t => t.cost > 30).map(t => t.id) };
     });
     ok('no momentum, no market', row.broke.shown === 0);
-    ok('part of a bar buys part of the market', row.some.shown === 3 &&
-      row.some.enabled.includes('FOCUS') && !row.some.enabled.includes('PRESS'));
-    // STIM stays dark at any price while nobody needs patching - that is its own guard, and
-    // the healthy-squad case below proves it. A full bar opens everything else.
-    ok('a full bar buys everything with a use', row.flush.shown === 3 &&
-      row.flush.enabled.includes('FOCUS') && row.flush.enabled.includes('PRESS'));
+    // The whole shelf is always shown; what a part-bar changes is what it will sell. Derived
+    // from the prices so a repriced or added tactic is checked rather than ignored.
+    ok(`part of a bar buys only what it covers (${row.some.enabled.join(', ')})`,
+      row.some.shown === row.all.length && row.over.every(id => !row.some.enabled.includes(id))
+      && row.under.some(id => row.some.enabled.includes(id)));
+    // STIM and BREAK stay dark while nothing needs them - their own guards, proved below and
+    // in the tactics suite. A full bar opens everything that has a use.
+    ok('a full bar buys everything with a use', row.flush.shown === row.all.length &&
+      row.flush.enabled.length >= row.all.length - 2);
 
     // The third tactic used to be pushed off the deck's edge on a narrow phone: a grid item
     // and a flex item both default to min-width:auto, so neither would shrink. Measured at
@@ -118,9 +126,12 @@ module.exports = {
       spendTactic('STIM');
       const stillMyTurn = turnQueue[activeIndex] === hero && combatActive;
       const deckLive = document.querySelectorAll('#command-deck [data-move]').length > 0;
-      return { healed: ally.hp, cleansed: ally.bleedingTurns === 0, paid: momentum, stillMyTurn, deckLive };
+      return { healed: ally.hp, want: 40 + stimHeal({ hp: 40, maxHp: 200 }),
+               cleansed: ally.bleedingTurns === 0, paid: momentum, stillMyTurn, deckLive };
     });
-    ok(`STIM patches the worst-off operator (40 -> ${stim.healed})`, stim.healed === 80);
+    // Derived rather than pinned: STIM pays against how badly they are hurt now, so a flat
+    // number here would only ever be re-measuring the constant it was copied from.
+    ok(`STIM patches the worst-off operator (40 -> ${stim.healed})`, stim.healed === stim.want);
     ok('and cleanses them', stim.cleansed);
     ok('for 30 momentum and no action', stim.paid === 20 && stim.stillMyTurn && stim.deckLive);
 
