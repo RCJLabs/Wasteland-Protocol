@@ -193,18 +193,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // This used to craft Med-Stims and nothing else, which is most of why the audit read the
     // other three as dead content: they were never in the bag to be used. It keeps a Med-Stim
     // or two for the floor and then spends what is left on whatever the materials allow.
+    // Affordability is asked of the game (canAfford reads the same recipe craftItem spends), so
+    // repricing a schematic cannot leave the simulator buying at yesterday's price.
     const before = () => inventory.length;
-    while (canCarry() && materials.chems >= 2 && inventory.filter(i => i === 'MED_STIM').length < 2) {
+    while (canCarry() && canAfford('MED_STIM') && inventory.filter(i => i === 'MED_STIM').length < 2) {
       const n = before(); craftItem('MED_STIM'); if (inventory.length === n) break; stat.crafted++;
     }
     let guard = 0;
     while (canCarry() && guard++ < 12) {
       const n = before();
-      if (materials.tech >= 2) craftItem('EMP_CHARGE');
-      else if (materials.chems >= 1 && materials.tech >= 1) craftItem('ADRENALINE');
-      else if (materials.parts >= 2) craftItem('SCRAP_BOMB');
-      else if (materials.chems >= 2) craftItem('MED_STIM');
-      else break;
+      const pick = ['EMP_CHARGE', 'ADRENALINE', 'SCRAP_BOMB', 'MED_STIM'].find(canAfford);
+      if (!pick) break;
+      craftItem(pick);
       if (inventory.length === n) break;
       stat.crafted++;
     }

@@ -437,6 +437,33 @@ button.reach-short { border-color: #7a5a20; }
 .tactic-btn:disabled { border-color: #222; }
 .tactic-btn:disabled .tactic-cost { color: #555; }
 
+/* ── Consumables that say what they do ──────────────────────────────────────────────────
+   The workbench, the bag and the deck all read one table, so a recipe cannot ship without a
+   line of effect. Each surface gets a different amount of room, so each gets a different cut:
+   the bench has three lines, the bag and the deck have one. The full sentence is the tooltip
+   everywhere, so nothing is hidden behind hover alone. */
+/* Four schematics, two up: at 45% the three-line stack keeps its own column instead of
+   splitting three-and-one across the card. min-width:0 so the emoji label can shrink. */
+.craft-btn { flex: 1 1 45%; min-width: 0; display: flex; flex-direction: column; align-items: flex-start;
+  gap: 3px; padding: 8px; text-transform: none; overflow: hidden; }
+.craft-name { font-size: 11.5px; color: #ccc; }
+.craft-what { font-size: 10px; color: #8fa06a; letter-spacing: 0.3px; }
+.craft-cost { font-size: 10px; color: #B8860B; }
+/* Deliberately NOT dimmed further when the recipe is unaffordable: what a thing does is
+   exactly what a player needs to read while deciding what to save materials for. */
+/* The bag reads as one line - name, then what it does, pushed to the far edge before [SELL]. */
+.inv-what { color: #8fa06a; font-size: 10px; margin-left: 6px; }
+/* In combat the bag replaces the whole deck, which is one narrow column: side by side, the
+   name and the effect fought for it and "EMP Charge" broke across two lines with the emoji
+   stranded. Stacked, every item fits any deck width and it reads like the bench does.
+   A full bag is four rows plus the way out, and the deck is about 250px tall on a phone: the
+   single-line version already pushed BACK off the bottom, so both are tightened until five
+   fit without a scroll. Nobody should have to scroll to cancel out of a menu mid-fight. */
+.bag-btn { border-color: #B8860B; color: #B8860B; display: flex; flex-direction: column;
+  align-items: flex-start; gap: 2px; min-width: 0; text-transform: none; padding: 6px 10px; }
+.item-what { color: #8fa06a; font-size: 10px; }
+.bag-back { color: #8B0000; border-color: #8B0000; padding: 7px 10px; }
+
 /* ── The Citadel, drawn ─────────────────────────────────────────────────────────────────
    A hillside at dusk: every meta-upgrade is a structure on it, and buying levels visibly
    lights them up. The card list survives underneath as the ledger view. */

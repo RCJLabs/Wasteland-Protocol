@@ -1459,6 +1459,11 @@ const CODEX = [
         ...GEAR_POOL.filter(g => g.slot === 'mod').map(g => `${g.name} (${g.cls}) — ${g.desc}`),
         ...GEAR_POOL.filter(g => g.slot === 'trinket').map(g => `${g.name} — ${g.desc}`)
     ] },
+    { id: 'BAG', title: 'THE BAG', body: () => [
+        'Four schematics at the workbench, four slots in the bag, and using one in a fight costs the operator\u2019s whole turn. They are the only thing in the game that answers a problem the squad you brought cannot: a hostile winding up out of everyone\u2019s reach, a stun on the one operator who could have stopped it.',
+        'The same three materials buy augments, which are permanent and per-operator, so every consumable made is an augment not installed. The bag is what you spend on the run in front of you.',
+        ...Object.entries(ITEM_DATA).map(([id, i]) => `${i.label} (${itemCost(id)}) \u2014 ${i.desc}`)
+    ] },
     { id: 'READING', title: 'READING A FIGHT', body: () => [
         'An operator carries an amber figure when something is aimed at them this round, and a red skull when what is aimed at them would finish them. A question mark means a ranged attacker has not committed to its mark yet.',
         'While an ability is armed, an enemy shows the share of a blow that survives its plating and resistances - 60% means four in ten of every point is soaked before it lands.',
@@ -2793,17 +2798,46 @@ function executeSelfAction(type) {
     pendingAction = null; checkWinState();
 }
 
+// Consumables were the one system in the game that never said what it did. Relics, gear,
+// doctrines, tactics and every ability carry a description; these carried a name and a price.
+// Measured, the two "unused" ones are used 7.5 and 4.5 times a run the moment they are in the
+// bag - so they were never weak, they were unexplained, and a player choosing between four
+// buttons that show only costs makes the one they already understand.
+//
+// One table, read by the workbench, the bag and the deck, so the three cannot drift.
+const MATERIAL_ICON = { parts: '\u2699\uFE0F', chems: '\uD83E\uDDEA', tech: '\uD83D\uDCBB' };
 const ITEM_DATA = {
-    MED_STIM:   { label: '💉 Med-Stim',   action: 'ITEM_MED' },
-    SCRAP_BOMB: { label: '💣 Scrap Bomb', action: 'ITEM_BOMB' },
-    ADRENALINE: { label: '⚡ Adrenaline', action: 'ITEM_ADRENALINE' },
-    EMP_CHARGE: { label: '🔋 EMP Charge', action: 'ITEM_EMP' }
+    MED_STIM:   { label: '💉 Med-Stim',   action: 'ITEM_MED',        short: 'Heal 30',
+                  mats: { chems: 2 },
+                  desc: 'Heals 30 to one operator. Reaches somebody on the floor.' },
+    SCRAP_BOMB: { label: '💣 Scrap Bomb', action: 'ITEM_BOMB',       short: '35 dmg',
+                  mats: { parts: 2 },
+                  desc: 'Throws 35 physical damage at one hostile, from any rank.' },
+    ADRENALINE: { label: '⚡ Adrenaline', action: 'ITEM_ADRENALINE', short: 'Cleanse +10',
+                  mats: { chems: 1, tech: 1 },
+                  desc: 'Clears stun and bleed off one operator and heals 10. Reaches somebody on the floor.' },
+    EMP_CHARGE: { label: '🔋 EMP Charge', action: 'ITEM_EMP',        short: 'Stun + 25',
+                  mats: { tech: 2 },
+                  desc: 'Takes one hostile\u2019s next turn away and deals 25 energy. Does what BREAK does, out of the bag.' }
 };
+// The recipe was written out three times - once to spend, once to grey the button, once to
+// print the price - so any of the three could drift from the other two. One table now, and
+// the price on the button is generated from the materials the craft actually takes.
+function itemCost(id) {
+    const m = (ITEM_DATA[id] || {}).mats || {};
+    return Object.entries(m).map(([k, n]) => `${n} ${MATERIAL_ICON[k]}`).join(' ');
+}
+function canAfford(id) {
+    const m = (ITEM_DATA[id] || {}).mats;
+    return !!m && Object.entries(m).every(([k, n]) => materials[k] >= n);
+}
 
 function openInventoryMenu() {
     const d = document.getElementById('command-deck'); let h = '';
-    inventory.forEach(it => { let m = ITEM_DATA[it]; if (m) h += `<button style="border-color:#B8860B; color:#B8860B;" data-action="queue" data-move="${m.action}">${m.label}</button>`; });
-    h += `<button style="color:#8B0000; border-color:#8B0000" data-action="cancel">BACK</button>`;
+    // The bag is the last place the choice is made, so it is the one place the effect has to be
+    // legible without a hover: the short sits on the button, the full line is the tooltip.
+    inventory.forEach(it => { let m = ITEM_DATA[it]; if (m) h += `<button class="bag-btn" data-action="queue" data-move="${m.action}" title="${m.desc}">${m.label}<span class="item-what">${m.short}</span></button>`; });
+    h += `<button class="bag-back" data-action="cancel">BACK</button>`;
     d.innerHTML = h;
 }
 
@@ -4108,7 +4142,14 @@ function renderOutpost() {
     document.getElementById('mat-tech').innerText = formatStat(materials.tech);
     document.getElementById('btn-breakdown').disabled = scrap < 25;
     let wbHtml = ''; let invFull = inventory.length >= metaUpgrades.invMax;
-    wbHtml += `<button class="upg-btn" ${materials.chems < 2 || invFull ? 'disabled' : ''} data-action="craft" data-item="MED_STIM">CRAFT MED-STIM (2 🧪)</button>`; wbHtml += `<button class="upg-btn" ${materials.parts < 2 || invFull ? 'disabled' : ''} data-action="craft" data-item="SCRAP_BOMB">CRAFT SCRAP BOMB (2 ⚙️)</button>`; wbHtml += `<button class="upg-btn" ${materials.chems < 1 || materials.tech < 1 || invFull ? 'disabled' : ''} data-action="craft" data-item="ADRENALINE">CRAFT ADRENALINE (1 🧪, 1 💻)</button>`; wbHtml += `<button class="upg-btn" ${materials.tech < 2 || invFull ? 'disabled' : ''} data-action="craft" data-item="EMP_CHARGE">CRAFT EMP CHARGE (2 💻)</button>`;
+    // Rendered off ITEM_DATA so the bench, the bag and the deck all quote the same effect, and
+    // a recipe cannot be added without saying what it makes.
+    Object.entries(ITEM_DATA).forEach(([id, it]) => {
+        wbHtml += `<button class="upg-btn craft-btn" ${!canAfford(id) || invFull ? 'disabled' : ''} data-action="craft" data-item="${id}" title="${it.desc}">`
+               + `<span class="craft-name">${it.label}</span>`
+               + `<span class="craft-what">${it.short}</span>`
+               + `<span class="craft-cost">${itemCost(id)}</span></button>`;
+    });
     document.getElementById('crafting-grid').innerHTML = wbHtml;
 
     const cybC = document.getElementById('cybernetics-roster'); const cybCards = [];
@@ -4119,18 +4160,16 @@ function renderOutpost() {
 
     cybC.innerHTML = cybCards.join('');
     document.getElementById('inv-count').innerText = `${inventory.length}/${metaUpgrades.invMax}`; const invC = document.getElementById('outpost-inventory'); const invCells = [];
-    for (let i = 0; i < metaUpgrades.invMax; i++) { let item = inventory[i]; if (item) { let label = item === 'MED_STIM' ? '💉 Med-Stim' : item === 'SCRAP_BOMB' ? '💣 Scrap Bomb' : item === 'ADRENALINE' ? '⚡ Adrenaline' : '🔋 EMP Charge'; invCells.push(`<button class="inv-slot" data-action="sell-item" data-index="${i}">${label} [SELL]</button>`); } else { invCells.push(`<button class="inv-slot" disabled>[ EMPTY SLOT ]</button>`); } }
+    for (let i = 0; i < metaUpgrades.invMax; i++) { let item = inventory[i]; if (item) { const meta = ITEM_DATA[item] || { label: item, desc: '' }; let label = `${meta.label}<span class="inv-what">${meta.short || ''}</span>`; invCells.push(`<button class="inv-slot" data-action="sell-item" data-index="${i}">${label} [SELL]</button>`); } else { invCells.push(`<button class="inv-slot" disabled>[ EMPTY SLOT ]</button>`); } }
     invC.innerHTML = invCells.join('');
 }
 
 function breakdownScrap() { if (scrap < 25) return; scrap -= 25; let m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)]; materials[m]++; saveGameState(); renderOutpost(); }
-function craftItem(item) { 
-    if (!canCarry()) return; 
-    if (item === 'MED_STIM' && materials.chems >= 2) { materials.chems -= 2; inventory.push(item); checkBountyProgress('CRAFT'); } 
-    else if (item === 'SCRAP_BOMB' && materials.parts >= 2) { materials.parts -= 2; inventory.push(item); checkBountyProgress('CRAFT'); } 
-    else if (item === 'ADRENALINE' && materials.chems >= 1 && materials.tech >= 1) { materials.chems -= 1; materials.tech -= 1; inventory.push(item); checkBountyProgress('CRAFT'); } 
-    else if (item === 'EMP_CHARGE' && materials.tech >= 2) { materials.tech -= 2; inventory.push(item); checkBountyProgress('CRAFT'); } 
-    saveGameState(); renderOutpost(); 
+function craftItem(item) {
+    if (!canCarry() || !canAfford(item)) return;
+    Object.entries(ITEM_DATA[item].mats).forEach(([k, n]) => { materials[k] -= n; });
+    inventory.push(item); checkBountyProgress('CRAFT');
+    saveGameState(); renderOutpost();
 }
 function installAugment(charId, type) { let char = playerRoster.find(c => c.id === charId); if (!char.augments) char.augments = []; if (type === 'PLATING' && materials.parts >= 3) { materials.parts -= 3; char.maxHp += 20; char.hp += 20; char.augments.push('Plating'); } else if (type === 'OPTICS' && materials.tech >= 2) { materials.tech -= 2; char.dmgBase += 4; char.augments.push('Optics'); } else if (type === 'PUMP' && materials.chems >= 2) { materials.chems -= 2; char.speed += 3; char.augments.push('Pump'); } saveGameState(); renderOutpost(); }
 function assignSlot(charId, newSlot) {
@@ -4591,7 +4630,10 @@ function shopItemLabel(it) {
         const r = RELIC_POOL.find(x => x.id === it.id);
         return { name: `◆ ${r.name}`, desc: `${r.tier} relic at trader markup — ${r.desc}` };
     }
-    if (it.kind === 'STIM') return { name: '💉 Med-Stim', desc: 'A combat heal in the pocket.' };
+    // The Armory is the fourth place a consumable can be read, so it quotes the same table as
+    // the bench, the bag and the deck. It used to say "a combat heal in the pocket" - true, and
+    // no help at all to anyone weighing 35 scrap against it.
+    if (it.kind === 'STIM') return { name: ITEM_DATA.MED_STIM.label, desc: ITEM_DATA.MED_STIM.desc };
     if (it.kind === 'REROLL') return { name: '↻ Quirk Therapy', desc: "Reroll one operator's quirk. No refunds on who they become." };
     if (it.kind === 'INSURANCE') return { name: '❖ Regroup Bond', desc: 'The next regroup takes none of your scrap.' };
     return { name: it.kind, desc: '' };
@@ -7519,7 +7561,7 @@ globalThis.WP = {
     RECRUIT_POOL, RECRUIT_COST, RECRUIT_HEALTH, recruitCost, recruitables, recruitById, recruitReach,
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
