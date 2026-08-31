@@ -753,3 +753,5 @@ button.reach-short { border-color: #7a5a20; }
 /* Two factions that had no ground of their own now have one each. */
 .tr-flooded { background: #16242a; color: #7fc4cf; }
 .tr-nest    { background: #241a22; color: #c98fb0; }
+/* Something an event promised, and how far off it is. Amber: not a threat yet, but coming. */
+.bounty-owed { color: #d9a93d; border-left: 2px solid #7a5c14; padding-left: 6px; }

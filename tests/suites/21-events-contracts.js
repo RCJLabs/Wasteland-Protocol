@@ -79,25 +79,33 @@ module.exports = {
     ok(`and ${booking.events.length} events that book one`, booking.events.length >= 3);
     ok('every declared kind is actually reachable from an event', booking.allKindsUsed);
 
+    // The fuse is counted in NODES, not sectors. It used to be booked against a sector and lit
+    // only when one was cleared, so a debt "one sector on" needed a whole sector including the
+    // commander - and the median run reaches sector 2. Six in seven were never collected.
     const timing = await page.evaluate(() => {
       currentSlot = 1; activeContracts = []; confirmNewGame(1.0); sectorFront = null;
-      currentSector = 1; pendingConsequences = [];
-      bookConsequence('DEBT', 2, { amount: 400 });
-      const at = s => { currentSector = s; return consequencesDue().length; };
-      return { s1: at(1), s2: at(2), s3: at(3), s4: at(4), booked: pendingConsequences[0] };
+      pendingConsequences = []; runStats.nodes = 0;
+      bookConsequence('DEBT', 4, { amount: 400 });
+      const at = n => { runStats.nodes = n; return consequencesDue().length; };
+      return { n0: at(0), n3: at(3), n4: at(4), n9: at(9), booked: pendingConsequences[0],
+               sameSector: (() => { runStats.nodes = 4; currentSector = 1; return consequencesDue().length; })(),
+               fuse: CONSEQUENCE_FUSE };
     });
-    ok('a consequence booked two sectors out is not due now', timing.s1 === 0 && timing.s2 === 0);
-    ok('comes due when the run reaches that sector', timing.s3 === 1);
-    ok('and stays due if it is somehow passed', timing.s4 === 1);
+    ok('a debt booked four nodes out is not due yet', timing.n0 === 0 && timing.n3 === 0);
+    ok('comes due on the node it was booked against', timing.n4 === 1);
+    ok('and stays due once passed', timing.n9 === 1);
+    ok('inside the sector that lit it, without waiting for a commander', timing.sameSector === 1);
     ok('carrying whatever the event promised', timing.booked.amount === 400);
+    ok(`every kind's term is short enough to land inside a run (${Object.values(timing.fuse).join(', ')} nodes)`,
+      Object.values(timing.fuse).every(v => v >= 1 && v <= 8));
 
     const debt = await page.evaluate(() => {
       const run = (purse) => {
         currentSlot = 1; activeContracts = []; confirmNewGame(1.0); sectorFront = null;
         playerRoster.forEach(u => { if (u.gridPos > 0) { u.maxHp = 100; u.hp = 100; } });
-        pendingConsequences = []; currentSector = 1;
+        pendingConsequences = []; runStats.nodes = 0;
         bookConsequence('DEBT', 1, { amount: 400 });
-        currentSector = 2; scrap = purse;
+        runStats.nodes = 1; scrap = purse;
         const shown = resolveConsequence();
         return { shown, scrap, hurt: playerRoster.filter(u => u.gridPos > 0 && u.hp < 100).length,
                  left: pendingConsequences.length,
@@ -120,7 +128,7 @@ module.exports = {
         currentSlot = 1; activeContracts = []; confirmNewGame(1.0); sectorFront = null;
         playerRoster.forEach(u => { if (u.gridPos > 0) { u.maxHp = 100; u.hp = 60; } });
         scrap = 0; materials = { parts: 0, chems: 0, tech: 0 };
-        pendingConsequences = []; currentSector = 2;
+        pendingConsequences = []; runStats.nodes = 0;
         bookConsequence(kind, 0);
         resolveConsequence();
         const squad = playerRoster.filter(u => u.gridPos > 0);
@@ -139,8 +147,8 @@ module.exports = {
     // A consequence must not evaporate on a reload, or the promise the event made is void.
     await page.evaluate(() => {
       currentSlot = 1; activeContracts = []; confirmNewGame(1.0); sectorFront = null;
-      pendingConsequences = []; currentSector = 1;
-      bookConsequence('DEBT', 2, { amount: 400 });
+      pendingConsequences = []; runStats.nodes = 0;
+      bookConsequence('DEBT', 4, { amount: 400 });
       recentEvents = ['THE HOARD', 'MINEFIELD'];
       saveGameState();
     });
@@ -151,25 +159,28 @@ module.exports = {
     const persisted = await page.evaluate(() => ({
       booked: pendingConsequences.length,
       amount: (pendingConsequences[0] || {}).amount,
-      due: (pendingConsequences[0] || {}).dueSector,
+      due: (pendingConsequences[0] || {}).dueAt,
       recent: recentEvents.length
     }));
     ok('a booked consequence survives a reload', persisted.booked === 1 && persisted.amount === 400);
-    ok('with its due sector intact', persisted.due === 3);
+    ok('with the node it comes due on intact', persisted.due === 4);
     ok('and the run remembers which events it has already seen', persisted.recent === 2);
 
-    // Reaching the sector it is booked against is what fires it.
+    // Clearing the node it is booked against is what fires it - no commander required.
     const arrival = await page.evaluate(() => {
       currentSlot = 1; activeContracts = []; confirmNewGame(1.0); sectorFront = null;
-      pendingConsequences = []; currentSector = 1; currentTier = TOTAL_TIERS + 1; scrap = 1000;
+      pendingConsequences = []; currentTier = 3; scrap = 1000;
+      runStats.nodes = 0;
       bookConsequence('DEBT', 1, { amount: 400 });
-      advanceSector();
+      collectLoot(10, false);   // one node cleared, which is the whole term
       return { sector: currentSector, screen: getComputedStyle(document.getElementById('screen-event')).display,
                map: getComputedStyle(document.getElementById('screen-map')).display, scrap };
     });
-    ok('advancing into the sector it is due in fires it', arrival.sector === 2 && arrival.screen === 'flex');
+    ok('clearing the node it is due on fires it, inside the same sector',
+      arrival.sector === 1 && arrival.screen === 'flex');
     ok('ahead of the map', arrival.map === 'none');
-    ok('and it is actually applied', arrival.scrap === 600);
+    ok('and it is actually applied', arrival.scrap === 610);   // 1000 + 10 looted - 400 owed
+
 
     const acknowledged = await page.evaluate(() => {
       document.querySelector('[data-action="consequence-ack"]').click();
@@ -177,6 +188,25 @@ module.exports = {
                left: pendingConsequences.length };
     });
     ok('acknowledging it returns to the map', acknowledged.map === 'flex');
+
+    // The board says what is coming, because a debt you can see is a decision.
+    const owedRow = await page.evaluate(() => {
+      currentSlot = 1; activeContracts = []; confirmNewGame(1.0); sectorFront = null;
+      pendingConsequences = []; runStats.nodes = 0; currentTier = 2;
+      renderMap();
+      const quiet = document.querySelectorAll('.bounty-owed').length;
+      bookConsequence('DEBT', 4, { amount: 400 });
+      renderMap();
+      const shown = document.querySelector('.bounty-owed');
+      runStats.nodes = 4; renderMap();
+      const now = document.querySelector('.bounty-owed');
+      return { quiet, warned: !!shown, text: shown ? shown.innerText : '',
+               nowText: now ? now.innerText : '' };
+    });
+    ok('nothing owed, nothing on the board', owedRow.quiet === 0);
+    ok(`a debt on the way is shown with how far off it is (${owedRow.text.replace(/\n/g, ' ')})`,
+      owedRow.warned && /4 nodes/.test(owedRow.text));
+    ok(`and reads as due when it is (${owedRow.nowText.replace(/\n/g, ' ')})`, /NOW/.test(owedRow.nowText));
     ok('with nothing outstanding', acknowledged.left === 0);
 
     const stacked = await page.evaluate(() => {

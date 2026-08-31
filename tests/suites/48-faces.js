@@ -120,16 +120,17 @@ module.exports = {
       currentSlot = 1; confirmNewGame(1.0);
       const vela = EVENT_POOL.find(e => e.cast === 'VELA');
       const free = choicesFor(vela).map(c => ({ label: c.label, can: c.canAfford() }));
-      const at = currentSector;
-      const words = { one: 1, two: 2, three: 3 };
-      const said = words[(free[0].label.match(/(one|two|three) sector/) || [])[1]] || null;
+      // The term is counted in nodes now, and the offer quotes a number - so read the number
+      // she says and check it against the node the debt is actually booked against.
+      const at = nodesCleared();
+      const said = Number((free[0].label.match(/in (\d+) nodes/) || [])[1]) || null;
       choicesFor(vela)[0].execute();                 // borrow
       const owing = choicesFor(vela).map(c => ({ label: c.label, can: c.canAfford() }));
-      return { free, owing, owes: owesVela(), term: { said, at, due: pendingConsequences[0].dueSector }, live: DEBT_TERM };
+      return { free, owing, owes: owesVela(), term: { said, at, due: pendingConsequences[0].dueAt }, live: DEBT_TERM };
     });
     const DEBT_TERM_EXPECTED = lender.live;
     ok('the fixer lends to a squad that owes her nothing', lender.free[0].can && /Borrow/.test(lender.free[0].label));
-    ok(`the term she names is the term she books (${lender.term.said} said, due sector ${lender.term.due} from ${lender.term.at})`,
+    ok(`the term she names is the term she books (${lender.term.said} said, due on node ${lender.term.due} from ${lender.term.at})`,
       lender.term.due - lender.term.at === DEBT_TERM_EXPECTED && lender.term.said === DEBT_TERM_EXPECTED);
     ok('and will not lend into a debt she has not been paid', lender.owes && !lender.owing[0].can);
 

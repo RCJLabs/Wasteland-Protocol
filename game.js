@@ -1301,17 +1301,38 @@ const CONSEQUENCE_POOL = {
 
 function deployed() { return playerRoster.filter(p => p.gridPos > 0 && p.hp > 0); }
 
-// Booked against a sector rather than a node count, so it reads the same to the player as the
-// event that promised it: "one sector on".
-function bookConsequence(kind, inSectors, extra = {}) {
-    pendingConsequences.push({ kind, dueSector: currentSector + inSectors, ...extra });
+// The fuse used to be measured in SECTORS and lit only inside advanceSector, so a debt booked
+// "one sector on" needed a whole sector cleared, commander included, before it could land. The
+// median run reaches sector 2. Measured: 0.32 consequences resolved per run against 5.3 events
+// seen - six in seven debts an expedition took on were never collected, because the run ended
+// first. The whole point of an event with a consequence is that you feel it later; almost
+// nothing did.
+//
+// Booked in NODES now, and lit when a node is done with rather than when a sector is. A term
+// of three to six nodes lands inside the run that lit it.
+const CONSEQUENCE_FUSE = { AMBUSH: 3, SURVIVOR: 5, DEBT: 6 };
+function nodesCleared() { return runStats ? (runStats.nodes || 0) : 0; }
+function bookConsequence(kind, inNodes, extra = {}) {
+    pendingConsequences.push({ kind, dueAt: nodesCleared() + inNodes, ...extra });
 }
-function consequencesDue() { return pendingConsequences.filter(c => c.dueSector <= currentSector); }
+function consequencesDue() {
+    const n = nodesCleared();
+    // A save written before the fuse moved carries dueSector instead; it keeps the old rule
+    // rather than firing all at once or never.
+    return pendingConsequences.filter(c =>
+        c.dueAt !== undefined ? n >= c.dueAt : currentSector >= (c.dueSector || 0));
+}
+// How far off the nearest one is, for the board. Null when nothing is owed.
+function consequenceIn() {
+    const n = nodesCleared();
+    const waits = pendingConsequences.map(c => c.dueAt !== undefined ? c.dueAt - n : 0);
+    return waits.length ? Math.max(0, Math.min(...waits)) : null;
+}
 
 // Shown on the event screen, one at a time, before the sector's map.
 function resolveConsequence() {
     const due = consequencesDue();
-    if (due.length === 0) { renderMap(); return false; }
+    if (due.length === 0) { afterNode(); return false; }
     const c = due[0];
     pendingConsequences = pendingConsequences.filter(o => o !== c);
     const spec = CONSEQUENCE_POOL[c.kind];
@@ -1576,9 +1597,9 @@ const EVENT_POOL = [
         const owed = castStanding('VELA') >= 1 ? 320 : 400;
         const list = [];
         if (!owing) list.push(
-          { label: `Borrow 200 Scrap (owe ${owed} one sector on)`, canAfford: () => true,
-            execute: () => { scrap += 200; bookConsequence('DEBT', DEBT_TERM, { amount: owed }); playSFX('click');
-              return `She counts out 200 Scrap without looking at you. 'One sector. ${owed}.'`; } });
+          { label: `Borrow 200 Scrap (owe ${owed} in ${DEBT_TERM} nodes)`, canAfford: () => true,
+            execute: () => { scrap += 200; bookConsequence('DEBT', CONSEQUENCE_FUSE.DEBT, { amount: owed }); playSFX('click');
+              return `She counts out 200 Scrap without looking at you. '${DEBT_TERM} nodes. ${owed}.'`; } });
         else list.push(
           { label: "Ask for more (she refuses)", canAfford: () => false,
             execute: () => "She does not deal you in twice." });
@@ -1594,7 +1615,7 @@ const EVENT_POOL = [
       choices: [
         { label: "Crack it open (+1 item, +1 Tech)", canAfford: () => canCarry(),
           execute: () => { inventory.push('SCRAP_BOMB'); materials.tech += 1; checkBountyProgress('CRAFT');
-            bookConsequence('AMBUSH', 1); playSFX('heal');
+            bookConsequence('AMBUSH', CONSEQUENCE_FUSE.AMBUSH); playSFX('heal');
             return "A Scrap Bomb and a clean tech core. Nobody says what everyone is thinking: why was this still here?"; } },
         { label: "Strip the shell for parts (+3 Parts)", canAfford: () => true,
           execute: () => { materials.parts += 3; playSFX('click');
@@ -1608,7 +1629,7 @@ const EVENT_POOL = [
         : "A scavenger is propped against a wheel rim, one leg opened to the bone. They have a rifle across their lap and no rounds left for it.",
       choices: [
         { label: "Patch them up (-2 Chems)", canAfford: () => materials.chems >= 2,
-          execute: () => { materials.chems -= 2; bookConsequence('SURVIVOR', 2); noteCast('KESS', 2); playSFX('heal');
+          execute: () => { materials.chems -= 2; bookConsequence('SURVIVOR', CONSEQUENCE_FUSE.SURVIVOR); noteCast('KESS', 2); playSFX('heal');
             return "You seal the leg and leave them water. They ask for your route. 'I pay what I owe.'"; } },
         { label: "Take the rifle (+50 Scrap)", canAfford: () => true,
           execute: () => { scrap += 50; noteCast('KESS', -2); playSFX('click');
@@ -1682,7 +1703,7 @@ const EVENT_POOL = [
     { title: "THE HOARD", desc: "Crates stacked three high in an open drainage culvert, unlocked, unguarded, in the middle of raider country.",
       choices: [
         { label: "Take all of it (+180 Scrap)", canAfford: () => true,
-          execute: () => { scrap += 180; bookConsequence('AMBUSH', 1); playSFX('heal');
+          execute: () => { scrap += 180; bookConsequence('AMBUSH', CONSEQUENCE_FUSE.AMBUSH); playSFX('heal');
             return "180 Scrap, and not one person in the squad believes this is free."; } },
         { label: "Take a crate and go (+50 Scrap)", canAfford: () => true,
           execute: () => { scrap += 50; playSFX('click');
@@ -1740,8 +1761,8 @@ const FOLLOWUPS = [
       when: () => castStanding('VELA') >= 2 && !owesVela(),
       desc: () => "Vela has a folding table this time, and a chair for you. 'You pay. That is rarer than you think. So here is the rate nobody else gets.'",
       choices: () => [
-        { label: "Borrow 400 Scrap (owe 480 one sector on)", canAfford: () => true,
-          execute: () => { scrap += 400; bookConsequence('DEBT', DEBT_TERM, { amount: 480 }); playSFX('click');
+        { label: `Borrow 400 Scrap (owe 480 in ${DEBT_TERM} nodes)`, canAfford: () => true,
+          execute: () => { scrap += 400; bookConsequence('DEBT', CONSEQUENCE_FUSE.DEBT, { amount: 480 }); playSFX('click');
             return "Four hundred, at a rate she does not write down where anyone can see it."; } },
         { label: "Sell her the squad's junk (+180 Scrap, -2 Parts)", canAfford: () => materials.parts >= 2,
           execute: () => { materials.parts -= 2; scrap += 180; playSFX('click');
@@ -1773,7 +1794,7 @@ const FOLLOWUPS = [
           execute: () => { scrap -= 140; noteCast('KESS', 3); playSFX('click');
             return "Money is a poor apology and an excellent one. The description stops travelling."; } },
         { label: "Let it stand", canAfford: () => true,
-          execute: () => { bookConsequence('AMBUSH', 1); playSFX('click');
+          execute: () => { bookConsequence('AMBUSH', CONSEQUENCE_FUSE.AMBUSH); playSFX('click');
             return "You walk through and nobody stops you. Somebody leaves ahead of you at a run."; } }
       ] },
 
@@ -3033,6 +3054,14 @@ function collectLoot(amount, abandoned) {
     activeEntities = []; turnQueue = []; pendingCombat = null; saveGameState();
     // A commander's reward is a decision, so it interrupts the return to the map rather than
     // being resolved silently behind it.
+    afterNode();
+}
+
+// What happens when a node is done with: anything that has come due lands first, then the
+// rewards that need a decision, then the map. One chain, so a consequence cannot swallow a
+// relic offer by getting to renderMap ahead of it.
+function afterNode() {
+    if (consequencesDue().length) { resolveConsequence(); return; }
     if (pendingRelicOffer && pendingRelicOffer.length) { renderRelicOffer(); return; }
     if (pendingPerkOffers.length) { renderPerkOffer(); return; }
     renderMap();
@@ -3883,6 +3912,15 @@ function renderMap() {
     if (!standingBounty) standingBounty = rollStanding();
     bHtml += `<div class="bounty-item bounty-standing" title="A standing contract: it runs the length of the expedition and pays ${standingBounty.reward} Scrap.">`
            + `<span>\u2726 ${standingBounty.desc}</span><span>[${standingBounty.current}/${standingBounty.target}]</span></div>`;
+    // A debt you can see coming is a decision; one you cannot is a coin flip. It sits under the
+    // contracts because that is where the run's standing obligations already live.
+    const owedIn = consequenceIn();
+    if (owedIn !== null) {
+        const n = pendingConsequences.length;
+        bHtml += `<div class="bounty-item bounty-owed" title="Something an event promised is coming due. It lands when the node count reaches it, wherever you are.">`
+               + `<span>\u26A0 ${n === 1 ? 'A debt comes due' : `${n} debts outstanding`}</span>`
+               + `<span>${owedIn === 0 ? 'NOW' : `${owedIn} node${owedIn === 1 ? '' : 's'}`}</span></div>`;
+    }
     document.getElementById('bounty-list').innerHTML = bHtml;
 
     let rHtml = '';
@@ -4229,7 +4267,7 @@ const FACE_RETURN_WEIGHT = 3;
 // How long Vela's money is yours. It was two sectors, which on a run whose median depth is two
 // meant most loans never came due at all: 200 scrap up front and no collection, and weighting
 // her to come back made that the most generous thing in the pool. One sector is a loan.
-const DEBT_TERM = 1;
+const DEBT_TERM = CONSEQUENCE_FUSE.DEBT;   // quoted in Vela's offer, so it must be the real term
 function eventWeight(e) { return (e.cast && hasMetCast(e.cast)) ? FACE_RETURN_WEIGHT : 1; }
 
 function pickEvent() {
@@ -7430,7 +7468,7 @@ globalThis.WP = {
     RECRUIT_POOL, RECRUIT_COST, RECRUIT_HEALTH, recruitCost, recruitables, recruitById, recruitReach,
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, resolveConsequence, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, assignSlot, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants

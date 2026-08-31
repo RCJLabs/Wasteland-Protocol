@@ -73,7 +73,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
-                 extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false };
+                 extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false,
+                 booked: 0, bookedKinds: {} };
 
   activeContracts = [...contracts];
   currentSlot = 1;
@@ -385,7 +386,14 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       const options = choicesFor(ev).filter(c => c.canAfford());
       if (ev.cast) stat.facesMet[ev.cast] = (stat.facesMet[ev.cast] || 0) + 1;
       if (FOLLOWUPS.some(f => f.title === ev.title)) stat.threads.push(ev.title);
+      const owedBefore = pendingConsequences.length;
       if (options.length) options[Math.floor(Math.random() * options.length)].execute();
+      // A resolve rate is meaningless without the booking rate underneath it: six in seven
+      // uncollected could be a fuse that never lands, or a debt that was never taken on.
+      if (pendingConsequences.length > owedBefore) {
+        stat.booked += pendingConsequences.length - owedBefore;
+        pendingConsequences.slice(owedBefore).forEach(c => { stat.bookedKinds[c.kind] = (stat.bookedKinds[c.kind] || 0) + 1; });
+      }
       currentTier++; stat.nodes++; noteDepth(); runStats.nodes++;
       continue;
     }
@@ -756,7 +764,14 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('contracts settled', allTypes.map(t => `${t} ${settled[t] || 0}`).join(', '));
   const unsettled = allTypes.filter(t => !settled[t]);
   line('never settled', unsettled.length ? unsettled.join(', ') : 'none');
+  const bookedN = results.reduce((a, r) => a + (r.booked || 0), 0);
+  const doneN = results.reduce((a, r) => a + r.consequences, 0);
+  line('consequences booked, mean', (bookedN / n).toFixed(2));
   line('consequences resolved, mean', mean(nums('consequences')).toFixed(2));
+  line('  of what was booked', bookedN ? `${doneN} of ${bookedN} (${(100 * doneN / bookedN).toFixed(0)}%)` : 'nothing was booked');
+  const kinds = {};
+  results.forEach(r => Object.entries(r.bookedKinds || {}).forEach(([k, v]) => { kinds[k] = (kinds[k] || 0) + v; }));
+  line('  by kind', Object.entries(kinds).map(([k, v]) => `${k} ${v}`).join(', ') || 'none');
   line('events seen, mean', mean(nums('events')).toFixed(1));
 
   if (errors.length) {
