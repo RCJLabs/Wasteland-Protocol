@@ -744,12 +744,26 @@ const TERRAIN = {
     RUINS:      { name: 'RUINS', short: 'RUINS', dot: 'tr-ruins',
                   desc: 'Broken concrete in every direction. The front rank has something to stand behind, a blast has somewhere to stop, and nobody has a clean line at anything.',
                   frontCover: 0.8, ranged: 0.9, aoe: 0.75,
-                  banner: '\u25A6 RUINS: front rank -20%, ranged -10%, area attacks -25% \u25A6' }
+                  banner: '\u25A6 RUINS: front rank -20%, ranged -10%, area attacks -25% \u25A6' },
+    // The Choir and the Carrion had no ground of their own - they borrowed tunnels and ruins
+    // off the Mech and the Beasts, so two of five factions fought nowhere in particular. A
+    // faction that reads as a place is the other half of what a named formation does.
+    FLOODED:    { name: 'FLOODED WORKS', short: 'WATER', dot: 'tr-flooded',
+                  desc: 'Ankle-deep in a drowned refinery. Nothing to brace against, blades drag through it, and whatever goes off carries across the water.',
+                  reach: 0.85, aoe: 1.25, frontCover: 1.2,
+                  banner: '\u2248 FLOODED WORKS: melee -15%, area attacks +25%, the front rank has nothing to stand behind \u2248' },
+    NEST:       { name: 'THE NEST', short: 'NEST', dot: 'tr-nest',
+                  desc: 'Chitin underfoot and egg-cases to the ceiling. They are packed in tight enough to catch a blast properly - and they know the floor better than you do.',
+                  aoe: 1.35, ranged: 0.9, backline: 2,
+                  banner: '\u2726 THE NEST: area attacks +35%, ranged -10%, your back rank is exposed \u2726' }
 };
 const TERRAIN_IDS = Object.keys(TERRAIN);
-// Ground is the place rather than an event, so it is commoner than weather's 0.4 - about half
-// the fights in a sector are on something that bends a rule.
-const GROUND_CHANCE = 0.5;
+// Ground is the place rather than an event, so it is commoner than weather's 0.4. Measured at
+// 0.5 it did exactly what it said - 51.4% of ELIGIBLE nodes carried terrain - but only 41% of
+// fights actually fought, because two categories are deliberately never eligible: a commander's
+// arena, and the opening fight of a run. Both stay plain; the dial is the honest lever, and at
+// 0.75 the fights that can carry ground mostly do.
+const GROUND_CHANCE = 0.75;
 let currentTerrain = 'OPEN_ROAD'; let forecastTerrain = null;
 // One accessor, so nothing has to remember that an unknown id means "the plain one".
 function ground() { return TERRAIN[currentTerrain] || TERRAIN.OPEN_ROAD; }
@@ -769,10 +783,10 @@ const FACTIONS = {
     MECH:    { bg: 'bg_refinery.webp', weather: 'TOXIC_SMOG',     ground: ['RUINS', 'TUNNELS'], allies: [] },
     // Irradiated cultists: the first enemies in the game that spend a turn on each other
     // rather than on you. Standing next to one is what makes the rest dangerous.
-    CHOIR:   { bg: 'bg_refinery.webp', weather: 'TOXIC_SMOG',     ground: ['TUNNELS', 'RUINS'], allies: ['BEASTS'], minSector: 2 },
+    CHOIR:   { bg: 'bg_refinery.webp', weather: 'TOXIC_SMOG',     ground: ['FLOODED', 'RUINS'], allies: ['BEASTS'], minSector: 2 },
     // A swarm. Each one is trivial and the pile is not, and the answer is to spread damage
     // across it rather than pick them off one at a time.
-    CARRION: { bg: 'bg_canyon.webp',   weather: 'SANDSTORM',      ground: ['TUNNELS', 'RUINS'], allies: [],         minSector: 2, swarm: 2, heavyCap: 2 }
+    CARRION: { bg: 'bg_canyon.webp',   weather: 'SANDSTORM',      ground: ['NEST', 'TUNNELS'], allies: [],         minSector: 2, swarm: 2, heavyCap: 2 }
 };
 const FIGHT_NODES = Object.keys(FACTIONS);
 function factionsAt(sector) { return FIGHT_NODES.filter(f => (FACTIONS[f].minSector || 1) <= sector); }

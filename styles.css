@@ -750,3 +750,6 @@ button.reach-short { border-color: #7a5a20; }
     letter-spacing: 2px; padding: 5px 8px; }
 #doctrine-badge.doctrine-badge-broken { border-color: #6b2020; background: #140808; color: #B22222; }
 .doctrine-badge-mult { font-variant-numeric: tabular-nums; opacity: 0.85; }
+/* Two factions that had no ground of their own now have one each. */
+.tr-flooded { background: #16242a; color: #7fc4cf; }
+.tr-nest    { background: #241a22; color: #c98fb0; }
