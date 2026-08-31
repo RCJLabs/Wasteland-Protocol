@@ -327,19 +327,26 @@ module.exports = {
         currentSector = 1; currentTier = 1; initiateCombat('RAIDERS', false);
         return currentWeather;
       };
-      const normalOpeners = []; for (let i = 0; i < 12; i++) normalOpeners.push(opener([]));
-      const watchOpeners = []; for (let i = 0; i < 12; i++) watchOpeners.push(opener(['THEY_MOVE_FIRST']));
+      // Sixty rather than twelve, because this is the CONTROL for the Second Watch contract and
+      // twelve put it on the noise floor: the squad opens about 28% of fights at this depth, so
+      // "at least one of twelve" came up empty roughly once in fifteen runs. Sixty makes an
+      // all-enemy sample a 1-in-10^9 event rather than a Tuesday.
+      const normalOpeners = []; for (let i = 0; i < 60; i++) normalOpeners.push(opener([]));
+      const watchOpeners = []; for (let i = 0; i < 60; i++) watchOpeners.push(opener(['THEY_MOVE_FIRST']));
       const out = { normalOpeners, watchOpeners,
                     clearNormally: weather([]), clearHarsh: weather(['HARSH_SKIES']),
                     graceNormal: grace([]), graceHarsh: grace(['HARSH_SKIES']) };
       activeContracts = [];
       return out;
     });
-    // Turn order is decided by speed, so a fast enemy can already open a normal fight - the
-    // invariant is that Second Watch takes the decision away from speed entirely.
-    ok(`normally the squad usually opens (${combat.normalOpeners.filter(Boolean).length}/12)`,
-      combat.normalOpeners.some(Boolean));
-    ok('Second Watch always hands the opening turn to the enemy',
+    // Turn order is decided by speed, so a fast enemy can already open a normal fight. The
+    // contract is not that the squad usually wins the roll - it is that speed DECIDES it
+    // normally and does not decide it under Second Watch. So the control asserts the opener
+    // genuinely varies, rather than that it lands one particular way.
+    const opened = combat.normalOpeners.filter(Boolean).length;
+    ok(`normally speed decides who opens, so it varies (${opened}/60 to the squad)`,
+      opened > 0 && opened < combat.normalOpeners.length);
+    ok(`Second Watch takes that decision away entirely (0/${combat.watchOpeners.length} to the squad)`,
       combat.watchOpeners.every(p => p === false));
     ok(`normally some nodes are clear (${combat.clearNormally}/120)`, combat.clearNormally > 20);
     ok('Harsh Skies leaves none of them clear', combat.clearHarsh === 0);

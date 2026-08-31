@@ -139,6 +139,12 @@ ground for the line to stand on.
   > the floor throwing green light up the walls, hand-daubed cult symbols on the concrete,
   > drifting motes of luminous vapour. Accent colour: sickly radium green.
 
+Anything painted with a dark foreground band along the bottom must also be listed in
+`GROUND_LIFT` in `game.js`, or the squad stands inside that band on visible nothing. The lift
+is measured, not guessed: the fraction of the image height that is essentially black from the
+bottom up, times 0.9, in vh. Suite 49 recomputes the band for every backdrop and fails if one
+grows a foreground without an entry.
+
 - **`bg_carrionfield.webp`** — the Carrion's ground.
   > An enormous animal ribcage half-buried in a dust plain, ribs arching overhead like rafters
   > in hard silhouette against a jaundiced sky, scraps of hide still stretched between them,

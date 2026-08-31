@@ -252,5 +252,76 @@ module.exports = {
     });
     ok('the manual lists every ground that bends a rule', taught.manual);
     ok('and the field prompt explains all three', taught.prompt);
+    const GROUND_LIFT_CONGREGATION = await page.evaluate(() => GROUND_LIFT['bg_congregation.webp']);
+    const DEFAULT_LIFT_V = await page.evaluate(() => DEFAULT_LIFT);
+
+    // ---- the squad has to stand on the ground, not below it ----
+    // Some backdrops are painted with a dark foreground band along the bottom. Standing the
+    // line at the default height puts it inside that band, on visible nothing - which is
+    // exactly what shipped when bg_congregation and bg_carrionfield went in without an entry
+    // in GROUND_LIFT. No existing assertion could see it: the art loads, combat runs, and the
+    // squad is simply standing in a void. So the band is measured here rather than trusted.
+    const footing = await page.evaluate(async () => {
+      const band = src => new Promise(resolve => {
+        const img = new Image();
+        img.onerror = () => resolve(null);
+        img.onload = () => {
+          const c = document.createElement('canvas');
+          const w = c.width = 64, h = c.height = 256;          // downsampled: only the profile matters
+          const cx = c.getContext('2d', { willReadFrequently: true });
+          cx.drawImage(img, 0, 0, w, h);
+          const d = cx.getImageData(0, 0, w, h).data;
+          let dead = 0;
+          for (let y = h - 1; y >= 0; y--) {
+            let sum = 0;
+            for (let x = 0; x < w; x++) {
+              const i = (y * w + x) * 4;
+              sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+            }
+            if (sum / w > 14) break;
+            dead++;
+          }
+          resolve(dead / h);
+        };
+        img.src = src;
+      });
+      const bgs = ASSET_LIST.filter(f => f.startsWith('bg_') && f !== 'bg_title.webp');
+      const out = [];
+      for (const f of bgs) {
+        const b = await band(f);
+        if (b === null) continue;
+        const lift = GROUND_LIFT[f] ? parseFloat(GROUND_LIFT[f]) : null;
+        out.push({ f, band: b, lift });
+      }
+      return { rows: out, def: parseFloat(DEFAULT_LIFT) };
+    });
+    const banded = footing.rows.filter(r => r.band > 0.10);
+    const flat = footing.rows.filter(r => r.band <= 0.10);
+    ok(`every backdrop was measured (${footing.rows.length} of them)`, footing.rows.length >= 8);
+    ok(`a backdrop with a painted foreground names its ground line (${banded.map(r => r.f.replace('bg_', '').replace('.webp', '')).join(', ') || 'none'})`,
+      banded.length > 0 && banded.every(r => r.lift !== null));
+    // The relationship the two hand-tuned entries both landed on, and what the rest derive from.
+    const off = banded.filter(r => Math.abs(r.lift - r.band * 100 * 0.9) > 4);
+    ok(`and states it close to 0.9x the band (${banded.map(r => `${(r.band * 100).toFixed(0)}%->${r.lift}vh`).join(' ')})`,
+      off.length === 0);
+    ok(`a backdrop without one keeps the default footing (${flat.length} on ${footing.def}vh)`,
+      flat.every(r => r.lift === null));
+
+    // And the lift reaches the battlefield through a real fight, rather than sitting unread in
+    // a table: the bug was never in the number, it was that nothing consulted one.
+    const applied = await page.evaluate(() => {
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      const stage = fac => {
+        currentSector = 3; currentTier = 6;
+        initiateCombat(fac, false);
+        return { bg: combatBgFile,
+                 margin: document.querySelector('.battlefield').style.marginBottom };
+      };
+      return { choir: stage('CHOIR'), raiders: stage('RAIDERS') };
+    });
+    ok(`a fight on a painted foreground lifts the line (${applied.choir.bg} -> ${applied.choir.margin})`,
+      applied.choir.bg === 'bg_congregation.webp' && applied.choir.margin === GROUND_LIFT_CONGREGATION);
+    ok(`and one without keeps the default (${applied.raiders.bg} -> ${applied.raiders.margin})`,
+      applied.raiders.margin === DEFAULT_LIFT_V);
   }
 };
