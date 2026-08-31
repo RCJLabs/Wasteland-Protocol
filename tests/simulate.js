@@ -90,6 +90,21 @@ const RELICS = flag('relics', 'rare');
 // `--meta fresh` wipes the ledger between runs: sixty independent first careers, which is what
 // a question about the game a player actually meets has to be asked against.
 const META = flag('meta', 'carry');
+// Event choices were picked uniformly at random, and standing with the four faces moves only
+// through those choices - so "standing barely moves across a run (-1.0 to +0.6)" was a random
+// walk by construction, not a reading about the game. It cascades: five of the six follow-up
+// threads gate on |standing| >= 2 with one face, so a walk that averages to zero never opens
+// them, and "two of six never appeared in sixty runs" follows from the same coin.
+//
+// A player is not a coin. They help the tinker because they want the tinker to like them, or
+// they rob the scavenger because they want the scrap. `--faces warm` takes the choice that
+// raises standing with whoever is across the table, `cold` takes the one that lowers it, and
+// `random` is the old behaviour. Warm and cold bracket a real player between them.
+//
+// Which choice is which is read off the game's own source - the noteCast call inside each
+// choice's execute - rather than encoded here, so a reworded event cannot leave this file
+// preferring a choice that no longer does what it used to.
+const FACES = flag('faces', 'warm');
 
 // The three games this file can measure, and why the difference is the whole story:
 //
@@ -129,7 +144,7 @@ const META = flag('meta', 'carry');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy }) => {
   const stat = { sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, ground: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
@@ -601,7 +616,14 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (ev.cast) stat.facesMet[ev.cast] = (stat.facesMet[ev.cast] || 0) + 1;
       if (FOLLOWUPS.some(f => f.title === ev.title)) stat.threads.push(ev.title);
       const owedBefore = pendingConsequences.length;
-      if (options.length) options[Math.floor(Math.random() * options.length)].execute();
+      if (options.length) {
+        const swing = c => { const m = String(c.execute).match(/noteCast\(\s*'(\w+)'\s*,\s*(-?\d+)/);
+                             return m ? Number(m[2]) : 0; };
+        const best = facePolicy === 'warm' ? Math.max(...options.map(swing))
+                   : facePolicy === 'cold' ? Math.min(...options.map(swing)) : null;
+        const pool = best === null ? options : options.filter(c => swing(c) === best);
+        pool[Math.floor(Math.random() * pool.length)].execute();
+      }
       // A resolve rate is meaningless without the booking rate underneath it: six in seven
       // uncollected could be a fuse that never lands, or a debt that was never taken on.
       if (pendingConsequences.length > owedBefore) {
@@ -824,13 +846,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   await page.evaluate(() => { globalSettings.sfx = false; });
   ALL_FORMATION_IDS = await page.evaluate(() => ALL_FORMATIONS.map(f => f.id));
 
-  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}, tactics ${TACTICS}, relics ${RELICS}, meta ${META}` +
+  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}, tactics ${TACTICS}, relics ${RELICS}, meta ${META}, faces ${FACES}` +
               (CONTRACTS.length ? ` under ${CONTRACTS.join(', ')}` : '') +
               (WITHDRAW_POLICY ? ', running from fights it is losing' : ', fighting every node to a finish') + '\n');
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -1000,12 +1022,22 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const groundTotal = Object.values(ground).reduce((a, b) => a + b, 0) || 1;
   line('ground fought on', Object.entries(ground).sort((a, b) => b[1] - a[1])
     .map(([k, v]) => `${k} ${(v / groundTotal * 100).toFixed(0)}%`).join(', ') || 'none');
+  // Every thread listed, including the ones that fired zero times - a list of what turned up
+  // cannot show you what never did, and "two of six never appeared" is the whole finding.
   const threads = {};
   results.forEach(r => (r.threads || []).forEach(t => { threads[t] = (threads[t] || 0) + 1; }));
-  line('threads picked up', Object.entries(threads).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ') || 'none');
+  const allThreads = await page.evaluate(() => FOLLOWUPS.map(f => f.title));
+  allThreads.forEach(t => line(`  thread: ${t}`, `${threads[t] || 0} of ${n} runs`));
+  // A mean is what a random walk hides behind: +1 and -1 average to zero and report as "barely
+  // moves". What matters is how far it got, and how often it got far enough to open a door.
   const stand = {};
   results.forEach(r => Object.entries(r.standings || {}).forEach(([k, v]) => { (stand[k] = stand[k] || []).push(v); }));
-  line('standing at run end', Object.entries(stand).map(([k, v]) => `${k} ${(v.reduce((a, b) => a + b, 0) / v.length).toFixed(1)}`).join(', ') || 'none');
+  Object.entries(stand).forEach(([k, v]) => {
+    const mean = (v.reduce((a, b) => a + b, 0) / v.length).toFixed(1);
+    const hi = Math.max(...v), lo = Math.min(...v);
+    const gated = v.filter(x => Math.abs(x) >= 2).length;
+    line(`  standing: ${k}`, `mean ${mean}, range ${lo} to ${hi}, reached a gate in ${gated}/${v.length}`);
+  });
 
   console.log('\n── RELICS ' + '─'.repeat(48));
   const relics = {};

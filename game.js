@@ -1621,11 +1621,31 @@ const EVENT_POOL = [
     { title: "WRECKED CARAVAN", desc: "You stumble upon a destroyed merchant rig. The engine block is sparking dangerously, but the cargo hold is partially intact.", choices: [ { label: "Salvage Cargo (+30 Scrap)", canAfford: () => true, execute: () => { scrap += 30; playSFX('heal'); return "Salvaged 30 Scrap from the wreckage."; } }, { label: "Gut the Engine (+1 Tech, +2 Parts, -15 HP to random unit)", canAfford: () => true, execute: () => { materials.tech += 1; materials.parts += 2; let active = playerRoster.filter(p => p.gridPos > 0 && p.hp > 0); let target = active[Math.floor(Math.random() * active.length)]; target.hp = Math.max(1, target.hp - 15); playSFX('hit'); triggerHitFlash(target.id); return `Extracted parts, but an electrical surge shocked ${target.name} for 15 DMG.`; } }, { label: `Take the whole rig (+90 Scrap, someone follows)`, canAfford: () => true, execute: () => { scrap += 90; bookConsequence('PURSUIT', CONSEQUENCE_FUSE.PURSUIT); playSFX('click'); return "You strip it to the frame. Ninety Scrap, and a set of tracks leading away that will lead back."; } }, { label: "Leave it", canAfford: () => true, execute: () => { return "You move on safely without risking the sparks."; } } ] },
     { title: "THE CHEM OASIS", desc: "A glowing pool of bio-luminescent fluid sits in a blast crater. It smells like synthetic ozone and iron.", choices: [ { label: "Extract Fluid (+2 Chems)", canAfford: () => true, execute: () => { materials.chems += 2; playSFX('heal'); return "Carefully extracted 2 Chems from the pool."; } }, { label: "Bathe Wounds (Heal All Deployed for 25 HP)", canAfford: () => true, execute: () => { playerRoster.forEach(p => { if(p.gridPos > 0 && p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + 25); }); playSFX('heal'); return "The fluid burned, but the wounds sealed rapidly."; } } ] },
     { title: "WANDERING TINKER", cast: 'ORRIN',
-      desc: () => hasMetCast('ORRIN') && castOf('ORRIN').met > 1
+      desc: () => castStanding('ORRIN') <= -2
+        ? "The same mechanical hand, and it is busy rolling the tarp. Orrin heard you coming a long way off."
+        : hasMetCast('ORRIN') && castOf('ORRIN').met > 1
         ? "A different fire, the same mechanical hand. Orrin has your measure now and lays the good stock out first."
         : "A hooded cyborg sits by a campfire. They gesture toward a pile of tactical gear and hold out a mechanical hand.",
       choices: () => {
-        // Trade with him twice and the price comes down. That is the whole of the relationship.
+        // Trade with him and the price comes down. That is the whole of the relationship - but
+        // it used to be the ONLY half of it. Every choice here moved him +1 and nothing moved
+        // him down, so measured across sixty expeditions with a player trying to burn him, his
+        // standing ranged from 0 to 0: he could not be wronged. And the tier that unlocks his
+        // discount, his free tune-up and his workshop all sit at +2, reachable only by meeting
+        // his one event twice in a run, which is why the workshop fired 3 times in sixty even
+        // when every choice was made to please him.
+        //
+        // So: one visit can buy the whole relationship if you pay over the odds, and there is
+        // now a way to take from him instead. He is a trader; the consequence of robbing a
+        // trader is that he stops trading.
+        const bad = castStanding('ORRIN') <= -2;
+        if (bad) return [
+          { label: "Try to trade anyway", canAfford: () => true,
+            execute: () => { playSFX('click');
+              return "The pile is already rolled and strapped before you are close. He does not look up."; } },
+          { label: "Leave him be", canAfford: () => true,
+            execute: () => "You give the fire a wide berth." }
+        ];
         const bombPrice = castStanding('ORRIN') >= 2 ? 25 : 40;
         const list = [
           { label: `Trade Scrap for Bomb (Cost: ${bombPrice} Scrap)`, canAfford: () => scrap >= bombPrice && canCarry(),
@@ -1633,7 +1653,16 @@ const EVENT_POOL = [
               return `Acquired 1 Scrap Bomb for ${bombPrice} Scrap.`; } },
           { label: "Trade Parts for Tech (Cost: 2 Parts)", canAfford: () => materials.parts >= 2,
             execute: () => { materials.parts -= 2; materials.tech += 1; noteCast('ORRIN', 1); playSFX('click');
-              return "Traded 2 Parts for 1 Tech."; } }
+              return "Traded 2 Parts for 1 Tech."; } },
+          // The relationship, bought outright. One meeting is enough if you overpay for it.
+          { label: "Pay him what the work is worth (Cost: 90 Scrap)", canAfford: () => scrap >= 90 && canCarry(),
+            execute: () => { scrap -= 90; inventory.push('SCRAP_BOMB'); checkBountyProgress('CRAFT');
+              noteCast('ORRIN', 2); playSFX('heal');
+              return "You put down more than he asked. He counts it twice, then looks at you properly for the first time."; } },
+          // And the other direction, which he did not have at all.
+          { label: "Take the pile while his back is turned (+2 Parts, +2 Tech)", canAfford: () => true,
+            execute: () => { materials.parts += 2; materials.tech += 2; noteCast('ORRIN', -2); playSFX('click');
+              return "You are three ridges out before you hear him swearing at the empty tarp."; } }
         ];
         if (castStanding('ORRIN') >= 2) list.push(
           { label: "Let him look at your weapons (free, +4 DMG for 3 battles)", canAfford: () => true,
@@ -1645,10 +1674,23 @@ const EVENT_POOL = [
     { title: "RADIATION STORM", desc: "The geiger counter screams. A violent wall of radioactive dust is rapidly approaching your position.", choices: [ { label: "Sprint Through (-10 HP to All Deployed)", canAfford: () => true, execute: () => { playerRoster.forEach(p => { if(p.gridPos > 0 && p.hp > 0) p.hp = Math.max(1, p.hp - 10); }); playSFX('hit'); triggerShake(); return "The squad powered through, but took heavy radiation burns."; } }, { label: "Deploy EMP Shield (-1 EMP Charge)", canAfford: () => inventory.includes('EMP_CHARGE'), execute: () => { inventory.splice(inventory.indexOf('EMP_CHARGE'), 1); playSFX('heal'); return "The EMP Charge detonated, creating a localized magnetic shield against the storm."; } } ] },
 
     { title: "THE COLLECTOR'S TABLE", cast: 'MAGPIE',
-      desc: () => castOf('MAGPIE').met > 1
+      desc: () => castStanding('MAGPIE') <= -2
+        ? "The velvet cloth is already folded under one arm. The Magpie watches you come and does not put it down."
+        : castOf('MAGPIE').met > 1
         ? "The same velvet cloth, the same tailgate, and The Magpie already has two face down before you sit."
         : "A relic dealer in a lead apron has laid a velvet cloth over a tailgate. 'One of yours, face down. Two of mine, blind. Everyone walks away richer or angrier.'",
-      choices: [
+      // Like the tinker, the Magpie had one direction and no other: every choice at this table
+      // moved him +1 or left him alone, so a player set on burning him ranged 0 to 0 across
+      // sixty expeditions. A dealer who cannot be cheated is not a dealer.
+      choices: () => {
+        if (castStanding('MAGPIE') <= -2) return [
+          { label: "Sit down anyway", canAfford: () => true,
+            execute: () => { playSFX('click');
+              return "The cloth is folded before you reach the tailgate. 'Not you. Not ever again.'"; } },
+          { label: "Walk on", canAfford: () => true,
+            execute: () => "He watches you the whole way past, and does not blink." }
+        ];
+        return [
         { label: "Trade a held relic for two blind draws", canAfford: () => activeRelics.length >= 1 && unownedRelics().length >= 2,
           execute: () => {
             // Every choice must resolve safely even when its canAfford gate would refuse it.
@@ -1664,9 +1706,21 @@ const EVENT_POOL = [
             announceSets(); noteCast('MAGPIE', 1); playSFX('overdrive');
             return `${given.name} slides across the cloth, face down. Back come ${draws.join(' and ')}.`;
           } },
+        // Take one and give nothing. Deliberately the nearest thing on the cloth rather than a
+        // pick of it - the pool is ordered commons first, so palming buys you an ordinary relic
+        // and the end of the relationship, not a free rare.
+        { label: "Palm one off the cloth", canAfford: () => unownedRelics().length > 0,
+          execute: () => {
+            const pool = unownedRelics().filter(r => r.tier !== 'CURSED');
+            const take = (pool.length ? pool : unownedRelics())[0];
+            if (!take) return "There is nothing on the cloth worth the risk.";
+            activeRelics.push(take); announceSets(); noteCast('MAGPIE', -2); playSFX('click');
+            return `${take.name} goes up your sleeve. He says nothing at all, which is worse.`;
+          } },
         { label: "Keep what you carry", canAfford: () => true,
           execute: () => "The dealer folds the cloth. 'Attachment. It gets them all killed.'" }
-      ] },
+        ];
+      } },
 
     { title: "THE DEBT COLLECTOR", cast: 'VELA',
       desc: () => owesVela()
