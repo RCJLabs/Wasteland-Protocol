@@ -5421,10 +5421,18 @@ function isOutOfDepth(move, dist) { return isMelee(move) && dist >= FRONT_RANKS;
 //
 // So the shelf needed more answers on the axis that decides runs, not more ways to hit. HOLD
 // and BREAK both buy survival - one soaks the blow, the other stops it being thrown - and STIM
-// now pays out against how badly someone is hurt, so patching a scratch is no longer the
-// correct default at thirty momentum.
-const STIM_FLOOR = 0.08;   // of max health, on someone barely scratched
-const STIM_NEED = 0.26;    // added in proportion to what they are missing
+// pays out against how badly someone is hurt rather than a flat fifth of their health.
+// Tuned once and measured wrong. The first curve was 0.08 + 0.26x, which beats the old flat
+// fifth from 46% missing upward - and stimTarget() always picks the WORST-OFF operator, so it
+// paid more at exactly the moment it gets used. STIM-only went from mean sector 2.6 to 3.1:
+// the repricing made the dominant option stronger. There was no spam-on-a-scratch default to
+// remove - there was a heal carrying the run.
+// The second attempt, 0.04 + 0.18x, overcorrected: it came in UNDER the flat fifth even at
+// death's door, which is exactly where N09's bleed-out clock needs it. This one is steep
+// rather than flat - almost nothing on a scratch, past the old rate only when someone is
+// nearly gone, so it is an emergency answer instead of a default purchase.
+const STIM_FLOOR = 0.01;   // of max health, on someone barely scratched
+const STIM_NEED = 0.24;    // added in proportion to what they are missing
 const MOMENTUM_TACTICS = [
     { id: 'FOCUS',   cost: 25, label: 'FOCUS',  desc: "The squad's next attack deals +30% damage." },
     { id: 'HOLD',    cost: 25, label: 'HOLD',   desc: 'The whole line digs in: +12 armour for two turns.' },
