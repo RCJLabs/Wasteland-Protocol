@@ -79,7 +79,38 @@ const EXTRACT_AT = EXTRACT_RAW === 'off' ? 99 : Number(EXTRACT_RAW);
 //   --relics random  picks blind always
 //   --relics curse   takes the curse every time one is offered                 (the ceiling)
 const RELICS = flag('relics', 'rare');
+// Meta is never reset between expeditions here, and grudges are meta. So a sixty-run sample is
+// one continuous career: the sim fells the sector-1 commander in run 1 and meets it Risen in
+// run 2, capped Thrice-Risen soon after - +60% health, +36% damage, +12 armour. Measured, mean
+// depth falls 3.45 -> 2.90 -> 2.30 across the thirds while grudge sits pinned at the cap, so a
+// single averaged figure blends a first encounter with a nemesis and reports neither.
+//
+// Both games are real and they are different games. `--meta carry` (the default) is a returning
+// player's arc, skulls and Citadel upgrades accumulating against grudges that accumulate back.
+// `--meta fresh` wipes the ledger between runs: sixty independent first careers, which is what
+// a question about the game a player actually meets has to be asked against.
+const META = flag('meta', 'carry');
 
+// The three games this file can measure, and why the difference is the whole story:
+//
+//                              median sector   mean / p90   commanders felled
+//   --meta carry, skulls unspent      2          2.9 / 6           1.88
+//   --meta fresh                      4          4.1 / 7           3.08
+//   --meta carry, skulls spent        6          5.5 / 9           4.55
+//
+// The first row is what this file reported for its whole life, and it is not a game anybody
+// plays. Grudges are meta and were carried, so the commanders escalated permanently to capped
+// Thrice-Risen (+60% health, +36% damage, +12 armour) - while buyMetaUpgrade was called nowhere
+// at all, so the player's half of that exchange never happened. Skulls piled up unspent: no
+// barracks, no bigger bag, no extra fallback. A handicap match, and every "the wall is too
+// close" reading came off it.
+//
+// Played properly, depth climbs across a career - 4.00 / 5.00 / 7.13 by thirds, with grudge
+// climbing 1.35 / 2.67 / 3.00 underneath it - and the last third lands at mean sector 7.1,
+// p90 9. The engine's stated target is "a run reliably ends somewhere around sector 10", so
+// the curve is doing what it was built to do, and the grudge ramp is a counterweight the
+// player out-paces rather than a wall.
+//
 // What this file measured about depth, before the player below could read a board:
 //
 //   player                                 median sector   nodes   ended
@@ -98,7 +129,7 @@ const RELICS = flag('relics', 'rare');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy }) => {
   const stat = { sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, ground: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
@@ -108,10 +139,50 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
                  extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false,
                  booked: 0, bookedKinds: {}, augments: 0,
-                 relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0 };
+                 relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0,
+                 bossGrudge: [], metGrudge: [] };
+
+  // Skulls were banked and never spent: buyMetaUpgrade was called nowhere in this file. So the
+  // carried sample escalated the commanders permanently - grudges are meta - while switching
+  // the player's half of that exchange off entirely. No Citadel upgrades, no extra fallback, no
+  // bigger bag, no start scrap; skulls just piled up. That is not a career, it is a handicap
+  // match, and every depth figure taken from a carried run sat on it.
+  //
+  // Three of the Citadel's buildings carry no max - SCRAP CRANE, BARRACKS, FALLBACK BUNKER -
+  // so any greedy ordering degenerates into one building, and each attempt proved it. Preferring
+  // the FALLBACK BUNKER stacked unlimited retries and runs stopped ending: the sample was still
+  // on expedition 20 after twenty minutes. Cheapest-first then bought SCRAP CRANE to level 327
+  // and nothing else at all, which is +16,350 starting scrap and no barracks, no bag, no
+  // fallback.
+  //
+  // So: breadth-first. Lowest level anywhere on the hillside, ties to the cheaper. That fills
+  // the Citadel out the way a player does - a bit of everything, unlocking what is gated -
+  // instead of pouring a career into one wall.
+  const spendSkulls = () => {
+    let guard = 0;
+    while (guard++ < 60) {
+      const sp = CITADEL_SPOTS.filter(o => !spotMaxed(o) && spotUnlocked(o) && bossSkulls >= o.cost)
+                              .sort((a, b) => (a.level() - b.level()) || (a.cost - b.cost))[0];
+      if (!sp) break;
+      const before = bossSkulls;
+      buyMetaUpgrade(sp.kind);
+      if (bossSkulls === before) break;
+    }
+  };
 
   activeContracts = [...contracts];
   currentSlot = 1;
+  if (metaPolicy !== 'fresh') spendSkulls();
+  if (metaPolicy === 'fresh') {
+    // Written out against the real shape rather than mapped over the keys: startLevel is 1 and
+    // invMax is 4 at a fresh install, and zeroing every number would quietly deploy level-zero
+    // operators with no bag and report that as difficulty.
+    grudges = {}; bossSkulls = 0; mastery = {}; bestiary = {};
+    metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0, vault: 0,
+                     heirloom: null, heirloomWalked: false,
+                     rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0 };
+    saveMeta();
+  }
   confirmNewGame(difficulty);
   stat.contractMult = runStats.contractMult;
   stat.frontsSeen.push(sectorFront);
@@ -628,6 +699,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     if (outcome === 'lost') {
       stat.wipes++;
       stat.wipedInSector.push(currentSector); stat.wipedAtTier.push(currentTier); stat.wipedOnElite.push(!!node.elite);
+      if (node.type === 'BOSS') stat.metGrudge.push(grudgeOn(bossForSector().id));
       if (regroupsLeft() > 0) { stat.regroupsSpent++; regroupSquad(); spend(); continue; }
       stat.endedBy = 'wiped'; break;
     }
@@ -666,7 +738,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (runStats.bosses < stat.bosses) {
         runStats.bosses = stat.bosses; bossSkulls++;
         const felled = activeEntities.find(e => e.classType === 'BOSS');
-        if (felled && felled.bossId) noteGrudge(felled.bossId);
+        if (felled && felled.bossId) { stat.bossGrudge.push(felled.grudge || 0); noteGrudge(felled.bossId); }
         // The engine did not count this kill, so it did not stage the offer either. Stage it.
         if (!pendingRelicOffer) { const o = rollRelicOffer(); if (o.length) pendingRelicOffer = o; }
       }
@@ -752,13 +824,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   await page.evaluate(() => { globalSettings.sfx = false; });
   ALL_FORMATION_IDS = await page.evaluate(() => ALL_FORMATIONS.map(f => f.id));
 
-  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}, tactics ${TACTICS}, relics ${RELICS}` +
+  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}, tactics ${TACTICS}, relics ${RELICS}, meta ${META}` +
               (CONTRACTS.length ? ` under ${CONTRACTS.join(', ')}` : '') +
               (WITHDRAW_POLICY ? ', running from fights it is losing' : ', fighting every node to a finish') + '\n');
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -809,6 +881,21 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('runs that signed anyone', `${withRecruits} of ${n}`);
   Object.entries(signed).sort((a, b) => b[1] - a[1]).forEach(([k, v]) => line('  ' + k, `${v} runs`));
   if (!Object.keys(signed).length) line('  none', 'nobody was ever signed on');
+
+  // This file never resets meta between expeditions, so grudges accumulate: by the end of a
+  // sixty-run sample the commanders are Risen and carrying +60% health. That is a real player's
+  // arc, but it means a single averaged figure blends a first encounter with a thrice-risen
+  // one - so the sample is split and shown drifting, or not, rather than assumed steady.
+  const third = Math.max(1, Math.floor(n / 3));
+  const band = (a, b) => results.slice(a, b);
+  const depthOf = rs => (rs.reduce((x, r) => x + r.sector, 0) / rs.length).toFixed(2);
+  const grudgeOf = rs => { const g = rs.flatMap(r => r.metGrudge.concat(r.bossGrudge));
+                           return g.length ? (g.reduce((x, y) => x + y, 0) / g.length).toFixed(2) : '-'; };
+  console.log('\n── META DRIFT ACROSS THE SAMPLE ' + '─'.repeat(26));
+  line('Citadel at the end', await page.evaluate(() => CITADEL_SPOTS.map(sp => `${sp.name.split(' ')[0]} ${sp.level()}`).join(', ')));
+  line('skulls left unspent', await page.evaluate(() => bossSkulls));
+  line('deepest sector, mean, by third', `${depthOf(band(0, third))} / ${depthOf(band(third, 2 * third))} / ${depthOf(band(2 * third, n))}`);
+  line('grudge on commanders met, same', `${grudgeOf(band(0, third))} / ${grudgeOf(band(third, 2 * third))} / ${grudgeOf(band(2 * third, n))}`);
 
   console.log('\n── WHERE RUNS END ' + '─'.repeat(40));
   const sectors = nums('sector');
