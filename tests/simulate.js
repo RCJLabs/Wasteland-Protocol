@@ -487,7 +487,19 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // applyTurnStartEffects directly, so a fight ended by a bleed tick or a death effect never
     // gets there. Measured: 55 of 63 bosses and 224 of 233 elites reached it. Adding
     // unconditionally double-counted the 55; skipping entirely lost the 8. So top up only what
-    // the engine missed, and let the check at the end prove the two agree.
+    // the engine missed - the check at the end confirmed the two routes then agreed exactly.
+    //
+    // What the whole correction was worth, over sixty expeditions each:
+    //
+    //                     doubled   skipped   reconciled
+    //   median score       10,650     8,670        8,355
+    //   relics held, mean      8.7       3.8          3.4
+    //   bosses felled         1.38      1.05         1.02
+    //   deepest sector, mean   2.4       2.0          2.0
+    //
+    // The depth row is the one that matters beyond the arithmetic. Relics are power, so a squad
+    // carrying twice as many got deeper: this file was reporting an easier game than the one
+    // that exists, and every difficulty figure taken from it before this sat on that baseline.
     if (node.type === 'BOSS') {
       stat.bosses++;
       if (runStats.bosses < stat.bosses) {
