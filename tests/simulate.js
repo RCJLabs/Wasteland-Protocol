@@ -471,18 +471,19 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       stat.endedBy = 'wiped'; break;
     }
 
-    if (node.type === 'BOSS') {
-      stat.bosses++; runStats.bosses++; bossSkulls++;
-      const felled = activeEntities.find(e => e.classType === 'BOSS');
-      if (felled && felled.bossId) noteGrudge(felled.bossId);
-      const offer = rollRelicOffer();
-      if (offer.length) { const pick = offer.find(r => r.tier === 'RARE') || offer[0]; activeRelics.push(pick); }
-    }
-    if (node.elite) {
-      stat.elites++; runStats.elites++; checkBountyProgress('ELITE');
-      const drop = rollRelic();
-      if (drop) activeRelics.push(drop);
-    }
+    // The killing blow goes through resolveAction, which calls checkWinState, which is where the
+    // engine banks a skull, counts the boss or elite, notes the grudge and rolls the drop. This
+    // block used to do all of it AGAIN: bosses, elites, skulls and grudges were counted twice
+    // and every run held about double the relics it should. Measured on a staged kill, skulls
+    // went 0 -> 1 in the engine and then 1 -> 2 here. Score reads bosses x900 + elites x250, so
+    // every figure this file has ever printed was high by roughly a fifth.
+    //
+    // What stays is only what the engine does NOT do at this point: its scrap is handed out by
+    // collectLoot, behind a LOOT button no simulator presses, and stat.* are this file's own
+    // counters. Those own counters are checked against the engine's below - if the two ever
+    // disagree again the report says so instead of quietly printing a doubled number.
+    if (node.type === 'BOSS') stat.bosses++;
+    if (node.elite) stat.elites++;
     checkBountyProgress('KILL');
     runStats.kills = stat.kills;
     scrap += Math.floor((20 + currentTier * 20) * (node.elite ? 2 : 1) * sectorRewardMult());
@@ -495,6 +496,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     if (boardNow !== boardBefore) { stat.bountiesDone++; boardBefore = boardNow; }
   }
 
+  // The instrument checks itself: these count the same events by different routes, and the
+  // whole point of the block above is that they must not diverge.
+  stat.engineBosses = runStats.bosses; stat.engineElites = runStats.elites;
   stat.standings = Object.fromEntries(facesMet().map(f => [f.id, f.standing]));
   stat.sector = runStats.deepestSector; stat.tier = runStats.deepestTier;
   stat.relics = activeRelics.map(r => r.id);
@@ -725,6 +729,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     console.log('\n── PAGE ERRORS ' + '─'.repeat(43));
     [...new Set(errors)].slice(0, 10).forEach(e => console.log('  ' + e));
   }
+  // Two independent counts of the same events. They agreed the day this check went in; if they
+  // ever stop agreeing, something is being counted twice again and the number above is wrong.
+  const simB = results.reduce((a, r) => a + r.bosses, 0), engB = results.reduce((a, r) => a + (r.engineBosses || 0), 0);
+  const simE = results.reduce((a, r) => a + r.elites, 0), engE = results.reduce((a, r) => a + (r.engineElites || 0), 0);
+  if (simB !== engB || simE !== engE)
+    console.log(`\n  !! COUNTED TWICE: bosses ${simB} here vs ${engB} in the engine; elites ${simE} vs ${engE}.`
+              + `\n     Every score above is wrong. Fix the post-fight block before believing any of this.`);
+  else
+    console.log(`\n  counts agree: ${simB} bosses, ${simE} elites, counted two ways.`);
+
   console.log(`\n${n} expeditions, ${errors.length} page errors.\n`);
 
   await browser.close();
