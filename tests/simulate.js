@@ -57,6 +57,9 @@ const DRAFT = flag('draft', 'line');
 // back. `--tactics focus|press|none|smart` buys something else, so the shelf can be compared
 // rather than assumed. `stim` is the old behaviour and stays the default.
 const TACTICS = flag('tactics', 'stim');
+// `--augments off` measures the materials economy the way this file used to see it: consumables
+// only, with the permanent upgrades it never installed left on the shelf.
+const AUGMENTS_ON = flag('augments', 'on') !== 'off';
 // A sim that never walks out measures a game with one ending. `--extract N` gives it the
 // player who leaves once the run is worth banking: from sector N on, it takes the camp's door
 // when the squad is worn down. `off` (the default) is the old behaviour, for comparison.
@@ -65,7 +68,7 @@ const EXTRACT_AT = EXTRACT_RAW === 'off' ? 99 : Number(EXTRACT_RAW);
 
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON }) => {
   const stat = { sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, ground: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
@@ -74,7 +77,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
                  extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false,
-                 booked: 0, bookedKinds: {} };
+                 booked: 0, bookedKinds: {}, augments: 0 };
 
   activeContracts = [...contracts];
   currentSlot = 1;
@@ -168,7 +171,43 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         ? (c.classType === g.cls && !c.weaponMod) : !c.trinket));
       if (fit) { equipGear(fit.id, id); stat.gearEquipped++; }
     });
-    while (canCarry() && materials.chems >= 2) { craftItem('MED_STIM'); stat.crafted++; }
+    // Augments are the other half of the materials economy and this file never touched them:
+    // installAugment was called zero times, which is most of why "the whole economy resolves to
+    // make more stims" looked true. They are permanent and per-operator, so they get first call
+    // on materials; consumables are what the leftovers buy.
+    if (AUGMENTS_ON) {
+      let aGuard = 0;
+      while (aGuard++ < 8) {
+        const who = playerRoster.filter(c => c.gridPos > 0);
+        const target = who.find(c => (c.augments || []).length < 3);
+        if (!target) break;
+        const had = (target.augments || []).length;
+        if (materials.parts >= 3) installAugment(target.id, 'PLATING');
+        else if (materials.tech >= 2) installAugment(target.id, 'OPTICS');
+        else if (materials.chems >= 2) installAugment(target.id, 'PUMP');
+        else break;
+        if ((target.augments || []).length === had) break;
+        stat.augments++;
+      }
+    }
+    // This used to craft Med-Stims and nothing else, which is most of why the audit read the
+    // other three as dead content: they were never in the bag to be used. It keeps a Med-Stim
+    // or two for the floor and then spends what is left on whatever the materials allow.
+    const before = () => inventory.length;
+    while (canCarry() && materials.chems >= 2 && inventory.filter(i => i === 'MED_STIM').length < 2) {
+      const n = before(); craftItem('MED_STIM'); if (inventory.length === n) break; stat.crafted++;
+    }
+    let guard = 0;
+    while (canCarry() && guard++ < 12) {
+      const n = before();
+      if (materials.tech >= 2) craftItem('EMP_CHARGE');
+      else if (materials.chems >= 1 && materials.tech >= 1) craftItem('ADRENALINE');
+      else if (materials.parts >= 2) craftItem('SCRAP_BOMB');
+      else if (materials.chems >= 2) craftItem('MED_STIM');
+      else break;
+      if (inventory.length === n) break;
+      stat.crafted++;
+    }
     playerRoster.forEach(c => {
       const cost = 30 + (c.upgradeCount * 25);
       if (c.gridPos > 0 && scrap >= cost * 2) { scrap -= cost; c.upgradeCount++; c.maxHp += 10; c.hp += 10; c.dmgBase += 3; }
@@ -230,6 +269,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         stat.saves++;
         pendingAction = 'ITEM_MED'; resolveConsumableItem(worst.id); return true;
       }
+      // Adrenaline is on the REACHES_THE_DOWN list too, and getting them up at all beats
+      // getting them up well.
+      if (inventory.includes('ADRENALINE')) {
+        stat.items.ADRENALINE = (stat.items.ADRENALINE || 0) + 1;
+        stat.saves++;
+        pendingAction = 'ITEM_ADRENALINE'; resolveConsumableItem(worst.id); return true;
+      }
       const patch = deck.find(a => a.move === 'CAUTERIZE' || a.move === 'STIM_DART');
       if (patch) {
         stat.moves[patch.move] = (stat.moves[patch.move] || 0) + 1;
@@ -265,6 +311,27 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     if (nearlyDead && inventory.includes('SCRAP_BOMB')) {
         stat.items.SCRAP_BOMB = (stat.items.SCRAP_BOMB || 0) + 1;
         pendingAction = 'ITEM_BOMB'; resolveConsumableItem(nearlyDead.id); return true;
+    }
+    // An operator who is stunned or bleeding has already lost the turn; Adrenaline buys it back.
+    const fouled = activeEntities.find(e => e.isPlayer && e.hp > 0 && ((e.stunnedTurns || 0) > 0 || (e.bleedingTurns || 0) > 0));
+    if (fouled && inventory.includes('ADRENALINE')) {
+        stat.items.ADRENALINE = (stat.items.ADRENALINE || 0) + 1;
+        pendingAction = 'ITEM_ADRENALINE'; resolveConsumableItem(fouled.id); return true;
+    }
+    // An EMP denies a turn, which is what BREAK costs 35 momentum to do. Spent on whoever is
+    // about to do the most, the same read BREAK uses.
+    if (inventory.includes('EMP_CHARGE')) {
+        const worstFoe = (typeof breakTarget === 'function' ? breakTarget() : null)
+          || foes.slice().sort((a, b) => b.dmgBase - a.dmgBase)[0];
+        if (worstFoe && (worstFoe.stunnedTurns || 0) <= 0) {
+            const f = forecastFor(worstFoe);
+            const hurts = f && f.hits ? f.hits.reduce((a, h) => a + h.dmg, 0) : worstFoe.dmgBase;
+            const pool = activeEntities.filter(e => e.isPlayer && e.hp > 0).reduce((a, e) => a + e.hp, 0);
+            if (hurts > pool * 0.15) {
+                stat.items.EMP_CHARGE = (stat.items.EMP_CHARGE || 0) + 1;
+                pendingAction = 'ITEM_EMP'; resolveConsumableItem(worstFoe.id); return true;
+            }
+        }
     }
 
     let chosen = null, target = foes[0];
@@ -586,7 +653,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS, AUGMENTS_ON });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -732,6 +799,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   results.forEach(r => (r.frontsSeen || []).forEach(f => { if (f) fronts[f] = (fronts[f] || 0) + 1; }));
   line('fronts weathered', Object.entries(fronts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ') || 'none');
   line('items crafted per run', (results.reduce((a, r) => a + r.crafted, 0) / n).toFixed(1));
+  line('augments installed per run', (results.reduce((a, r) => a + (r.augments || 0), 0) / n).toFixed(1));
   const faces = {};
   results.forEach(r => Object.entries(r.facesMet || {}).forEach(([k, v]) => { faces[k] = (faces[k] || 0) + v; }));
   line('faces met', Object.entries(faces).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ') || 'none');
