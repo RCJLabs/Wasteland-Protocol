@@ -1,6 +1,13 @@
 // After the wall is climbed the curve stops threatening, so the ladder keeps going: named
-// protocols unlocked by real depth, chosen on the contract board, each rung stacking every
-// twist below it - and paying a score multiplier above what contracts give.
+// protocols chosen on the contract board, each rung stacking every twist below it, and paying
+// a score multiplier above what contracts give.
+//
+// Re-encoded at C05, which took the ladder off deepest-sector-ever and put it behind a clear.
+// This suite keeps the ladder's MACHINERY - the board cycles it, the score pays for it, the
+// save carries it, the manual documents it - and 71-ladder owns the gate and what each of the
+// eight rungs does. The three assertions that read the old gates are re-encoded against the
+// new one rather than dropped: the question "does this open when it should" is still the
+// question, only the answer to "when" has changed.
 module.exports = {
   name: 'Ascension protocols',
   run: async ({ page, ok, base }) => {
@@ -11,40 +18,45 @@ module.exports = {
     const ladder = await page.evaluate(() => ({
       count: PROTOCOLS.length,
       named: PROTOCOLS.every(p => p.name && p.desc),
-      climbs: PROTOCOLS.every((p, i) => i === 0 || (p.gate > PROTOCOLS[i - 1].gate && p.mult > PROTOCOLS[i - 1].mult))
+      climbs: PROTOCOLS.every((p, i) => i === 0 || p.mult > PROTOCOLS[i - 1].mult)
     }));
-    ok('three named rungs, each higher and richer than the last', ladder.count === 3 && ladder.named && ladder.climbs);
+    ok(`${ladder.count} named rungs, each richer than the last`, ladder.count >= 6 && ladder.named && ladder.climbs);
 
     const gates = await page.evaluate(() => {
-      const at = s => { bestSector = s; return unlockedProtocols(); };
-      const r = [at(0), at(2), at(3), at(5), at(7), at(8), at(12)].join(',');
-      ascension = 2; bestSector = 8;
+      // The gate is a clear now, so the sweep is over the ladder rather than over the map.
+      const at = (wins, cleared) => { careerWins = wins; bestRung = cleared; return unlockedProtocols(); };
+      const r = [at(0, 0), at(0, 3), at(1, 0), at(1, 1), at(1, 4), at(1, PROTOCOLS.length)].join(',');
+      careerWins = 1; bestRung = PROTOCOLS.length; ascension = 2;
       const mult = protocolMult(); const name = protocolName();
-      ascension = 0;
+      ascension = 0; careerWins = 0; bestRung = 0;
       return { r, mult, name, off: protocolMult() === 1 && protocolName() === null };
     });
-    ok(`the gates open on real depth (${gates.r})`, gates.r === '0,0,1,2,2,3,3');
+    ok(`the gate opens on a clear and climbs one rung at a time (${gates.r})`,
+      gates.r === `0,0,1,2,5,${ladder.count}`);
     ok('each rung names itself and prices the score', gates.mult === 1.3 && /BLOODRITE/.test(gates.name) && gates.off);
 
     // ---- the contract board offers the climb ----
     const board = await page.evaluate(() => {
-      bestSector = 0; ascension = 0; renderContracts();
+      careerWins = 0; bestRung = 0; bestSector = 7; ascension = 0; renderContracts();
       const locked = { shown: document.getElementById('ascension-btn').style.display,
                        note: document.getElementById('ascension-note').innerText };
-      bestSector = 8; renderContracts();
+      // Two cleared, so three are open: the cycle is 1,2,3 and off again, not the whole table.
+      careerWins = 1; bestRung = 2; renderContracts();
       const open = document.getElementById('ascension-btn').style.display;
       const walk = [];
       for (let i = 0; i < 4; i++) {
         document.getElementById('ascension-btn').click();
         walk.push(ascension);
       }
+      bestRung = PROTOCOLS.length;
       const stacked = (() => { ascension = 3; renderContracts(); return document.getElementById('ascension-note').innerText; })();
-      ascension = 0; renderContracts();
+      ascension = 0; careerWins = 0; bestRung = 0; renderContracts();
       return { locked, open, walk: walk.join(','), stacked };
     });
-    ok('the ladder stays out of reach until the depth is real',
-      board.locked.shown === 'none' && /Sector 3/.test(board.locked.note));
-    ok('and cycles through every earned rung and off again', board.open === 'block' && board.walk === '1,2,3,0');
+    ok('the ladder stays out of reach until the road has been walked',
+      board.locked.shown === 'none' && /walked once/i.test(board.locked.note));
+    ok('and cycles through every earned rung and off again - and no further',
+      board.open === 'block' && board.walk === '1,2,3,0');
     ok('a rung names every twist below it',
       /elite arrives affixed/.test(board.stacked) && /enrage at 60%/.test(board.stacked) && /hide their intent/.test(board.stacked));
 
@@ -113,7 +125,7 @@ module.exports = {
       const st = { deepestSector: 3, deepestTier: 5, bosses: 2, elites: 4, kills: 50, scrapEarned: 1000, contractMult: 1.2, protocolMult: 1.5 };
       const risen = computeScore(st);
       const flat = computeScore({ ...st, protocolMult: 1 });
-      ascension = 2; bestSector = 8;
+      ascension = 2; careerWins = 1; bestRung = PROTOCOLS.length;
       activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const banked = { mult: runStats.protocolMult, rung: runStats.ascension };
       ascension = 0;
@@ -129,14 +141,14 @@ module.exports = {
 
     // ---- persistence ----
     const saved = await page.evaluate(() => {
-      ascension = 2; bestSector = 8;
+      ascension = 2; careerWins = 1; bestRung = PROTOCOLS.length;
       activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       saveGameState();
       ascension = 0;
       loadGameState();
       const kept = ascension;
       const raw = JSON.parse(Store.get(BASE_SAVE_KEY + currentSlot));
-      raw.ascension = 99;
+      raw.ascension = 999;
       Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify(raw));
       loadGameState();
       const clamped = ascension;
@@ -148,7 +160,7 @@ module.exports = {
       return { kept, clamped, legacy };
     });
     ok('the rung rides the save', saved.kept === 2);
-    ok('a tampered rung clamps to the ladder', saved.clamped === 3);
+    ok('a tampered rung clamps to the ladder', saved.clamped === ladder.count);
     ok('a pre-ascension save loads flat', saved.legacy === 0);
 
     // ---- the field manual has the page ----

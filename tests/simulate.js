@@ -58,6 +58,32 @@
 // go, where before they would have bought 635 more levels of something - and depth then drifts
 // down rather than up, because the grudge ramp keeps climbing under a meta that has stopped.
 // A career now buys a floor, not an escape. That is the shape the cap was for.
+
+// ── The ladder, measured ────────────────────────────────────────────────────────────────
+// `--rung N` deploys every expedition at ascension rung N. Three matched 24-run carried
+// careers, difficulty 1, line draft, warm faces:
+//
+//                            rung 0    rung 4    rung 8
+//   deepest sector, median      6         4         2
+//   mean                       5.2       4.4       2.4
+//   nodes cleared, median      115        93        40
+//   ended the road           6 of 24   5 of 24   1 of 24
+//   score, median            30,635    40,732    27,780
+//   score on a won run      120,518   205,739   363,068
+//
+// Depth is the signal to trust here: three medians two sectors apart on 24 samples each. The
+// win column is not - 6 against 5 is noise at this sample size, and only rung 8's single win
+// is clearly different. Read that way, two things are true and one is worth an argument.
+//
+// True: every band of the ladder does something, and the reward tracks it - a won run pays
+// roughly the multiplier it was run at, 1.00 / 1.70 / 3.00 against 121k / 206k / 363k.
+//
+// Worth an argument: the cost is back-loaded and the reward is not. Rungs 1-4 cut the median
+// road from 6 sectors to 4 but left the ending about as reachable, and the multiplier more than
+// covered it - median score went UP, 30.6k to 40.7k. So the first half of the ladder currently
+// pays a strong player to climb it. Rungs 5-8 are where the difficulty actually lives: one win
+// in 24, median depth 2. If the ladder should cost something the whole way up, the lever is the
+// multipliers on rungs 1-4, not the effects.
 const path = require('path');
 const { serve } = require('./server');
 
@@ -109,6 +135,10 @@ const ENDING = flag('ending', 'walk');
 // Which order the expedition signs for. 'long' is the whole road, which is what every run did
 // before orders existed, so it stays the default and the older figures stay comparable.
 const ORDER = flag('order', 'long').toUpperCase();
+// `--rung N` deploys every expedition at ascension rung N. The ladder is meant to be climbed
+// by clearing it, so the sim skips the climb and sets the rung directly - the question it can
+// answer is "what does rung N do to the win rate", not "can this policy climb".
+const RUNG = Math.max(0, Number(flag('rung', '0')) || 0);
 // A commander's offer deals three cards and sometimes one of them is cursed. This file took
 // `offer.find(RARE) || offer[0]`, which is two opinions dressed as one: prefer a rare, and
 // otherwise take whatever happens to sit first. "Cursed relics are refused" was that policy
@@ -188,7 +218,7 @@ const FACES = flag('faces', 'warm');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy }) => {
   const stat = { order: null, fulfilled: false, won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
                  sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
@@ -245,9 +275,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                      rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0,
                      // The upstairs, which a fresh career has not earned either.
                      chapel: 0, footlocker: 0, locker: null, roadCrew: 0 };
-    careerWins = 0;
+    careerWins = 0; bestRung = 0;
     saveMeta();
   }
+  // After the wipe, not before: the fresh path zeroes careerWins, and a rung set ahead of it
+  // would deploy against a ladder the same block had just torn down. Before confirmNewGame,
+  // which is where newRunStats reads the rung onto the run.
+  if (rungPolicy > 0) {
+    careerWins = Math.max(careerWins, 1);
+    bestRung = Math.max(bestRung, rungPolicy);
+  }
+  ascension = Math.min(rungPolicy, PROTOCOLS.length);
   confirmNewGame(difficulty);
   stat.contractMult = runStats.contractMult;
   stat.frontsSeen.push(sectorFront);
@@ -961,13 +999,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   ORDER_NAME = ordSpec ? ordSpec.name : ORDER;
   ORDER_SECTORS = ordSpec ? ordSpec.sectors : FINAL_SECTOR_N;
 
-  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}, tactics ${TACTICS}, relics ${RELICS}, meta ${META}, faces ${FACES}` +
+  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}, tactics ${TACTICS}, relics ${RELICS}, meta ${META}, faces ${FACES}${RUNG > 0 ? `, ascension \u25B2${RUNG}` : ''}` +
               (CONTRACTS.length ? ` under ${CONTRACTS.join(', ')}` : '') +
               (WITHDRAW_POLICY ? ', running from fights it is losing' : ', fighting every node to a finish') + '\n');
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }

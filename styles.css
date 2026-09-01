@@ -535,12 +535,29 @@ button.reach-short { border-color: #7a5a20; }
 .chronicle-career:empty { display: none; }
 .career-line { display: flex; justify-content: space-between; font-size: 10px; letter-spacing: 1px; color: #b9b4a6; }
 .career-line span:last-child { color: #d9a93d; }
-.chronicle-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.chronicle-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+.chronicle-list { flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
 .chronicle-entry { border: 1px solid #33301f; background: #0a0a08; padding: 8px 10px; }
 .chronicle-epitaph { font-size: 12px; color: #d5cfc0; font-style: italic; line-height: 1.4; }
 .chronicle-facts { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 5px; font-size: 9px; letter-spacing: 1px; color: #8a8578; text-transform: uppercase; }
 .chronicle-seed { color: #7ab0d0; }
 .chronicle-empty { font-size: 11px; color: #8a8578; text-align: center; padding: 30px 10px; line-height: 1.6; }
+.chronicle-rung { color: #c08ad0; }
+.career-rung span:last-child { color: #c08ad0; }
+/* The ladder: eight rows that have to stay readable at 320px, so the description wraps onto
+   its own full-width line under the name rather than fighting the multiplier for room. */
+.chronicle-ladder { flex-shrink: 0; border: 1px solid #4a4030; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
+.chronicle-ladder:empty { display: none; }
+.ladder-head { font-size: 10px; letter-spacing: 1px; color: #c08ad0; margin-bottom: 3px; }
+.ladder-sealed { font-size: 10px; letter-spacing: 1px; color: #8a8578; line-height: 1.5; }
+.ladder-rung { display: grid; grid-template-columns: 14px 1fr auto; gap: 2px 6px; font-size: 10px; letter-spacing: 1px; align-items: baseline; }
+.ladder-mark { color: #8a8578; }
+.ladder-name { color: #b9b4a6; }
+.ladder-mult { color: #d9a93d; font-variant-numeric: tabular-nums; }
+.ladder-desc { grid-column: 2 / 4; font-size: 9px; color: #7d786c; letter-spacing: 0; line-height: 1.35; text-transform: none; }
+.ladder-cleared .ladder-mark, .ladder-cleared .ladder-name { color: #c08ad0; }
+.ladder-open .ladder-mark, .ladder-open .ladder-name { color: #d9a93d; }
+.ladder-locked .ladder-name, .ladder-locked .ladder-mult { color: #5c584e; }
 .title-epitaph { text-align: center; font-size: 10px; font-style: italic; color: #8a8272; margin-bottom: 10px; line-height: 1.5; max-width: 300px; align-self: center; }
 
 /* ── Combat that moves: all transforms, no new art. ────────────────────────────────── */

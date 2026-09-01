@@ -206,9 +206,10 @@ function giveScar(ch, rng = Math.random) {
 // ceiling there needs to be - a third scar is already a career's worth on one body.
 function markScars(ids, rng = Math.random) {
     const took = [];
+    const chance = SCAR_CHANCE * (hasProtocol('MASSGRAVE') ? 2 : 1);
     (ids || []).forEach(id => {
         const ch = playerRoster.find(c => c.id === id);
-        if (!ch || rng() >= SCAR_CHANCE) return;
+        if (!ch || rng() >= chance) return;
         const s = giveScar(ch, rng);
         if (!s) return;
         took.push(`${ch.name} - ${s.name}`);
@@ -574,6 +575,17 @@ function raiseFelled(boss, count, mult, dmgMult) {
 // rather than a second boss fight, high enough that ignoring them loses the fight.
 const REVENANT = { hp: 0.35, dmg: 0.55, armor: 0.5 };
 
+// OSSUARY, the last rung, hands the last warlord's own move to everything on the road: an
+// enrage that opens on the graves this expedition has already filled. One raised where the
+// Ossuary itself raises two, and never the ward - the capstone has to be survivable. It also
+// scales itself: a sector-1 commander opens it on nothing, and by sector six there are five
+// warlords down there. A run that routed around them meets fewer, which is what routing bought.
+function protocolEnrage(base) {
+    const e = { ...(base || {}) };
+    if (hasProtocol('OSSUARY') && !e.raiseFelled) e.raiseFelled = 1;
+    return e;
+}
+
 // The last tally: it stops counting and spends. Every point of armour the count put on comes
 // off and goes into the swing, so the number on the passive chip all fight is the number that
 // arrives here.
@@ -790,7 +802,13 @@ const GRUDGE = {
 const RISEN_MARK = ['', 'Risen', 'Twice-Risen', 'Thrice-Risen'];
 let grudges = {};    // bossId -> times you have put it down, meta-persisted
 
-function grudgeOn(id) { return Math.min(GRUDGE.cap, grudges[id] || 0); }
+// LONG SHADOW puts a floor under this. B02 deliberately eased the FIRST meeting with each
+// commander; rung 6 is where that mercy is withdrawn, which is the whole point of a ladder -
+// it climbs back over the things that were softened on the way down.
+function grudgeOn(id) {
+    const g = Math.max(grudges[id] || 0, hasProtocol('LONGSHADOW') ? 1 : 0);
+    return Math.min(GRUDGE.cap, g);
+}
 function noteGrudge(id) { if (id) grudges[id] = (grudges[id] || 0) + 1; }
 function risenName(b, g) { return g > 0 ? `${b.name}, ${RISEN_MARK[g] || `Risen ×${g}`}` : b.name; }
 // What the map promises before you take the node, so a re-match is a routing decision.
@@ -1128,13 +1146,46 @@ function noteSeedBest(seed, score) {
 // The ladder after the game is beaten in the ordinary sense: named tiers unlocked by real
 // depth milestones, each stacking a permanent twist, with a score multiplier above what
 // contracts give. Level N applies every twist up to N.
+// ── The ascension ladder ────────────────────────────────────────────────────────────────
+// Three rungs, gated on deepest-sector-ever of 3, 5 and 8. Two of them therefore opened before
+// the player had finished anything at all - sector 3 is most of a first evening - so the
+// "ladder after the game is beaten" was mostly a ladder beside it. The third was worse: it
+// wanted sector 8, and C01 ended the road at 7, so it could only be reached by felling the last
+// warlord and then declining to stop. One rung unreachable without a clear, two reachable
+// without ever trying, and nothing in between.
+//
+// The ladder is a ladder now. Nothing opens until the road has been walked once, and after that
+// each rung is opened by clearing the one below it - the same bar every time, against a game
+// that has grown one twist harder. Eight rungs, each stacking everything under it, and each
+// pulling on a different system rather than turning the same dial up:
+//
+//   1 IRONSIDE    elites          2 BLOODRITE   warlord phases    3 BLACKOUT   information
+//   4 ATTRITION   the safety net  5 RATIONING   the economy       6 LONG SHADOW the grudge
+//   7 MASS GRAVE  the wounded     8 OSSUARY     the last warlord's own trick, handed to all
+//
+// The effects are keyed by id and read through hasProtocol, not by rung number. They used to be
+// `ascension >= 2` spelled out at the call site, which meant the ladder's order and its effects
+// were two separate facts that had to agree - reorder the table and BLOODRITE silently becomes
+// whatever now sits third.
 const PROTOCOLS = [
-    { name: 'PROTOCOL: IRONSIDE', gate: 3, mult: 1.15, desc: 'Every elite arrives affixed.' },
-    { name: 'PROTOCOL: BLOODRITE', gate: 5, mult: 1.3, desc: 'Warlords enrage at 60% health.' },
-    { name: 'PROTOCOL: BLACKOUT', gate: 8, mult: 1.5, desc: 'Heavy hitters hide their intent.' }
+    { id: 'IRONSIDE',   name: 'PROTOCOL: IRONSIDE',    mult: 1.15, desc: 'Every elite arrives affixed.' },
+    { id: 'BLOODRITE',  name: 'PROTOCOL: BLOODRITE',   mult: 1.30, desc: 'Warlords enrage at 60% health instead of 50%.' },
+    { id: 'BLACKOUT',   name: 'PROTOCOL: BLACKOUT',    mult: 1.50, desc: 'Heavy hitters hide their intent.' },
+    { id: 'ATTRITION',  name: 'PROTOCOL: ATTRITION',   mult: 1.70, desc: 'One fewer fallback, every expedition.' },
+    { id: 'RATIONING',  name: 'PROTOCOL: RATIONING',   mult: 1.95, desc: 'Salvage off a cleared node is cut by a quarter.' },
+    { id: 'LONGSHADOW', name: 'PROTOCOL: LONG SHADOW', mult: 2.25, desc: 'Every commander arrives already carrying a grudge.' },
+    { id: 'MASSGRAVE',  name: 'PROTOCOL: MASS GRAVE',  mult: 2.60, desc: 'The wounded bleed out a turn faster, and the road leaves twice the scars.' },
+    { id: 'OSSUARY',    name: 'PROTOCOL: OSSUARY',     mult: 3.00, desc: 'Every warlord opens the ossuary. What you have buried this expedition gets up.' }
 ];
+const PROTOCOL_CUT = 0.75;   // RATIONING's share of the salvage
 let ascension = 0;   // the chosen rung, 0..unlockedProtocols(), persisted with the run
-function unlockedProtocols() { return PROTOCOLS.filter(p => bestSector >= p.gate).length; }
+let bestRung = 0;    // the highest rung a won expedition was played at, meta-persisted
+// Nothing opens until the road is walked; after that, one rung above the highest one cleared.
+function unlockedProtocols() { return careerWins > 0 ? Math.min(bestRung + 1, PROTOCOLS.length) : 0; }
+// The rungs in force on the chosen one. Every rung stacks everything below it, so this is a
+// prefix of the table rather than a single entry.
+function activeProtocols() { return ascension > 0 ? PROTOCOLS.slice(0, Math.min(ascension, PROTOCOLS.length)) : []; }
+function hasProtocol(id) { return activeProtocols().some(p => p.id === id); }
 function protocolMult() { return ascension > 0 ? PROTOCOLS[Math.min(ascension, PROTOCOLS.length) - 1].mult : 1; }
 
 // ── Doctrines ──────────────────────────────────────────────────────
@@ -1801,8 +1852,10 @@ const CODEX = [
             list.map(f => `${fac} \u00B7 ${f.name} \u2014 ${f.note} (${f.units.length} strong)`))
     ] },
     { id: 'ASCENSION', title: 'ASCENSION PROTOCOLS', body: () => [
-        'The ladder after the game is beaten in the ordinary sense: named protocols unlocked by your deepest sector ever, chosen on the contract board, each rung stacking every twist below it - with a score multiplier above what contracts give.',
-        ...PROTOCOLS.map(p => `${p.name} (Sector ${p.gate}) — ${p.desc} Score x${p.mult.toFixed(2)}.`)
+        `The ladder on the far side of the ending. Nothing on it opens until the road has been walked once; after that, each rung is opened by walking the whole road again at the rung below it. ${PROTOCOLS.length} rungs, chosen on the contract board, each stacking every twist under it and paying a score multiplier above what contracts and orders give.`,
+        'It used to be gated on deepest sector ever - 3, 5 and 8 - so two rungs opened before anything had been finished and the third wanted a sector further than the road goes. Depth is not an achievement the ladder cares about. Finishing is.',
+        ...PROTOCOLS.map((p, i) => `\u25B2${i + 1} ${p.name} — ${p.desc} Score x${p.mult.toFixed(2)}.`),
+        'The Chronicle keeps the ladder: which rungs are cleared, which one is open, and the rung every logged expedition was run at.'
     ] },
     { id: 'DOSSIERS', title: 'DOSSIERS', body: () => [
         `Every point of XP an operator earns also goes on their class's dossier, across every run. Ranks come at ${MASTERY_RANKS[1].toLocaleString()}, ${MASTERY_RANKS[2].toLocaleString()} and ${MASTERY_RANKS[3].toLocaleString()} lifetime XP - and they unlock options, never raw power.`,
@@ -3086,7 +3139,11 @@ function bleedingOut() { return activeEntities.filter(e => isDown(e) && (e.downT
 function goDown(ent) {
     if (!ent || !ent.isPlayer || ent.fallen || (ent.downTurns || 0) > 0) return;
     // SLOW TO RISE: they have done this before and the body is slower about it each time.
-    const turns = hasScar(ent, 'SLOW_TO_RISE') ? BLEED_OUT - 1 : BLEED_OUT;
+    // MASS GRAVE takes another turn off everyone, and the two stack down to a floor of one -
+    // a clock of zero would kill on the fall, which is not a shorter clock, it is no clock.
+    const turns = Math.max(1, BLEED_OUT
+        - (hasScar(ent, 'SLOW_TO_RISE') ? 1 : 0)
+        - (hasProtocol('MASSGRAVE') ? 1 : 0));
     ent.downTurns = turns;
     log(`> ${ent.name} is down and bleeding out - ${turns} turns.`, 'log-dmg');
 }
@@ -3312,7 +3369,12 @@ function regroupsLeft() {
 // commander, and availableNodeIds needs no telling because with no node entered yet it simply
 // offers whatever tier the squad is standing on.
 function openingTier() { return metaUpgrades.roadCrew ? 2 : 1; }
-function totalRegroups() { return hasContract('NO_REGROUPS') ? 0 : BASE_REGROUPS + (metaUpgrades.extraRegroups || 0); }
+function totalRegroups() {
+    if (hasContract('NO_REGROUPS')) return 0;
+    // ATTRITION takes one off the top - including one the Fallback Bunker paid for. The safety
+    // net is the thing being climbed past, so buying more of it should not opt out of the rung.
+    return Math.max(0, BASE_REGROUPS + (metaUpgrades.extraRegroups || 0) - (hasProtocol('ATTRITION') ? 1 : 0));
+}
 
 // Revive the squad, take half the scrap, and put them back at the start of the sector. The
 // save is left intact - this is the outcome the player expects from losing a fight.
@@ -3456,7 +3518,24 @@ function renderChronicle() {
          <div class="career-line"><span>HOSTILES KILLED</span><span>${merged.kills.toLocaleString()}</span></div>
          <div class="career-line"><span>DEEPEST EVER</span><span>SECTOR ${merged.deepestSector}</span></div>
          ${careerWins > 0 ? `<div class="career-line career-won"><span>ROAD WALKED</span><span>\u2620 ${careerWins}</span></div>` : ''}
+         ${careerWins > 0 ? `<div class="career-line career-rung"><span>HIGHEST RUNG CLEARED</span><span>${bestRung > 0 ? `\u25B2${bestRung} ${PROTOCOLS[bestRung - 1].name.replace('PROTOCOL: ', '')}` : 'NONE — \u25B21 IS OPEN'}</span></div>` : ''}
          <div class="career-line"><span>MOST FIELDED</span><span>${most ? `${most[0]} (${most[1]})` : '—'}</span></div>`;
+    // The ladder, a line per rung. Before this the only place a rung was written down was the
+    // contract board, which shows one at a time and only the ones already open - so a player
+    // could not see what they were climbing towards, which is most of the reason to climb.
+    document.getElementById('chronicle-ladder').innerHTML = careerWins === 0
+        ? `<div class="ladder-sealed">THE LADDER IS SEALED. Walk the whole road once to open \u25B21.</div>`
+        : `<div class="ladder-head">THE LADDER \u00B7 ${bestRung} of ${PROTOCOLS.length} CLEARED</div>` +
+          PROTOCOLS.map((pr, i) => {
+              const n = i + 1;
+              const state = n <= bestRung ? 'cleared' : n === bestRung + 1 ? 'open' : 'locked';
+              return `<div class="ladder-rung ladder-${state}">
+                  <span class="ladder-mark">${state === 'cleared' ? '\u25B2' : state === 'open' ? '\u25B3' : '\u00B7'}</span>
+                  <span class="ladder-name">${n}. ${pr.name.replace('PROTOCOL: ', '')}</span>
+                  <span class="ladder-mult">\u00D7${pr.mult.toFixed(2)}</span>
+                  <span class="ladder-desc">${pr.desc}</span>
+              </div>`;
+          }).join('');
     // Three kinds of ending are on this list now - the wasteland kept them, they walked out, or
     // they finished it - so it has to be possible to tell which at a glance.
     document.getElementById('chronicle-list').innerHTML = entries.length ? entries.map(e =>
@@ -3467,6 +3546,7 @@ function renderChronicle() {
                 <span>S${e.sector || 1}·T${e.tier || 1}</span>
                 <span>${e.kills || 0} kills</span>
                 <span>${(e.relics || []).length} relics</span>
+                ${e.rung ? `<span class="chronicle-rung">\u25B2${e.rung}</span>` : ''}
                 ${e.withdrawals ? `<span>${e.withdrawals} abandoned</span>` : ''}
                 ${(e.contracts || []).length ? `<span>signed: ${e.contracts.join(', ')}</span>` : ''}
                 ${e.seed ? `<span class="chronicle-seed">${e.seed}</span>` : ''}
@@ -3490,6 +3570,7 @@ function endRun() {
         kills: runStats.kills || 0, nodes: runStats.nodes || 0, withdrawals: runStats.withdrawals || 0,
         contracts: runStats.contracts || [], relics: activeRelics.map(r => r.name),
         seed: runSeed, extracted: !!runStats.extracted, won: !!runStats.won,
+        rung: runStats.ascension || 0,
         epitaph: runStats.won
             ? `Walked the whole road. ${FINAL_BOSS ? FINAL_BOSS.name : 'The last warlord'} went down at Sector ${runStats.wonAtSector || FINAL_SECTOR}.`
             : runStats.extracted
@@ -3605,9 +3686,16 @@ function renderRunOver(score, isBest, seedPrev = null) {
         `<button class="event-btn" data-action="title">RETURN TO TITLE</button>`;
 }
 
-function collectLoot(amount, abandoned) {
+// What a cleared node actually pays out. RATIONING is written here rather than at the twenty
+// places scrap is added, so the rung means exactly what its card says - salvage off a node, not
+// event payouts, not bounties, not the Scrap Crane.
+function nodeSalvage(amount) {
+    return hasProtocol('RATIONING') ? Math.floor(amount * PROTOCOL_CUT) : amount;
+}
+function collectLoot(raw, abandoned) {
     disarmWithdraw();
     closeRanks();
+    const amount = nodeSalvage(raw);
     // A node you ran from is not a node you cleared, and the run summary should not claim it was.
     scrap += amount;
     if (runStats) {
@@ -3659,7 +3747,7 @@ function takeRelic(index) {
 let bestScore = 0; let bestSector = 0;
 let careerWins = 0;   // expeditions that reached the end of the road, meta-persisted
 
-function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, careerWins, mastery, bestiary, seenPrompts, grudges })); }
+function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, careerWins, bestRung, mastery, bestiary, seenPrompts, grudges })); }
 
 function newRunStats() { return { extracted: false, won: false, fulfilled: false, order: activeOrder, warlords: [], doctrine: null, doctrineMult: 1, kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, recruited: 0, fallen: [], deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
 
@@ -3737,6 +3825,10 @@ function noteVictory() {
     if (orderSectors(runStats) >= FINAL_SECTOR) runStats.fulfilled = true;
     bossSkulls += VICTORY.skulls;
     careerWins++;
+    // The rung the expedition was DEPLOYED at, not whatever the board is set to now: the board
+    // is live and the run's is fixed at muster, and a player who changed it mid-career would
+    // otherwise open rungs they never cleared.
+    bestRung = Math.max(bestRung, runStats.ascension || 0);
     saveMeta();
     playSFX('overdrive');
     log(`> THE ROAD ENDS. The last warlord is down and the way through is open. +${VICTORY.skulls} \uD83D\uDC80.`, 'log-heal');
@@ -3823,6 +3915,7 @@ function loadMeta() {
         bossSkulls = d.bossSkulls || 0;
         metaUpgrades = { ...metaUpgrades, ...(d.metaUpgrades || {}) };
         bestScore = d.bestScore || 0; bestSector = d.bestSector || 0; careerWins = d.careerWins || 0;
+        bestRung = Math.max(0, Math.min(Number(d.bestRung) || 0, PROTOCOLS.length));
         mastery = (d.mastery && typeof d.mastery === 'object') ? d.mastery : {};
         grudges = (d.grudges && typeof d.grudges === 'object' && !Array.isArray(d.grudges)) ? d.grudges : {};
         bestiary = (d.bestiary && typeof d.bestiary === 'object' && !Array.isArray(d.bestiary)) ? d.bestiary : {};
@@ -3980,7 +4073,8 @@ function renderTitleScreen() {
     if (bestScore > 0) menuHTML += `<div style="text-align:center; font-size:11px; letter-spacing:2px; color:#B8860B; margin-bottom:6px;">BEST RUN: ${bestScore.toLocaleString()} PTS \u00B7 SECTOR ${bestSector}</div>`;
     // The one line on this screen that is not a number about how well you did. It says whether
     // the game has been finished, which nothing here could say before.
-    if (careerWins > 0) menuHTML += `<div class="title-wins">\u2620 THE ROAD WALKED ${careerWins === 1 ? 'ONCE' : `\u00D7${careerWins}`}</div>`;
+    if (careerWins > 0) menuHTML += `<div class="title-wins">\u2620 THE ROAD WALKED ${careerWins === 1 ? 'ONCE' : `\u00D7${careerWins}`}`
+        + `${bestRung > 0 ? ` \u00B7 \u25B2${bestRung}` : ''}</div>`;
     const lastWord = latestEpitaph();
     if (lastWord) menuHTML += `<div class="title-epitaph">"${lastWord}"</div>`;
     if (!Store.working) menuHTML += `<div class="title-warning">⚠ STORAGE UNAVAILABLE — THIS RUN WILL NOT BE SAVED</div>`;
@@ -4037,22 +4131,34 @@ function renderContracts() {
     const best = seedBests()[daily];
     document.getElementById('seed-note').innerText =
         `${daily} — ${best ? `your best ${best.toLocaleString()} PTS` : 'not yet attempted'}. Seeds fix the map, fronts, quirks and bounty slate; the fighting stays live.`;
-    // The ascension rung: the ladder above the contracts, gated by real depth.
+    // The ascension rung: the ladder above the contracts, opened by walking the road and
+    // climbed by clearing it again one rung higher each time.
     const unlocked = unlockedProtocols();
     if (ascension > unlocked) ascension = unlocked;
     const btn = document.getElementById('ascension-btn');
     const note = document.getElementById('ascension-note');
     if (unlocked === 0) {
         btn.style.display = 'none';
-        note.innerText = `Ascension opens at Sector ${PROTOCOLS[0].gate}. Deepest so far: ${bestSector || 1}.`;
+        note.innerText = `Ascension opens when the road has been walked once. Deepest so far: Sector ${bestSector || 1} of ${FINAL_SECTOR}.`;
     } else {
         btn.style.display = 'block';
-        btn.innerText = ascension > 0 ? `▲ ${protocolName()} · SCORE x${protocolMult().toFixed(2)}` : '▲ ASCENSION: OFF';
-        const next = PROTOCOLS[unlocked];
-        note.innerText = (ascension > 0
-            ? PROTOCOLS.slice(0, ascension).map(p => p.desc).join(' ')
-            : `${unlocked} protocol${unlocked > 1 ? 's' : ''} earned. Each rung stacks every twist below it.`)
-            + (next ? ` Next rung unlocks at Sector ${next.gate}.` : '');
+        btn.innerText = ascension > 0
+            ? `▲ ${ascension} · ${protocolName()} · SCORE x${protocolMult().toFixed(2)}`
+            : '▲ ASCENSION: OFF';
+        // Everything below the chosen rung is in force, so the card lists all of it rather than
+        // the one that was picked - the rung is a stack, and reading only the top of it was how
+        // a player found out about BLOODRITE by being enraged at 60% with no warning.
+        const on = activeProtocols();
+        const climb = ascension === 0
+            ? `▲${unlocked} is open. Each rung stacks every twist below it.`
+            : ascension < PROTOCOLS.length && ascension === unlocked
+            ? `Walk the whole road at ▲${ascension} to open ▲${ascension + 1}.`
+            : ascension === PROTOCOLS.length
+            ? 'The top of the ladder. There is nothing above this one.'
+            : `▲${unlocked} is open.`;
+        note.innerText = (on.length
+            ? on.map(p => `▲${PROTOCOLS.indexOf(p) + 1} ${p.desc}`).join(' ') + ' '
+            : '') + climb;
     }
 }
 
@@ -6152,7 +6258,7 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
         // sector without needing a curve of its own.
         if (hasSig(t, 'RIOT_PLATE')) t.plate = Math.floor(hp * 0.5);
         
-        if (isEliteNode && (ascension >= 1 || Math.random() < 0.6)) {
+        if (isEliteNode && (hasProtocol('IRONSIDE') || Math.random() < 0.6)) {
             let affixes = ['FRENZIED', 'ARMORED', 'VAMPIRIC'];
             t.eliteType = affixes[Math.floor(Math.random() * affixes.length)]; t.name = `*${t.eliteType}* ${t.name}`;
             if (t.eliteType === 'FRENZIED') { t.dmgBase = Math.floor(t.dmgBase * 1.4); t.speed += 4; }
@@ -6782,7 +6888,7 @@ function renderField() {
 
         const html = `
             <div class="entity ${isAct} ${dCls} ${bleedCls} ${tCls} ${hint ? 'has-combo' : ''} ${farTag ? 'out-of-reach' : ''} ${guarding ? 'covering' : ''}" id="${ent.id}" ${clk} style="--sprite-scale: ${ent.scale || 1}; --sprite-sink: ${ent.sink || 0}px;">
-                <div class="intent-icon" style="display:${ent.intent && !isDead && !ent.isPlayer ? 'flex' : 'none'}">${ent.intent ? (ascension >= 3 && ent.intent.type === 'HEAVY' ? '?' : ent.intent.icon) : ''}</div>
+                <div class="intent-icon" style="display:${ent.intent && !isDead && !ent.isPlayer ? 'flex' : 'none'}">${ent.intent ? (hasProtocol('BLACKOUT') && ent.intent.type === 'HEAVY' ? '?' : ent.intent.icon) : ''}</div>
                 ${hint ? `<div class="combo-flag">${hint}</div>` : ''}
                 ${farTag ? `<div class="reach-flag">FAR</div>` : ''}
                 ${guarding ? `<div class="guard-flag">COVERING</div>` : ''}
@@ -8053,10 +8159,10 @@ function executeEnemyAi(enemy) {
         setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return;
     }
 
-    if (enemy.classType === 'BOSS' && enemy.phase === 1 && enemy.hp <= enemy.maxHp * (ascension >= 2 ? 0.6 : 0.5)) {
+    if (enemy.classType === 'BOSS' && enemy.phase === 1 && enemy.hp <= enemy.maxHp * (hasProtocol('BLOODRITE') ? 0.6 : 0.5)) {
         enemy.phase = 2;
         playSFX('enrage');
-        const e = enemy.enrage || {};
+        const e = protocolEnrage(enemy.enrage);
         log(`> ${e.cry || 'THE COMMANDER ENRAGES!'}`, "log-dmg");
         spawnFCT(enemy.id, "ENRAGED!", "fct-status"); triggerShake();
 
@@ -8518,6 +8624,8 @@ globalThis.WP = {
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
     spotBlocker, lockerGear, lockerDescText, lockerFrom, stashLocker, openingTier, scarTreatCost,
+    PROTOCOL_CUT, activeProtocols, hasProtocol, protocolEnrage, nodeSalvage,
+    get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
     Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
