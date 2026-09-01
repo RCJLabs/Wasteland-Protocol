@@ -95,6 +95,10 @@ let combatBgFile = 'bg_combat.webp'; let pendingCombat = null;
 // What the squad ran from, waiting at the next fight. Persisted, because a run that reloads
 // between the withdrawal and the next node should still be followed.
 let pursuit = null;
+// Which way the word went about you. +1: Sept sold your route to the congregation and every
+// Choir road is a body heavier. -1: Sept sold the congregation to you instead and they are a
+// body lighter, because some of them are somewhere else. 0: nobody said anything.
+let choirWord = 0;
 let armedExit = null;      // null | 'WITHDRAW' | 'RETREAT' - only one question can be on screen
 let retreatNode = null;    // the node a retreat put the squad back in front of
 let runStats = null;
@@ -1628,7 +1632,12 @@ const CAST = {
     ORRIN:  { name: 'Orrin',      epithet: 'the Tinker',    note: 'A hooded cyborg who mends what the road breaks.' },
     VELA:   { name: 'Vela',       epithet: 'the Fixer',     note: 'Lends to anyone. Collects from everyone.' },
     KESS:   { name: 'Kess',       epithet: 'the Scavenger', note: 'Was bleeding out against a wheel rim when you found them.' },
-    MAGPIE: { name: 'The Magpie', epithet: 'the Dealer',    note: 'Trades relics face down, and never blinks.' }
+    MAGPIE: { name: 'The Magpie', epithet: 'the Dealer',    note: 'Trades relics face down, and never blinks.' },
+    // The Choir and the Carrion were the only two groups on the road you could not have a
+    // relationship with - you met them exclusively down the barrel of something. Each gets
+    // somebody standing slightly outside it who will talk.
+    SEPT:   { name: 'Sept',       epithet: 'the Defector',  note: 'Sang in the congregation for nine years. Knows every verse and will sell you all of them.' },
+    GRALE:  { name: 'Grale',      epithet: 'the Handler',   note: 'Keeps the swarm the way other people keep dogs. The swarm has not agreed to this.' }
 };
 // Bands rather than a raw number: the player is told where they stand, not shown a score.
 // The words have to fit all four of them. "Owes you" is true of the scavenger you saved and
@@ -1754,6 +1763,50 @@ const CONSEQUENCE_POOL = {
 };
 
 function deployed() { return playerRoster.filter(p => p.gridPos > 0 && p.hp > 0); }
+
+// ── The handler's leash ─────────────────────────────────────────────────────────────────
+// Grale can take the swarm off a road, or put it on a different one. Both are edits to the
+// live sector map, which is already saved and reloaded whole, so the change survives the
+// session the same way a cleared node does. Only nodes still ahead of the squad are eligible:
+// calling the Carrion off something already fought is not an offer, it is a no-op with a line
+// of flavour on it.
+function openCarrionNodes() {
+    if (!sectorMap || !Array.isArray(sectorMap.nodes)) return [];
+    return sectorMap.nodes.filter(n => n.type === 'CARRION' && !clearedNodeIds.includes(n.id) && n.id !== currentNodeId);
+}
+// What the swarm could be moved onto: another fight still ahead that is not already theirs.
+// FIGHT_NODES is the five factions and nothing else, so the commander's arena is out by
+// construction rather than by a clause - it was written with one, and the clause was dead.
+function nestTargets() {
+    if (!sectorMap || !Array.isArray(sectorMap.nodes)) return [];
+    return sectorMap.nodes.filter(n => FIGHT_NODES.includes(n.type) && n.type !== 'CARRION'
+        && !clearedNodeIds.includes(n.id) && n.id !== currentNodeId);
+}
+// Called off: the road is still a road, so the node becomes an ordinary patrol rather than
+// vanishing. Which faction takes it over is the sector's own business, not the handler's.
+function callOffCarrion(rng = Math.random) {
+    const open = openCarrionNodes();
+    if (!open.length) return null;
+    const n = open[Math.floor(rng() * open.length)];
+    const others = factionsAt(currentSector).filter(f => f !== 'CARRION');
+    n.type = others.length ? others[Math.floor(rng() * others.length)] : 'RAIDERS';
+    // The node's promises were made about the swarm and are not true of whoever moved in.
+    n.formation = null;
+    if (n.weather && n.weather !== 'CLEAR') n.weather = FACTIONS[n.type].weather;
+    if (n.terrain && !(FACTIONS[n.type].ground || []).includes(n.terrain)) n.terrain = null;
+    return n;
+}
+// Put onto someone else: a road that was not theirs becomes theirs.
+function setCarrionOn(rng = Math.random) {
+    const marks = nestTargets();
+    if (!marks.length) return null;
+    const n = marks[Math.floor(rng() * marks.length)];
+    n.type = 'CARRION';
+    n.formation = null;
+    if (n.weather && n.weather !== 'CLEAR') n.weather = FACTIONS.CARRION.weather;
+    if (n.terrain && !(FACTIONS.CARRION.ground || []).includes(n.terrain)) n.terrain = null;
+    return n;
+}
 
 // The fuse used to be measured in SECTORS and lit only inside advanceSector, so a debt booked
 // "one sector on" needed a whole sector cleared, commander included, before it could land. The
@@ -1910,6 +1963,13 @@ const CODEX = [
         'Four schematics at the workbench, four slots in the bag, and using one in a fight costs the operator\u2019s whole turn. They are the only thing in the game that answers a problem the squad you brought cannot: a hostile winding up out of everyone\u2019s reach, a stun on the one operator who could have stopped it.',
         'The same three materials buy augments, which are permanent and per-operator, so every consumable made is an augment not installed. The bag is what you spend on the run in front of you.',
         ...Object.entries(ITEM_DATA).map(([id, i]) => `${i.label} (${itemCost(id)}) \u2014 ${i.desc}`)
+    ] },
+    { id: 'THE_FACES', title: 'THE FACES ON THE ROAD', body: () => [
+        `${Object.keys(CAST).length} people turn up more than once, and each remembers how the last meeting went. Standing runs from bad blood to trust, moves on what you choose rather than what you buy, and lasts one expedition. Somebody you have met is ${FACE_RETURN_WEIGHT} times likelier to turn up again than a stranger.`,
+        ...Object.values(CAST).map(c => `${c.name}, ${c.epithet} \u2014 ${c.note}`),
+        'Two of them stand slightly outside a faction rather than beside the road: the Choir and the Carrion were the only groups you could meet exclusively down the barrel of something.',
+        'Sept trades in what the congregation knows, and the trade runs both ways - keep faith and half a congregation is walking the wrong road all sector; sell them out and every Choir road ahead is a body heavier.',
+        'Grale keeps the swarm. At her word the Carrion come off a road ahead of you, or go onto somebody else\u2019s.'
     ] },
     { id: 'GROUND_SKY', title: 'THE GROUND AND THE SKY', body: () => [
         `Two things stand over every fight and both are on the node before you take it: what you are standing on, and what is overhead. Ground is the commoner of the two - ${Math.round(GROUND_CHANCE * 100)}% of eligible fights carry it against weather's ${Math.round(WEATHER_CHANCE * 100)}% - because the ground is where the fight is and the weather is something happening to it. Neither is dealt in the opening fight of a run.`,
@@ -2235,6 +2295,46 @@ const EVENT_POOL = [
         { label: "Leave it buried", canAfford: () => true, execute: () => "You mark it on nobody's map and keep walking." }
       ] },
 
+    // The Choir and the Carrion arrive at sector 2, so both of these name that condition.
+    // Before the gate existed, an event was always eligible and these two would have opened a
+    // first-sector run talking about factions the player had not met.
+    { title: "THE ONE WHO LEFT", cast: 'SEPT', when: () => currentSector >= 2,
+      desc: () => castOf('SEPT').met > 1
+        ? "Sept is waiting where the road bends, which means they knew which way you were coming. 'I have been listening. They have been singing about you.'"
+        : "Someone is sitting in the ditch with a censer beside them and no mask on. The robe is Choir. The face underneath it is about twenty and has not slept.",
+      choices: [
+        { label: "Buy what they know (-90 Scrap)", canAfford: () => scrap >= 90,
+          execute: () => { scrap -= 90; noteCast('SEPT', 2); choirWord = -1; playSFX('click');
+            return "They talk for an hour: which verses mean which orders, and which of the congregation will be somewhere else when you arrive. Some of them will be."; } },
+        { label: "Take the censer and go (+70 Scrap, +2 Chems)", canAfford: () => true,
+          execute: () => { scrap += 70; materials.chems += 2; noteCast('SEPT', -2); playSFX('click');
+            return "They do not fight you for it. They watch you take it, and they memorise your faces while you do."; } },
+        { label: "Give them water and a road out", canAfford: () => true,
+          execute: () => { noteCast('SEPT', 1); playSFX('heal');
+            return "They drink, and point you at a road that is not the one they came down. 'That one is quiet. I would know.'"; } },
+        { label: "Walk past", canAfford: () => true,
+          execute: () => "Nobody says anything. The censer is still smoking when you lose sight of it." }
+      ] },
+
+    { title: "THE HANDLER'S TOLL", cast: 'GRALE', when: () => currentSector >= 2,
+      desc: () => castOf('GRALE').met > 1
+        ? "Grale is sitting on the same crate with the same tin, and the swarm behind them is noticeably larger than last time. 'They grow. That is the arrangement.'"
+        : "There is a woman sitting on a crate in the middle of the road with a tin in her lap, and behind her the ground is moving. She is not looking at it. 'Toll,' she says. 'Or don't.'",
+      choices: [
+        { label: "Pay the toll (-120 Scrap)", canAfford: () => scrap >= 120,
+          execute: () => { scrap -= 120; noteCast('GRALE', 2); playSFX('click');
+            return "The tin goes into a coat pocket. Behind her the ground stops moving, and stays stopped until you are past it."; } },
+        { label: "Pay in meat (-2 Chems, -1 Parts)", canAfford: () => materials.chems >= 2 && materials.parts >= 1,
+          execute: () => { materials.chems -= 2; materials.parts -= 1; noteCast('GRALE', 1); playSFX('click');
+            return "She looks at what you put in the tin, then at you. 'They eat better than I do.' The road opens anyway."; } },
+        { label: "Push through it", canAfford: () => true,
+          execute: () => { noteCast('GRALE', -2); bookConsequence('AMBUSH', CONSEQUENCE_FUSE.AMBUSH); playSFX('hit');
+            return "You go around her. She does not stop you, and she does not call them off either, and something follows you out of the grass."; } },
+        { label: "Ask what she is doing out here", canAfford: () => true,
+          execute: () => { noteCast('GRALE', 1); playSFX('click');
+            return "'Same as you. Walking somewhere with something dangerous behind me.' She does not take a toll for the answer."; } }
+      ] },
+
     { title: "THE SURVIVOR", cast: 'KESS',
       desc: () => castOf('KESS').met > 1
         ? "Kess is upright this time, and walking, and there is someone else propped against the rim beside them. 'Your turn to watch me decide.'"
@@ -2418,6 +2518,76 @@ const FOLLOWUPS = [
           execute: () => { bookConsequence('AMBUSH', CONSEQUENCE_FUSE.AMBUSH); playSFX('click');
             return "You walk through and nobody stops you. Somebody leaves ahead of you at a run."; } }
       ] },
+
+    // Both of these read their own standing and turn out differently by its sign, rather than
+    // being two entries with opposite gates. The existing threads split that way because each
+    // side was a different scene; these two are the same scene arriving with a different answer,
+    // which is the thing the standing is for.
+    { title: "WHAT SEPT TOLD THEM", cast: 'SEPT',
+      when: () => Math.abs(castStanding('SEPT')) >= 2,
+      desc: () => castStanding('SEPT') >= 2
+        ? "Sept is waiting at a culvert with a chalk map already drawn on the concrete. 'They change the order of the verses every sector. I still know the order.'"
+        : "The singing starts before you see anyone, and it is your squad's names in it. Sept is standing at the front of them, masked again, not singing.",
+      choices: () => castStanding('SEPT') >= 2
+        ? [
+            { label: "Take the map (the congregation is thinned)", canAfford: () => true,
+              execute: () => { choirWord = -1; noteCast('SEPT', 1); playSFX('heal');
+                return "They mark three roads and a time. Half the congregation will be walking the wrong one of them all sector."; } },
+            { label: "Ask them to come with you", canAfford: () => true,
+              execute: () => { materials.chems += 3; noteCast('SEPT', 1); playSFX('click');
+                return "'No.' They hand over what they were carrying instead - three Chems and a look that ends the conversation."; } },
+            { label: "Tell them to run properly this time", canAfford: () => true,
+              execute: () => { choirWord = -1; playSFX('click');
+                return "They go, and they do not look back, and the roads stay quieter behind them than they have any right to be."; } }
+          ]
+        : [
+            { label: "Buy the silence back (-250 Scrap)", canAfford: () => scrap >= 250,
+              execute: () => { scrap -= 250; noteCast('SEPT', 3); choirWord = 0; playSFX('click');
+                return "The money goes under the mask. The singing stops. It is not forgiveness, it is a price, and it was paid."; } },
+            { label: "Break the line and walk through it", canAfford: () => true,
+              execute: () => { choirWord = 1; deployed().forEach(u => { u.hp = Math.max(1, u.hp - Math.floor(u.maxHp * 0.2)); });
+                playSFX('hit'); triggerShake();
+                return "You get through. They let you get through. Every road after this one has someone extra standing on it."; } },
+            { label: "Let them finish the verse", canAfford: () => true,
+              execute: () => { choirWord = 1; noteCast('SEPT', -1); playSFX('click');
+                return "It is long, and it is thorough, and by the end of it every congregation in the sector knows how many of you there are."; } }
+          ] },
+
+    { title: "GRALE CALLS THEM", cast: 'GRALE',
+      when: () => Math.abs(castStanding('GRALE')) >= 2,
+      desc: () => castStanding('GRALE') >= 2
+        ? "Grale is crouched over a hole in the ground with her hand flat on the dirt. 'They will do one thing for me today. One. So pick.'"
+        : "The crate is empty and the tin is on its side, and the grass on both sides of the road is moving in the same direction you are.",
+      choices: () => castStanding('GRALE') >= 2
+        ? [
+            { label: "Take them off a road ahead", canAfford: () => openCarrionNodes().length > 0,
+              execute: () => { const n = callOffCarrion();
+                if (!n) return "Nothing of theirs is left ahead of you. 'Then I have nothing to offer,' she says, and means it.";
+                playSFX('heal');
+                return `She puts her palm down and holds it there. Somewhere ahead of you a road empties out, and something else moves into it instead.`; } },
+            { label: "Put them on somebody else's", canAfford: () => nestTargets().length > 0,
+              execute: () => { const n = setCarrionOn();
+                if (!n) return "There is nobody ahead worth setting them on. 'Another time.'";
+                playSFX('overdrive');
+                return `She points down the road, and the grass goes with her hand. Whoever was holding that stretch is going to have a bad afternoon.`; } },
+            { label: "Ask her not to (+2 standing)", canAfford: () => true,
+              execute: () => { noteCast('GRALE', 2); playSFX('click');
+                return "'Suit yourself.' She takes her hand off the dirt, and looks at you slightly differently afterwards."; } }
+          ]
+        : [
+            { label: "Leave them the whole haul (-200 Scrap)", canAfford: () => scrap >= 200,
+              execute: () => { scrap -= 200; noteCast('GRALE', 3); playSFX('click');
+                return "You put it on the crate and back away. By the time you are out of sight the grass has stopped moving."; } },
+            { label: "Burn the grass", canAfford: () => true,
+              execute: () => { const n = setCarrionOn();
+                deployed().forEach(u => { u.hp = Math.max(1, u.hp - Math.floor(u.maxHp * 0.15)); });
+                playSFX('hit'); triggerShake();
+                return n ? "It works, and it spreads, and it drives them onto a road ahead of you instead of this one. Everybody comes out of it singed."
+                         : "It works. It also spreads. Everybody comes out of it singed and nothing is following you."; } },
+            { label: "Keep walking and do not look at the grass", canAfford: () => true,
+              execute: () => { bookConsequence('PURSUIT', CONSEQUENCE_FUSE.PURSUIT); noteCast('GRALE', -1); playSFX('click');
+                return "Nothing happens. Nothing keeps happening for about four more nodes."; } }
+          ] },
 
     { title: "THE MAGPIE'S BACK SHELF", cast: 'MAGPIE',
       when: () => castStanding('MAGPIE') >= 1 && unownedRelics().length > 0,
@@ -4425,7 +4595,7 @@ function buildNewRun(diff) {
     // Nobody carries over. Every expedition starts with the seven and finds the rest again.
     pendingRecruit = null;
     bossSalt = 'w' + Math.floor(Math.random() * 1e9);
-    pursuit = null; armedExit = null; retreatNode = null; vacatedRanks = [];
+    pursuit = null; armedExit = null; retreatNode = null; vacatedRanks = []; choirWord = 0;
     bonds = {}; bondSavesUsed = new Set();
     playerRoster.forEach(c => { c.weaponMod = null; c.trinket = null; });
     // The Footlocker hands back what it kept. Into the stash rather than onto an operator: which
@@ -4503,7 +4673,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, pendingRecruit, regroupInsured, bonds, sectorFront, runSeed, ascension, activeOrder, bossSalt, doctrineOffer, activeDoctrine, doctrineBroken, doctrineFavourites, pendingConsequences, recentEvents, castState, firedEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, retreatNode, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, pendingRecruit, regroupInsured, bonds, sectorFront, runSeed, ascension, activeOrder, bossSalt, doctrineOffer, activeDoctrine, doctrineBroken, doctrineFavourites, pendingConsequences, recentEvents, castState, firedEvents, choirWord, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, retreatNode, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -4551,6 +4721,9 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         currentNodeId = d.currentNodeId || null;
         clearedNodeIds = Array.isArray(d.clearedNodeIds) ? d.clearedNodeIds : [];
         forecastWeather = null; forecastFormation = null; activeRelics = migrateRelics(d.activeRelics); pendingRelicOffer = migrateRelics((d.relicOffer || []).map(id => ({ id }))); if (!pendingRelicOffer.length) pendingRelicOffer = null; pendingCombat = d.combat || null; pursuit = (d.pursuit && Array.isArray(d.pursuit.units)) ? d.pursuit : null; retreatNode = d.retreatNode || null;
+        // Clamped rather than trusted: a save carrying a tampered word must not field a Choir
+        // road eleven bodies deep, or empty one out.
+        choirWord = Math.max(-1, Math.min(1, Number(d.choirWord) || 0));
         if (pendingCombat) {
             migrateAssetPaths(pendingCombat.enemies);
             if (typeof pendingCombat.bgFile === 'string') pendingCombat.bgFile = pendingCombat.bgFile.replace(/\.png$/, '.webp');
@@ -5321,8 +5494,15 @@ function pickEvent() {
         recentEvents = [pick.title, ...recentEvents].slice(0, EVENT_MEMORY);
         return pick;
     }
-    const fresh = EVENT_POOL.filter(e => !recentEvents.includes(e.title));
-    const pool = fresh.length ? fresh : EVENT_POOL;
+    // An ordinary event may name a condition the same way a follow-up does. Nothing did until
+    // C07, and nothing had to: the pool was all strangers on an empty road. The Choir and the
+    // Carrion do not exist before sector 2, so a face who trades in what they know cannot be
+    // met before there is anything to know - an ungated one turns up in the first fight of the
+    // game talking about a faction the player has never seen.
+    const eligible = EVENT_POOL.filter(e => !e.when || e.when());
+    const draw = eligible.length ? eligible : EVENT_POOL;
+    const fresh = draw.filter(e => !recentEvents.includes(e.title));
+    const pool = fresh.length ? fresh : draw;
     const total = pool.reduce((n, e) => n + eventWeight(e), 0);
     let roll = Math.random() * total;
     let pick = pool[pool.length - 1];
@@ -5335,8 +5515,11 @@ function pickEvent() {
 // depends on standing cannot shift underneath the button the player is looking at.
 let activeChoices = [];
 
-function initiateEvent() {
-    switchScreen('screen-event'); activeEvent = pickEvent();
+// `forced` is for the suites and the dev tools: the draw is the thing under test in one place
+// and the thing in the way everywhere else, and a screen that can only be reached by rolling
+// for it cannot be checked at all. Play never passes it.
+function initiateEvent(forced) {
+    switchScreen('screen-event'); activeEvent = forced || pickEvent();
     if (activeEvent.cast) meetCast(activeEvent.cast);
     activeChoices = choicesFor(activeEvent);
     document.getElementById('event-title').innerText = activeEvent.title;
@@ -6341,6 +6524,9 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
     // A swarm that turns up two-strong is not a swarm. The row is fitted to what it holds, so
     // a wide field is a rendering problem the layout already solves rather than a hard cap.
     sZ += (FACTIONS[nodeType] && FACTIONS[nodeType].swarm) || 0;
+    // Whether the congregation was expecting you. Floored at two so the kindest possible word
+    // still leaves a fight - a road that empties is not a reward, it is a missing node.
+    if (nodeType === 'CHOIR' && choirWord) sZ = Math.max(2, sZ + choirWord);
     if (composed) sZ = roster.length;
     let squad = [];
     for (let i = 0; i < sZ; i++) {
@@ -8746,6 +8932,8 @@ globalThis.WP = {
     spotBlocker, lockerGear, lockerDescText, lockerFrom, stashLocker, openingTier, scarTreatCost,
     PROTOCOL_CUT, activeProtocols, hasProtocol, protocolEnrage, nodeSalvage,
     WEATHER, WEATHER_IDS, WEATHER_CHANCE, CONFLUENCE, confluence, sky, weatherName,
+    openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
+    get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
     Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
