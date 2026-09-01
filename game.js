@@ -82,7 +82,8 @@ function volName(v) { const i = VOL_STEPS.indexOf(v); return VOL_NAMES[i < 0 ? V
 function cycleVol(v) { const i = VOL_STEPS.indexOf(v); return VOL_STEPS[(i < 0 ? 0 : i + 1) % VOL_STEPS.length]; }
 
 let bossSkulls = 0; let metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0, vault: 0, heirloom: null, heirloomWalked: false,
-                                         rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0 };
+                                         rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0,
+                                         chapel: 0, footlocker: 0, locker: null, roadCrew: 0 };
 let scrap = 0; let currentTier = 1; let currentSector = 1; let difficultyMult = 1.0; 
 let inventory = []; let materials = { parts: 0, chems: 0, tech: 0 }; 
 let tuneUpBattles = 0; 
@@ -215,11 +216,18 @@ function markScars(ids, rng = Math.random) {
     if (took.length) log(`> It leaves a mark: ${took.join(', ')}.`, 'log-dmg');
     return took;
 }
+// What this treatment costs. The Chapel covers the first one of each expedition, and only the
+// first: a building that made every scar free would delete the decision C02 exists to create.
+function scarTreatCost() {
+    return (metaUpgrades.chapel && runStats && !runStats.chapelUsed) ? 0 : SCAR_TREAT_COST;
+}
 function healScar(charId, scarId) {
     const ch = playerRoster.find(c => c.id === charId);
     const s = scarById(scarId);
-    if (!ch || !s || !hasScar(ch, scarId) || scrap < SCAR_TREAT_COST) return false;
-    scrap -= SCAR_TREAT_COST;
+    const price = scarTreatCost();
+    if (!ch || !s || !hasScar(ch, scarId) || scrap < price) return false;
+    if (price === 0 && runStats) runStats.chapelUsed = true;
+    scrap -= price;
     ch.scars = ch.scars.filter(id => id !== scarId);
     removeScarStats(ch, s);
     // The capacity comes back and the blood with it - otherwise treating cracked ribs leaves
@@ -228,7 +236,8 @@ function healScar(charId, scarId) {
     activeScarSelector = null;
     playSFX('heal');
     saveGameState(); renderOutpost();
-    showOutpostNotice(`${ch.name} is treated. The ${s.name.toLowerCase()} is gone.`);
+    showOutpostNotice(`${ch.name} is treated. The ${s.name.toLowerCase()} is gone.`
+        + (price === 0 ? ' The Chapel covered it.' : ''));
     return true;
 }
 
@@ -1708,8 +1717,14 @@ const CODEX = [
         `Some of the people out here come back. ${Object.keys(CAST).length} of them remember what you did last time - pay them, save them, rob them - and what they offer next changes with it. Standing lasts one expedition and starts over on the next.`,
         `Before deploying, the muster shows every operator's quirk. ${MUSTER_REROLLS} reroll tokens per expedition swap the ones that do not fit the plan.`,
         `The board carries three contracts and rotates one in whenever it is settled, plus one standing contract that runs the whole expedition. ${BOUNTY_POOL.length} kinds in the rotation - most of them are ways to win a fight rather than counts of what you were doing anyway.`,
-        `Skulls taken from commanders build the Citadel, and it has ${CITADEL_SPOTS.length} places to spend them - two of which need something else standing first.`,
+        `Skulls taken from commanders build the Citadel, and it has ${CITADEL_SPOTS.length} places to spend them - ${CITADEL_SPOTS.filter(sp => sp.needs).length} of which need something else standing first.`,
         'Depth is worth far more than any single haul: pushing one sector deeper always beats farming the one you are on.'
+    ] },
+    { id: 'CITADEL', title: 'THE CITADEL', body: () => [
+        `Skulls come off commanders and off walking out, and they build the hillside. ${CITADEL_SPOTS.length} places to spend them, and every one of them has a ceiling now - a career used to be able to buy its way past the whole curve, and one that bought nothing but cranes was carrying an extra 16,000 Scrap into sector one.`,
+        ...CITADEL_SPOTS.filter(sp => !sp.wins).map(sp => `${sp.name} — ${sp.cost} skulls${sp.max > 1 ? ` per level, ${sp.max} levels` : ''}${sp.needs ? `, needs the ${(CITADEL_SPOTS.find(o => o.kind === sp.needs) || {}).name}` : ''}. ${sp.pitch}`),
+        'Above them is an upstairs, and it is sealed until an expedition has walked the whole road once. Nothing up there is a bigger number; each one answers something the ground floor left standing.',
+        ...CITADEL_SPOTS.filter(sp => sp.wins).map(sp => `${sp.name} — ${sp.cost} skulls${sp.needs ? `, needs the ${(CITADEL_SPOTS.find(o => o.kind === sp.needs) || {}).name}` : ''}. ${sp.pitch}`)
     ] },
     { id: 'ORDERS', title: 'HOW LONG YOU HAVE', body: () => [
         'An expedition used to take as long as it took, and the only way to make one shorter was to walk out of it early. The length is declared before deploying now, alongside the contracts.',
@@ -3292,6 +3307,11 @@ function regroupsLeft() {
     return Math.max(0, runStats.regroups);
 }
 
+// Which tier a sector opens on. The Road Crew has already been through the first one, so the
+// squad arrives a node further along - the same map, one fewer fight between it and the
+// commander, and availableNodeIds needs no telling because with no node entered yet it simply
+// offers whatever tier the squad is standing on.
+function openingTier() { return metaUpgrades.roadCrew ? 2 : 1; }
 function totalRegroups() { return hasContract('NO_REGROUPS') ? 0 : BASE_REGROUPS + (metaUpgrades.extraRegroups || 0); }
 
 // Revive the squad, take half the scrap, and put them back at the start of the sector. The
@@ -3332,7 +3352,7 @@ function regroupSquad() {
     // The fallback costs half the scrap, but the squad walks back in with tuned weapons -
     // a wipe should sting, not start a death spiral.
     tuneUpBattles = Math.max(tuneUpBattles, 3);
-    currentTier = 1;
+    currentTier = openingTier();
     // The sector keeps its map; the squad walks back in at the bottom of it.
     currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null; forecastFormation = null;
     // A retreat is over the moment the squad is dragged off the field. Left set, it pinned the
@@ -3481,6 +3501,7 @@ function endRun() {
     // Walking out carries the relic; the Vault is what keeps one when you do not. One call site,
     // so the two ways home cannot disagree about which relic came back.
     stashHeirloom(!!runStats.extracted);
+    stashLocker();
     saveMeta();
     Store.remove(BASE_SAVE_KEY + currentSlot);
     renderRunOver(score, isBest, seedPrev);
@@ -4182,7 +4203,7 @@ function applyDoctrineEdge() {
 function confirmNewGame(diff) { buildNewRun(diff); renderMap(); }
 
 function buildNewRun(diff) {
-    difficultyMult = diff; currentSector = 1; currentTier = 1; tuneUpBattles = 0; momentum = 0;
+    difficultyMult = diff; currentSector = 1; currentTier = openingTier(); tuneUpBattles = 0; momentum = 0;
     scrap = metaUpgrades.startScrap || 0; inventory = hasContract('NO_CONSUMABLES') ? [] : ['MED_STIM']; materials = { parts: 0, chems: 0, tech: 0 }; 
     playerRoster = migrateTraits(JSON.parse(JSON.stringify(ROSTER_TEMPLATE)));
     activeBounties = generateBounties(seededRng('bounties')); standingBounty = rollStanding(seededRng('standing'));
@@ -4198,6 +4219,10 @@ function buildNewRun(diff) {
     pursuit = null; armedExit = null; retreatNode = null; vacatedRanks = [];
     bonds = {}; bondSavesUsed = new Set();
     playerRoster.forEach(c => { c.weaponMod = null; c.trinket = null; });
+    // The Footlocker hands back what it kept. Into the stash rather than onto an operator: which
+    // of them should be wearing it is the player's decision, not the building's.
+    const fromLocker = lockerGear();
+    if (fromLocker) gearStash.push(fromLocker.id);
     sectorFront = rollFront(seededRng('front:1'), 1); frontBannerPending = true;
     sectorMap = generateSectorMap(seededRng('map:1')); currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null; forecastFormation = null;
     odChoices = {}; pendingOverdrive = null; momentumFocus = 0; pressExtra = false;
@@ -4436,23 +4461,43 @@ const BOARD_SLOTS = 3;     // contracts on the board before the War Room
 // standing before it can be built. The ledger, the hillside and the purchase all read this one
 // table - the cost used to be written here and again in the buy handler and a third time in the
 // markup, where the names had already drifted apart from these.
+// ── The Citadel, capped ─────────────────────────────────────────────────────────────────
+// Four of these carried no maximum: the crane, the barracks, the rigging bay and the bunker.
+// A career could therefore buy its way past anything. That is not a theory - the simulator's
+// skull-spending policy hit it three separate ways. Preferring the bunker stacked unlimited
+// retries and forty-expedition samples stopped terminating at all; preferring the cheapest
+// bought SCRAP CRANE to level 327 and nothing else, which is +16,350 starting Scrap. Only a
+// breadth-first policy behaved, and only because it was spreading skulls across the capped
+// buildings by accident.
+//
+// So each of the four gets a ceiling, chosen as "enough to feel, not enough to outrun the
+// curve": six cranes is +300 Scrap, about five Outpost upgrades; four barracks deploys the
+// squad at level five; four rigging bays doubles the bag; three bunkers is five fallbacks
+// against the base two. Completing the whole ground floor now costs 74 skulls, which is a
+// dozen or so expeditions rather than an unbounded grind.
+//
+// And a ceiling with nothing above it is just an end, so the first clear opens an upstairs -
+// three buildings that only exist for a career that has walked the road once. Each hooks a
+// system that already shipped and had no meta answer: scars persist through an expedition and
+// cost Scrap to treat, gear is found and then lost entirely at the end of every run, and a
+// sector's ten tiers are ten tiers however many times you have cleared one.
 const CITADEL_SPOTS = [
-    { kind: 'SCRAP',   name: 'SCRAP CRANE', cost: 1,
+    { kind: 'SCRAP',   name: 'SCRAP CRANE', cost: 1, max: 6,
       level: () => (metaUpgrades.startScrap || 0) / 50,
       apply: () => { metaUpgrades.startScrap = (metaUpgrades.startScrap || 0) + 50; },
       effect: l => `Expeditions start with +${l * 50} Scrap.`,
       pitch: 'Start new expeditions with +50 initial Scrap per level.' },
-    { kind: 'LEVEL',   name: 'BARRACKS', cost: 2,
+    { kind: 'LEVEL',   name: 'BARRACKS', cost: 2, max: 4,
       level: () => (metaUpgrades.startLevel || 1) - 1,
       apply: () => { metaUpgrades.startLevel = (metaUpgrades.startLevel || 1) + 1; },
       effect: l => `Operators start ${l ? `+${l} level${l > 1 ? 's' : ''} higher` : 'at level 1'}.`,
       pitch: 'All operators permanently start +1 Level higher (grants early Perk point).' },
-    { kind: 'INV',     name: 'RIGGING BAY', cost: 3,
+    { kind: 'INV',     name: 'RIGGING BAY', cost: 3, max: 4,
       level: () => (metaUpgrades.invMax || 4) - 4,
       apply: () => { metaUpgrades.invMax = (metaUpgrades.invMax || 4) + 1; },
       effect: l => `${4 + l} tactical inventory slots.`,
       pitch: 'Increase maximum tactical inventory slots by +1.' },
-    { kind: 'REGROUP', name: 'FALLBACK BUNKER', cost: 4,
+    { kind: 'REGROUP', name: 'FALLBACK BUNKER', cost: 4, max: 3,
       level: () => metaUpgrades.extraRegroups || 0,
       apply: () => { metaUpgrades.extraRegroups = (metaUpgrades.extraRegroups || 0) + 1; },
       effect: l => `${BASE_REGROUPS + l} regroups per expedition.`,
@@ -4488,23 +4533,74 @@ const CITADEL_SPOTS = [
       level: () => metaUpgrades.cache ? 1 : 0,
       apply: () => { metaUpgrades.cache = 1; },
       effect: l => l ? 'Every expedition deploys already holding a relic.' : 'Expeditions deploy with nothing.',
-      pitch: 'Every expedition starts holding a relic. Needs the Vault - somewhere to keep them first.' }
+      pitch: 'Every expedition starts holding a relic. Needs the Vault - somewhere to keep them first.' },
+
+    // ── The upstairs ────────────────────────────────────────────────────────────────────
+    // Sealed until the road has been walked once. Nothing here is a bigger number; each one
+    // answers something the ground floor left standing.
+    { kind: 'CHAPEL',  name: 'THE CHAPEL', cost: 6, max: 1, wins: 1,
+      level: () => metaUpgrades.chapel ? 1 : 0,
+      apply: () => { metaUpgrades.chapel = 1; },
+      effect: l => l ? `The first scar treated each expedition costs nothing.` : `Every scar costs ${SCAR_TREAT_COST} Scrap to treat.`,
+      pitch: 'Somewhere to take the wounded. One treatment an expedition, free.' },
+    { kind: 'LOCKER',  name: 'THE FOOTLOCKER', cost: 8, max: 1, wins: 1, needs: 'VAULT',
+      level: () => metaUpgrades.footlocker ? 1 : 0,
+      apply: () => { metaUpgrades.footlocker = 1; },
+      effect: () => lockerDescText(),
+      pitch: 'One piece of gear survives the expedition and arms the next. Needs the Vault - the same shelf, a different drawer.' },
+    { kind: 'ROADCREW', name: 'THE ROAD CREW', cost: 7, max: 1, wins: 1,
+      level: () => metaUpgrades.roadCrew ? 1 : 0,
+      apply: () => { metaUpgrades.roadCrew = 1; },
+      effect: l => l ? `Every sector opens at tier 2. ${TOTAL_TIERS - 1} to walk instead of ${TOTAL_TIERS}.` : `Every sector is ${TOTAL_TIERS} tiers from the road to the commander.`,
+      pitch: 'They go ahead and clear the first tier of every sector. One node less between you and the commander, every time.' }
 ];
+// The gear the locker is holding, and what it says on the card.
+function lockerGear() {
+    return metaUpgrades.footlocker && metaUpgrades.locker ? gearById(metaUpgrades.locker) : null;
+}
+function lockerDescText() {
+    const g = lockerGear();
+    return !metaUpgrades.footlocker
+        ? 'One piece of gear survives the expedition and arms the next.'
+        : g ? `Holding ${g.name} — the next expedition deploys with it.`
+            : 'Empty. The next expedition that salvages a piece will leave one here.';
+}
+// The first thing the squad picked up, which is the same rule the Vault keeps for relics.
+function lockerFrom(ids) { return (ids || []).map(gearById).filter(Boolean)[0] || null; }
+function stashLocker() {
+    if (!metaUpgrades.footlocker) return;
+    const worn = playerRoster.flatMap(c => [c.weaponMod, c.trinket]).filter(Boolean);
+    const keep = lockerFrom([...gearStash, ...worn]);
+    metaUpgrades.locker = keep ? keep.id : null;
+}
 
 // Whether a spot's prerequisite is standing. A spot with no `needs` is always available.
 function spotUnlocked(sp) {
-    if (!sp || !sp.needs) return true;
+    if (!sp) return true;
+    // The upstairs is sealed to a career that has not finished the road once.
+    if (sp.wins && careerWins < sp.wins) return false;
+    if (!sp.needs) return true;
     const req = CITADEL_SPOTS.find(o => o.kind === sp.needs);
     return !!req && req.level() > 0;
+}
+// Why a spot is sealed, which the card has to say or the whole upstairs reads as broken.
+function spotBlocker(sp) {
+    if (!sp || spotUnlocked(sp)) return null;
+    if (sp.wins && careerWins < sp.wins) return 'NEEDS THE ROAD WALKED';
+    const req = CITADEL_SPOTS.find(o => o.kind === sp.needs);
+    return `NEEDS ${req ? req.name : sp.needs}`;
 }
 function spotMaxed(sp) { return sp.max !== undefined && sp.level() >= sp.max; }
 // What the hillside and the ledger print next to a name. A one-shot building reads as built or
 // not; anything that stacks reads as a level.
 function spotState(sp) {
     if (sp.kind === 'VAULT') return metaUpgrades.vault ? (metaUpgrades.heirloom ? 'ARMED' : 'EMPTY') : 'LOCKED';
+    if (sp.kind === 'LOCKER' && spotUnlocked(sp)) return metaUpgrades.footlocker ? (metaUpgrades.locker ? 'ARMED' : 'EMPTY') : 'LOCKED';
     if (!spotUnlocked(sp)) return 'SEALED';
     if (sp.max === 1) return sp.level() ? 'BUILT' : 'LOCKED';
-    return `LVL ${sp.level()}`;
+    // Everything has a ceiling now, so the ceiling is worth printing: a level with no maximum
+    // beside it reads as a number that goes on forever, which is exactly what it used to be.
+    return `LVL ${sp.level()}${sp.max ? `/${sp.max}` : ''}`;
 }
 
 function vaultDescText() {
@@ -4521,8 +4617,8 @@ function vaultDescText() {
 function renderCitadel() { switchScreen('screen-citadel'); document.getElementById('citadel-skulls').innerText = `${bossSkulls} 💀`;
     document.getElementById('citadel-list').innerHTML = CITADEL_SPOTS.map(sp => {
         const lvl = sp.level(), maxed = spotMaxed(sp), open = spotUnlocked(sp);
-        const req = open ? null : CITADEL_SPOTS.find(o => o.kind === sp.needs);
-        const label = maxed ? 'BUILT' : !open ? `NEEDS ${req ? req.name : sp.needs}` : `${sp.max === 1 ? 'UNLOCK' : 'UPGRADE'} [${sp.cost} 💀]`;
+        const label = maxed ? (sp.max === 1 ? 'BUILT' : 'MAXED') : !open ? spotBlocker(sp)
+                    : `${sp.max === 1 ? 'UNLOCK' : 'UPGRADE'} [${sp.cost} 💀]`;
         return `<div class="upgrade-card ${open ? '' : 'upg-sealed'}">
             <div class="upgrade-header"><span>${sp.name}</span><span>${spotState(sp)}</span></div>
             <div class="upgrade-stats">${typeof sp.effect === 'function' ? sp.effect(lvl) : ''}</div>
@@ -4678,7 +4774,7 @@ function advanceSector() {
     // A sector's worth of road between you and them is enough. Nothing follows across.
     pursuit = null; retreatNode = null;
     checkBountyProgress('SECTOR');
-    currentSector++; currentTier = 1;
+    currentSector++; currentTier = openingTier();
     sectorFront = rollFront(seededRng('front:' + currentSector), currentSector); frontBannerPending = true;
     sectorMap = generateSectorMap(seededRng('map:' + currentSector)); currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null; forecastFormation = null;
     noteDepth(); saveGameState();
@@ -4745,8 +4841,9 @@ function operatorCardHtml(char) {
             ? `<div class="scar-line" title="${scarList.map(sc => sc.name + ': ' + sc.desc).join(' \u2014 ')}">✚ ${scarList.map(sc => sc.name).join(', ')}</div>` : '';
         // Treatment is the only way a scar comes off, and it is priced as a real decision -
         // four upgrades' worth of Scrap to undo what one bad node left behind.
+        const scarPrice = scarTreatCost();
         let scarBtn = scarList.length
-            ? ` <button class="upg-btn scar-btn" ${scrap < SCAR_TREAT_COST || isDead ? 'disabled' : ''} data-action="scar-menu" data-id="${char.id}" title="Treat a scar - ${SCAR_TREAT_COST} Scrap each.">TREAT (${SCAR_TREAT_COST})</button>` : '';
+            ? ` <button class="upg-btn scar-btn" ${scrap < scarPrice || isDead ? 'disabled' : ''} data-action="scar-menu" data-id="${char.id}" title="${scarPrice ? `Treat a scar - ${scarPrice} Scrap each.` : 'The Chapel covers the first treatment of the expedition.'}">TREAT (${scarPrice || 'FREE'})</button>` : '';
 
         const modG = gearById(char.weaponMod), trkG = gearById(char.trinket);
         let gearHtml = '';
@@ -4768,7 +4865,7 @@ function operatorCardHtml(char) {
 
         if (activePosSelector === char.id) { btnGroupHtml = `<button class="upg-btn sub-menu-btn pos-btn-1" data-action="assign-slot" data-id="${char.id}" data-slot="1">[1] FRONT</button> <button class="upg-btn sub-menu-btn pos-btn-2" data-action="assign-slot" data-id="${char.id}" data-slot="2">[2] MID</button> <button class="upg-btn sub-menu-btn pos-btn-3" data-action="assign-slot" data-id="${char.id}" data-slot="3">[3] BACK</button> <button class="upg-btn sub-menu-btn pos-btn-0" data-action="assign-slot" data-id="${char.id}" data-slot="0">[X] BENCH</button> <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
         else if (activePerkSelector === char.id) { btnGroupHtml = PERK_POOL.map(p => `<button class="upg-btn sub-menu-btn perk-btn" data-action="assign-perk" data-id="${char.id}" data-perk="${p.id}">${p.label}</button>`).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
-        else if (activeScarSelector === char.id) { btnGroupHtml = scarList.map(sc => `<button class="upg-btn sub-menu-btn scar-btn" ${scrap < SCAR_TREAT_COST ? 'disabled' : ''} data-action="treat-scar" data-id="${char.id}" data-scar="${sc.id}" title="${sc.desc}">TREAT ${sc.name}</button>`).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
+        else if (activeScarSelector === char.id) { btnGroupHtml = scarList.map(sc => `<button class="upg-btn sub-menu-btn scar-btn" ${scrap < scarPrice ? 'disabled' : ''} data-action="treat-scar" data-id="${char.id}" data-scar="${sc.id}" title="${sc.desc}">TREAT ${sc.name}</button>`).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
         else { btnGroupHtml = `<button class="upg-btn ${posClass}" data-action="pos-menu" data-id="${char.id}">${posText}</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="HP" data-cost="${cost}">+10 HP</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="DMG" data-cost="${cost}">+3 DMG</button> ${medHtml}${scarBtn}`; }
 
         return `<div class="upgrade-card" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay}${masteryDisplay}${traitsDisplay}${scarDisplay}${bondDisplay} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> <div class="upgrade-btn-group">${btnGroupHtml}</div> <div class="upgrade-btn-group gear-row">${gearHtml}</div> </div>`;
@@ -8420,6 +8517,7 @@ globalThis.WP = {
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
+    spotBlocker, lockerGear, lockerDescText, lockerFrom, stashLocker, openingTier, scarTreatCost,
     Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },

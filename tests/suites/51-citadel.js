@@ -41,9 +41,11 @@ module.exports = {
     // ---- buying ----
     const buying = await page.evaluate(() => {
       const out = [];
+      const career = careerWins; careerWins = 9;
       CITADEL_SPOTS.forEach(sp => {
         metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0, vault: 0, heirloom: null,
-                         rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0 };
+                         rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0,
+                         chapel: 0, footlocker: 0, locker: null, roadCrew: 0 };
         // Stand up whatever it needs first, so the gate is not what is being measured here.
         if (sp.needs) CITADEL_SPOTS.find(o => o.kind === sp.needs).apply();
         bossSkulls = sp.cost;
@@ -56,6 +58,7 @@ module.exports = {
         buyMetaUpgrade(sp.kind);
         out[out.length - 1].brokeIsRefused = sp.level() === at;
       });
+      careerWins = career;
       return out;
     });
     ok('every building can be bought, and takes exactly its price',
@@ -66,15 +69,19 @@ module.exports = {
 
     const ceiling = await page.evaluate(() => {
       const capped = CITADEL_SPOTS.filter(s => s.max !== undefined);
-      return capped.map(sp => {
+      const career = careerWins; careerWins = 9;
+      const rows = capped.map(sp => {
         metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0, vault: 0, heirloom: null,
-                         rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0 };
+                         rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0,
+                         chapel: 0, footlocker: 0, locker: null, roadCrew: 0 };
         if (sp.needs) CITADEL_SPOTS.find(o => o.kind === sp.needs).apply();
         bossSkulls = sp.cost * (sp.max + 4);
         for (let i = 0; i < sp.max + 3; i++) buyMetaUpgrade(sp.kind);
         return { kind: sp.kind, at: sp.level(), max: sp.max, left: bossSkulls,
                  wasted: bossSkulls < sp.cost * 4 };
       });
+      careerWins = career;
+      return rows;
     });
     ok(`a building stops at its ceiling (${ceiling.map(c => `${c.kind} ${c.at}/${c.max}`).join(', ')})`,
       ceiling.every(c => c.at === c.max));
@@ -82,9 +89,11 @@ module.exports = {
 
     // ---- the gates ----
     const gates = await page.evaluate(() => {
-      return CITADEL_SPOTS.filter(s => s.needs).map(sp => {
+      const career = careerWins; careerWins = 9;
+      const rows = CITADEL_SPOTS.filter(s => s.needs).map(sp => {
         metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0, vault: 0, heirloom: null,
-                         rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0 };
+                         rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0,
+                         chapel: 0, footlocker: 0, locker: null, roadCrew: 0 };
         bossSkulls = sp.cost * 3;
         const sealedBefore = !spotUnlocked(sp);
         buyMetaUpgrade(sp.kind);
@@ -95,6 +104,8 @@ module.exports = {
         buyMetaUpgrade(sp.kind);
         return { kind: sp.kind, sealedBefore, refused, state, openNow, built: sp.level() === 1 };
       });
+      careerWins = career;
+      return rows;
     });
     ok('a sealed building refuses the purchase and banks the skulls',
       gates.every(g => g.sealedBefore && g.refused));
@@ -105,7 +116,8 @@ module.exports = {
     // ---- and each of them does the thing it promises ----
     const effects = await page.evaluate(() => {
       const wipe = () => { metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0, vault: 0,
-                                            heirloom: null, rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0 }; };
+                                            heirloom: null, rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0,
+                                            chapel: 0, footlocker: 0, locker: null, roadCrew: 0 }; };
       currentSlot = 1; wipe(); confirmNewGame(1.0);
 
       wipe(); const rerollsBefore = (currentSlot = 1, confirmNewGame(1.0), musterRerolls);

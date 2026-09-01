@@ -40,6 +40,24 @@
 //
 // So: the wall this file has been measuring against was an artefact of the instrument, and no
 // difficulty conclusion drawn from a pre-C02 run of it should be carried forward. Re-measure.
+
+// ── The long career, re-measured after C04 ──────────────────────────────────────────────
+// Four Citadel spots had no ceiling, and `--meta carry` at 40 runs used to stop terminating on
+// them: unlimited fallback bunkers meant a squad that could not be made to stop. Capped, the
+// same sample runs to the end. 40 expeditions, difficulty 1, line draft, warm faces:
+//
+//   deepest sector, median            6      (mean 5.3, p10 2, p90 7)
+//   ended by                          won 8, wiped 32
+//   reached sector 7                  15 of 40, and won it 8 of 15
+//   Citadel at the end                every spot at its ceiling
+//   skulls left unspent               635
+//   deepest sector, mean, by third    5.77 / 5.38 / 4.64
+//   grudge on commanders met, same    2.38 / 2.98 / 3.00
+//
+// The last two rows are the point of C04. The hillside saturates - 635 skulls with nowhere to
+// go, where before they would have bought 635 more levels of something - and depth then drifts
+// down rather than up, because the grudge ramp keeps climbing under a meta that has stopped.
+// A career now buys a floor, not an escape. That is the shape the cap was for.
 const path = require('path');
 const { serve } = require('./server');
 
@@ -224,7 +242,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     grudges = {}; bossSkulls = 0; mastery = {}; bestiary = {};
     metaUpgrades = { startScrap: 0, startLevel: 1, invMax: 4, extraRegroups: 0, vault: 0,
                      heirloom: null, heirloomWalked: false,
-                     rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0 };
+                     rerolls: 0, discount: 0, archive: 0, warRoom: 0, cache: 0,
+                     // The upstairs, which a fresh career has not earned either.
+                     chapel: 0, footlocker: 0, locker: null, roadCrew: 0 };
+    careerWins = 0;
     saveMeta();
   }
   confirmNewGame(difficulty);
@@ -1022,7 +1043,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const grudgeOf = rs => { const g = rs.flatMap(r => r.metGrudge.concat(r.bossGrudge));
                            return g.length ? (g.reduce((x, y) => x + y, 0) / g.length).toFixed(2) : '-'; };
   console.log('\n── META DRIFT ACROSS THE SAMPLE ' + '─'.repeat(26));
-  line('Citadel at the end', await page.evaluate(() => CITADEL_SPOTS.map(sp => `${sp.name.split(' ')[0]} ${sp.level()}`).join(', ')));
+  // A leading "THE" is not a name: four of the spots are THE VAULT, THE CHAPEL, THE FOOTLOCKER
+  // and THE ROAD CREW, and taking the first word printed all four as "THE 1". The ceiling goes
+  // beside the level too - a career that saturated the hillside should read as saturated.
+  line('Citadel at the end', await page.evaluate(() => CITADEL_SPOTS.map(sp =>
+    `${sp.name.replace(/^THE /, '').split(' ')[0]} ${sp.level()}/${sp.max}`).join(', ')));
   line('skulls left unspent', await page.evaluate(() => bossSkulls));
   line('deepest sector, mean, by third', `${depthOf(band(0, third))} / ${depthOf(band(third, 2 * third))} / ${depthOf(band(2 * third, n))}`);
   line('grudge on commanders met, same', `${grudgeOf(band(0, third))} / ${grudgeOf(band(third, 2 * third))} / ${grudgeOf(band(2 * third, n))}`);
