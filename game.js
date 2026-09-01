@@ -1346,6 +1346,31 @@ function noteSeedBest(seed, score) {
 // `ascension >= 2` spelled out at the call site, which meant the ladder's order and its effects
 // were two separate facts that had to agree - reorder the table and BLOODRITE silently becomes
 // whatever now sits third.
+// ── What a rung is worth ────────────────────────────────────────────────────────────────
+// These numbers are NOT justified by the current build, and the honest thing is to say so
+// rather than to keep quoting the measurement they came from.
+//
+// They were set against C05's reading of rungs 0/4/8 - median depth 6/4/2, raw score shares
+// 1.00/0.78/0.30 - which showed the first half of the ladder overpaying and the top half
+// slightly underpaying. Re-measured on the C10 build, 24 runs a rung on the same instrument:
+//
+//   rung 0   median 37,435 at x1.00   raw 37,435   share 1.000
+//   rung 4   median 13,338 at x1.35   raw  9,880   share 0.264   break-even x3.79
+//   rung 8   median 30,567 at x3.45   raw  8,860   share 0.237   break-even x4.23
+//
+// (Raw is exact: every run in a sample carries the same protocolMult and computeScore
+// multiplies by it, so raw = median / mult.)
+//
+// Two things changed underneath the ladder. The base game got EASIER - rung 0 went from median
+// depth 6 to 7 and from 6 wins in 24 to 10 - while rungs 4 and 8 collapsed onto each other,
+// 0.26 against 0.24, when they used to be 0.78 against 0.30. So the ladder's entire cost now
+// sits in its first four rungs and the top four add almost nothing.
+//
+// Repricing against that would set rung 4 near x3.8 and rung 8 near x4.2, which fixes the
+// arithmetic and leaves a ladder where climbing from 4 to 8 costs nothing and pays 11% more.
+// The multipliers are not the defect any more; the spacing of the effects is. That is D12, and
+// it is blocked on D07 - the instrument that measured all of this cannot use a self-action, so
+// it has never guarded, vented or gone over the top, and three classes lean on exactly those.
 const PROTOCOLS = [
     { id: 'IRONSIDE',   name: 'PROTOCOL: IRONSIDE',    mult: 1.15, desc: 'Every elite arrives affixed.' },
     { id: 'BLOODRITE',  name: 'PROTOCOL: BLOODRITE',   mult: 1.30, desc: 'Warlords enrage at 60% health instead of 50%.' },

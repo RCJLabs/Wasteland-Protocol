@@ -55,14 +55,16 @@ module.exports = {
     const stack = await page.evaluate(() => {
       __at(5);
       const on = activeProtocols().map(p => p.id);
-      const r = { on, fifth: hasProtocol('RATIONING'), sixth: hasProtocol('LONGSHADOW'), mult: protocolMult() };
+      const r = { on, fifth: hasProtocol('RATIONING'), sixth: hasProtocol('LONGSHADOW'),
+                  mult: protocolMult(), want: PROTOCOLS[4].mult, top: PROTOCOLS[PROTOCOLS.length - 1].mult };
       __at(0); r.none = activeProtocols().length; r.anyOff = hasProtocol('IRONSIDE');
       __off();
       return r;
     });
     ok(`rung 5 holds the first five and nothing above them (${stack.on.join(', ')})`,
       stack.on.length === 5 && stack.fifth && !stack.sixth);
-    ok('and the multiplier is that rung\'s, not the top of the stack\'s', stack.mult === 1.95);
+    ok(`and the multiplier is that rung's, not the top of the stack's (x${stack.mult})`,
+      stack.mult === stack.want && stack.mult !== stack.top);
     ok('off the ladder, nothing is in force', stack.none === 0 && !stack.anyOff);
 
     // ---- rung 4: one fewer fallback ----

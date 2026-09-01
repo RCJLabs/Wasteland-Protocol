@@ -27,13 +27,16 @@ module.exports = {
       const at = (wins, cleared) => { careerWins = wins; bestRung = cleared; return unlockedProtocols(); };
       const r = [at(0, 0), at(0, 3), at(1, 0), at(1, 1), at(1, 4), at(1, PROTOCOLS.length)].join(',');
       careerWins = 1; bestRung = PROTOCOLS.length; ascension = 2;
-      const mult = protocolMult(); const name = protocolName();
+      // Read off the table, not written out again: the ladder was repriced once already and
+      // a suite carrying its own copy of the numbers fails the reprice rather than the rung.
+      const mult = protocolMult(); const name = protocolName(); const table = PROTOCOLS[1].mult;
       ascension = 0; careerWins = 0; bestRung = 0;
-      return { r, mult, name, off: protocolMult() === 1 && protocolName() === null };
+      return { r, mult, name, table, off: protocolMult() === 1 && protocolName() === null };
     });
     ok(`the gate opens on a clear and climbs one rung at a time (${gates.r})`,
       gates.r === `0,0,1,2,5,${ladder.count}`);
-    ok('each rung names itself and prices the score', gates.mult === 1.3 && /BLOODRITE/.test(gates.name) && gates.off);
+    ok(`each rung names itself and prices the score (x${gates.mult})`,
+      gates.mult === gates.table && /BLOODRITE/.test(gates.name) && gates.off);
 
     // ---- the contract board offers the climb ----
     const board = await page.evaluate(() => {
@@ -127,17 +130,19 @@ module.exports = {
       const flat = computeScore({ ...st, protocolMult: 1 });
       ascension = 2; careerWins = 1; bestRung = PROTOCOLS.length;
       activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
-      const banked = { mult: runStats.protocolMult, rung: runStats.ascension };
+      const banked = { mult: runStats.protocolMult, rung: runStats.ascension, want: PROTOCOLS[1].mult };
       ascension = 0;
       runStats.deepestSector = 2; runStats.kills = 10;
-      runStats.protocolMult = 1.3; runStats.ascension = 2;
+      runStats.protocolMult = PROTOCOLS[1].mult; runStats.ascension = 2;
       endRun();
       const line = document.getElementById('runover-lines').innerText;
       return { risen, flat, banked, line };
     });
     ok('the multiplier stacks above the contracts', score.risen === Math.floor(score.flat * 1.5));
-    ok('and is banked when the run starts, not re-read later', score.banked.mult === 1.3 && score.banked.rung === 2);
-    ok('the run-over screen names the rung', /BLOODRITE/.test(score.line) && /x1\.30/.test(score.line));
+    ok(`and is banked when the run starts, not re-read later (x${score.banked.mult})`,
+      score.banked.mult === score.banked.want && score.banked.rung === 2);
+    ok(`the run-over screen names the rung and its price (x${score.banked.want.toFixed(2)})`,
+      /BLOODRITE/.test(score.line) && score.line.includes(`x${score.banked.want.toFixed(2)}`));
 
     // ---- persistence ----
     const saved = await page.evaluate(() => {

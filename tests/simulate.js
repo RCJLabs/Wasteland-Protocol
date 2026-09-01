@@ -78,12 +78,27 @@
 // True: every band of the ladder does something, and the reward tracks it - a won run pays
 // roughly the multiplier it was run at, 1.00 / 1.70 / 3.00 against 121k / 206k / 363k.
 //
-// Worth an argument: the cost is back-loaded and the reward is not. Rungs 1-4 cut the median
-// road from 6 sectors to 4 but left the ending about as reachable, and the multiplier more than
-// covered it - median score went UP, 30.6k to 40.7k. So the first half of the ladder currently
-// pays a strong player to climb it. Rungs 5-8 are where the difficulty actually lives: one win
-// in 24, median depth 2. If the ladder should cost something the whole way up, the lever is the
-// multipliers on rungs 1-4, not the effects.
+// Worth an argument, AND SUPERSEDED - kept because the reasoning is still how to read this
+// file, not because the conclusion holds. It said the cost was back-loaded: rungs 1-4 cut the
+// median road from 6 sectors to 4 while the multiplier more than covered it, so the first half
+// of the ladder paid a strong player to climb it.
+//
+// Re-measured on the C10 build, five commits later, 24 runs a rung on this same instrument:
+//
+//                          C05          C10
+//   rung 0 raw           30,635       37,435     the base game got EASIER
+//   rung 4 raw           23,960        9,880     median depth 4 -> 2
+//   rung 8 raw            9,260        8,860     barely moved
+//   shares          1.00/0.78/0.30   1.00/0.26/0.24
+//
+// So rungs 4 and 8 have collapsed onto each other - eleven percent apart where they were nearly
+// threefold - and the ladder's whole cost now sits in its first four rungs. Break-even today
+// would be x3.79 at rung 4 and x4.23 at rung 8; setting those fixes the arithmetic and leaves a
+// ladder that costs nothing between 4 and 8. The multipliers are no longer the defect. That is
+// D12, blocked on D07.
+//
+// The lesson for anyone reading a figure out of this header: a balance reading is about the
+// build it was taken on. Five feature commits moved this one enough to invert its conclusion.
 
 // ── What the learned moves cost, measured after C09 ─────────────────────────────────────
 // From the second meeting a commander trades one of its intents for something it picked up
