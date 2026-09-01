@@ -182,14 +182,18 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 
 .intent-icon { position: absolute; top: -25px; font-size: 14px; background: #111; border: 1px solid #444; border-radius: 50%; width: 22px; height: 22px; display: flex; justify-content: center; align-items: center; z-index: 20; box-shadow: 0 2px 4px #000; }
 
-.battlefield { position: relative; display: flex; justify-content: center; gap: clamp(18px, 9vw, 70px); flex-grow: 1; align-items: flex-end; padding: 0 22px 0 0; box-sizing: border-box; margin-bottom: 12vh; /* overridden per backdrop by applyCombatScenery; relative so tracer lines can anchor to it */ }
+.battlefield { position: relative; display: flex; justify-content: center; gap: clamp(18px, 9vw, 70px); flex-grow: 1; align-items: flex-end; padding: 0 11px; box-sizing: border-box; margin-bottom: 12vh; /* overridden per backdrop by applyCombatScenery; relative so tracer lines can anchor to it */ }
 .team { display: flex; align-items: flex-end; justify-content: center; min-width: 0; }
 /* Four-strong squads tighten up so oversized sprites stay inside the viewport. */
-.team.crowded .entity { width: clamp(42px, 11vw, 78px); }
+.team.crowded .entity { width: calc(clamp(42px, 11vw, 78px) * var(--field-fit, 1)); }
 /* Sprites overlap on purpose, but the readouts ride on top of them - so a six-strong swarm
-   painted every card over its neighbour. A crowded hostile line stands its units apart; the
-   squad never exceeds four and reads fine as it is. */
-#enemy-team.crowded .entity { --overlap: 0px; margin: 0; }
+   painted every card over its neighbour. A crowded line stands its units apart instead.
+   This used to be the hostile row alone, on the grounds that a squad never exceeds four and
+   read fine as it was. It stopped reading fine the moment the field started fitting itself:
+   at four operators on a 320px screen the slots are narrow enough that the health readouts
+   printed straight over each other. Both rows now stand apart when they are crowded, and the
+   fit absorbs the extra width. */
+.team.crowded .entity { --overlap: 0px; margin: 0; }
 .team.crowded .portrait { width: calc(100% * min(var(--sprite-scale, 1), 1.45) * var(--row-fit, 1)); }
 /* A commander and its retinue share the line. They stand beside each other rather than
    stacked, the retinue reads in front, and fitEnemyRow narrows the whole row to the width it
@@ -200,7 +204,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .team.retinue .entity:nth-child(2) { z-index: 3; }
 #player-team { flex-direction: row-reverse; } 
 #enemy-team { flex-direction: row; }
-.entity { width: clamp(55px, 16vw, 110px); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; position: relative; transition: transform 0.2s; gap: 2px; --overlap: 1.5vw; margin: 0 calc(-1 * var(--overlap)); z-index: 1; }
+.entity { width: calc(clamp(55px, 16vw, 110px) * var(--field-fit, 1)); display: flex; flex-direction: column; align-items: center; justify-content: flex-end; position: relative; transition: transform 0.2s; gap: 2px; --overlap: 1.5vw; margin: 0 calc(-1 * var(--overlap)); z-index: 1; }
 .entity:nth-child(1) { z-index: 3; } .entity:nth-child(2) { z-index: 2; } .entity:nth-child(3) { z-index: 1; } .entity:nth-child(4) { z-index: 4; }
 .entity.active .portrait { filter: drop-shadow(0 0 12px rgba(255, 255, 255, 0.9)); }
 .entity.dead { opacity: 0.55; filter: grayscale(90%); }
@@ -300,7 +304,7 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
 .op-tab-btn, .upg-btn, .inv-slot,
 .prompt-ok, .prompt-off { min-height: 44px; }
 /* A tightened hostile line squeezed its slots to 43px wide, one short of the same floor. */
-.team.crowded .entity { min-width: 44px; }
+.team.crowded .entity { min-width: calc(44px * var(--field-fit, 1)); }
 
 .entity:focus-visible { outline-offset: -2px; }
 

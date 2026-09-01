@@ -3761,6 +3761,17 @@ function migrateOldSaves() {
 // Art for a new warlord may not have landed yet, and a broken portrait is worse than a
 // stand-in. Delegated rather than inline, because no inline handler survives in this codebase.
 const PORTRAIT_FALLBACK = 'enemy_boss.webp';
+// A fit measured before the art has decoded is a fit against a box that is about to change,
+// and on a narrow screen the field lands close enough to the glass that a late pixel clips.
+// Portraits are fetched once and then served from cache, so in practice this fires on the
+// first fight of a session and hardly ever again. load does not bubble, so it is captured -
+// the same reason the fallback below is.
+function armFieldRefit() {
+    document.addEventListener('load', e => {
+        const el = e.target;
+        if (el && el.tagName === 'IMG' && el.classList && el.classList.contains('portrait')) fitField();
+    }, true);
+}
 function armPortraitFallback() {
     document.addEventListener('error', e => {
         const el = e.target;
@@ -3775,6 +3786,7 @@ function armPortraitFallback() {
 
 function initEngine() { 
     armPortraitFallback();
+    armFieldRefit();
     preloadAssets();
     Store.probe();
     migrateOldSaves();
@@ -6565,6 +6577,8 @@ function renderField() {
     pTeam.classList.toggle('crowded', pTeam.children.length >= 4);
     eTeam.classList.toggle('crowded', eTeam.children.length >= 4);
     fitEnemyRow(eTeam, eLoad);
+    // After the commander's row has taken its own share, whatever is left over is the field's.
+    fitField();
     // An open file closes itself if its subject dies or the squad starts aiming.
     if (inspecting) {
         const subj = activeEntities.find(e => e.id === inspecting);
@@ -6743,6 +6757,128 @@ function applyTurnStartEffects(ent) {
 // question of how much sprite is in the row rather than how many units are in it, so a row
 // carrying a commander measures the width it has and fits itself to it. Ordinary rows never
 // reach the guard, and a lone commander keeps its full size.
+// ── Keeping the field on the screen ─────────────────────────────────────────────────────
+// fitEnemyRow below narrows a commander's row against its own half of the field, which is the
+// right answer to a warlord standing in front of its retinue. It is not an answer to the field
+// being too wide, because it only ever measures one row and only when a commander is in it.
+// Reported from play: raiders calling reinforcements pushed operators off the screen.
+//
+// Surveyed across every composition the game can actually produce - one to six hostiles, three
+// and four strong squads, swarms, juggernauts, each commander, the ossuary with its raised -
+// at three viewport widths, sixteen of twenty-four compositions clipped at 320px and nine of
+// twenty-four at 400px and 480px. Almost all of it off the LEFT edge, which was the tell: the
+// battlefield carried 22px of padding on the right and none on the left, so justify-content
+// centred every fight 11px left of the actual centre. That is fixed in the stylesheet; this is
+// the other half.
+//
+// One number, measured rather than derived: the span the sprites actually occupy against the
+// room actually available. It scales the slot widths, and the portraits are sized off their
+// slots, so the whole field shrinks together and nothing is singled out. A fight that fits -
+// which is most of them - measures once and does nothing.
+//
+// It is searched rather than solved, because the span is not a straight line in the fit. Two
+// tries at arithmetic missed: scaling by room/span undershoots, since the gap between the rows
+// and the negative margins the sprites overlap by do not scale with the slots. Solving that as
+// f*A + B off probes at 1 and 0.5 missed too, and the profile says why - measured at 480px the
+// span runs 474 / 461 / 410 / 360 / 310 / 259 from f=1 down to f=0.5. Below about 0.85 it is
+// clean and linear at 504px per unit of f; above it the slope collapses to a seventh of that,
+// because the rows are already being squeezed by flex and shrinking a slot barely moves the
+// sprite. A two-point line drawn across that kink describes neither half.
+//
+// So the test is the requirement itself - is every sprite inside the glass - and the answer is
+// bisected.
+//
+// It is not cached. The first version keyed a cache on the shape of the field - the viewport,
+// the two counts, the sprite scales - and reused the answer while that held. Measured against
+// a forced recompute, the cached number was wrong on six of seventy-two staged compositions,
+// by one to four pixels, and the reason is that the span depends on much more than the shape:
+// a dead operator's portrait rotates 78 degrees and takes a far wider box, an HP readout gets
+// wider as the number does, a status badge appears. Any key cheap enough to be worth having
+// misses some of that. One honest measurement beats a cache that is sometimes right: a fight
+// that fits - which is most of them, and every fight before a crowd shows up - costs exactly
+// one, and only a field that does not fit pays for the other six.
+const FIELD_FIT_MIN = 0.6;    // past this the sprites stop being readable; better to clip a hair
+const FIELD_PAD = 11;         // the breathing room each side, and the budget recentreField spends
+const FIELD_FIT_STEPS = 6;    // bisection depth: 0.006 of resolution across the range
+function fieldSpan(field) {
+    const arts = [...field.querySelectorAll('.portrait')];
+    if (!arts.length) return null;
+    let l = Infinity, r = -Infinity;
+    arts.forEach(a => { const b = a.getBoundingClientRect(); if (b.width) { l = Math.min(l, b.left); r = Math.max(r, b.right); } });
+    return r > l ? { l, r, w: r - l } : null;
+}
+function fitField() {
+    const field = document.querySelector('.battlefield');
+    if (!field) return 1;
+    const glass = field.clientWidth;
+    // Six pixels of margin each side, and every one of them earned. The search measures a
+    // layout that is still settling, so a fit accepted at exactly the width of the glass is a
+    // fit that clips when it paints: at two pixels a different composition tipped over on every
+    // run of the survey, at four it was one in seventy-two, at six none of the two hundred and
+    // sixteen staged across three passes. It costs the sprites about two percent.
+    const EDGE = 6;
+    // Width and position are two problems and only one of them is solved by shrinking. The
+    // search tests the WIDTH alone; where that width sits is fixed afterwards by recentre().
+    // Conflating them made 320px worse rather than better - three compositions there had room
+    // to spare on the right and were over the left edge anyway, so the search shrank sprites
+    // chasing a target that shrinking could never reach.
+    //
+    // Only a value this has actually measured is allowed to be the answer. The first version
+    // bisected on lo/hi and applied lo - but lo starts at the floor, which is never tested, so
+    // a composition that did not fit at any step shipped an unverified number and still clipped.
+    let best = null;
+    const fits = f => {
+        field.style.setProperty('--field-fit', String(f));
+        const s = fieldSpan(field);
+        const ok = !s || s.w <= glass - EDGE * 2;
+        if (ok && (best === null || f > best)) best = f;
+        return ok;
+    };
+    if (!fits(1)) {
+        let lo = FIELD_FIT_MIN, hi = 1;
+        for (let i = 0; i < FIELD_FIT_STEPS; i++) { const mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; }
+        // Nothing in the range fitted, so take the smallest sprites the range allows and let the
+        // sliver that is left run over rather than shrinking the fight into illegibility.
+        if (best === null) fits(FIELD_FIT_MIN);
+    }
+    const f = best === null ? FIELD_FIT_MIN : best;
+    field.style.setProperty('--field-fit', String(f));
+    recentreField(field, glass);
+    return f;
+}
+
+// justify-content centres the two team boxes; it does not centre the sprites, because each row
+// overhangs its box by a different amount - the squad's slots are wider than a crowded hostile
+// line's, and a commander's portrait is wider again than the slot it stands in. Measured at
+// 400px the sprites sat six pixels right of centre with the rows themselves dead centre, which
+// is why the operator going off the screen was always the one on the far left.
+//
+// Corrected by sliding the whole field, which has no budget. The first version rebalanced the
+// padding left against right - elegant, because it keeps the total padding and so the room the
+// search just fitted to - but it can only ever move the field as far as there is padding to
+// take from, and once both rows stood their units apart the drift wanted eighteen pixels of an
+// eleven pixel allowance. It clamped, and the overhang moved to the other edge.
+//
+// A transform is safe here: the battlefield carries none of its own, the shake is on the sky
+// layer behind it, and the tracer lines and floating numbers are absolutely positioned against
+// this element so they slide with it rather than away from it.
+function recentreField(field, glass) {
+    field.style.transform = '';
+    const s = fieldSpan(field);
+    if (!s) return 0;
+    let d = Math.round(glass / 2 - (s.l + s.r) / 2);
+    if (d) field.style.transform = `translateX(${d}px)`;
+    // Then check the work. The span above is measured off a layout that is still settling, and
+    // one shift in a few lands several pixels short of the middle; a second look costs one more
+    // measurement and takes whatever is left.
+    const after = fieldSpan(field);
+    if (after) {
+        const rest = Math.round(glass / 2 - (after.l + after.r) / 2);
+        if (rest) { d += rest; field.style.transform = `translateX(${d}px)`; }
+    }
+    return d;
+}
+
 function fitEnemyRow(team, scales) {
     // 2.0 is the line between the heaviest ordinary stock (a Juggernaut at 1.8, which has
     // always overlapped its neighbours and reads fine doing it) and a commander.
@@ -8151,7 +8287,8 @@ globalThis.WP = {
     RECRUIT_POOL, RECRUIT_COST, RECRUIT_HEALTH, recruitCost, recruitables, recruitById, recruitReach,
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
