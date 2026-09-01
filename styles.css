@@ -578,6 +578,9 @@ button.reach-short { border-color: #7a5a20; }
 
 /* The tie between two operators, on the roster card. */
 .bond-line { font-size: 9px; color: #7ab0d0; text-transform: uppercase; margin-top: 2px; }
+/* Earned, not rolled - so it reads in the wound colour rather than the quirk colour. */
+.scar-line { font-size: 9px; color: #c96a5a; text-transform: uppercase; margin-top: 2px; letter-spacing: 1px; }
+.upg-btn.scar-btn { border-color: #8B4A3A; color: #d98a78; }
 
 /* Gear slots on the Outpost card. */
 .gear-row { border-top: 1px dashed #33301f; padding-top: 6px; margin-top: 6px; }

@@ -21,6 +21,25 @@
 // This is written down because a claim was published off a thirty-run pair and was wrong:
 // N11 was reported as +49% median score. Re-measured at 150 against its own predecessor it
 // is 14,460 -> 11,455, which is not an increase at all.
+//
+// ── On the depth figures printed before C02 ─────────────────────────────────────────────
+// Every one of them is void, and by a wide margin. This file never called recoverDowned on a
+// won or a lost fight - only withdraw() reached it, because withdraw() does it for itself - so
+// an operator who went down and was not healed mid-fight lay at zero health with a live
+// bleed-out clock, walked into the NEXT initiateCombat still down, and was ticked to death by
+// the turn queue. The engine drags those operators clear at the end of every fight however it
+// ended. This file was killing them.
+//
+// Fixing it moved the game this file reports by more than any phase ever has:
+//
+//                              before   after
+//   deepest sector, median        2       5
+//   nodes cleared, median        ~25     120
+//   operators on the floor/run   14.2    21.8   (they get up, so they can fall again)
+//   lost for good, per run       2.33    1.92
+//
+// So: the wall this file has been measuring against was an artefact of the instrument, and no
+// difficulty conclusion drawn from a pre-C02 run of it should be carried forward. Re-measure.
 const path = require('path');
 const { serve } = require('./server');
 
@@ -155,7 +174,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false,
                  booked: 0, bookedKinds: {}, augments: 0,
                  relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0,
-                 bossGrudge: [], metGrudge: [] };
+                 bossGrudge: [], metGrudge: [], scars: [], recovered: 0 };
 
   // Skulls were banked and never spent: buyMetaUpgrade was called nowhere in this file. So the
   // carried sample escalated the commanders permanently - grudges are meta - while switching
@@ -526,6 +545,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const fight = (nodeType, elite) => {
     initiateCombat(nodeType, elite);
     stat.fights++;
+    // Scars are dealt inside recoverDowned, and every ending reaches it - including withdraw(),
+    // which does it for itself. So the snapshot is taken at the door and the diff read at each
+    // exit rather than at any one of them.
+    const marks = () => playerRoster.flatMap(c => (c.scars || []).map(id => c.id + ':' + id));
+    const scarsAtStart = marks();
+    const tallyScars = () => marks().filter(m => !scarsAtStart.includes(m))
+        .forEach(m => { if (!stat.__seen) stat.__seen = []; if (!stat.__seen.includes(m)) { stat.__seen.push(m); stat.scars.push(m.split(':')[1]); } });
     // A sim that never met a formation would report a game without them and read identically
     // to one that did, so what walked on is counted rather than assumed.
     if (currentFormation) stat.formations[currentFormation] = (stat.formations[currentFormation] || 0) + 1;
@@ -552,6 +578,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (!activeEntities.some(e => !e.isPlayer && e.hp > 0)) break;
       if (actor.isPlayer && withdrawPolicy && canWithdraw() && losing(enemyStartHp)) {
         stat.kills += activeEntities.filter(e => !e.isPlayer && e.hp <= 0).length;
+        // withdraw() reaches recoverDowned on its own, so the operators it picks up have to be
+        // counted here or the scar rate is measured against a denominator missing every one of
+        // the five withdrawals a run. That read 12% against a 0.08 chance and looked like a bug
+        // in the game rather than a bug in the tally.
+        stat.recovered += bleedingOut().length;
         withdraw(); withdraw();          // the real thing: arms, then commits
         fled = true;
         break;
@@ -570,7 +601,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     (runStats.fallen || []).slice(stat.lost.length).forEach(f => stat.lost.push(f.name));
     activeEntities.forEach(e => { delete e.__counted; });
     stat.rounds += rounds;
-    if (fled) { stat.withdrawals++; return 'fled'; }
+    if (fled) { tallyScars(); stat.withdrawals++; return 'fled'; }
     const survived = activeEntities.some(e => e.isPlayer && e.hp > 0);
     const foesLeft = activeEntities.filter(e => !e.isPlayer && e.hp > 0).length;
     stat.kills += activeEntities.filter(e => !e.isPlayer && e.hp <= 0).length;
@@ -578,6 +609,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // checkWinState does this in the real loop, and without it the board's fight-end contracts
     // would read as content nobody ever settles.
     if (won) noteFightWon();
+    // Nothing here called recoverDowned. The engine calls it on every ending - the victory
+    // block, handleSquadWipe, withdraw, fallBackToNode - and this loop reached it only through
+    // withdraw(), so a won fight left its casualties lying at zero health with a live bleed-out
+    // clock. They walked into the NEXT initiateCombat still down, the queue ticked them, and the
+    // sim killed operators the real game had already dragged clear. Every "lost for good" figure
+    // this file has printed sat on that. It also meant scars, which are dealt inside
+    // recoverDowned, could not be measured at all: the rate would have read zero whatever the
+    // chance was set to.
+    const up = recoverDowned(won ? 'once the field is held' : 'as the squad is dragged off');
+    stat.recovered += up.length;
+    tallyScars();
     combatActive = false;
     return won ? 'won' : 'lost';
   };
@@ -840,11 +882,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const page = await context.newPage();
   const errors = [];
   let ALL_FORMATION_IDS = [];
+  let SCAR_IDS = [];
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(`http://127.0.0.1:${port}/index.html`);
   await page.waitForTimeout(800);
   await page.evaluate(() => { globalSettings.sfx = false; });
   ALL_FORMATION_IDS = await page.evaluate(() => ALL_FORMATIONS.map(f => f.id));
+  SCAR_IDS = await page.evaluate(() => SCAR_POOL.map(sc => sc.id));
 
   console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}, tactics ${TACTICS}, relics ${RELICS}, meta ${META}, faces ${FACES}` +
               (CONTRACTS.length ? ` under ${CONTRACTS.join(', ')}` : '') +
@@ -881,12 +925,26 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const saves = results.reduce((a, r) => a + r.saves, 0);
   const lost = results.reduce((a, r) => a + r.lost.length, 0);
   const lostPer = results.map(r => r.lost.length).sort((a, b) => a - b);
+  const recovered = results.reduce((a, r) => a + r.recovered, 0);
   line('operators put on the floor', `${downs} (${(downs / n).toFixed(1)} per run)`);
   line('turns spent saving them', saves);
+  line('dragged clear at a fight\u2019s end', `${recovered} (${(recovered / n).toFixed(1)} per run)`);
   line('lost for good', `${lost} (${(lost / n).toFixed(2)} per run)`);
   line('  median / worst run', `${lostPer[Math.floor(n / 2)]} / ${lostPer[n - 1]}`);
   line('runs that lost nobody', `${results.filter(r => !r.lost.length).length} of ${n}`);
   line('runs that ran out of squad', results.filter(r => r.endedBy === 'wiped-out').length);
+
+  // What the floor costs the ones who get up. A rate near one a run is the target: often enough
+  // that a career accumulates them, rare enough that a single bad node is not a sentence.
+  const allScars = results.flatMap(r => r.scars);
+  const perRun = results.map(r => r.scars.length).sort((a, b) => a - b);
+  line('scars dealt', `${allScars.length} (${(allScars.length / n).toFixed(2)} per run)`);
+  line('  median / worst run', `${perRun[Math.floor(n / 2)]} / ${perRun[n - 1]}`);
+  line('runs that took none', `${results.filter(r => !r.scars.length).length} of ${n}`);
+  line('share of recoveries scarred', recovered ? `${Math.round(allScars.length / recovered * 100)}%` : 'n/a');
+  const byScar = {};
+  allScars.forEach(id => { byScar[id] = (byScar[id] || 0) + 1; });
+  SCAR_IDS.forEach(id => line(`  ${id.toLowerCase().replace(/_/g, ' ')}`, byScar[id] || 'never dealt'));
 
   console.log('\n── RECRUITS ' + '─'.repeat(48));
   const offers = results.flatMap(r => r.recruitOffers);

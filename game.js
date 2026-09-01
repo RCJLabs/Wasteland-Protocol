@@ -96,7 +96,7 @@ let pursuit = null;
 let armedExit = null;      // null | 'WITHDRAW' | 'RETREAT' - only one question can be on screen
 let retreatNode = null;    // the node a retreat put the squad back in front of
 let runStats = null;
-let activeEvent = null; let pendingConsequences = []; let recentEvents = []; let activeContracts = []; let pendingDifficulty = 1.0; let activeGearSelector = null;
+let activeEvent = null; let pendingConsequences = []; let recentEvents = []; let activeContracts = []; let pendingDifficulty = 1.0; let activeGearSelector = null; let activeScarSelector = null;
 let activePosSelector = null; let activePerkSelector = null; let currentWeather = 'CLEAR'; let currentNodeType = '';
 let isCurrentNodeElite = false;
 
@@ -122,6 +122,114 @@ const QUIRK_POOL = [
 ];
 
 function hasQuirk(ent, id) { return !!(ent && ent.isPlayer && ent.quirk && ent.quirk.id === id); }
+
+// ── Scars ────────────────────────────────────────────────────────────────────────────────
+// Going down had no memory. The clock ran, somebody stopped it or nobody did, and either way
+// the operator walked into the next fight exactly as they walked into the last one. Measured
+// across forty expeditions: 627 operators hit the floor and 510 of them were dragged clear at
+// the end of a fight, not one of them worse off for it. So the only outcome that ever cost
+// anything was the one where they died, and every turn the squad spent hauling somebody up
+// bought the body and nothing else.
+//
+// (Those two figures had to be re-measured to be written down. simulate.js never called
+// recoverDowned on a won or a lost fight, so it was killing operators the engine had already
+// dragged clear - see the note at the head of that file. The pre-fix numbers said 850 and 710.)
+//
+// The rule is one line: if the fight ends with you still on the floor, you carry something out
+// of it. Being picked up mid-fight - a Cauterize, a Stim Dart, a Med-Stim spent on somebody
+// bleeding out - prevents it entirely, which is what finally pays for the save. Scars are not
+// in the quirk draw and cannot be rolled at muster; they are only ever earned, and once earned
+// they follow the operator through every remaining node of the expedition.
+//
+// They do not outlive the expedition, because nothing on this roster does - endRun clears the
+// save slot and the next muster deals a fresh seven. So the whole life of a scar is the run it
+// was dealt in, which is what makes treating one a live decision rather than housekeeping: 120
+// Scrap now against carrying the tremor through three more sectors. It is also the first real
+// sink this game has had for a late pile of Scrap.
+//
+// Measured on a simulated player who spends 33 turns picking people up across 287 chances -
+// which is to say, almost never, and so is the worst case this mechanic can produce. Sixty
+// fresh careers took 1.35 scars a run (1.57 over forty, 0.90 over twenty), median one, and
+// thirteen of those sixty came home with none at all. A player who actually heals the floor
+// takes none at all, every time. That spread is the whole point of the rule.
+const SCAR_CHANCE = 0.08;      // per operator still down when the fight ends
+const SCAR_MAX = 3;            // as much as one body can carry
+const SCAR_TREAT_COST = 120;
+// Each of the five hangs off exactly one hook. Three are stat deltas applied to the operator
+// the way a quirk is; the other two are read where they bite - the first turn of a fight, and
+// the bleed-out clock.
+const SCAR_POOL = [
+    { id: 'CRACKED_RIBS', name: 'CRACKED RIBS', desc: '-10 max HP. It never set right.',           hp: -10, dmg: 0,  spd: 0 },
+    { id: 'NERVE_DAMAGE', name: 'NERVE DAMAGE', desc: '-2 SPD. The leg drags.',                    hp: 0,   dmg: 0,  spd: -2 },
+    { id: 'TREMOR',       name: 'TREMOR',       desc: '-3 DMG. The hand will not hold steady.',    hp: 0,   dmg: -3, spd: 0 },
+    { id: 'SHELL_SHOCK',  name: 'SHELL SHOCK',  desc: 'Loses the first turn of every fight.',      hp: 0,   dmg: 0,  spd: 0 },
+    { id: 'SLOW_TO_RISE', name: 'SLOW TO RISE', desc: 'Bleeds out in 2 turns instead of 3.',       hp: 0,   dmg: 0,  spd: 0 }
+];
+function scarById(id) { return SCAR_POOL.find(s => s.id === id) || null; }
+function hasScar(ent, id) { return !!(ent && Array.isArray(ent.scars) && ent.scars.indexOf(id) !== -1); }
+function scarsOf(ch) { return ((ch && ch.scars) || []).map(scarById).filter(Boolean); }
+
+// Scars move the stats themselves rather than being read at every damage site, exactly as
+// quirks do - so treating one has to give back precisely what it took. Neither of these
+// clamps anything, which is what keeps the pair exact; the floor is enforced before a scar is
+// ever dealt instead.
+function applyScarStats(ch, s) {
+    if (!ch || !s) return;
+    ch.maxHp += s.hp; ch.dmgBase += s.dmg; ch.speed += s.spd;
+    ch.hp = Math.min(ch.hp, ch.maxHp);
+}
+function removeScarStats(ch, s) {
+    if (!ch || !s) return;
+    ch.maxHp -= s.hp; ch.dmgBase -= s.dmg; ch.speed -= s.spd;
+}
+// A wound the body could not fight through is not dealt in the first place.
+function scarFits(ch, s) {
+    return (ch.maxHp + s.hp) >= 20 && (ch.dmgBase + s.dmg) >= 5 && (ch.speed + s.spd) >= 3;
+}
+// Never the same scar twice on the same operator: three of these is a career, six would be a
+// spreadsheet.
+function giveScar(ch, rng = Math.random) {
+    if (!ch) return null;
+    if (!Array.isArray(ch.scars)) ch.scars = [];
+    if (ch.scars.length >= SCAR_MAX) return null;
+    const pool = SCAR_POOL.filter(s => !hasScar(ch, s.id) && scarFits(ch, s));
+    if (!pool.length) return null;
+    const s = pool[Math.floor(rng() * pool.length)];
+    ch.scars.push(s.id);
+    applyScarStats(ch, s);
+    return s;
+}
+// At most one roll per operator per fight, which the caller gets for free: recoverDowned runs
+// once at each ending and each operator appears in its list once. SCAR_MAX is the only other
+// ceiling there needs to be - a third scar is already a career's worth on one body.
+function markScars(ids, rng = Math.random) {
+    const took = [];
+    (ids || []).forEach(id => {
+        const ch = playerRoster.find(c => c.id === id);
+        if (!ch || rng() >= SCAR_CHANCE) return;
+        const s = giveScar(ch, rng);
+        if (!s) return;
+        took.push(`${ch.name} - ${s.name}`);
+    });
+    if (took.length) log(`> It leaves a mark: ${took.join(', ')}.`, 'log-dmg');
+    return took;
+}
+function healScar(charId, scarId) {
+    const ch = playerRoster.find(c => c.id === charId);
+    const s = scarById(scarId);
+    if (!ch || !s || !hasScar(ch, scarId) || scrap < SCAR_TREAT_COST) return false;
+    scrap -= SCAR_TREAT_COST;
+    ch.scars = ch.scars.filter(id => id !== scarId);
+    removeScarStats(ch, s);
+    // The capacity comes back and the blood with it - otherwise treating cracked ribs leaves
+    // them ten short of a full bar and looks like it did nothing.
+    if (s.hp < 0) ch.hp = Math.min(ch.maxHp, ch.hp - s.hp);
+    activeScarSelector = null;
+    playSFX('heal');
+    saveGameState(); renderOutpost();
+    showOutpostNotice(`${ch.name} is treated. The ${s.name.toLowerCase()} is gone.`);
+    return true;
+}
 
 // ── Gear ─────────────────────────────────────────────────────────────────────────────────
 // Two slots per operator: a weapon mod and a trinket. The rule that makes the system matter:
@@ -1480,6 +1588,14 @@ const CODEX = [
         `Skulls taken from commanders build the Citadel, and it has ${CITADEL_SPOTS.length} places to spend them - two of which need something else standing first.`,
         'Depth is worth far more than any single haul: pushing one sector deeper always beats farming the one you are on.'
     ] },
+    { id: 'SCARS', title: 'GOING DOWN', body: () => [
+        `Nobody on this roster dies at zero health. They go down, and a clock starts: ${BLEED_OUT} of their own turns, counted down over their head, and at the end of it they are gone from the expedition for good.`,
+        `Stopping the clock is a heal - Cauterize, a Stim Dart, a Med-Stim, anything that lifts them above zero. Those are the only moves that reach somebody on the floor.`,
+        `Ending the fight also stops it, however it ended: won, withdrawn from, fallen back out of, or lost outright. Whoever was still down is dragged clear at ${Math.round(DRAGGED_CLEAR * 100)}% health.`,
+        'And dragged clear is not unhurt. An operator the fight ended on top of may carry a scar out of it, and it follows them through every node left in the expedition. Picking them up before the end - any heal, any turn spent on it - is what prevents it. Scars are never rolled at the muster; they are only ever earned.',
+        ...SCAR_POOL.map(sc => `${sc.name} \u2014 ${sc.desc}`),
+        `At most ${SCAR_MAX} to a body and never the same one twice. The Outpost treats them one at a time for ${SCAR_TREAT_COST} Scrap, which is the only way one comes off.`
+    ] },
     { id: 'PROMOTIONS', title: 'FIELD PROMOTIONS', body: () => [
         'A level-up offers three perks on the spot: class signatures that change what an ability does, and repeatable training for flat stats. Banking the point keeps it for the Outpost instead.',
         ...SIG_PERKS.map(p => `${p.name} (${p.cls}) — ${p.desc}`)
@@ -2104,7 +2220,9 @@ const ACTIONS = {
     'assign-perk':      el => assignPerk(el.dataset.id, el.dataset.perk),
     'pos-menu':         el => { activePosSelector = el.dataset.id; activePerkSelector = null; renderOutpost(); },
     'perk-menu':        el => { activePerkSelector = el.dataset.id; activePosSelector = null; renderOutpost(); },
-    'selector-cancel':  () => { activePosSelector = null; activePerkSelector = null; activeGearSelector = null; renderOutpost(); },
+    'scar-menu':        el => { activeScarSelector = el.dataset.id; activePosSelector = null; activePerkSelector = null; activeGearSelector = null; renderOutpost(); },
+    'treat-scar':       el => healScar(el.dataset.id, el.dataset.scar),
+    'selector-cancel':  () => { activePosSelector = null; activePerkSelector = null; activeGearSelector = null; activeScarSelector = null; renderOutpost(); },
 
     'event-choice':     el => resolveEvent(Number(el.dataset.index)),
     'consequence-ack':  () => resolveConsequence(),
@@ -2758,8 +2876,10 @@ function bleedingOut() { return activeEntities.filter(e => isDown(e) && (e.downT
 
 function goDown(ent) {
     if (!ent || !ent.isPlayer || ent.fallen || (ent.downTurns || 0) > 0) return;
-    ent.downTurns = BLEED_OUT;
-    log(`> ${ent.name} is down and bleeding out - ${BLEED_OUT} turns.`, 'log-dmg');
+    // SLOW TO RISE: they have done this before and the body is slower about it each time.
+    const turns = hasScar(ent, 'SLOW_TO_RISE') ? BLEED_OUT - 1 : BLEED_OUT;
+    ent.downTurns = turns;
+    log(`> ${ent.name} is down and bleeding out - ${turns} turns.`, 'log-dmg');
 }
 
 // Their turn comes round and they spend it dying.
@@ -2834,7 +2954,12 @@ function recoverDowned(how) {
     const saved = bleedingOut();
     saved.forEach(e => { e.hp = Math.max(1, Math.floor(e.maxHp * DRAGGED_CLEAR)); e.downTurns = 0; });
     if (saved.length) log(`> ${saved.map(e => e.name).join(' and ')} dragged clear${how ? ' ' + how : ''}.`, 'log-heal');
-    return saved.map(e => e.id);
+    const ids = saved.map(e => e.id);
+    // Everything that ends a fight funnels through here, which is what makes this the one place
+    // scars are dealt: won, lost, withdrawn from or fallen back out of, the rule is the same.
+    // Anybody picked up before the end is not in this list and so is never in the roll.
+    markScars(ids);
+    return ids;
 }
 
 function nextTurn() {
@@ -4224,6 +4349,13 @@ function operatorCardHtml(char) {
             ? `<div class="mastery-line" title="Dossier rank ${masteryRank(char.classType)} — ${masteryXp(char.classType).toLocaleString()} lifetime XP">★ ${MASTERY_TITLES[char.classType]} · RANK ${['0','I','II','III'][masteryRank(char.classType)]}</div>` : '';
         let bondLine = bondLineFor(char);
         let bondDisplay = bondLine ? `<div class="bond-line" title="Bonds deepen with every fight this pair survives together.">⚯ ${bondLine}</div>` : '';
+        const scarList = scarsOf(char);
+        let scarDisplay = scarList.length
+            ? `<div class="scar-line" title="${scarList.map(sc => sc.name + ': ' + sc.desc).join(' \u2014 ')}">✚ ${scarList.map(sc => sc.name).join(', ')}</div>` : '';
+        // Treatment is the only way a scar comes off, and it is priced as a real decision -
+        // four upgrades' worth of Scrap to undo what one bad node left behind.
+        let scarBtn = scarList.length
+            ? ` <button class="upg-btn scar-btn" ${scrap < SCAR_TREAT_COST || isDead ? 'disabled' : ''} data-action="scar-menu" data-id="${char.id}" title="Treat a scar - ${SCAR_TREAT_COST} Scrap each.">TREAT (${SCAR_TREAT_COST})</button>` : '';
 
         const modG = gearById(char.weaponMod), trkG = gearById(char.trinket);
         let gearHtml = '';
@@ -4245,9 +4377,10 @@ function operatorCardHtml(char) {
 
         if (activePosSelector === char.id) { btnGroupHtml = `<button class="upg-btn sub-menu-btn pos-btn-1" data-action="assign-slot" data-id="${char.id}" data-slot="1">[1] FRONT</button> <button class="upg-btn sub-menu-btn pos-btn-2" data-action="assign-slot" data-id="${char.id}" data-slot="2">[2] MID</button> <button class="upg-btn sub-menu-btn pos-btn-3" data-action="assign-slot" data-id="${char.id}" data-slot="3">[3] BACK</button> <button class="upg-btn sub-menu-btn pos-btn-0" data-action="assign-slot" data-id="${char.id}" data-slot="0">[X] BENCH</button> <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
         else if (activePerkSelector === char.id) { btnGroupHtml = PERK_POOL.map(p => `<button class="upg-btn sub-menu-btn perk-btn" data-action="assign-perk" data-id="${char.id}" data-perk="${p.id}">${p.label}</button>`).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
-        else { btnGroupHtml = `<button class="upg-btn ${posClass}" data-action="pos-menu" data-id="${char.id}">${posText}</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="HP" data-cost="${cost}">+10 HP</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="DMG" data-cost="${cost}">+3 DMG</button> ${medHtml}`; }
+        else if (activeScarSelector === char.id) { btnGroupHtml = scarList.map(sc => `<button class="upg-btn sub-menu-btn scar-btn" ${scrap < SCAR_TREAT_COST ? 'disabled' : ''} data-action="treat-scar" data-id="${char.id}" data-scar="${sc.id}" title="${sc.desc}">TREAT ${sc.name}</button>`).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
+        else { btnGroupHtml = `<button class="upg-btn ${posClass}" data-action="pos-menu" data-id="${char.id}">${posText}</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="HP" data-cost="${cost}">+10 HP</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="DMG" data-cost="${cost}">+3 DMG</button> ${medHtml}${scarBtn}`; }
 
-        return `<div class="upgrade-card" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay}${masteryDisplay}${traitsDisplay}${bondDisplay} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> <div class="upgrade-btn-group">${btnGroupHtml}</div> <div class="upgrade-btn-group gear-row">${gearHtml}</div> </div>`;
+        return `<div class="upgrade-card" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay}${masteryDisplay}${traitsDisplay}${scarDisplay}${bondDisplay} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> <div class="upgrade-btn-group">${btnGroupHtml}</div> <div class="upgrade-btn-group gear-row">${gearHtml}</div> </div>`;
 }
 
 function renderOutpost() {
@@ -4436,6 +4569,9 @@ function migrateTraits(roster) {
     roster.forEach(c => {
         if (!Array.isArray(c.traits)) c.traits = c.trait ? [c.trait] : [];
         delete c.trait;
+        // Scars are earned and never rolled, so a save written before they existed has none;
+        // anything in the list whose id has since gone is dropped rather than left inert.
+        c.scars = Array.isArray(c.scars) ? c.scars.filter(id => scarById(id)) : [];
     });
     return roster;
 }
@@ -5890,6 +6026,11 @@ function initiateCombat(nodeType, isEliteNode) {
     // be cleared here or it rides into the next node.
     playerRoster.forEach(ent => { ent.stunnedTurns = 0; ent.bleedingTurns = 0; ent.armorTurns = 0; ent.armor = 0;
         ent.oiledTurns = 0; ent.corrodedTurns = 0; ent.markedTurns = 0; ent.guardTurns = 0; });
+    // SHELL SHOCK: the fight starts without them. Set after the clear above, so it survives it.
+    deployedRoster.filter(p => p.hp > 0 && hasScar(p, 'SHELL_SHOCK')).forEach(p => {
+        p.stunnedTurns = 1;
+        log(`> ${p.name} is somewhere else. Shell shock costs them the opening.`, 'log-dmg');
+    });
     momentumFocus = 0; pressExtra = false; pendingOverdrive = null;
     fightLog = newFightLog(); fightLog.chased = chasedIn; chasedIn = false;
     playerRoster.forEach(ent => { ent.secondWindUsed = false; ent.deadRendered = ent.hp <= 0; });
@@ -7704,6 +7845,8 @@ globalThis.WP = {
     EXTRACT, extractBonus, extractSkulls, canExtract, extractRun, extractPitch, armExtract, renderCamp,
     bossRetinueUp, GRUDGE, RISEN_MARK, grudgeOn, noteGrudge, risenName, risenShort, openGrudgePhase,
     BLEED_OUT, DRAGGED_CLEAR, REACHES_THE_DOWN, isDown, bleedingOut, goDown, tickBleedOut,
+    SCAR_POOL, SCAR_CHANCE, SCAR_MAX, SCAR_TREAT_COST, scarById, hasScar, scarsOf, scarFits,
+    applyScarStats, removeScarStats, giveScar, markScars, healScar,
     loseOperator, recoverDowned, closeRanks,
     RECRUIT_POOL, RECRUIT_COST, RECRUIT_HEALTH, recruitCost, recruitables, recruitById, recruitReach,
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
@@ -7787,6 +7930,7 @@ globalThis.WP = {
     get gearStash() { return gearStash; }, set gearStash(v) { gearStash = v; },
     get pendingPerkOffers() { return pendingPerkOffers; }, set pendingPerkOffers(v) { pendingPerkOffers = v; },
     get activeGearSelector() { return activeGearSelector; }, set activeGearSelector(v) { activeGearSelector = v; },
+    get activeScarSelector() { return activeScarSelector; }, set activeScarSelector(v) { activeScarSelector = v; },
     get activeEvent() { return activeEvent; }, set activeEvent(v) { activeEvent = v; },
     get pendingConsequences() { return pendingConsequences; }, set pendingConsequences(v) { pendingConsequences = v; },
     get recentEvents() { return recentEvents; }, set recentEvents(v) { recentEvents = v; },
