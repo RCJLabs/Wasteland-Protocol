@@ -43,7 +43,7 @@ commander should read as roughly twice the bulk of a regular raider.
 > unhurried - the posture of someone who expects other people to do the fighting. Accent
 > colour: cold steel blue.
 
-### `enemy_boss_ossuary.webp` — The Ossuary *(outstanding)*
+### `enemy_boss_ossuary.webp` — The Ossuary
 *The last warlord. Sector 7 is the end of the road and this is what is standing on it.*
 
 It is not one of the seven that hold the road - it is what they answer to, and it has been
@@ -61,12 +61,14 @@ Scale 2.5, the largest thing in the game.
 
 ---
 
-### `bg_ossuary.webp` — the last arena *(outstanding, optional)*
-*The final fight currently reuses `bg_thunderdome.webp`, which works. This would be better.*
+### `bg_ossuary.webp` — the last arena
+*Drawn at 768x1346 and trimmed to 768x1000 before it went in.*
 
-Follow the grounds brief further down this file, not the portrait brief - it is a backdrop.
-If it lands, it also needs a `GROUND_LIFT` entry in `game.js` calibrated the way the others
-were, or the squad stands on blackness.
+The plate came back with a shadowed lip across the bottom 38% of its height. Left whole it
+measured a 38vh ground line, which stood the squad a third of the way up the screen with the
+foreground empty under them - correct footing, wasted frame. Cropping the bottom 346px brings
+the band to 22%, the same depth `bg_carrionfield` carries, and the lit arena floor reaches the
+edge of the frame. Ground line: 20vh.
 
 > A vast open bowl of cracked earth ringed by a wall built entirely of stacked skulls and
 > scavenged armour plate, iron standards driven into the ground at intervals, a low bone-white

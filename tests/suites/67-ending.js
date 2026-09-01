@@ -325,17 +325,36 @@ module.exports = {
                named: txt.includes(FINAL_BOSS.name),
                ossuary: /raise|gets up|get up/i.test(txt),
                choice: /press on|walk out/i.test(txt),
-               // Art commissioned but not drawn must be kept off the preloader and covered.
-               pending: PENDING_ART.includes(FINAL_BOSS.img),
-               listed: ASSET_LIST.includes(FINAL_BOSS.img),
-               stands: !!FINAL_BOSS.stand && !PENDING_ART.includes(FINAL_BOSS.stand),
-               bgReal: !PENDING_ART.includes(FINAL_BOSS.bg) && ASSET_LIST.includes(FINAL_BOSS.bg) };
+               // The art landed. Declared, not outstanding, and no longer leaning on a stand-in.
+               drawn: ASSET_LIST.includes(FINAL_BOSS.img) && !PENDING_ART.includes(FINAL_BOSS.img),
+               noStand: !FINAL_BOSS.stand,
+               bgDrawn: ASSET_LIST.includes(FINAL_BOSS.bg) && !PENDING_ART.includes(FINAL_BOSS.bg),
+               // Its arena is painted with a foreground lip, so it has to name a ground line or
+               // the squad fights standing in the shadow - the B05 bug, on the one fight that
+               // most needs to look right.
+               lift: GROUND_LIFT[FINAL_BOSS.bg] || null };
     });
     ok('the manual has an entry for the end of the road', manual.has);
     ok('and names the sector and the warlord', manual.sector && manual.named);
     ok('and says what the ossuary does', manual.ossuary);
     ok('and that winning does not force you home', manual.choice);
-    ok('its portrait is commissioned, listed, and stood in for', manual.pending && manual.listed && manual.stands);
-    ok('and its backdrop is one that exists, so the squad is not fighting on black', manual.bgReal);
+    ok('its portrait is drawn and declared, with no stand-in left behind', manual.drawn && manual.noStand);
+    ok('and its arena is its own', manual.bgDrawn);
+    ok(`which names a ground line for its painted foreground (${manual.lift})`, !!manual.lift);
+
+    // Declared is not drawn. The one contract that catches a filename pointing at nothing is
+    // the browser fetching it, so the last fight is staged and both pieces are read off the DOM.
+    const onField = await page.evaluate(async () => {
+      __last();
+      await new Promise(r => setTimeout(r, 400));
+      const boss = [...document.querySelectorAll('#enemy-team .portrait')].pop();
+      const sky = getComputedStyle(document.getElementById('combat-sky-layer')).backgroundImage;
+      return { src: boss && boss.getAttribute('src'), loaded: !!boss && boss.complete && boss.naturalWidth > 0,
+               sky, bg: FINAL_BOSS.bg, margin: document.querySelector('.battlefield').style.marginBottom };
+    });
+    ok(`the last warlord renders as itself (${onField.src})`,
+      onField.loaded && onField.src === 'enemy_boss_ossuary.webp');
+    ok(`on its own arena (${onField.bg})`, onField.sky.includes(onField.bg));
+    ok(`with the line stood on the ground (${onField.margin})`, onField.margin === manual.lift);
   }
 };

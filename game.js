@@ -6,13 +6,14 @@
 // Art that is commissioned but not yet drawn. Anything listed here is kept out of the
 // preloader and the service worker cache so neither chases a file that does not exist, and
 // the portrait fallback covers it on the field. Empty is the healthy state.
-const PENDING_ART = ['enemy_boss_ossuary.webp'];
+const PENDING_ART = [];
 const ASSET_LIST = [
     "bg_title.webp", "bg_combat.webp", "bg_thunderdome.webp", "bg_refinery.webp", "bg_highway.webp", "bg_canyon.webp", "bg_foundry.webp", "bg_nest.webp",
     "hero_bruiser.webp", "hero_medic.webp", "hero_scavenger.webp", "hero_pyro.webp", "hero_shotgunner.webp", "hero_sniper.webp", "hero_hound.webp",
     "hero_fiend.webp", "hero_hazmat.webp", "hero_harpooner.webp",
     "enemy_dog.webp", "enemy_hound_bulldog.webp", "enemy_mutant.webp", "enemy_chem.webp", "enemy_raider.webp", "enemy_psycho.webp", "enemy_sniper.webp", "enemy_juggernaut.webp", "enemy_drone.webp", "enemy_turret.webp", "enemy_warrig.webp", "enemy_boss.webp", "enemy_boss_mech.webp", "enemy_boss_vulture.webp",
     "enemy_boss_vatborn.webp", "enemy_boss_marshal.webp", "enemy_boss_stormcaller.webp", "enemy_boss_bastion.webp", "enemy_boss_ossuary.webp",
+    "bg_ossuary.webp",
     "enemy_choir_acolyte.webp", "enemy_choir_censer.webp", "enemy_choir_reliquary.webp", "enemy_choir_hierophant.webp",
     "enemy_carrion_rat.webp", "enemy_carrion_moth.webp", "enemy_carrion_worm.webp", "enemy_carrion_brood.webp",
     "bg_congregation.webp", "bg_carrionfield.webp"
@@ -735,12 +736,12 @@ const BOSS_POOL = [
     // the reflex every fight before this one taught, into the way you lose.
     {
         id: 'OSSUARY', final: true, threat: 4, name: 'The Ossuary', short: 'OSSUARY',
-        img: 'enemy_boss_ossuary.webp', stand: 'enemy_boss_bastion.webp', scale: 2.5,
+        img: 'enemy_boss_ossuary.webp', scale: 2.5,
         range: 'melee', hpMult: 1.5, dmgMult: 0.95, speed: 8, armor: 20,
         resistances: { phys: 12, bio: 15, energy: 8 },
         passive: 'TALLY',
         blurb: 'It has been collecting warlords for longer than you have. What it counts, it eventually spends.',
-        bg: 'bg_thunderdome.webp',
+        bg: 'bg_ossuary.webp',
         banner: '\u{1F480} THE ROAD ENDS HERE: All units deal +20% DMG \u{1F480}',
         intents: [['ATTACK', 0.30], ['HEAVY', 0.25], ['AOE', 0.25], ['STATUS', 0.10], ['DEFEND', 0.10]],
         // Every one of its own that falls is written down.
@@ -5940,7 +5941,8 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
 // failure is invisible in tests and obvious on a phone: the squad stands on nothing.
 const GROUND_LIFT = {
     'bg_nest.webp': '21vh', 'bg_foundry.webp': '25vh',
-    'bg_carrionfield.webp': '20vh', 'bg_congregation.webp': '26vh'
+    'bg_carrionfield.webp': '20vh', 'bg_congregation.webp': '26vh',
+    'bg_ossuary.webp': '20vh'
 };
 const DEFAULT_LIFT = '12vh';
 

@@ -271,14 +271,25 @@ module.exports = {
           const cx = c.getContext('2d', { willReadFrequently: true });
           cx.drawImage(img, 0, 0, w, h);
           const d = cx.getImageData(0, 0, w, h).data;
+          const luma = y => { let sum = 0;
+            for (let x = 0; x < w; x++) { const i = (y * w + x) * 4;
+              sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; }
+            return sum / w; };
+          // This used to stop at an absolute luma of 14 - "essentially black". bg_ossuary broke
+          // it: its foreground lip is dark BROWN, sitting around 25, so the scan read a band of
+          // 8% where the eye and the layout both see 38%. Shipped on that number the squad would
+          // have stood inside the shadow, which is the exact bug this block exists to catch.
+          // A foreground band is dark relative to the lit ground above it, not dark in absolute
+          // terms, so the reference is the middle of the plate. Checked against all four
+          // hand-tuned entries: 22/26/25/22 against the 20/26/25/21 that were eyeballed, and
+          // every flat backdrop still measures zero.
+          const mid = [];
+          for (let y = Math.floor(h * 0.375); y < Math.floor(h * 0.625); y++) mid.push(luma(y));
+          mid.sort((a, b) => a - b);
+          const ref = mid[Math.floor(mid.length / 2)];
           let dead = 0;
           for (let y = h - 1; y >= 0; y--) {
-            let sum = 0;
-            for (let x = 0; x < w; x++) {
-              const i = (y * w + x) * 4;
-              sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
-            }
-            if (sum / w > 14) break;
+            if (luma(y) > ref * 0.40) break;
             dead++;
           }
           resolve(dead / h);
