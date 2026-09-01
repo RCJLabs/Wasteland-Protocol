@@ -14,10 +14,20 @@ module.exports = {
                described: cursed.every(r => r.name && r.desc && /but/i.test(r.desc)),
                ids: new Set(cursed.map(r => r.id)).size,
                sets: RELIC_SETS.length,
-               setsReal: RELIC_SETS.every(s => RELIC_POOL.some(r => r.id === s.a) && RELIC_POOL.some(r => r.id === s.b)) };
+               setsReal: RELIC_SETS.every(s => RELIC_POOL.some(r => r.id === s.a) && RELIC_POOL.some(r => r.id === s.b)),
+               // C08: a curse can be built toward rather than only traded for. 74-sets owns
+               // the board itself; what belongs here is that this shelf is wired into it.
+               cursedSets: RELIC_SETS.filter(setIsCursed).map(s => s.name),
+               cursedHalves: [...new Set(RELIC_SETS.filter(setIsCursed)
+                 .flatMap(s => [s.a, s.b])
+                 .filter(id => (RELIC_POOL.find(r => r.id === id) || {}).tier === 'CURSED'))] };
     });
     ok(`six curses on the shelf, each naming its teeth`, shelf.count === 6 && shelf.described && shelf.ids === 6);
-    ok('three sets, both halves real relics', shelf.sets === 3 && shelf.setsReal);
+    ok(`${shelf.sets} sets, both halves real relics`, shelf.sets >= 3 && shelf.setsReal);
+    ok(`and ${shelf.cursedSets.length} of them want something off this shelf (${shelf.cursedSets.join(', ')})`,
+      shelf.cursedSets.length >= 2);
+    ok(`so a curse is a build rather than a trade taken once (${shelf.cursedHalves.join(', ')})`,
+      shelf.cursedHalves.length >= 2);
 
     // ---- never dealt at random ----
     const dealt = await page.evaluate(() => {

@@ -903,15 +903,53 @@ const RELIC_POOL = [
     { id: 'OVERCLOCKED_REACTOR',tier: 'CURSED', name: "Overclocked Reactor",desc: "Overdrive threshold -20 — but each overdrive vents 10 HP through your front rank." }
 ];
 
-// Three pairs upgrade each other when both halves ride together.
+// ── Relic sets ──────────────────────────────────────────────────────────────────────────
+// Three pairs, all of them two clean relics. A07 made curses a real bargain - a big upside you
+// pay for rather than a worse card - but nothing on the board rewarded COMMITTING to one, so a
+// curse could only ever be a single trade taken on its own merits. A build was something only
+// clean relics could have.
+//
+// Nine now, and three of them want a cursed half. Those three do not stack another multiplier
+// on top of the curse: they pay back its cost. The knife feeds twice as hard for a squad that
+// gave up shooting, the coat weighs a third as much for a line that was already slow, and the
+// collector halves his price for a run carrying both of his debts. That is the difference
+// between a curse you took and a curse you built toward.
 const RELIC_SETS = [
     { a: 'THERMAL_CORE', b: 'OVERCHARGED_CELL', name: 'Reactor Rig',   desc: 'Thermal Core burns at +50%.' },
     { a: 'WHETSTONE',    b: 'RANGEFINDER',      name: 'Full Arsenal',  desc: 'Whetstone +30%, Rangefinder +25%.' },
-    { a: 'BLOOD_VIAL',   b: 'FIELD_DRESSING',   name: 'Field Surgery', desc: 'Blood Vial heals 10, and squad bleeds never last past 1 turn.' }
+    { a: 'BLOOD_VIAL',   b: 'FIELD_DRESSING',   name: 'Field Surgery', desc: 'Blood Vial heals 10, and squad bleeds never last past 1 turn.' },
+
+    { a: 'KINETIC_MESH', b: 'BULWARK_PLATING',  name: 'Hard Cover',    desc: 'The mesh reaches the middle rank as well as the front.' },
+    { a: 'SCRAP_MAGNET', b: 'SALVAGE_RIG',      name: 'Quartermaster', desc: 'The magnet pays 30 a fight, and salvage comes in pairs.' },
+    { a: 'AMMO_HOIST',   b: 'OVERCHARGED_CELL', name: 'Deep Magazine', desc: 'Cooldowns come off three turns at a time instead of two.' },
+
+    // The three that want a curse. Each one repays the price its cursed half charges.
+    { a: 'HUNGRY_BLADE', b: 'WHETSTONE',        name: 'The Long Knife',
+      desc: 'A squad that gave up shooting is fed for it: the blade returns 12 instead of 6.' },
+    { a: 'LEAD_LINED_COAT', b: 'BULWARK_PLATING', name: 'Deadweight',
+      desc: 'A line that was already slow carries the coat better: it costs 1 SPD instead of 3.' },
+    { a: 'SCAVENGERS_DEBT', b: 'VULTURE_ROYALTY', name: "The Collector's Terms",
+      desc: 'Carrying both his debts is worth a rate: the warlord price falls from 500 to 200.' }
 ];
 function relicSetActive(name) {
     const s = RELIC_SETS.find(x => x.name === name);
     return !!s && hasRelic(s.a) && hasRelic(s.b);
+}
+// Whether a set asks for something cursed. Read off the pool rather than marked on the set, so
+// a relic that changes tier cannot leave a set claiming to be something it is not.
+// What each set is actually worth, named rather than spelled out at the call site. A figure
+// written inline can only be checked by writing it a second time in a test, and two copies of
+// a rule agree right up until one of them changes.
+function bladeBite() { return relicSetActive('The Long Knife') ? 12 : 6; }
+function collectorPrice() { return relicSetActive("The Collector's Terms") ? 200 : 500; }
+function magnetPay() { return relicSetActive('Quartermaster') ? 30 : 15; }
+function salvageBonus() { return relicSetActive('Quartermaster') ? 2 : 1; }
+function coatDrag() { return relicSetActive('Deadweight') ? 1 : 3; }
+function meshRanks() { return relicSetActive('Hard Cover') ? 2 : 1; }
+function cooldownStep() { return hasRelic('AMMO_HOIST') ? (relicSetActive('Deep Magazine') ? 3 : 2) : 1; }
+function setIsCursed(s) {
+    const tier = id => (RELIC_POOL.find(r => r.id === id) || {}).tier;
+    return tier(s.a) === 'CURSED' || tier(s.b) === 'CURSED';
 }
 // Called wherever a relic is gained: a completed pair announces itself exactly once per run.
 function announceSets() {
@@ -2031,8 +2069,10 @@ const CODEX = [
         'A cursed card takes the RARE\'s place in a commander\'s cache, never a common one. A bargain offered beside a free rare is not a bargain, it is a worse card - so the question is a big upside you pay for against two ordinary bonuses.',
         'The camp is the other door, and it only opens when the squad is in no state to keep going: two of the line under ' + Math.round(CACHE.hurtAt * 100) + '% health, nothing left to fall back on, or the bench gone. Taking it costs the camp - no triage, no tune-up, no forage - which is the price on top of the curse, paid when the heal is worth most.',
         ...RELIC_POOL.filter(r => r.tier === 'CURSED').map(r => `${r.name} — ${r.desc}`),
-        'Three pairs upgrade each other when both halves ride together:',
-        ...RELIC_SETS.map(s => `${s.name} (${RELIC_POOL.find(r => r.id === s.a).name} + ${RELIC_POOL.find(r => r.id === s.b).name}) — ${s.desc}`)
+        `${RELIC_SETS.filter(s => !setIsCursed(s)).length} pairs upgrade each other when both halves ride together:`,
+        ...RELIC_SETS.filter(s => !setIsCursed(s)).map(s => `${s.name} (${RELIC_POOL.find(r => r.id === s.a).name} + ${RELIC_POOL.find(r => r.id === s.b).name}) \u2014 ${s.desc}`),
+        `And ${RELIC_SETS.filter(setIsCursed).length} of them want a cursed half. These do not stack another multiplier on top of the curse - they pay back what it charges, so committing to one is a build rather than a trade taken once:`,
+        ...RELIC_SETS.filter(setIsCursed).map(s => `${s.name} (${RELIC_POOL.find(r => r.id === s.a).name} + ${RELIC_POOL.find(r => r.id === s.b).name}) \u2014 ${s.desc}`)
     ] },
     { id: 'PROTOCOL', title: 'THE DAILY PROTOCOL', body: () => [
         'A seed typed on the contract board fixes everything the wasteland generates: the maps, the fronts, the quirk draws, the opening bounty slate. The fighting stays live, and rerolls are yours.',
@@ -6995,7 +7035,7 @@ function initiateCombat(nodeType, isEliteNode) {
     if (openForm) firePrompt('FORMATION');
     if (activeEntities.some(e => !e.isPlayer && sigOf(e))) firePrompt('SIGNATURE');
     // The Lead-Lined Coat weighs on the turn order without touching the sheet.
-    const queueSpeed = e => e.speed - (e.isPlayer && hasRelic('LEAD_LINED_COAT') ? 3 : 0);
+    const queueSpeed = e => e.speed - (e.isPlayer && hasRelic('LEAD_LINED_COAT') ? coatDrag() : 0);
     turnQueue = [...activeEntities].sort((a, b) => queueSpeed(b) - queueSpeed(a));
     activeIndex = 0;
     // Second Watch hands the opening turn to whichever enemy is fastest, however quick the squad is.
@@ -7344,7 +7384,7 @@ function applyTurnStartEffects(ent) {
     let chg = false;
     const wasAlive = ent.hp > 0;
     if (ent.isPlayer && ent.cooldowns) {
-        const step = hasRelic('AMMO_HOIST') ? 2 : 1;
+        const step = cooldownStep();
         for (let s in ent.cooldowns) { if (ent.cooldowns[s] > 0) { ent.cooldowns[s] = Math.max(0, ent.cooldowns[s] - step); chg = true; } }
     }
     
@@ -7966,8 +8006,9 @@ function resolveAction(targetId) {
             spawnFCT(actEnt.id, `+${fed}`, "fct-heal");
         }
         if (hasRelic('HUNGRY_BLADE') && isMelee(pendingAction) && actEnt.isPlayer && actEnt.hp < actEnt.maxHp) {
-            actEnt.hp = Math.min(actEnt.maxHp, actEnt.hp + 6);
-            spawnFCT(actEnt.id, "+6", "fct-heal");
+            const bite = bladeBite();
+            actEnt.hp = Math.min(actEnt.maxHp, actEnt.hp + bite);
+            spawnFCT(actEnt.id, `+${bite}`, "fct-heal");
         }
 
         if (pendingAction === 'FLARE_GUN') {
@@ -8079,7 +8120,7 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     let ac = (abilityStr === 'FERAL_BITE' || (t.corrodedTurns || 0) > 0) ? 0 : t.armor + (w.armor || 0);
     if (t.oiledTurns > 0 && atkType === 'energy') rv -= 15;
     let cd = calcDmg;
-    if (hasRelic('KINETIC_MESH') && t.isPlayer && t.gridPos === 1 && atkType === 'phys') cd = Math.floor(cd * 0.75);
+    if (hasRelic('KINETIC_MESH') && t.isPlayer && t.gridPos <= meshRanks() && atkType === 'phys') cd = Math.floor(cd * 0.75);
     if (hasRelic('LEAD_LINED_COAT') && t.isPlayer) cd = Math.floor(cd * 0.8);
     // NO HANDS: a line with nothing that swings has to be able to survive what walks into it.
     // Melee only - the doctrine is about giving up reach, not about being harder to shoot.
@@ -8803,7 +8844,7 @@ function checkWinState() {
             }
             // Scavenger's Debt comes due wherever a warlord falls.
             if (hasRelic('SCAVENGERS_DEBT')) {
-                const taken = Math.min(scrap, 500);
+                const taken = Math.min(scrap, collectorPrice());
                 scrap -= taken;
                 log(`> The collector's men are already here. They take ${taken} Scrap.`, "log-dmg");
             }
@@ -8863,7 +8904,7 @@ function checkWinState() {
         if (sectorFront === 'RAIDER_WARBAND' && currentNodeType === 'RAIDERS') s *= 2;
         if (sectorFront === 'QUIET_ROADS' && currentNodeType === 'BOSS') s *= 2;
         if (hasRelic('VULTURE_ROYALTY')) s = Math.floor(s * 0.75);
-        if (hasRelic('SCRAP_MAGNET')) s += 15;
+        if (hasRelic('SCRAP_MAGNET')) s += magnetPay();
         if (hasRelic('SCAVENGERS_DEBT')) s += 40;
         
         // Deployed survivors earn full XP; the bench trains at half rate so reserves stay
@@ -8874,7 +8915,7 @@ function checkWinState() {
             else if (char.gridPos === 0) awardXp(char, Math.floor(base * RESERVE_XP_RATE));
         });
 
-        let matDrops = (1 + Math.floor(Math.random() * 2)) * scrapMult + (hasRelic('SALVAGE_RIG') ? 1 : 0);
+        let matDrops = (1 + Math.floor(Math.random() * 2)) * scrapMult + (hasRelic('SALVAGE_RIG') ? salvageBonus() : 0);
         for(let i=0; i<matDrops; i++) {
             let m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)];
             const paired = (sectorFront === 'MACHINE_UPRISING' && m === 'tech') || (sectorFront === 'IRRADIATED' && m === 'chems');
@@ -8925,7 +8966,8 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, announceSets, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
+    bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
