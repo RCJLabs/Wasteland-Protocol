@@ -62,6 +62,10 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .wx-smog { background: #7fbf5f; box-shadow: 0 0 6px #7fbf5f; }
 .wx-sand { background: #d8b25c; box-shadow: 0 0 6px #d8b25c; }
 .wx-shrap { background: #9fb6c9; box-shadow: 0 0 6px #9fb6c9; }
+.wx-ash { background: #b9b2a4; box-shadow: 0 0 6px #b9b2a4; }
+.wx-ion { background: #6fd8e8; box-shadow: 0 0 6px #6fd8e8; }
+.wx-haze { background: #c85a5a; box-shadow: 0 0 6px #c85a5a; }
+.wx-blood { background: #ff4444; box-shadow: 0 0 6px #ff4444; }
 
 .map-node { width: 75px; height: 75px; border-radius: 50%; background: #111; border: 2px solid #444; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: all 0.3s; font-family: monospace; color: #888; padding: 0; position: relative; }
 .node-lbl { font-size: 9px; margin-top: 4px; letter-spacing: 1px; font-weight: bold; text-align: center; }
@@ -197,6 +201,12 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .weather-sand { background: rgba(80, 50, 10, 0.8); color: #ffcc66; display: block !important; border-bottom: 1px solid #B8860B; }
 .weather-shrap { background: rgba(40, 40, 40, 0.8); color: #cccccc; display: block !important; border-bottom: 1px solid #888; }
 .weather-blood { background: rgba(80, 10, 10, 0.8); color: #ff4444; display: block !important; border-bottom: 1px solid #ff0000; }
+.weather-ash { background: rgba(48, 46, 42, 0.85); color: #ded7c8; display: block !important; border-bottom: 1px solid #b9b2a4; }
+.weather-ion { background: rgba(10, 44, 52, 0.85); color: #9ff0fb; display: block !important; border-bottom: 1px solid #6fd8e8; }
+.weather-haze { background: rgba(62, 16, 16, 0.85); color: #ff9d9d; display: block !important; border-bottom: 1px solid #c85a5a; }
+/* A faction's own sky over its own ground. It gets its own line under the two banners rather
+   than rewording either: both are still true, and the confluence is the third fact. */
+.confluence-banner { background: rgba(30, 24, 40, 0.9); color: #d9b8ff; border-bottom: 1px solid #7d5fa8; font-size: 10px; letter-spacing: 1px; padding: 3px 8px; text-align: center; }
 
 .intent-icon { position: absolute; top: -25px; font-size: 14px; background: #111; border: 1px solid #444; border-radius: 50%; width: 22px; height: 22px; display: flex; justify-content: center; align-items: center; z-index: 20; box-shadow: 0 2px 4px #000; }
 

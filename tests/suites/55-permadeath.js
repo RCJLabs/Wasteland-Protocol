@@ -127,9 +127,15 @@ module.exports = {
         const { squad, foe } = window.__fight(2);
         const [a] = squad;
         window.__drop(a);
+        // The share has to be measured against the health they had when they were dragged
+        // clear, not the health they have afterwards. recoverDowned sets hp from maxHp and
+        // THEN rolls scars, and CRACKED RIBS takes ten off the maximum - so a body that came
+        // round at 20 of 100 reads as 20 of 90, or 22%, and the reading is of the scar rather
+        // than of the rescue. About one run in sixty; it had been latent since scars shipped.
+        const wasMax = a.maxHp;
         finish(squad, foe);
         return { hp: a.hp, fallen: !!a.fallen, onRoster: playerRoster.some(c => c.id === a.id),
-                 share: a.hp / a.maxHp };
+                 share: a.hp / wasMax, scarred: (a.scars || []).length > 0 };
       };
       return {
         won: after((squad, foe) => { foe.hp = 0; checkWinState(); }),

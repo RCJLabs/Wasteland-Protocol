@@ -298,10 +298,13 @@ function cdFor(ent, id, base) {
     const mods = { COUNTERWEIGHT: 'heavy_wrench', PRESSURE_SYRINGE: 'cauterize',
                    SPOTTING_SCOPE: 'spotters_mark', WAR_HARNESS: 'rip_and_tear',
                    CHAIN_OILER: 'ripsaw', SWIVEL_MOUNT: 'drag_line' };
+    let cd = base;
     for (const [mod, key] of Object.entries(mods)) {
-        if (key === id && hasMod(ent, mod)) return Math.max(1, base - 1);
+        if (key === id && hasMod(ent, mod)) cd -= 1;
     }
-    return base;
+    // A charged sky cycles everything faster, the squad's and theirs alike.
+    cd -= (sky().cdCut || 0);
+    return Math.max(1, cd);
 }
 
 // A random piece the run has not already got everywhere; mods lean to classes in the roster.
@@ -1004,7 +1007,95 @@ const TOTAL_TIERS = 10;
 const MAP_COL_X = [18, 50, 82];   // percent across the viewport, up to three abreast
 const MAP_ROW_H = 96;             // px per tier row in the rendered graph
 const ELITE_TIERS = [5, 6, 7, 8, 9];
-const WEATHER_DOTS = { TOXIC_SMOG: 'wx-smog', SANDSTORM: 'wx-sand', SHRAPNEL_WINDS: 'wx-shrap' };
+// ── Weather ─────────────────────────────────────────────────────────────────────────────
+// Ground became a table at N12 and grew rules with real weight at A10; weather never did. It
+// was three rollable skies and a boss-only BLOODLUST, and it was spelled out in four separate
+// hand-kept lists - a dot map, a banner map, the contract's pool and the sky-flip passive's -
+// with the effects themselves written as `currentWeather === 'SANDSTORM'` at seven call sites.
+// Adding a sky meant finding all eleven places first, which is why nobody had.
+//
+// It is a table now, with the same field vocabulary the terrain table uses, read through sky()
+// exactly as terrain is read through ground(). The two compose at every site rather than one
+// of them being hardcoded beside the other.
+//
+//   ranged/aoe/all  damage multipliers, applied to both sides
+//   backline        how much easier the back rank is to find
+//   armor           flat plating on every unit, corrodible like any other
+//   cdCut           turns off every cooldown
+//   chip            bio damage at the start of a unit's turn, scaled by tier
+//   shrapnel        { chance, dmg } at the start of a unit's turn
+const WEATHER = {
+    CLEAR: { name: 'CLEAR', short: 'CLEAR', desc: 'Nothing overhead worth mentioning.' },
+    TOXIC_SMOG: { name: 'TOXIC SMOG', short: 'SMOG', dot: 'wx-smog', cls: 'weather-smog',
+        desc: 'Yellow air that settles in the low ground. Everything in it is being poisoned, including them.',
+        chip: 2,
+        banner: '\u26A0\uFE0F TOXIC SMOG: passive Bio DMG to active units \u26A0\uFE0F' },
+    SANDSTORM: { name: 'SANDSTORM', short: 'SAND', dot: 'wx-sand', cls: 'weather-sand',
+        desc: 'Grit at forty miles an hour. Nothing fired across the field arrives the way it left.',
+        ranged: 0.75,
+        banner: '\u26A0\uFE0F SANDSTORM: ranged attacks -25% \u26A0\uFE0F' },
+    SHRAPNEL_WINDS: { name: 'SHRAPNEL WINDS', short: 'SHRAP', dot: 'wx-shrap', cls: 'weather-shrap',
+        desc: 'The wind is carrying the last place it went through. Standing still is not safe either.',
+        shrapnel: { chance: 0.3, dmg: 5 },
+        banner: '\u26A0\uFE0F SHRAPNEL WINDS: 30% chance of random DMG at turn start \u26A0\uFE0F' },
+    // Three skies with rules of the ground's weight, each pulling a lever nothing else pulls:
+    // plating, cooldowns, and how easily the back rank is found.
+    ASHFALL: { name: 'ASHFALL', short: 'ASH', dot: 'wx-ash', cls: 'weather-ash',
+        desc: 'Grey snow off something that burned for a week. It cakes on armour and it smothers a blast.',
+        armor: 2, aoe: 0.7,
+        banner: '\u26A0\uFE0F ASHFALL: every unit +2 armour, area attacks -30% \u26A0\uFE0F' },
+    ION_STORM: { name: 'ION STORM', short: 'ION', dot: 'wx-ion', cls: 'weather-ion',
+        desc: 'The air is charged and everything in it cycles faster and lands softer.',
+        cdCut: 1, all: 0.85,
+        banner: '\u26A0\uFE0F ION STORM: cooldowns a turn shorter, all damage -15% \u26A0\uFE0F' },
+    BLOOD_HAZE: { name: 'BLOOD HAZE', short: 'HAZE', dot: 'wx-haze', cls: 'weather-haze',
+        desc: 'Red air thick enough to lose a squad in. Nobody can shoot, and nobody can find your back rank either.',
+        ranged: 0.6, backline: 0.3,
+        banner: '\u26A0\uFE0F BLOOD HAZE: ranged -40%, your back rank is hard to find \u26A0\uFE0F' },
+    BLOODLUST: { name: 'THUNDERDOME BLOODLUST', short: 'BLOOD', dot: 'wx-blood', cls: 'weather-blood',
+        desc: 'The arena wants a short fight and everything in it obliges.',
+        all: 1.2, arena: true,
+        banner: '\uD83D\uDC80 THUNDERDOME BLOODLUST: all units deal +20% DMG \uD83D\uDC80' }
+};
+// Everything a road can actually roll. BLOODLUST is the commander's arena and is never dealt.
+const WEATHER_IDS = Object.keys(WEATHER).filter(id => id !== 'CLEAR' && !WEATHER[id].arena);
+const WEATHER_DOTS = Object.fromEntries(Object.entries(WEATHER).map(([id, w]) => [id, w.dot || '']));
+
+// A faction\u2019s own sky standing over its own ground is the fight it was built to pick, and it
+// used to read exactly like the sky standing anywhere else. One rule per faction, each on a
+// different lever, so a confluence is a thing to recognise rather than a number to re-read.
+const CONFLUENCE = [
+    { sky: 'SHRAPNEL_WINDS', ground: 'OPEN_FLATS', faction: 'RAIDERS',
+      note: 'Nothing out here to get behind.',
+      mod: { shrapnel: { chance: 0.5, dmg: 5 } } },
+    { sky: 'SANDSTORM', ground: 'TUNNELS', faction: 'BEASTS',
+      note: 'The storm stays up top. Down here the air is still.',
+      mod: { ranged: 1 } },
+    { sky: 'TOXIC_SMOG', ground: 'RUINS', faction: 'MECH',
+      note: 'The gas pools exactly where the cover is.',
+      mod: { noCover: true } },
+    { sky: 'TOXIC_SMOG', ground: 'FLOODED', faction: 'CHOIR',
+      note: 'It sits on the water and it does not lift.',
+      mod: { chip: 4 } },
+    { sky: 'SANDSTORM', ground: 'NEST', faction: 'CARRION',
+      note: 'They hunt by scent. You have nothing.',
+      mod: { ranged: 0.5 } }
+];
+function confluence(w = currentWeather, t = currentTerrain) {
+    return CONFLUENCE.find(c => c.sky === w && c.ground === t) || null;
+}
+// The sky in force, with its confluence folded in. Cheap in the common case: the find walks a
+// five-row table and only a hit allocates. One source of truth, so a suite that sets
+// currentWeather directly gets the same answer the engine does.
+function sky() {
+    const w = WEATHER[currentWeather] || WEATHER.CLEAR;
+    const c = confluence();
+    return c ? { ...w, ...c.mod } : w;
+}
+function weatherName(id) { return (WEATHER[id] || WEATHER.CLEAR).name; }
+// How often an eligible fight carries its faction's own sky. Weather stays rarer than ground's
+// 0.75 on purpose: the ground is where the fight is, the weather is something happening to it.
+const WEATHER_CHANCE = 0.4;
 
 // ── Ground ──────────────────────────────────────────────────────────────────────────────
 // Every fight was staged on the same rectangle. The backdrops already varied by faction and
@@ -1308,16 +1399,19 @@ function protocolName() { return ascension > 0 ? PROTOCOLS[Math.min(ascension, P
 // weather does, what falls as loot, and what the boss brings. "Sector 3 was a blood moon"
 // becomes a sentence a player says about a run.
 const FRONTS = [
-    { id: 'RAIDER_WARBAND',   name: 'Raider Warband',   icon: '☠',
-      desc: 'Raider-heavy roads. Their elites hit a quarter harder; their loot pays double.' },
-    { id: 'MACHINE_UPRISING', name: 'Machine Uprising', icon: '⚙',
-      desc: 'The machines are walking. Mech-heavy roads past the shallows, and tech falls in pairs.' },
-    { id: 'BLOOD_MOON',       name: 'Blood Moon',       icon: '◖',
-      desc: 'Beasts everywhere, and every wound wants to bleed.' },
-    { id: 'IRRADIATED',       name: 'Irradiated',       icon: '☢',
+    // A front tilts the sky as well as the roads. IRRADIATED always did - it is where the
+    // 0.7 comes from - and the other three carry the skies added at C06, at a lower rate so
+    // that a faction's own weather still gets a look in underneath.
+    { id: 'RAIDER_WARBAND',   name: 'Raider Warband',   icon: '☠', sky: 'ASHFALL', skyChance: 0.35,
+      desc: 'Raider-heavy roads under the ash of what they burned. Their elites hit a quarter harder; their loot pays double.' },
+    { id: 'MACHINE_UPRISING', name: 'Machine Uprising', icon: '⚙', sky: 'ION_STORM', skyChance: 0.35,
+      desc: 'The machines are walking and the air is charged with it. Mech-heavy roads past the shallows, and tech falls in pairs.' },
+    { id: 'BLOOD_MOON',       name: 'Blood Moon',       icon: '◖', sky: 'BLOOD_HAZE', skyChance: 0.35,
+      desc: 'Beasts everywhere under a red haze, and every wound wants to bleed.' },
+    { id: 'IRRADIATED',       name: 'Irradiated',       icon: '☢', sky: 'TOXIC_SMOG', skyChance: 0.7, bossSky: true,
       desc: 'Smog hangs over most roads, and the boss fights under it. Chems fall in pairs.' },
     { id: 'QUIET_ROADS',      name: 'Quiet Roads',      icon: '~',
-      desc: 'Fewer fights, more strange encounters, leaner XP - and a boss hoarding double scrap.' },
+      desc: 'Fewer fights, more strange encounters, leaner XP - and a boss hoarding double scrap. Clear skies, for what that is worth.' },
     { id: 'THE_CHOIR',        name: 'The Choir',        icon: '\u2670', minSector: 2,
       desc: 'Something is being sung out there. Cultists on half the roads, and the smog follows them.' },
     { id: 'CARRION_BLOOM',    name: 'Carrion Bloom',    icon: '\u2042', minSector: 2,
@@ -1415,9 +1509,10 @@ function generateSectorMap(rng = Math.random) {
     nodes.forEach(n => {
         if (n.type === 'BOSS') n.weather = 'BLOODLUST';
         else if (FIGHT_NODES.includes(n.type)) {
+            const fr = frontById(sectorFront);
             if (currentSector === 1 && n.tier === 1) n.weather = 'CLEAR';
-            else if (sectorFront === 'IRRADIATED' && rng() < 0.7) n.weather = 'TOXIC_SMOG';
-            else if (rng() < 0.4) n.weather = FACTIONS[n.type].weather;
+            else if (fr && fr.sky && rng() < (fr.skyChance || 0)) n.weather = fr.sky;
+            else if (rng() < WEATHER_CHANCE) n.weather = FACTIONS[n.type].weather;
         }
         // Ground follows the place, so a refinery reliably fights like a refinery. The opening
         // node is plain for the same reason its sky is: nothing new in the first fight. A
@@ -1815,6 +1910,14 @@ const CODEX = [
         'Four schematics at the workbench, four slots in the bag, and using one in a fight costs the operator\u2019s whole turn. They are the only thing in the game that answers a problem the squad you brought cannot: a hostile winding up out of everyone\u2019s reach, a stun on the one operator who could have stopped it.',
         'The same three materials buy augments, which are permanent and per-operator, so every consumable made is an augment not installed. The bag is what you spend on the run in front of you.',
         ...Object.entries(ITEM_DATA).map(([id, i]) => `${i.label} (${itemCost(id)}) \u2014 ${i.desc}`)
+    ] },
+    { id: 'GROUND_SKY', title: 'THE GROUND AND THE SKY', body: () => [
+        `Two things stand over every fight and both are on the node before you take it: what you are standing on, and what is overhead. Ground is the commoner of the two - ${Math.round(GROUND_CHANCE * 100)}% of eligible fights carry it against weather's ${Math.round(WEATHER_CHANCE * 100)}% - because the ground is where the fight is and the weather is something happening to it. Neither is dealt in the opening fight of a run.`,
+        ...TERRAIN_IDS.filter(id => TERRAIN[id].banner).map(id => `${TERRAIN[id].name} \u2014 ${TERRAIN[id].desc}`),
+        'Overhead, a faction brings its own sky, a sector front tilts the roads toward one of its own, and a commander\u2019s arena has a sky of its own that nothing else does.',
+        ...WEATHER_IDS.map(id => `${WEATHER[id].name} \u2014 ${WEATHER[id].desc}`),
+        'And when a faction\u2019s own sky stands over its own ground, the two make a third thing, called out on its own line under both banners:',
+        ...CONFLUENCE.map(c => `${weatherName(c.sky)} over ${terrainName(c.ground)} \u2014 ${c.note}`)
     ] },
     { id: 'READING', title: 'READING A FIGHT', body: () => [
         'An operator carries an amber figure when something is aimed at them this round, and a red skull when what is aimed at them would finish them. A question mark means a ranged attacker has not committed to its mark yet.',
@@ -4869,7 +4972,7 @@ function renderMap() {
                   : `data-action="node-combat" data-type="${n.type}" data-elite="${n.elite ? 1 : 0}"`;
         const wx = WEATHER_DOTS[n.weather] || '';
         const gr = (n.terrain && n.terrain !== 'OPEN_ROAD') ? TERRAIN[n.terrain] : null;
-        m += `<button class="map-node node-${status} ${cutoff} ${eCls} ${nf ? 'formation-node' : ''} ${(n.type === 'BOSS' && status === 'active') ? 'boss-node' : ''}"${hint ? ` title="${hint}"` : ''} style="left:${MAP_COL_X[n.col]}%; top:${(TOTAL_TIERS - n.tier) * MAP_ROW_H + (MAP_ROW_H - 75) / 2}px" ${status === 'active' ? '' : 'disabled'} ${act} data-node="${n.id}"><span class="node-icon">${icon}</span><span class="node-lbl">${lbl}${n.elite ? ' (ELITE)' : ''}</span>${wx ? `<span class="node-weather ${wx}" title="Forecast: ${n.weather.replace('_', ' ')}"></span>` : ''}${gr ? `<span class="node-ground ${gr.dot}" title="Ground: ${gr.name} \u2014 ${gr.desc}">${gr.short[0]}</span>` : ''}</button>`;
+        m += `<button class="map-node node-${status} ${cutoff} ${eCls} ${nf ? 'formation-node' : ''} ${(n.type === 'BOSS' && status === 'active') ? 'boss-node' : ''}"${hint ? ` title="${hint}"` : ''} style="left:${MAP_COL_X[n.col]}%; top:${(TOTAL_TIERS - n.tier) * MAP_ROW_H + (MAP_ROW_H - 75) / 2}px" ${status === 'active' ? '' : 'disabled'} ${act} data-node="${n.id}"><span class="node-icon">${icon}</span><span class="node-lbl">${lbl}${n.elite ? ' (ELITE)' : ''}</span>${wx ? `<span class="node-weather ${wx}" title="Forecast: ${weatherName(n.weather)} \u2014 ${(WEATHER[n.weather] || {}).desc || ''}"></span>` : ''}${gr ? `<span class="node-ground ${gr.dot}" title="Ground: ${gr.name} \u2014 ${gr.desc}">${gr.short[0]}</span>` : ''}</button>`;
     });
     m += `</div>`; mapC.innerHTML = m;
     const focusY = (TOTAL_TIERS - currentTier) * MAP_ROW_H - mapC.clientHeight * 0.45;
@@ -5711,17 +5814,18 @@ let explaining = null; // index into hitLog of the blow being read
 function enemyStrike(enemy, intent, opts = {}) {
     const g = ground();
     const type = (intent || {}).type || 'ATTACK';
+    const w = sky();
     let raw = (enemy.dmgBase + (opts.roll || 0)) * enemyDmgMult(enemy);
-    if (type === 'AOE') raw = enemy.dmgBase * 0.7 * enemyDmgMult(enemy) * (g.aoe || 1);
+    if (type === 'AOE') raw = enemy.dmgBase * 0.7 * enemyDmgMult(enemy) * (g.aoe || 1) * (w.aoe || 1);
     else {
         if (opts.lockOn) raw *= 2.2;
         if (type === 'HEAVY') raw *= 1.5;
         if (opts.intercepted) raw *= opts.interceptMult;
         if (type === 'STATUS') raw *= 0.3;
-        if (enemy.range === 'ranged') { if (currentWeather === 'SANDSTORM') raw *= 0.75; raw *= (g.ranged || 1); }
+        if (enemy.range === 'ranged') raw *= (w.ranged || 1) * (g.ranged || 1);
         else raw *= groundReach(1);
     }
-    if (currentWeather === 'BLOODLUST') raw *= 1.2;
+    raw *= (w.all || 1);
     return Math.floor(raw);
 }
 // How much of a melee swing the ground lets through, before the attacker's own rank is figured.
@@ -6571,13 +6675,10 @@ function comboHint(move, target) {
     return null;
 }
 
-const WEATHER_BANNERS = {
-    TOXIC_SMOG:     ['weather-smog',  '⚠️ TOXIC SMOG: Passive Bio DMG to Active Units ⚠️'],
-    SANDSTORM:      ['weather-sand',  '⚠️ SANDSTORM: Ranged Abilities deal -25% DMG ⚠️'],
-    SHRAPNEL_WINDS: ['weather-shrap', '⚠️ SHRAPNEL WINDS: 30% chance for random DMG at Turn Start ⚠️'],
-    BLOODLUST:      ['weather-blood', '💀 THUNDERDOME BLOODLUST: All units deal +20% DMG 💀']
-};
-
+// Built from the table rather than kept beside it - the pair of hand-written maps had already
+// drifted apart from each other, and neither knew about a sky the other did.
+const WEATHER_BANNERS = Object.fromEntries(
+    Object.entries(WEATHER).filter(([, w]) => w.banner).map(([id, w]) => [id, [w.cls, w.banner]]));
 // bannerText only replaces the wording. The weather itself is unchanged, so the +20% damage
 // a boss arena applies is identical whichever commander is waiting - only the sign differs.
 function applyCombatScenery(bgFile, bannerText) {
@@ -6600,6 +6701,16 @@ function applyCombatScenery(bgFile, bannerText) {
         gBanner.innerText = g.banner || '';
         gBanner.style.display = g.banner ? 'block' : 'none';
     }
+    // And the confluence gets a third line when a faction's sky is standing over its own
+    // ground. It says what changed rather than restating either - both banners above are
+    // still true, and this is the thing that is true because they are true together.
+    const cBanner = document.getElementById('confluence-banner');
+    if (cBanner) {
+        const c = confluence();
+        cBanner.className = c ? 'confluence-banner' : '';
+        cBanner.innerText = c ? `\u21AF ${weatherName(currentWeather)} OVER ${ground().name}: ${c.note}` : '';
+        cBanner.style.display = c ? 'block' : 'none';
+    }
 }
 
 function initiateCombat(nodeType, isEliteNode) {
@@ -6614,7 +6725,7 @@ function initiateCombat(nodeType, isEliteNode) {
         if (nodeType === 'BOSS') { bgFile = bossForSector().bg || 'bg_thunderdome.webp'; currentWeather = 'BLOODLUST'; }
         else if (FACTIONS[nodeType]) {
             bgFile = FACTIONS[nodeType].bg;
-            if (Math.random() < 0.4) currentWeather = FACTIONS[nodeType].weather;
+            if (Math.random() < WEATHER_CHANCE) currentWeather = FACTIONS[nodeType].weather;
         }
     }
     // A fight entered from the map keeps the promise its node made; a fight staged directly
@@ -6624,10 +6735,13 @@ function initiateCombat(nodeType, isEliteNode) {
     currentFormation = forecastFormation || null; forecastFormation = null;
     if (currentTerrain !== 'OPEN_ROAD') firePrompt('GROUND');
     if (hasContract('HARSH_SKIES') && currentWeather === 'CLEAR') {
-        currentWeather = ['TOXIC_SMOG', 'SANDSTORM', 'SHRAPNEL_WINDS'][Math.floor(Math.random() * 3)];
+        currentWeather = WEATHER_IDS[Math.floor(Math.random() * WEATHER_IDS.length)];
     }
-    // An irradiated sector's warlord fights under the smog, not the bloodlust.
-    if (nodeType === 'BOSS' && sectorFront === 'IRRADIATED') currentWeather = 'TOXIC_SMOG';
+    // A front whose description promises the boss fights under its sky delivers that; the rest
+    // tilt the roads only. Generalising this to every front with a sky would have had three of
+    // them quietly cancelling the arena's bloodlust without ever saying so.
+    const bossFront = frontById(sectorFront);
+    if (nodeType === 'BOSS' && bossFront && bossFront.sky && bossFront.bossSky) currentWeather = bossFront.sky;
     applyCombatScenery(bgFile, nodeType === 'BOSS' ? bossForSector().banner : null);
 
     // Enemies are built fresh each fight; the squad persists, so anything left on a unit has to
@@ -7052,8 +7166,9 @@ function applyTurnStartEffects(ent) {
         if (ent.hp <= 0 && ent.isPlayer && runStats)
             runStats.lastKiller = { cause, sector: currentSector, tier: currentTier };
     };
-    if (currentWeather === 'TOXIC_SMOG') { let sDmg = Math.floor(2 * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - sDmg); log(`> ${ent.name} choked by Smog for ${sDmg} DMG.`, "log-dmg"); spawnFCT(ent.id, `-${sDmg}`, "fct-status"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SMOG'); }
-    if (currentWeather === 'SHRAPNEL_WINDS' && Math.random() < 0.3) { let shrapDmg = Math.floor(5 * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - shrapDmg); log(`> Shrapnel struck ${ent.name} for ${shrapDmg} DMG!`, "log-dmg"); spawnFCT(ent.id, `-${shrapDmg}`, "fct-dmg"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SHRAPNEL'); }
+    const wx = sky();
+    if (wx.chip) { let sDmg = Math.floor(wx.chip * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - sDmg); log(`> ${ent.name} choked by Smog for ${sDmg} DMG.`, "log-dmg"); spawnFCT(ent.id, `-${sDmg}`, "fct-status"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SMOG'); }
+    if (wx.shrapnel && Math.random() < wx.shrapnel.chance) { let shrapDmg = Math.floor(wx.shrapnel.dmg * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - shrapDmg); log(`> Shrapnel struck ${ent.name} for ${shrapDmg} DMG!`, "log-dmg"); spawnFCT(ent.id, `-${shrapDmg}`, "fct-dmg"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SHRAPNEL'); }
 
     // Over The Top runs on the Fiend's own turns, so it is spent here rather than on the clock.
     if ((ent.chargeTurns || 0) > 0) { ent.chargeTurns--; chg = true; if (ent.chargeTurns > 0) spawnFCT(ent.id, "OVER THE TOP", "fct-combo"); }
@@ -7630,8 +7745,10 @@ function resolveAction(targetId) {
         // list that had drifted - a thrown molotov was somehow unaffected - and now reads the
         // same reach the formation rules use.
         snap('relics & curses');
-        if (currentWeather === 'SANDSTORM' && moveReachFor(pendingAction, actEnt) === 'ranged') { dmgMult *= 0.75; }
-        if (currentWeather === 'BLOODLUST') { dmgMult *= 1.2; }
+        const wx = sky();
+        if (moveReachFor(pendingAction, actEnt) === 'ranged') dmgMult *= (wx.ranged || 1);
+        if (isAoe(pendingAction)) dmgMult *= (wx.aoe || 1);
+        dmgMult *= (wx.all || 1);
 
         snap('weather');
         // The melee half of the ground was already folded into reach above; this is the rest.
@@ -7771,7 +7888,9 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
 
     let rv = t.resistances[atkType] || 0;
     // Corrosion eats plating outright - the counter to a unit that re-plates itself each turn.
-    let ac = (abilityStr === 'FERAL_BITE' || (t.corrodedTurns || 0) > 0) ? 0 : t.armor;
+    // Ashfall cakes onto everything - and corrodes off it with the rest of the plating.
+    const w = sky();
+    let ac = (abilityStr === 'FERAL_BITE' || (t.corrodedTurns || 0) > 0) ? 0 : t.armor + (w.armor || 0);
     if (t.oiledTurns > 0 && atkType === 'energy') rv -= 15;
     let cd = calcDmg;
     if (hasRelic('KINETIC_MESH') && t.isPlayer && t.gridPos === 1 && atkType === 'phys') cd = Math.floor(cd * 0.75);
@@ -7783,7 +7902,8 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     if (hasRelic('CHEM_ETCHER') && !t.isPlayer && (t.corrodedTurns || 0) > 0) cd = Math.floor(cd * 1.25);
     if (hasQuirk(t, 'THICK_HIDE')) cd = Math.max(1, cd - 3);
     // Ruins are cover for whoever is standing in them, and the front rank is where the cover is.
-    if (t.gridPos === 1 && ground().frontCover) cd = Math.max(1, Math.floor(cd * ground().frontCover));
+    // ...unless the sky has filled the cover: gas pools in exactly the low ground you crouch in.
+    if (t.gridPos === 1 && ground().frontCover && !w.noCover) cd = Math.max(1, Math.floor(cd * ground().frontCover));
     // Every dose the Vatborn takes is another split seam: it hits harder and it takes more.
     if (t.venomStacks > 0) cd = Math.floor(cd * (1 + (t.venom ? t.venom.taken : 0.12) * t.venomStacks));
     // Teeming: a Carrion is only hard to kill while the rest of the pile is standing. Picking
@@ -7965,7 +8085,7 @@ const BACKLINE_WEIGHT = { 1: 1, 2: 3, 3: 5 };
 // Open ground lets a shooter see past your front rank; the weighting is where that lands.
 function backlineWeight(ent) {
     const w = BACKLINE_WEIGHT[ent.gridPos] || 1;
-    return ent.gridPos > 1 ? w * (ground().backline || 1) : w;
+    return ent.gridPos > 1 ? w * (ground().backline || 1) * (sky().backline || 1) : w;
 }
 
 function pickTarget(enemy, candidates, intent) {
@@ -8073,7 +8193,7 @@ function executeEnemyAi(enemy) {
     // Whatever the forecast promised, the Stormcaller will not let it stand.
     if (enemy.stormTurn && ++enemy.stormClock >= enemy.stormTurn) {
         enemy.stormClock = 0;
-        const skies = ['TOXIC_SMOG', 'SANDSTORM', 'SHRAPNEL_WINDS', 'BLOODLUST'].filter(w => w !== currentWeather);
+        const skies = WEATHER_IDS.filter(w => w !== currentWeather);
         currentWeather = skies[Math.floor(Math.random() * skies.length)];
         log(`> ${enemy.name} turns the sky over: ${currentWeather.replace(/_/g, ' ')}.`, 'log-status');
         spawnFCT(enemy.id, 'THE SKY TURNS', 'fct-status');
@@ -8625,6 +8745,7 @@ globalThis.WP = {
     // engine constants
     spotBlocker, lockerGear, lockerDescText, lockerFrom, stashLocker, openingTier, scarTreatCost,
     PROTOCOL_CUT, activeProtocols, hasProtocol, protocolEnrage, nodeSalvage,
+    WEATHER, WEATHER_IDS, WEATHER_CHANCE, CONFLUENCE, confluence, sky, weatherName,
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
     Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
