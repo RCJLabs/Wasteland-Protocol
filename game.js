@@ -1657,7 +1657,9 @@ function availableNodeIds() {
     if (!sectorMap || currentTier > TOTAL_TIERS) return [];
     // A retreat buys another go at the node, not another go at the routing decision before it.
     if (retreatNode && nodeById(retreatNode)) return [retreatNode];
-    if (currentNodeId) {
+    // A scout on the bench has already walked it: the tier stays open rather than narrowing
+    // to whatever the last node happened to lead to.
+    if (currentNodeId && !hasBenchJob('SCOUT')) {
         const cur = nodeById(currentNodeId);
         if (cur && cur.tier === currentTier - 1) return cur.edges.slice();
     }
@@ -2047,6 +2049,11 @@ const CODEX = [
         'Four schematics at the workbench, four slots in the bag, and using one in a fight costs the operator\u2019s whole turn. They are the only thing in the game that answers a problem the squad you brought cannot: a hostile winding up out of everyone\u2019s reach, a stun on the one operator who could have stopped it.',
         'The same three materials buy augments, which are permanent and per-operator, so every consumable made is an augment not installed. The bag is what you spend on the run in front of you.',
         ...Object.entries(ITEM_DATA).map(([id, i]) => `${i.label} (${itemCost(id)}) \u2014 ${i.desc}`)
+    ] },
+    { id: 'BENCH', title: 'THE BENCH', body: () => [
+        `Ten on the roster and three on the line. The other seven earn XP at ${Math.round(RESERVE_XP_RATE * 100)}% - and one of them takes a job for the expedition, chosen at the muster.`,
+        ...BENCH_JOBS.map(j => `${j.name} \u2014 ${j.desc}`),
+        'One job, one holder, and it only holds while they are on the bench: put them on the line later and the job lapses. That is the whole point of it - the class you bench to get the job is a class you are not fighting with.'
     ] },
     { id: 'THE_FACES', title: 'THE FACES ON THE ROAD', body: () => [
         `${Object.keys(CAST).length} people turn up more than once, and each remembers how the last meeting went. Standing runs from bad blood to trust, moves on what you choose rather than what you buy, and lasts one expedition. Somebody you have met is ${FACE_RETURN_WEIGHT} times likelier to turn up again than a stranger.`,
@@ -2821,6 +2828,7 @@ const ACTIONS = {
     'toggle-prompts':   () => { globalSettings.prompts = globalSettings.prompts === false; Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); },
     'ascension-cycle':  () => { ascension = (ascension + 1) % (unlockedProtocols() + 1); renderContracts(); },
     'pick-order':       el => { if (orderById(el.dataset.id)) activeOrder = el.dataset.id; renderContracts(); },
+    'bench-job':        el => takeBenchJob(el.dataset.id, el.dataset.job),
     'loadout-bench':    el => {
         const ch = playerRoster.find(c => c.id === el.dataset.id);
         if (ch && masteryRank(ch.classType) >= 3) { ch.benchedMove = el.dataset.move; renderMuster(); }
@@ -4562,7 +4570,16 @@ function renderMuster() {
             loadout = `<div class="muster-loadout">` + all.map(a =>
                 `<button class="loadout-chip ${a.move === benched ? 'chip-benched' : ''}" data-action="loadout-bench" data-id="${ch.id}" data-move="${a.move}">${a.move === benched ? '✕ ' : ''}${a.label}</button>`).join('') + `</div>`;
         }
-        return `<div class="muster-row ${pos > 0 ? 'muster-deployed' : ''}">
+        // The bench got half XP and nothing else. One of them takes the expedition's job, and
+        // only one - so the row offers it to whoever is not deployed, and taking it anywhere
+        // moves it from wherever it was.
+        let jobs = '';
+        if (pos === 0) {
+            const mine = benchJob && benchJob.charId === ch.id ? benchJob.job : null;
+            jobs = `<div class="muster-jobs">` + BENCH_JOBS.map(j =>
+                `<button class="job-chip ${mine === j.id ? 'job-on' : ''}" title="${j.desc}" data-action="bench-job" data-id="${ch.id}" data-job="${j.id}">${mine === j.id ? '\u2611 ' : ''}${j.short}</button>`).join('') + `</div>`;
+        }
+        return `<div class="muster-row ${pos > 0 ? 'muster-deployed' : ''} ${benchJob && benchJob.charId === ch.id && pos === 0 ? 'muster-working' : ''}">
             <div class="muster-who">
                 <span class="muster-name">${ch.name}</span>
                 <span class="muster-class">${ch.classType}</span>
@@ -4576,11 +4593,20 @@ function renderMuster() {
                 <button class="muster-reroll" ${musterRerolls <= 0 ? 'disabled' : ''} data-action="muster-reroll" data-id="${ch.id}">⟳</button>
             </div>
             ${loadout}
+            ${jobs}
         </div>`;
     }).join('');
     // The three on offer, and whether the line as it stands would keep each one. A doctrine you
     // cannot currently field is shown and refused rather than hidden, so it reads as something
     // to build toward rather than as a card that was never dealt.
+    const jobEl = document.getElementById('muster-jobline');
+    if (jobEl) {
+        const holder = benchJobHolder();
+        jobEl.innerText = holder
+            ? `${holder.name} works the expedition as ${benchJobName()}. ${benchJobById(benchJob.job).desc}`
+            : `Nobody on the bench has a job. One of them can take one - and the class you bench for it is a class you are not fighting with.`;
+        jobEl.className = holder ? 'muster-jobline job-taken' : 'muster-jobline';
+    }
     const line = deployedLine();
     document.getElementById('muster-doctrines').innerHTML = doctrineOffer.map(id => {
         const d = doctrineById(id);
@@ -4613,6 +4639,17 @@ function renderMuster() {
         : activeDoctrine ? `DEPLOY UNDER ${doctrineName()}` : 'DEPLOY';
 }
 
+// Give the expedition's job to a benched operator, or take it back off them. Exactly one job
+// and exactly one holder: tapping it anywhere moves it there from wherever it was.
+function takeBenchJob(charId, jobId) {
+    const ch = playerRoster.find(c => String(c.id) === String(charId));
+    const job = benchJobById(jobId);
+    if (!ch || !job || ch.gridPos !== 0) return false;
+    const same = benchJob && benchJob.charId === ch.id && benchJob.job === job.id;
+    benchJob = same ? null : { job: job.id, charId: ch.id };
+    playSFX('click'); renderMuster();
+    return !same;
+}
 function musterRank(charId) {
     const ch = playerRoster.find(c => c.id === charId);
     if (!ch) return;
@@ -4626,6 +4663,9 @@ function musterRank(charId) {
     }
     if (next !== 0 && playerRoster.filter(c => c.gridPos > 0 && c.id !== charId).length >= cap) next = 0;
     ch.gridPos = next;
+    // A job is a bench job. Putting its holder on the line gives it up, and says so rather
+    // than leaving a card claiming somebody in the front rank is out scouting.
+    if (next !== 0 && benchJob && benchJob.charId === ch.id) benchJob = null;
     renderMuster();
 }
 
@@ -4686,7 +4726,7 @@ function buildNewRun(diff) {
     // Nobody carries over. Every expedition starts with the seven and finds the rest again.
     pendingRecruit = null;
     bossSalt = 'w' + Math.floor(Math.random() * 1e9);
-    pursuit = null; armedExit = null; retreatNode = null; vacatedRanks = []; choirWord = 0;
+    pursuit = null; armedExit = null; retreatNode = null; vacatedRanks = []; choirWord = 0; benchJob = null;
     bonds = {}; bondSavesUsed = new Set();
     playerRoster.forEach(c => { c.weaponMod = null; c.trinket = null; });
     // The Footlocker hands back what it kept. Into the stash rather than onto an operator: which
@@ -4764,7 +4804,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, pendingRecruit, regroupInsured, bonds, sectorFront, runSeed, ascension, activeOrder, bossSalt, doctrineOffer, activeDoctrine, doctrineBroken, doctrineFavourites, pendingConsequences, recentEvents, castState, firedEvents, choirWord, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, retreatNode, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, pendingRecruit, regroupInsured, bonds, sectorFront, runSeed, ascension, activeOrder, bossSalt, doctrineOffer, activeDoctrine, doctrineBroken, doctrineFavourites, pendingConsequences, recentEvents, castState, firedEvents, choirWord, benchJob, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, retreatNode, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -4815,6 +4855,10 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         // Clamped rather than trusted: a save carrying a tampered word must not field a Choir
         // road eleven bodies deep, or empty one out.
         choirWord = Math.max(-1, Math.min(1, Number(d.choirWord) || 0));
+        // Rebuilt rather than trusted: a save naming a job that no longer exists, or nobody,
+        // must not put a run into a state the muster could not have produced.
+        benchJob = (d.benchJob && benchJobById(d.benchJob.job) && d.benchJob.charId != null)
+            ? { job: d.benchJob.job, charId: d.benchJob.charId } : null;
         if (pendingCombat) {
             migrateAssetPaths(pendingCombat.enemies);
             if (typeof pendingCombat.bgFile === 'string') pendingCombat.bgFile = pendingCombat.bgFile.replace(/\.png$/, '.webp');
@@ -5709,8 +5753,12 @@ function armExtract() {
 
 function resolveCamp(type) {
     if (type === 'TRIAGE') {
-        playerRoster.forEach(p => { if(p.gridPos > 0 && p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp * 0.35)); });
-        playSFX('heal'); document.getElementById('camp-choices').innerHTML = `<div style="color:#6B8E23; font-weight:bold; margin-bottom:15px;">> Squad patched up and ready.</div><button class="event-btn" data-action="camp-finish">CONTINUE EXPEDITION</button>`;
+        // A medic keeping the camp puts back more of it, and works on the bench too - the
+        // people who are not fighting are the ones nobody was treating.
+        const kept = hasBenchJob('MEDIC');
+        const share = kept ? CAMP_TRIAGE_JOB : CAMP_TRIAGE;
+        playerRoster.forEach(p => { if ((kept || p.gridPos > 0) && p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp * share)); });
+        playSFX('heal'); document.getElementById('camp-choices').innerHTML = `<div style="color:#6B8E23; font-weight:bold; margin-bottom:15px;">> Squad patched up and ready.${kept ? ` ${benchJobHolder().name} worked the whole roster.` : ''}</div><button class="event-btn" data-action="camp-finish">CONTINUE EXPEDITION</button>`;
     } else if (type === 'TUNEUP') {
         tuneUpBattles = 3; playSFX('click');
         document.getElementById('camp-choices').innerHTML = `<div style="color:#B8860B; font-weight:bold; margin-bottom:15px;">> Weapons cleaned and calibrated. (+4 Base DMG active)</div><button class="event-btn" data-action="camp-finish">CONTINUE EXPEDITION</button>`;
@@ -8990,6 +9038,44 @@ function executeEnemyAi(enemy) {
 
 const RESERVE_XP_RATE = 0.5;
 
+// ── The bench ───────────────────────────────────────────────────────────────────────────
+// Ten on the roster, three deployed, and the other seven earned half XP and did nothing else.
+// One of them takes a job for the expedition now, chosen at the muster - so who you leave
+// behind is a decision, and the class you bench to get the job is a class you are not fighting
+// with. The job holds only while its holder is actually on the bench: deploy them later and it
+// lapses, which is what makes the choice cost something rather than being free upside.
+//
+// On the Scout. The task this came from asked for one that "reveals a node two tiers ahead",
+// and there is nothing there to reveal: the map has shown every node's type, elite status,
+// weather, ground and named formation since N12 and A06, and the only thing it withholds is
+// what an EVENT holds - which is drawn when the node is entered, not stored on it, so it
+// cannot be read early without pre-rolling the draw and breaking how follow-ups preempt it.
+// What a scout can honestly sell is not information but a way across: with one on the bench
+// the routing does not close behind you, and any node on the tier stays open rather than only
+// the ones the last node happened to connect to.
+const CAMP_TRIAGE = 0.35;       // what a camp puts back without a field medic
+const CAMP_TRIAGE_JOB = 0.55;   // and with one keeping it
+const BENCH_JOBS = [
+    { id: 'SCOUT', name: 'SCOUT', short: 'SCOUT',
+      desc: 'Walks ahead and finds the ways across. The route never closes behind you: every node on the tier stays open, not just the ones your last one led to.' },
+    { id: 'QUARTERMASTER', name: 'QUARTERMASTER', short: 'QM',
+      desc: 'Works the wreckage you leave behind. One more material out of every salvage.' },
+    { id: 'MEDIC', name: 'FIELD MEDIC', short: 'MEDIC',
+      desc: `Runs the camp properly. Triage puts back ${Math.round(CAMP_TRIAGE_JOB * 100)}% instead of ${Math.round(CAMP_TRIAGE * 100)}%, and it reaches the bench as well as the line.` }
+];
+let benchJob = null;            // { job, charId } for this expedition, persisted with the run
+
+function benchJobById(id) { return BENCH_JOBS.find(j => j.id === id) || null; }
+// Who is holding the job, if anyone still is. The holder has to be on the roster and on the
+// bench: a job whose holder was deployed after the muster is not in force.
+function benchJobHolder() {
+    if (!benchJob) return null;
+    const ch = playerRoster.find(c => c.id === benchJob.charId);
+    return (ch && ch.gridPos === 0) ? ch : null;
+}
+function hasBenchJob(id) { return !!benchJob && benchJob.job === id && !!benchJobHolder(); }
+function benchJobName() { const j = benchJob && benchJobById(benchJob.job); return j ? j.name : null; }
+
 function awardXp(char, amount) {
     if (amount <= 0) return;
     if (sectorFront === 'QUIET_ROADS') amount = Math.floor(amount * 0.85);
@@ -9115,7 +9201,8 @@ function checkWinState() {
             else if (char.gridPos === 0) awardXp(char, Math.floor(base * RESERVE_XP_RATE));
         });
 
-        let matDrops = (1 + Math.floor(Math.random() * 2)) * scrapMult + (hasRelic('SALVAGE_RIG') ? salvageBonus() : 0);
+        let matDrops = (1 + Math.floor(Math.random() * 2)) * scrapMult + (hasRelic('SALVAGE_RIG') ? salvageBonus() : 0)
+                     + (hasBenchJob('QUARTERMASTER') ? 1 : 0);
         for(let i=0; i<matDrops; i++) {
             let m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)];
             const paired = (sectorFront === 'MACHINE_UPRISING' && m === 'tech') || (sectorFront === 'IRRADIATED' && m === 'chems');
@@ -9174,6 +9261,8 @@ globalThis.WP = {
     spotBlocker, lockerGear, lockerDescText, lockerFrom, stashLocker, openingTier, scarTreatCost,
     PROTOCOL_CUT, activeProtocols, hasProtocol, protocolEnrage, nodeSalvage,
     LEARNED_AT, learnedMove, tradeIntents, growTally,
+    BENCH_JOBS, CAMP_TRIAGE, CAMP_TRIAGE_JOB, benchJobById, benchJobHolder, hasBenchJob, benchJobName, takeBenchJob,
+    get benchJob() { return benchJob; }, set benchJob(v) { benchJob = v; },
     WEATHER, WEATHER_IDS, WEATHER_CHANCE, CONFLUENCE, confluence, sky, weatherName,
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
