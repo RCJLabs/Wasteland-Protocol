@@ -156,11 +156,29 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .runover-score { font-family: monospace; font-size: clamp(38px, 12vw, 60px); font-weight: bold; color: #B8860B; text-align: center; letter-spacing: 2px; text-shadow: 2px 2px 0 #8B0000; margin: 6px 0 2px; }
 .runover-best { text-align: center; font-size: 11px; letter-spacing: 2px; color: #6B8E23; text-transform: uppercase; margin-bottom: 14px; min-height: 14px; }
 .runover-lines { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #aaa; border-top: 1px solid #222; border-bottom: 1px solid #222; padding: 10px 0; margin-bottom: 14px; }
-.runover-line { display: flex; justify-content: space-between; }
+.runover-line { display: flex; justify-content: space-between; gap: 10px; }
 .runover-line span:last-child { color: #ccc; font-weight: bold; }
 .title-wins { text-align: center; font-size: 11px; letter-spacing: 2px; color: #c9a84a; margin-bottom: 8px; }
 /* The last sector counts the same as every other one; it just says so in gold. */
 .sector-last { color: #c9a84a; }
+/* The order picker sits above the contracts because it is the bigger decision: a contract
+   changes how hard the road is, an order changes how much of it there is. */
+.order-note { font-size: 11px; color: #8a8272; text-align: center; padding: 0 14px; line-height: 1.5; }
+.order-list { display: flex; flex-direction: column; gap: 8px; padding: 0 14px; }
+.order-card { display: flex; flex-direction: column; gap: 4px; text-align: left; background: #0a0a0a; border: 1px solid #333; color: #999; padding: 10px 12px; font-family: monospace; cursor: pointer; }
+.order-card.order-on { border-color: #B8860B; background: #171308; color: #ddd; }
+/* The longest order has the longest name and the longest reach line; on a narrow card they do
+   not both fit, so the reach drops under the name rather than wrapping through it. */
+.order-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.order-name { font-weight: bold; letter-spacing: 1px; font-size: 13px; white-space: nowrap; }
+.order-card.order-on .order-name { color: #B8860B; }
+.order-reach { font-size: 10px; letter-spacing: 1px; color: #8a8272; white-space: nowrap; }
+.order-desc { font-size: 11px; line-height: 1.45; }
+/* The recall, rendered into the sector-secured panel rather than on a screen of its own. */
+.recall-head { color: #6B8E23; text-align: center; letter-spacing: 2px; margin: 4px 0 8px; }
+.recall-note { font-size: 11px; color: #aaa; line-height: 1.55; margin-bottom: 12px; }
+.recall-lines { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #aaa; border-top: 1px solid #222; border-bottom: 1px solid #222; padding: 10px 0; margin-bottom: 14px; }
+.return-btn.recall-home { border-color: #6B8E23; color: #6B8E23; margin-bottom: 10px; }
 .runover-score.score-won { color: #c9a84a; text-shadow: 2px 2px 0 #4a3a10; }
 #victory-title { font-size: clamp(24px, 8vw, 34px); text-shadow: 2px 2px 0 #4a3a10; }
 .victory-sub { text-align: center; font-size: 11px; letter-spacing: 2px; color: #8a7a3a; text-transform: uppercase; margin-bottom: 10px; }

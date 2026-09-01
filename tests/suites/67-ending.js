@@ -61,7 +61,8 @@ module.exports = {
 
     // ---- the map says so before it is walked, not after ----
     const map = await page.evaluate(() => {
-      __run(); currentSector = FINAL_SECTOR - 1; currentTier = 1; sectorMap = generateSectorMap();
+      __run(); activeOrder = 'LONG'; runStats.order = 'LONG';
+      currentSector = FINAL_SECTOR - 1; currentTier = 1; sectorMap = generateSectorMap();
       renderMap();
       const before = document.getElementById('map-sector-lbl').innerText;
       currentSector = FINAL_SECTOR; sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = [];
@@ -77,7 +78,8 @@ module.exports = {
                fits: document.getElementById('map-sector-lbl').scrollWidth
                      <= document.getElementById('map-sector-lbl').clientWidth + 1 };
     });
-    ok(`short of the end the header counts toward it (${map.before})`, map.before.includes(`/ ${road.final}`));
+    ok(`on the long road, short of the end, the header counts toward it (${map.before})`,
+      map.before.replace(/\s/g, '') === `${road.final - 1}/${road.final}`);
     ok(`and at the end it reads ${road.final} of ${road.final}`, map.at.replace(/\s/g, '') === `${road.final}/${road.final}`);
     ok('and is marked as the last one', map.marked);
     ok('the last warlord is named on the map before the node is taken', !!map.bossNode);

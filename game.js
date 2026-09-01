@@ -1711,6 +1711,13 @@ const CODEX = [
         `Skulls taken from commanders build the Citadel, and it has ${CITADEL_SPOTS.length} places to spend them - two of which need something else standing first.`,
         'Depth is worth far more than any single haul: pushing one sector deeper always beats farming the one you are on.'
     ] },
+    { id: 'ORDERS', title: 'HOW LONG YOU HAVE', body: () => [
+        'An expedition used to take as long as it took, and the only way to make one shorter was to walk out of it early. The length is declared before deploying now, alongside the contracts.',
+        ...ORDERS.map(o => `${o.name} — ${o.sectors === FINAL_SECTOR ? 'the whole road' : `recalled at sector ${o.sectors}`}. ${o.desc} Kept, it pays +${Math.round(o.bonus * 100)}% score.`),
+        'The road is identical whichever you sign. The fights, the map, the commanders and the scaling do not know which order you took - only where the recall comes, and what keeping it pays.',
+        'Clearing the last sector of a short order puts a question rather than a full stop: come home and take the bonus on top of the walk-out, or press on and let the order lapse. A lapsed order pays nothing, however deep the run then goes.',
+        `The long road is the only order that reaches sector ${FINAL_SECTOR}, and the only one whose bonus is paid by felling what is standing there rather than by coming home.`
+    ] },
     { id: 'ENDING', title: 'THE END OF THE ROAD', body: () => [
         `The road runs ${FINAL_SECTOR} sectors. It used to run forever - the map kept generating, the commanders kept cycling, and an expedition could be long or short but never finished.`,
         `Sector ${FINAL_SECTOR} is the last one. ${FINAL_BOSS ? FINAL_BOSS.name : 'The last warlord'} is at the top of it, it is not one of the ${BOSS_ROTATION.length} that hold the road, and it is never dealt at any other depth.`,
@@ -1835,6 +1842,58 @@ function renderCodex() {
 
 // Optional conditions taken before a run, each buying a share of the final score. A run stops
 // being the same shape every time, and a leaderboard entry says how it was earned.
+// ── Orders ──────────────────────────────────────────────────────────────────────────────
+// An expedition took as long as it took. Measured on a developed career it ran a median 120
+// nodes, and the only way to make one shorter was to walk out of it early and take the loss of
+// having said you would go further. There was no way to ask for a short one, which is a strange
+// thing for a game whose whole shape is a session.
+//
+// So the length is declared before deploying, the same way the contracts and the ascension rung
+// are. Three orders, and the only difference between them is how far down the road they send
+// you - the fights, the map and the commanders are identical. What changes is where the recall
+// comes, and what fulfilling the order pays.
+//
+// The bonus is the point. A short run already scores less simply by being shallow, so charging
+// it a multiplier as well would be punishing the same thing twice; instead every order pays for
+// being FINISHED, and the longer the order the more it pays. That makes the declaration a real
+// one in both directions: a Sortie is a promise you can keep, and the Long Road is a promise
+// that pays for the sectors it costs you to keep it.
+//
+// Nothing is locked out. Clearing a short order puts a question rather than a full stop - come
+// home and take the bonus, or press on and let the order lapse - which is the same shape as
+// walking out at a camp and the same shape as the ending. This game asks that question a lot,
+// on purpose.
+//
+// Measured over thirty fresh careers each, on a simulated player weak enough to die at a median
+// sector 2 either way, so these are the lengths of the runs that actually got home:
+//
+//                     nodes   fights   score
+//   SORTIE (3)          50       42    20,287     kept 23% of runs
+//   PATROL (5)          70       58    43,507     kept 17% of runs
+//
+// Forty percent more nodes for a bit over twice the score, which is the gradient the whole
+// thing exists to offer. The keep rates say nothing about the orders and everything about the
+// player being measured - a squad that dies in sector 2 never reaches any recall.
+const ORDERS = [
+    { id: 'SORTIE', name: 'SORTIE',        sectors: 3, bonus: 0.20,
+      desc: 'Three sectors and the squad is recalled. The shortest thing the Citadel will sign for, and the one you are most likely to come back from.' },
+    { id: 'PATROL', name: 'PATROL',        sectors: 5, bonus: 0.35,
+      desc: 'Five sectors out and back. Long enough to build a squad worth having, short enough to finish in a sitting.' },
+    { id: 'LONG',   name: 'THE LONG ROAD', sectors: FINAL_SECTOR, bonus: 0.50,
+      desc: 'The whole road, and the only order that reaches the end of it. Nothing recalls you. Fulfilling it means felling what is standing at the gate.' }
+];
+const DEFAULT_ORDER = 'PATROL';
+let activeOrder = DEFAULT_ORDER;
+function orderById(id) { return ORDERS.find(o => o.id === id) || null; }
+function currentOrder() { return orderById(activeOrder) || orderById(DEFAULT_ORDER); }
+// How far this expedition signed up to go. Read from the run rather than the live setting, so a
+// score already banked is not re-judged by whatever the next expedition signs up for.
+function orderSectors(st) { const o = orderById(((st || runStats || {}).order) || activeOrder); return o ? o.sectors : FINAL_SECTOR; }
+function orderBonus(st) { const o = orderById(((st || runStats || {}).order) || activeOrder); return o ? o.bonus : 0; }
+// The last sector this order sends you to. Past it the run is over its orders and running long,
+// which is allowed and pays nothing extra.
+function isLastOrdered(sector = currentSector) { return sector === orderSectors(); }
+
 const CONTRACT_POOL = [
     { id: 'NO_CONSUMABLES', name: "DRY RUN",       bonus: 0.15, desc: "Deploy with an empty bag. Nothing can be carried or crafted into it." },
     // MEASURED AND MISPRICED, left alone here because repricing it is its own piece of work:
@@ -2329,6 +2388,7 @@ const ACTIONS = {
     'prompt-off':       () => disablePrompts(),
     'toggle-prompts':   () => { globalSettings.prompts = globalSettings.prompts === false; Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); },
     'ascension-cycle':  () => { ascension = (ascension + 1) % (unlockedProtocols() + 1); renderContracts(); },
+    'pick-order':       el => { if (orderById(el.dataset.id)) activeOrder = el.dataset.id; renderContracts(); },
     'loadout-bench':    el => {
         const ch = playerRoster.find(c => c.id === el.dataset.id);
         if (ch && masteryRank(ch.classType) >= 3) { ch.benchedMove = el.dataset.move; renderMuster(); }
@@ -2362,6 +2422,7 @@ const ACTIONS = {
     'take-doctrine':    el => takeDoctrine(el.dataset.id),
     'camp-extract':     () => armExtract(),
     'camp-extract-go':  () => extractRun(),
+    'order-home':       () => orderHome(),
     'victory-walk':     () => victoryWalk(),
     'victory-press':    () => victoryPress(),
     'camp-finish':      () => finishCamp(),
@@ -3454,11 +3515,15 @@ function renderRunOver(score, isBest, seedPrev = null) {
     // around EXTRACTED read as a defeat, and gold on a wipe would read as a win.
     const won = !!(runStats && runStats.won);
     const tone = won ? '#c9a84a' : walked ? '#6B8E23' : '#ff4444';
-    document.getElementById('runover-title').innerText = won ? 'THE ROAD ENDED' : walked ? 'EXTRACTED' : 'RUN OVER';
+    const kept = !!(runStats && runStats.fulfilled);
+    document.getElementById('runover-title').innerText =
+        won ? 'THE ROAD ENDED' : kept ? 'ORDER FULFILLED' : walked ? 'EXTRACTED' : 'RUN OVER';
     document.getElementById('runover-title').style.color = tone;
     document.getElementById('runover-box').style.borderColor = won ? '#c9a84a' : walked ? '#6B8E23' : '#8B0000';
     document.getElementById('runover-desc').innerText = won
         ? `They went the whole way and came back. ${careerWins === 1 ? 'The first squad to do it.' : `That is ${careerWins} squads that have.`}`
+        : kept
+        ? `They went exactly as far as they said they would and came back on the transport. The Citadel pays for that.`
         : walked
         ? 'They walked out of it. Everything the expedition earned is banked, and the squad is still standing.'
         : 'The wasteland claimed them. What they salvaged reaches the Citadel.';
@@ -3481,6 +3546,10 @@ function renderRunOver(score, isBest, seedPrev = null) {
     const dOver = doctrineById(st.doctrine);
     if (dOver) lines.splice(1, 0, ['DOCTRINE',
         `${dOver.name} \u00B7 ${(st.doctrineMult || 1) > 1 ? `\u00D7${(st.doctrineMult).toFixed(2)}` : 'BROKEN, PAID NOTHING'}`]);
+    // What was signed for, and whether it was kept. Above the walk-out, because the walk-out is
+    // how they got home and the order is why.
+    if (st.order) lines.splice(1, 0, ['ORDER',
+        `${(orderById(st.order) || {}).name || st.order} · ${orderSectors(st)} SECTORS · ${st.fulfilled ? `KEPT ×${(1 + orderBonus(st)).toFixed(2)}` : 'LAPSED'}`]);
     if (st.extracted) lines.splice(1, 0, ['WALKED OUT WITH',
         `+${Math.round(extractBonus(st) * 100)}% SCORE \u00B7 \uD83D\uDC80 ${extractSkulls(st)} \u00B7 ${playerRoster.filter(p => p.hp > 0).length} STANDING`]);
     if ((st.fallen || []).length) lines.splice(1, 0, ['OPERATORS LOST',
@@ -3571,7 +3640,7 @@ let careerWins = 0;   // expeditions that reached the end of the road, meta-pers
 
 function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, careerWins, mastery, bestiary, seenPrompts, grudges })); }
 
-function newRunStats() { return { extracted: false, won: false, warlords: [], doctrine: null, doctrineMult: 1, kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, recruited: 0, fallen: [], deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
+function newRunStats() { return { extracted: false, won: false, fulfilled: false, order: activeOrder, warlords: [], doctrine: null, doctrineMult: 1, kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, recruited: 0, fallen: [], deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
 
 // Endless scoring: depth is worth far more than any single haul, so pushing one sector
 // deeper always beats farming the one you are on.
@@ -3641,6 +3710,10 @@ function noteVictory() {
     if (!runStats || runStats.won) return;
     runStats.won = true;
     runStats.wonAtSector = currentSector;
+    // The long road's order is fulfilled by felling what the road ends at. A shorter order that
+    // lapsed and kept walking is not - the promise was three sectors, or five, and it was not
+    // kept by going further than it.
+    if (orderSectors(runStats) >= FINAL_SECTOR) runStats.fulfilled = true;
     bossSkulls += VICTORY.skulls;
     careerWins++;
     saveMeta();
@@ -3712,7 +3785,9 @@ function computeScore(st) {
     const out = st.extracted ? 1 + extractBonus(st) : 1;
     // Reaching the end of the road is worth more than the depth it took to get there.
     const win = st.won ? VICTORY.scoreMult : 1;
-    return Math.floor(base * (st.contractMult || 1) * (st.protocolMult || 1) * (st.doctrineMult || 1) * out * win);
+    // And an order kept pays for being kept, which is the only reason to declare a short one.
+    const ord = st.fulfilled ? 1 + orderBonus(st) : 1;
+    return Math.floor(base * (st.contractMult || 1) * (st.protocolMult || 1) * (st.doctrineMult || 1) * out * win * ord);
 }
 
 function noteDepth() {
@@ -3917,6 +3992,14 @@ function openContracts(diff) {
 
 function renderContracts() {
     switchScreen('screen-contracts');
+    document.getElementById('order-list').innerHTML = ORDERS.map(o => {
+        const on = o.id === activeOrder;
+        const ends = o.sectors >= FINAL_SECTOR ? 'the whole road' : `recall at sector ${o.sectors}`;
+        return `<button class="order-card ${on ? 'order-on' : ''}" data-action="pick-order" data-id="${o.id}">
+            <span class="order-head"><span class="order-name">${on ? '\u25C9' : '\u25CB'} ${o.name}</span><span class="order-reach">${ends} \u00B7 +${Math.round(o.bonus * 100)}% IF KEPT</span></span>
+            <span class="order-desc">${o.desc}</span>
+        </button>`;
+    }).join('');
     document.getElementById('contract-list').innerHTML = CONTRACT_POOL.map(c => {
         const on = hasContract(c.id);
         return `<button class="contract-card ${on ? 'contract-on' : ''}" data-action="toggle-contract" data-id="${c.id}">
@@ -3926,7 +4009,8 @@ function renderContracts() {
     }).join('');
     const m = contractMult();
     document.getElementById('contract-mult').innerText =
-        `SCORE x${m.toFixed(2)}${activeContracts.length ? ` — ${contractNames().join(', ')}` : ''}`;
+        `${currentOrder().name} · SCORE x${m.toFixed(2)}, x${(m * (1 + currentOrder().bonus)).toFixed(2)} IF KEPT`
+        + `${activeContracts.length ? ` — ${contractNames().join(', ')}` : ''}`;
     // The daily is the same wasteland for everyone who types it today, scored on its own line.
     const daily = dailySeed();
     const best = seedBests()[daily];
@@ -4185,7 +4269,7 @@ function buildCombatSnapshot() {
     };
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, pendingRecruit, regroupInsured, bonds, sectorFront, runSeed, ascension, bossSalt, doctrineOffer, activeDoctrine, doctrineBroken, doctrineFavourites, pendingConsequences, recentEvents, castState, firedEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, retreatNode, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, pendingRecruit, regroupInsured, bonds, sectorFront, runSeed, ascension, activeOrder, bossSalt, doctrineOffer, activeDoctrine, doctrineBroken, doctrineFavourites, pendingConsequences, recentEvents, castState, firedEvents, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, retreatNode, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -4213,6 +4297,8 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         doctrineFavourites = Array.isArray(d.doctrineFavourites) ? d.doctrineFavourites : [];
         runSeed = (typeof d.runSeed === 'string' && d.runSeed) ? d.runSeed : null;
         ascension = Number.isInteger(d.ascension) ? Math.max(0, Math.min(d.ascension, PROTOCOLS.length)) : 0;
+        // A save from before orders existed ran the whole road, which is what it was doing.
+        activeOrder = orderById(d.activeOrder) ? d.activeOrder : 'LONG';
         bossSalt = (typeof d.bossSalt === 'string' && d.bossSalt) ? d.bossSalt : 'w0';
         // Gear fields on a roster saved before gear existed, and any id that no longer exists,
         // resolve to empty slots rather than phantom equipment.
@@ -4461,12 +4547,16 @@ function renderMap() {
     // Depth was a number that only went up. On the road to the gate it is a distance to it -
     // and it has to fit the stat box, which "7 - LAST" did not: it rendered as "7 - LA...".
     // The node, the banner and the briefing all say "last" in full; this only has to count.
+    // Counted against the order rather than the road: a Sortie is three sectors long and a
+    // header telling it there are four more to go is measuring somebody else's expedition.
     const secLbl = document.getElementById('map-sector-lbl');
-    secLbl.innerText = currentSector <= FINAL_SECTOR ? `${currentSector} / ${FINAL_SECTOR}` : `${currentSector}`;
-    secLbl.classList.toggle('sector-last', isFinalSector());
+    const target = orderSectors();
+    secLbl.innerText = currentSector <= target ? `${currentSector} / ${target}` : `${currentSector}`;
+    secLbl.classList.toggle('sector-last', isLastOrdered() || isFinalSector());
     secLbl.title = isFinalSector() ? 'The last sector. The road ends at the commander above it.'
-                 : currentSector < FINAL_SECTOR ? `${FINAL_SECTOR - currentSector} to the end of the road.`
-                 : 'Past the gate.';
+                 : isLastOrdered() ? 'The last sector of this order. Clearing it brings the squad home.'
+                 : currentSector < target ? `${target - currentSector} to go on this order.`
+                 : 'Past the order. Nothing is recalling you now.';
     if (isFinalSector()) firePrompt('LAST');
     document.getElementById('map-score-lbl').innerText = formatStat(computeScore(runStats));
 
@@ -4520,7 +4610,10 @@ function renderMap() {
     document.getElementById('relic-list').innerHTML = rHtml;
 
     const mapC = document.getElementById('map-nodes');
-    if (currentTier > TOTAL_TIERS) { 
+    if (currentTier > TOTAL_TIERS) {
+        // The order is up. Not for the long road, where the ending has already asked its own
+        // version of this question and been answered.
+        if (isLastOrdered() && runStats && !runStats.won) { firePrompt('RECALL'); renderRecall(mapC); return; }
         mapC.innerHTML = `<h3 style="color:#8B0000; text-align:center;">SECTOR ${currentSector} SECURED</h3><button class="return-btn" style="border-color:#6B8E23; color:#6B8E23; margin-bottom:15px;" data-action="advance-sector">ENTER SECTOR ${currentSector + 1}</button><button class="return-btn" data-action="citadel">RETURN TO CITADEL</button>`; 
         return; 
     }
@@ -4590,6 +4683,39 @@ function advanceSector() {
     sectorMap = generateSectorMap(seededRng('map:' + currentSector)); currentNodeId = null; clearedNodeIds = []; forecastWeather = null; forecastTerrain = null; forecastFormation = null;
     noteDepth(); saveGameState();
     resolveConsequence();
+}
+
+// What the order was for, put in front of the player on the sector it runs out. Both answers
+// are real: coming home is what was signed for and is paid for, and pressing on is allowed -
+// it just means the order lapses, and nothing pays for a promise that was not kept.
+function renderRecall(mapC) {
+    const o = currentOrder();
+    const pct = Math.round(orderBonus(runStats) * 100);
+    const standing = playerRoster.filter(p => p.hp > 0).length;
+    const lost = (runStats.fallen || []).length;
+    mapC.innerHTML = `<h3 class="recall-head">\u2714 ORDER FULFILLED</h3>
+        <div class="recall-note">${o.name} was ${o.sectors} sectors, and this is the ${o.sectors}${o.sectors === 3 ? 'rd' : 'th'}.
+        The transport is on the road. Coming home banks the expedition with the order's bonus on top of the walk-out;
+        pressing on is allowed, and lets the order lapse.</div>
+        <div class="recall-lines">
+            <div class="runover-line"><span>ORDER BONUS</span><span>+${pct}% SCORE</span></div>
+            <div class="runover-line"><span>STILL STANDING</span><span>${standing} of ${playerRoster.length}</span></div>
+            ${lost ? `<div class="runover-line"><span>PAID FOR IT</span><span>${runStats.fallen.map(f => f.name).join(', ')}</span></div>` : ''}
+        </div>
+        <button class="return-btn recall-home" data-action="order-home">COME HOME \u2014 +${pct}% AND OUT</button>
+        <button class="return-btn" data-action="advance-sector">PRESS ON \u2014 SECTOR ${currentSector + 1}, ORDER LAPSED</button>
+        <button class="return-btn contract-back" data-action="citadel">RETURN TO CITADEL</button>`;
+}
+// Coming home on the order is a walk-out that was planned rather than called, so it pays what a
+// walk-out pays and the order's bonus besides.
+function orderHome() {
+    if (!runStats || !isLastOrdered() || runStats.won) return;
+    noteDepth();
+    runStats.fulfilled = true;
+    runStats.extracted = true;
+    bossSkulls += extractSkulls(runStats);
+    playSFX('overdrive');
+    endRun();
 }
 
 function setOutpostTab(tab) { document.getElementById('tab-roster').className = `op-tab-btn ${tab === 'ROSTER' ? 'op-tab-active' : ''}`; document.getElementById('tab-workbench').className = `op-tab-btn ${tab === 'WORKBENCH' ? 'op-tab-active' : ''}`; document.getElementById('tab-cyber').className = `op-tab-btn ${tab === 'CYBER' ? 'op-tab-active' : ''}`; document.getElementById('outpost-roster-view').style.display = tab === 'ROSTER' ? 'flex' : 'none'; document.getElementById('outpost-workbench-view').style.display = tab === 'WORKBENCH' ? 'flex' : 'none'; document.getElementById('outpost-cyber-view').style.display = tab === 'CYBER' ? 'flex' : 'none'; renderOutpost(); }
@@ -5507,6 +5633,7 @@ const PROMPTS = [
     { id: 'CURSE',     title: 'A CURSED RELIC',  body: 'Cursed relics carry a real upside and a real cost, and they are never dealt at random - this one is on the table because you can refuse it. Read the second half of the line before you take it.' },
     { id: 'ROUTE',     title: 'THE ROUTE IS A PLAN', body: 'Taking a node commits you to what it connects to. Elites and warlords pay the most; camps and the Armory cost you a node but keep the squad standing. Look two tiers ahead before you step.' },
     { id: 'EXTRACT',   title: 'YOU CAN WALK OUT', body: 'An expedition does not have to end with the squad on the floor. Calling it at a camp banks everything the run earned with a bonus that grows the deeper you got, sends a Skull to the Citadel for every sector you cleared, and brings whatever relic you are carrying home with you. It also ends the run - and score climbs far faster with depth than the bonus does, so pushing on is worth more if you survive it. That is the whole question: is the squad in front of you good for one more sector?' },
+    { id: 'RECALL',    title: 'THE ORDER IS UP', body: 'This is the last sector the order signed you out for, and clearing it brings the transport. Coming home banks everything the expedition earned, pays the walk-out bonus for the depth reached, and pays the order on top of it for having been kept. Pressing on is allowed and costs nothing that is already banked - it only lets the order lapse, and a lapsed order pays nothing however much further the squad gets. The choice is whether the squad in front of you is good for a sector nobody is paying for.' },
     { id: 'LAST',      title: 'THE ROAD ENDS HERE', body: 'This is the last sector. The commander at the top of it is not one of the seven that hold the road - it is what they answer to, it is not in the rotation, and putting it down is how an expedition is won rather than merely survived. Nothing about the way there changes: ten tiers, the same branching routes, the same fights. Only the thing at the top is different, and it is standing on everything it has outlived. Winning does not force you home - the road past the gate is still there, and the win is banked before you decide.' },
     { id: 'TALLY',     title: 'IT IS COUNTING', body: 'The last warlord writes down every one of its own that falls in front of it: more armour and more damage for each, up to eight, and the count rides its passive chip where you can watch it climb. Halfway down it raises the commanders you already felled, and while any of them stands it takes 30% of what you land on it - so they have to come down, and every one that does is another point on the count. Broken past a quarter it stops counting and spends: the armour comes off and goes into the swing, and everything you cleared off it is in that number.' },
     { id: 'GRUDGE',    title: 'IT REMEMBERS YOU', body: 'You have felled this commander before, and it has come back for it - heavier, faster, better armoured, and holding a move it never needed against you the first time. That move opens under a quarter health, after the enrage you already know about, and the fight log names it at the door so you can plan around it. A warlord is the one fight you cannot walk away from, so it pays for the trouble: felling a risen one banks an extra Skull for every grudge it was carrying.' },
@@ -8278,6 +8405,7 @@ globalThis.WP = {
     // entry points and pure helpers the suites exercise
     EXTRACT, extractBonus, extractSkulls, canExtract, extractRun, extractPitch, armExtract, renderCamp,
     bossRetinueUp, GRUDGE, RISEN_MARK, grudgeOn, noteGrudge, risenName, risenShort, openGrudgePhase,
+    ORDERS, DEFAULT_ORDER, orderById, currentOrder, orderSectors, orderBonus, isLastOrdered, renderRecall, orderHome,
     FINAL_SECTOR, FINAL_BOSS, BOSS_ROTATION, isFinalSector, VICTORY, noteTally, raiseFelled, REVENANT,
     spendTally, noteVictory, renderVictory, victoryWalk, victoryPress, roadWarlords,
     BLEED_OUT, DRAGGED_CLEAR, REACHES_THE_DOWN, isDown, bleedingOut, goDown, tickBleedOut,
@@ -8347,6 +8475,7 @@ globalThis.WP = {
     get explaining() { return explaining; }, set explaining(v) { explaining = v; },
     get inspecting() { return inspecting; }, set inspecting(v) { inspecting = v; },
     get ascension() { return ascension; }, set ascension(v) { ascension = v; },
+    get activeOrder() { return activeOrder; }, set activeOrder(v) { activeOrder = v; },
     get bestSector() { return bestSector; }, set bestSector(v) { bestSector = v; },
     get frontBannerPending() { return frontBannerPending; }, set frontBannerPending(v) { frontBannerPending = v; },
     get regroupInsured() { return regroupInsured; }, set regroupInsured(v) { regroupInsured = v; },

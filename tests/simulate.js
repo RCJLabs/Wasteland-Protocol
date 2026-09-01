@@ -88,6 +88,9 @@ const EXTRACT_AT = EXTRACT_RAW === 'off' ? 99 : Number(EXTRACT_RAW);
 // which is what the feature is for; 'press' declines it and carries on into the post-game, so
 // the endless half of the game can still be measured.
 const ENDING = flag('ending', 'walk');
+// Which order the expedition signs for. 'long' is the whole road, which is what every run did
+// before orders existed, so it stays the default and the older figures stay comparable.
+const ORDER = flag('order', 'long').toUpperCase();
 // A commander's offer deals three cards and sometimes one of them is cursed. This file took
 // `offer.find(RARE) || offer[0]`, which is two opinions dressed as one: prefer a rare, and
 // otherwise take whatever happens to sit first. "Cursed relics are refused" was that policy
@@ -167,8 +170,8 @@ const FACES = flag('faces', 'warm');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy }) => {
-  const stat = { won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy }) => {
+  const stat = { order: null, fulfilled: false, won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
                  sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, ground: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
@@ -211,6 +214,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   activeContracts = [...contracts];
   currentSlot = 1;
+  // Set before confirmNewGame, which is where newRunStats reads it onto the run.
+  if (orderById(orderPolicy)) activeOrder = orderPolicy;
   if (metaPolicy !== 'fresh') spendSkulls();
   if (metaPolicy === 'fresh') {
     // Written out against the real shape rather than mapped over the keys: startLevel is 1 and
@@ -631,6 +636,15 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   while (stat.nodes < capNodes) {
     if (currentTier > TOTAL_TIERS) {
+      // The order runs out. The engine puts this on the map as two buttons; here it is taken,
+      // because taking it is what the order is for - a run that signs for three sectors and
+      // then walks past the transport has not measured a Sortie, it has measured a long road
+      // with extra steps.
+      if (isLastOrdered() && !runStats.won) {
+        stat.fulfilled = true; stat.endedBy = 'recalled';
+        orderHome();
+        break;
+      }
       currentSector++; currentTier = 1; noteDepth();
       pursuit = null;                    // as advanceSector does: nothing follows across a sector
       sectorFront = rollFront(); frontBannerPending = false;
@@ -877,6 +891,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   // The instrument checks itself: these count the same events by different routes, and the
   // whole point of the block above is that they must not diverge.
+  stat.order = runStats.order;
   stat.engineBosses = runStats.bosses; stat.engineElites = runStats.elites;
   stat.standings = Object.fromEntries(facesMet().map(f => [f.id, f.standing]));
   stat.sector = runStats.deepestSector; stat.tier = runStats.deepestTier;
@@ -913,6 +928,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   let ALL_FORMATION_IDS = [];
   let SCAR_IDS = [];
   let FINAL_SECTOR_N = 7;
+  let ORDER_NAME = '', ORDER_SECTORS = 7;
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(`http://127.0.0.1:${port}/index.html`);
   await page.waitForTimeout(800);
@@ -920,6 +936,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   ALL_FORMATION_IDS = await page.evaluate(() => ALL_FORMATIONS.map(f => f.id));
   SCAR_IDS = await page.evaluate(() => SCAR_POOL.map(sc => sc.id));
   FINAL_SECTOR_N = await page.evaluate(() => FINAL_SECTOR);
+  const ordSpec = await page.evaluate(id => { const o = orderById(id); return o ? { name: o.name, sectors: o.sectors } : null; }, ORDER);
+  ORDER_NAME = ordSpec ? ordSpec.name : ORDER;
+  ORDER_SECTORS = ordSpec ? ordSpec.sectors : FINAL_SECTOR_N;
 
   console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}, tactics ${TACTICS}, relics ${RELICS}, meta ${META}, faces ${FACES}` +
               (CONTRACTS.length ? ` under ${CONTRACTS.join(', ')}` : '') +
@@ -927,7 +946,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -1007,6 +1026,21 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('skulls left unspent', await page.evaluate(() => bossSkulls));
   line('deepest sector, mean, by third', `${depthOf(band(0, third))} / ${depthOf(band(third, 2 * third))} / ${depthOf(band(2 * third, n))}`);
   line('grudge on commanders met, same', `${grudgeOf(band(0, third))} / ${grudgeOf(band(third, 2 * third))} / ${grudgeOf(band(2 * third, n))}`);
+
+  // How long an order actually takes, which is the question orders exist to answer.
+  console.log('\n── THE ORDER ' + '─'.repeat(45));
+  line('signed for', `${ORDER_NAME || ORDER} \u00B7 ${ORDER_SECTORS} sectors`);
+  const keptN = results.filter(r => r.fulfilled).length;
+  line('kept', `${keptN} of ${n} (${Math.round(keptN / n * 100)}%)`);
+  if (keptN) {
+    const kn = results.filter(r => r.fulfilled).map(r => r.nodes).sort((a, b) => a - b);
+    const kf = results.filter(r => r.fulfilled).map(r => r.fights).sort((a, b) => a - b);
+    const ks = results.filter(r => r.fulfilled).map(r => r.score).sort((a, b) => a - b);
+    line('  nodes to keep it, median', `${pct(kn, 0.5)} (p90 ${pct(kn, 0.9)})`);
+    line('  fights to keep it, median', `${pct(kf, 0.5)} (p90 ${pct(kf, 0.9)})`);
+    line('  score for keeping it, median', pct(ks, 0.5).toLocaleString());
+  }
+  line('lost before the recall', `${results.filter(r => !r.fulfilled).length} of ${n}`);
 
   console.log('\n── WHERE RUNS END ' + '─'.repeat(40));
   const sectors = nums('sector');
