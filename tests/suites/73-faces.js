@@ -174,8 +174,10 @@ module.exports = {
       seed();
       const before = sectorMap.nodes.filter(n => n.type === 'CARRION').length;
       const off = callOffCarrion();
+      const offType = off && off.type;      // read now: the node is live and setCarrionOn may take it back
       const afterOff = sectorMap.nodes.filter(n => n.type === 'CARRION').length;
       const on = setCarrionOn();
+      const onType = on && on.type;
       const afterOn = sectorMap.nodes.filter(n => n.type === 'CARRION').length;
 
       // What is behind the squad is not on offer, and neither is the commander.
@@ -210,7 +212,7 @@ module.exports = {
       const okWeather = w => !w || w === 'CLEAR' || w === FACTIONS[swapped.type].weather;
       const cleaned = tookTheMarked && !swapped.formation && okWeather(swapped.weather)
         && (!swapped.terrain || (FACTIONS[swapped.type].ground || []).includes(swapped.terrain));
-      return { before, off: off && off.type, afterOff, on: on && on.type, afterOn,
+      return { before, off: offType, afterOff, on: onType, afterOn,
                noneBehind, marksSafe, bossExists, currentSafe, cleaned, tookTheMarked,
                swappedTo: swapped && swapped.type,
                left: swapped && { f: swapped.formation, w: swapped.weather, t: swapped.terrain } };

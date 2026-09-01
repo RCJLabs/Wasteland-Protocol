@@ -537,17 +537,26 @@ function bossRetinueUp(ent, key) {
 // armour and puts the count into the swing instead. Kill everything and it hits like the
 // weight of it; kill nothing and it is a fast unarmoured thing you can burn down, standing in
 // a crowd. Neither line is free.
+// One more on the count, and what a count is worth. Split out from noteTally because COUNT
+// YOURS adds to the tally without anything of the Ossuary's having died - noteTally takes the
+// CORPSE and finds the keeper from it, so handing it the keeper made it look for a second
+// tally-holder, find none, and return having logged nothing. The arithmetic lives here once.
+function growTally(keeper, mark) {
+    if (!keeper || !keeper.tally) return false;
+    const t = keeper.tally;
+    if ((keeper.tallyStacks || 0) >= t.max) return false;
+    keeper.tallyStacks = (keeper.tallyStacks || 0) + 1;
+    keeper.armor += t.armor; keeper.baseArmor = (keeper.baseArmor || 0) + t.armor;
+    keeper.dmgBase = Math.ceil(keeper.dmgBase * (1 + t.dmg));
+    if (mark) log(`> ${keeper.name} writes ${mark} down. Tally ${keeper.tallyStacks}/${t.max}.`, 'log-dmg');
+    setTimeout(() => spawnFCT(keeper.id, `TALLY ${keeper.tallyStacks}`, 'fct-status'), 260);
+    return true;
+}
 function noteTally(dead) {
     if (!dead || dead.isPlayer) return;
     const keeper = activeEntities.find(e => e.classType === 'BOSS' && e.hp > 0 && e.tally && e.id !== dead.id);
     if (!keeper) return;
-    const t = keeper.tally;
-    if ((keeper.tallyStacks || 0) >= t.max) return;
-    keeper.tallyStacks = (keeper.tallyStacks || 0) + 1;
-    keeper.armor += t.armor; keeper.baseArmor = (keeper.baseArmor || 0) + t.armor;
-    keeper.dmgBase = Math.ceil(keeper.dmgBase * (1 + t.dmg));
-    log(`> ${keeper.name} writes ${dead.name} down. Tally ${keeper.tallyStacks}/${t.max}.`, 'log-dmg');
-    setTimeout(() => spawnFCT(keeper.id, `TALLY ${keeper.tallyStacks}`, 'fct-status'), 260);
+    growTally(keeper, dead.name);
 }
 
 // The ossuary opens: the commanders this expedition already put in the ground get up, wearing
@@ -621,6 +630,7 @@ const BOSS_POOL = [
         bg: 'bg_thunderdome.webp',
         banner: '\uD83D\uDC80 THUNDERDOME BLOODLUST: All units deal +20% DMG \uD83D\uDC80',
         intents: [['ATTACK', 0.30], ['AOE', 0.20], ['HEAVY', 0.20], ['STATUS', 0.20], ['DEFEND', 0.10]],
+        learned: { sig: 'RECKONING', replaces: 'DEFEND' },
         enrage: { cry: 'WARLORD ENRAGED - THE PACK ANSWERS!', dmgScale: 1.5,
                   summon: { name: 'War Hound', classType: 'BEAST', range: 'melee', hp: 30, dmg: 12, speed: 18,
                             img: 'enemy_dog.webp', scale: 0.8, resistances: { phys: -2, bio: 0, energy: 0 } },
@@ -638,6 +648,7 @@ const BOSS_POOL = [
         bg: 'bg_foundry.webp',
         banner: '\uD83D\uDD25 FOUNDRY HEAT: All units deal +20% DMG \uD83D\uDD25',
         intents: [['AOE', 0.35], ['ATTACK', 0.30], ['DEFEND', 0.20], ['HEAVY', 0.15]],
+        learned: { sig: 'REFIT', replaces: 'DEFEND' },
         // Last time you out-lasted the salvoes. It stopped spacing them out.
         grudge: { cry: 'OVERLOAD - BATTERIES CHARGING', name: 'OVERLOAD',
                   tell: 'Charges a turn, then fires on the whole line.', charge: { turns: 1, mult: 1.1 } },
@@ -656,6 +667,7 @@ const BOSS_POOL = [
         bg: 'bg_nest.webp',
         banner: '\u2620\uFE0F CARRION REEK: All units deal +20% DMG \u2620\uFE0F',
         intents: [['STATUS', 0.35], ['HEAVY', 0.25], ['ATTACK', 0.25], ['AOE', 0.15]],
+        learned: { sig: 'CARRION_CALL', replaces: 'STATUS' },
         enrage: { cry: 'THE MATRIARCH SHRIEKS - PLAGUE WIND!', dmgScale: 1.25, speedBonus: 4, plague: true },
         // You killed her once. This time she does not intend to be the last of them.
         grudge: { cry: 'SHE IS LAYING - THE NEST ANSWERS!', name: 'SPAWNING',
@@ -676,6 +688,7 @@ const BOSS_POOL = [
         bg: 'bg_nest.webp',
         banner: '\u{1F9EA} VAT REEK: All units deal +20% DMG \u{1F9EA}',
         intents: [['ATTACK', 0.35], ['HEAVY', 0.30], ['STATUS', 0.20], ['AOE', 0.15]],
+        learned: { sig: 'SELF_DOSE', replaces: 'STATUS' },
         // The pump is a trade it makes against itself, and the whole fight is a question of
         // timing: chip a wall early, or hold the burst until the tubes are wide open and it is
         // hitting hard enough to matter.
@@ -697,6 +710,7 @@ const BOSS_POOL = [
         bg: 'bg_thunderdome.webp',
         banner: '\u{1F6E1} MARSHAL\u2019S COLUMN: All units deal +20% DMG \u{1F6E1}',
         intents: [['ATTACK', 0.40], ['STATUS', 0.25], ['HEAVY', 0.20], ['DEFEND', 0.15]],
+        learned: { sig: 'WHISTLE', replaces: 'DEFEND' },
         // The lieutenant is the fight: kill Bulldog or spend the whole fight chipping plate.
         escort: { name: 'Bulldog', classType: 'BEAST', range: 'melee', hp: 66, dmg: 18, speed: 16,
                   img: 'enemy_hound_bulldog.webp', scale: 1.5, armor: 5, sig: 'RIOT_PLATE',
@@ -717,6 +731,7 @@ const BOSS_POOL = [
         bg: 'bg_thunderdome.webp',
         banner: '\u26A1 THE SKY TURNS: All units deal +20% DMG \u26A1',
         intents: [['AOE', 0.30], ['ATTACK', 0.30], ['STATUS', 0.25], ['HEAVY', 0.15]],
+        learned: { sig: 'READ_THE_LINE', replaces: 'STATUS' },
         // Every third turn the weather changes under everyone, squad and warlord alike.
         stormTurn: 3,
         enrage: { cry: 'THE STORMCALLER OPENS THE SKY!', dmgScale: 1.2, speedBonus: 2 },
@@ -734,6 +749,7 @@ const BOSS_POOL = [
         bg: 'bg_foundry.webp',
         banner: '\u{1F6A7} BASTION WARD: All units deal +20% DMG \u{1F6A7}',
         intents: [['DEFEND', 0.30], ['AOE', 0.30], ['ATTACK', 0.25], ['HEAVY', 0.15]],
+        learned: { sig: 'FIELD_REPAIR', replaces: 'DEFEND' },
         // Warded to near-invulnerability until the generator standing beside it is destroyed.
         ward: { name: 'Ward Generator', classType: 'MECH', range: 'ranged', hp: 55, dmg: 6, speed: 3,
                 img: 'enemy_turret.webp', scale: 1.2, armor: 6,
@@ -772,6 +788,7 @@ const BOSS_POOL = [
         bg: 'bg_ossuary.webp',
         banner: '\u{1F480} THE ROAD ENDS HERE: All units deal +20% DMG \u{1F480}',
         intents: [['ATTACK', 0.30], ['HEAVY', 0.25], ['AOE', 0.25], ['STATUS', 0.10], ['DEFEND', 0.10]],
+        learned: { sig: 'COUNT_YOURS', replaces: 'DEFEND' },
         // Every one of its own that falls is written down.
         tally: { armor: 4, dmg: 0.06, max: 8 },
         // Halfway down it opens the ossuary: the commanders this expedition already put in the
@@ -798,6 +815,23 @@ const FINAL_BOSS = BOSS_POOL.find(b => b.final) || null;
 // The point is not that it is harder. It is that the meta has an enemy in it - felling the
 // Marshal is a thing that happened to you both, and the version that turns up in your next run
 // is the version you made.
+// ── What a commander learns ─────────────────────────────────────────────────────────────
+// A04 gave every commander a grudge PHASE - a last gear that opens under a quarter health. It
+// works, and it arrives after the fight is decided. For the three-quarters before it, a
+// Thrice-Risen commander is a fresh one wearing bigger numbers, which is the one language a
+// player learns nothing from: you cannot read +20% health off a field.
+//
+// So from the second time it meets you, a commander also trades one of its intents for
+// something it picked up losing to you - armed from turn one, telegraphed like anything else,
+// and deliberately NOT the grudge phase's payload. The phase is what it does when it is dying;
+// the learned move is what it does while it is healthy, and it changes how you open rather than
+// how you finish.
+//
+// It rides the signature pipeline rather than a new intent type: rollIntent already prefers a
+// signature over the table, intentFor already gives it an icon, the field already telegraphs
+// it, forecastFor already reports one as worth stopping, and the bestiary already prints its
+// description. A new intent type would have needed all five taught separately.
+const LEARNED_AT = 2;    // grudge stacks before a commander brings something new
 const GRUDGE = {
     hp: 0.20,        // per grudge, compounding with the sector scale it already carries
     dmg: 0.12,
@@ -817,6 +851,18 @@ function grudgeOn(id) {
     return Math.min(GRUDGE.cap, g);
 }
 function noteGrudge(id) { if (id) grudges[id] = (grudges[id] || 0) + 1; }
+// What this commander has picked up, if it has met you often enough to pick anything up.
+function learnedMove(b, g) { return (b && b.learned && g >= LEARNED_AT) ? b.learned : null; }
+// The trade. The named intent comes out of the table and the rest are renormalised to sum to
+// one again - the signature roll happens before the table and consumes its own share, so a
+// table left short would simply fall through to its last entry more often, which is not a
+// trade, it is a quiet bias toward whatever happens to be written last.
+function tradeIntents(intents, replaces) {
+    const kept = (intents || []).filter(([type]) => type !== replaces);
+    if (!kept.length) return intents || [];
+    const total = kept.reduce((a, [, w]) => a + w, 0);
+    return total > 0 ? kept.map(([type, w]) => [type, w / total]) : kept;
+}
 function risenName(b, g) { return g > 0 ? `${b.name}, ${RISEN_MARK[g] || `Risen ×${g}`}` : b.name; }
 // What the map promises before you take the node, so a re-match is a routing decision.
 function risenShort(b, g) { return g > 0 ? `${b.short} †${g}` : b.short; }
@@ -2033,7 +2079,12 @@ const CODEX = [
     ] },
     { id: 'HOSTILES', title: 'KNOW THE HOSTILES', body: () => [
         'Every hostile carries a signature. A passive one is always running; an action is telegraphed by its own icon a turn before it lands, so there is always an answer.',
-        ...Object.values(ENEMY_SIGS).map(s => `${s.name} (${s.kind === 'action' ? 'telegraphed' : s.kind}) \u2014 ${s.desc}`)
+        ...Object.values(ENEMY_SIGS).filter(s => !s.learned).map(s => `${s.name} (${s.kind === 'action' ? 'telegraphed' : s.kind}) \u2014 ${s.desc}`),
+        `A commander carries none of those. It brings its own, and only from the ${LEARNED_AT === 2 ? 'second' : LEARNED_AT + 'th'} time it meets you: felling one teaches it something, and what it learned it trades one of its usual intents to use. This is not the gear it shows when it is dying - that opens under a quarter health and is a different thing entirely.`,
+        ...BOSS_POOL.filter(b => b.learned).map(b => {
+            const s = ENEMY_SIGS[b.learned.sig];
+            return `${b.name} \u2014 ${s.name}, in place of its ${b.learned.replaces.toLowerCase()}. ${s.desc}`;
+        })
     ] },
     { id: 'CONSEQUENCES', title: 'WHAT COMES BACK', body: () => [
         'Some event choices take something now and book what it costs for later. The debt is counted in NODES cleared, not sectors, so it lands inside the expedition that took it on - and the board on the map shows what is owed and how far off it is.',
@@ -5933,7 +5984,27 @@ const ENEMY_SIGS = {
     BURROW:     { name: 'Burrow',       kind: 'action',  icon: '\u{1F573}', weight: 0.35, cd: 3,
                   desc: 'Goes under for a turn, untouchable, then comes up under the front rank.' },
     BROOD:      { name: 'Brood',        kind: 'action',  icon: '\u{1F95A}', weight: 0.40, cd: 2,
-                  desc: 'Lays another Carrion Rat. Keeps laying until it is killed.' }
+                  desc: 'Lays another Carrion Rat. Keeps laying until it is killed.' },
+
+    // ── What the commanders learned ─────────────────────────────────────────────────────
+    // One each, armed from the second meeting. Every one of these is a thing the squad did
+    // to it the last time, done back: none of them repeats that commander's grudge phase.
+    RECKONING:  { name: 'Reckoning',    kind: 'action',  icon: '\u{1F9B4}', weight: 0.30, cd: 3, learned: true,
+                  desc: 'The Warlord eats one of its own to close its wounds. It learned that from watching you drag yours clear.' },
+    REFIT:      { name: 'Refit',        kind: 'action',  icon: '\u{1F527}', weight: 0.30, cd: 3, learned: true,
+                  desc: 'The Colossus welds its plating back on mid-fight. It learned that stripping the armour was how you did it.' },
+    CARRION_CALL:{ name: 'Carrion Call', kind: 'action', icon: '\u{1F441}', weight: 0.28, cd: 3, learned: true,
+                  desc: 'The Matriarch marks whoever is weakest and everything on the field comes for them. She learned which one of you falls first.' },
+    SELF_DOSE:  { name: 'Self-Dose',    kind: 'action',  icon: '\u{1F489}', weight: 0.28, cd: 3, learned: true,
+                  desc: 'The Vatborn opens its own tank early rather than waiting to be hurt into it. It learned not to wait.' },
+    WHISTLE:    { name: 'Whistle',      kind: 'action',  icon: '\u{1F4EF}', weight: 0.32, cd: 4, learned: true,
+                  desc: 'The Marshal puts the hound back on its feet. It learned that you kill the dog first.' },
+    READ_THE_LINE:{ name: 'Read The Line', kind: 'action', icon: '\u{1F32A}', weight: 0.30, cd: 3, learned: true,
+                  desc: 'The Stormcaller stops turning the sky at random and picks the one your line is worst under.' },
+    FIELD_REPAIR:{ name: 'Field Repair', kind: 'action', icon: '\u{1F6E1}', weight: 0.30, cd: 3, learned: true,
+                  desc: 'The Bastion patches its ward generator instead of shooting. It learned that you go for the generator.' },
+    COUNT_YOURS:{ name: 'Count Yours',  kind: 'action',  icon: '\u{1F480}', weight: 0.26, cd: 2, learned: true,
+                  desc: 'The Ossuary adds your dead to its tally as well as its own. It learned that you lose people too.' }
 };
 // How many of the swarm are still up. Three is the line: at three the pile protects itself,
 // at two it is just fast, fragile things. Everything Carrion counts toward the floor, but only
@@ -6238,8 +6309,12 @@ function bestiaryRoster() {
     Object.entries(ENEMY_POOL).forEach(([faction, list]) =>
         list.forEach(e => out.push({ name: e.name, faction, sig: e.sig, minTier: e.minTier,
                                      range: e.range, isHeavy: e.isHeavy, resistances: e.resistances, boss: false })));
-    BOSS_POOL.forEach(b => out.push({ name: b.name, faction: 'COMMAND', sig: null, minTier: null,
+    BOSS_POOL.forEach(b => out.push({ name: b.name, faction: 'COMMAND',
+                                      // What it picked up off you, once it has picked it up.
+                                      sig: (learnedMove(b, grudgeOn(b.id)) || {}).sig || null,
+                                      minTier: null,
                                       range: b.range, isHeavy: true, resistances: b.resistances, boss: true,
+                                      grudge: grudgeOn(b.id),
                                       passive: b.passive || null }));
     return out;
 }
@@ -6478,12 +6553,22 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
             stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
             resistances: { ...b.resistances }, phase: 1,
             grudge: g,
+            sigCd: 0,
             // A grudge phase is the gear a commander only shows to somebody who already beat
             // it. The last warlord always has one: it is the end of the game and does not need
             // to have met you before to have a last word.
             grudgeMove: (b.final || g > 0) ? (b.grudge || null) : null,
             intents: b.intents, bossPassive: b.passive || null, enrage: b.enrage
         };
+        // Something it picked up losing to you, from the second meeting on. It comes with the
+        // intent it replaces already taken out, so the commander is doing something else
+        // rather than something more.
+        const learned = learnedMove(b, g);
+        if (learned) {
+            boss.sig = learned.sig;
+            boss.learnedSig = learned.sig;
+            boss.intents = tradeIntents(b.intents, learned.replaces);
+        }
         if (b.final) boss.isFinal = true;
         // Kept on the entity because the ossuary raises units mid-fight, long after the scale
         // factors this function was called with have gone out of scope.
@@ -8733,6 +8818,121 @@ function executeEnemyAi(enemy) {
             playSFX('heal');
         }
 
+        // ── What the commanders learned ─────────────────────────────────────────────────
+        // Each of these is something the squad did to it last time, done back. None repeats
+        // that commander's grudge phase: the phase is its last gear, this is its opening.
+
+        else if (enemy.sig === 'RECKONING') {
+            // It watched you drag your people clear, and drew the wrong lesson from it.
+            const pack = activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.id !== enemy.id);
+            const weakest = pack.sort((a, b) => a.hp - b.hp)[0];
+            if (weakest && enemy.hp < enemy.maxHp) {
+                const fed = Math.min(enemy.maxHp - enemy.hp, Math.floor(enemy.maxHp * 0.12));
+                weakest.hp = 0;
+                enemy.hp += fed;
+                log(`> ${enemy.name} takes ${weakest.name} apart and closes its own wounds.`, 'log-dmg');
+                spawnFCT(enemy.id, `+${fed}`, 'fct-heal'); playSFX('enrage'); triggerShake();
+            } else {
+                log(`> ${enemy.name} looks around for something to eat and finds nothing.`, 'log-status');
+            }
+        }
+
+        else if (enemy.sig === 'REFIT') {
+            // You stripped the plating last time. It brought a welder.
+            const back = Math.max(0, (enemy.baseArmor || 0) - (enemy.armor || 0));
+            enemy.armor = (enemy.armor || 0) + Math.max(6, back);
+            enemy.corrodedTurns = 0;
+            log(`> ${enemy.name} welds its plating back on.`, 'log-status');
+            spawnFCT(enemy.id, '+PLATE', 'fct-heal'); playSFX('heal');
+        }
+
+        else if (enemy.sig === 'CARRION_CALL') {
+            // She learned which one of you goes down first, and told everything else.
+            const mark = [...validTargets].sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp))[0];
+            if (mark) {
+                mark.markedTurns = Math.max(mark.markedTurns || 0, 2);
+                activeEntities.filter(e => !e.isPlayer && e.hp > 0).forEach(e => { e.lockOn = mark.id; });
+                log(`> ${enemy.name} marks ${mark.name}. Everything out there turns to look.`, 'log-dmg');
+                spawnFCT(mark.id, 'MARKED', 'fct-weak'); playSFX('beast');
+            } else {
+                log(`> ${enemy.name} shrieks over an empty field.`, 'log-status');
+            }
+        }
+
+        else if (enemy.sig === 'SELF_DOSE') {
+            // It used to wait to be hurt into the tank. It stopped waiting.
+            if (enemy.venom && enemy.venomStacks < enemy.venom.max) {
+                venomDose(enemy, true);
+                log(`> ${enemy.name} opens the tank on itself before you have laid a hand on it.`, 'log-dmg');
+            } else {
+                log(`> ${enemy.name} reaches for the valve. There is nothing left in it.`, 'log-status');
+            }
+        }
+
+        else if (enemy.sig === 'WHISTLE') {
+            // You kill the dog first. It knows.
+            const hound = activeEntities.find(e => e.id === enemy.escortId);
+            if (hound && hound.hp <= 0) {
+                hound.hp = Math.max(1, Math.floor(hound.maxHp * 0.6));
+                hound.deathPlayed = false; hound.bloomed = false;
+                hound.stunnedTurns = 0; hound.bleedingTurns = 0;
+                if (!turnQueue.some(e => e.id === hound.id)) turnQueue.push(hound);
+                hound.intent = rollIntent(hound);
+                log(`> ${enemy.name} whistles, and ${hound.name} gets back up.`, 'log-dmg');
+                spawnFCT(hound.id, 'UP AGAIN', 'fct-heal'); playSFX('enrage'); triggerShake();
+            } else if (hound) {
+                hound.armor = (hound.armor || 0) + 10; hound.armorTurns = Math.max(hound.armorTurns || 0, 2);
+                log(`> ${enemy.name} whistles ${hound.name} back into the plate.`, 'log-status');
+                spawnFCT(hound.id, '+ARMOR', 'fct-heal'); playSFX('heal');
+            } else {
+                log(`> ${enemy.name} whistles. Nothing comes.`, 'log-status');
+            }
+        }
+
+        else if (enemy.sig === 'READ_THE_LINE') {
+            // It stopped turning the sky at random and started turning it at you.
+            const shooters = validTargets.filter(t => t.gridPos >= 2).length;
+            const pick = shooters > validTargets.length / 2 ? 'BLOOD_HAZE'
+                       : validTargets.some(t => t.hp < t.maxHp * 0.5) ? 'SHRAPNEL_WINDS'
+                       : 'ASHFALL';
+            currentWeather = pick;
+            applyCombatScenery(combatBgFile, null);
+            log(`> ${enemy.name} reads your line and turns the sky to suit: ${weatherName(pick)}.`, 'log-dmg');
+            spawnFCT(enemy.id, 'THE SKY', 'fct-status'); playSFX('enrage');
+        }
+
+        else if (enemy.sig === 'FIELD_REPAIR') {
+            // You go for the generator. It brought a toolkit.
+            const gen = activeEntities.find(e => e.id === enemy.wardId);
+            if (gen && gen.hp > 0 && gen.hp < gen.maxHp) {
+                const mend = Math.min(gen.maxHp - gen.hp, Math.floor(gen.maxHp * 0.4));
+                gen.hp += mend;
+                log(`> ${enemy.name} patches the ward generator back up.`, 'log-status');
+                spawnFCT(gen.id, `+${mend}`, 'fct-heal'); playSFX('heal');
+            } else if (gen && gen.hp > 0) {
+                gen.armor = (gen.armor || 0) + 10; gen.armorTurns = Math.max(gen.armorTurns || 0, 2);
+                log(`> ${enemy.name} plates the generator before you can get to it.`, 'log-status');
+                spawnFCT(gen.id, '+ARMOR', 'fct-heal'); playSFX('heal');
+            } else {
+                log(`> ${enemy.name} reaches for a generator that is not there any more.`, 'log-status');
+            }
+        }
+
+        else if (enemy.sig === 'COUNT_YOURS') {
+            // The tally was its own dead. It has started counting yours.
+            const down = activeEntities.filter(e => e.isPlayer && e.hp <= 0).length
+                       + ((runStats && (runStats.fallen || []).length) || 0);
+            if (enemy.tally && down > 0) {
+                let add = 0;
+                for (let i = 0; i < down; i++) { if (growTally(enemy, null)) add++; else break; }
+                if (add) log(`> ${enemy.name} adds your dead to the count. ${add} more.`, 'log-dmg');
+                else log(`> ${enemy.name} counts yours too, and the ledger is already full.`, 'log-status');
+                if (add) { spawnFCT(enemy.id, `TALLY +${add}`, 'fct-weak'); playSFX('enrage'); }
+            } else {
+                log(`> ${enemy.name} counts, and you have not given it anything to count.`, 'log-status');
+            }
+        }
+
         enemy.intent = rollIntent(enemy); checkWinState(); return;
     }
 
@@ -8973,6 +9173,7 @@ globalThis.WP = {
     // engine constants
     spotBlocker, lockerGear, lockerDescText, lockerFrom, stashLocker, openingTier, scarTreatCost,
     PROTOCOL_CUT, activeProtocols, hasProtocol, protocolEnrage, nodeSalvage,
+    LEARNED_AT, learnedMove, tradeIntents, growTally,
     WEATHER, WEATHER_IDS, WEATHER_CHANCE, CONFLUENCE, confluence, sky, weatherName,
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },

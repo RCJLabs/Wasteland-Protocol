@@ -84,6 +84,26 @@
 // pays a strong player to climb it. Rungs 5-8 are where the difficulty actually lives: one win
 // in 24, median depth 2. If the ladder should cost something the whole way up, the lever is the
 // multipliers on rungs 1-4, not the effects.
+
+// ── What the learned moves cost, measured after C09 ─────────────────────────────────────
+// From the second meeting a commander trades one of its intents for something it picked up
+// losing to you. A trade should tighten the fight without running away with it, and the way to
+// tell those apart is the commander win rate at the depths where the moves arm. Two matched
+// 24-run carried careers, difficulty 1, line draft, warm faces - 269 commander fights each:
+//
+//                                 before      after
+//   deepest sector, median           6          5
+//   mean                            5.2        4.8
+//   reached sector 7               29%        33%
+//   commander fights, grudged      39% won    35% won
+//     risen x3 (n~200)             40% won    37% won
+//
+// About three points off the commander win rate where the moves are armed, and the risen-x3
+// row is the one to trust - it is the only band with a sample worth reading, and the x2 row's
+// 30 -> 21 is thirty-odd fights of noise. Depth moved less than a sector and the share of runs
+// reaching the gate went up rather than down, so this is a fight that got harder to open
+// rather than a wall that moved. That is what a trade should look like: the commander is doing
+// something else, not something strictly more.
 const path = require('path');
 const { serve } = require('./server');
 
