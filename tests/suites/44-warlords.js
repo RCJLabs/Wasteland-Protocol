@@ -11,16 +11,22 @@ module.exports = {
     // ---- the roster ----
     const pool = await page.evaluate(() => ({
       count: BOSS_POOL.length,
+      road: BOSS_ROTATION.length,
+      finals: BOSS_POOL.filter(b => b.final).length,
       ids: new Set(BOSS_POOL.map(b => b.id)).size,
       complete: BOSS_POOL.every(b => b.name && b.short && b.img && b.blurb && b.bg && b.banner && b.intents && b.enrage),
       arted: BOSS_POOL.every(b => ASSET_LIST.includes(b.img)),
       mechanics: BOSS_POOL.filter(b => b.escort || b.ward || b.stormTurn || b.passive ||
-        b.venom || b.enrage.summon || b.enrage.plague || b.enrage.backbreaker).length,
+        b.venom || b.enrage.summon || b.enrage.plague || b.enrage.backbreaker || b.tally).length,
       newOnes: BOSS_POOL.filter(b => ['VATBORN', 'MARSHAL', 'STORMCALLER', 'BASTION'].includes(b.id)).length
     }));
-    ok(`seven warlords, each with a unique id`, pool.count === 7 && pool.ids === 7);
+    // Seven hold the road and one waits at the end of it. The rotation deals only the seven;
+    // the eighth is the ending and is dealt at the last sector alone.
+    ok(`${pool.road} warlords hold the road, and one stands at the end of it`,
+      pool.road === 7 && pool.finals === 1 && pool.count === pool.road + pool.finals);
+    ok('each with a unique id', pool.ids === pool.count);
     ok('each fully described, with its arena and its art declared', pool.complete && pool.arted);
-    ok('every one carries a mechanic, not just intent weights', pool.mechanics === 7);
+    ok('every one carries a mechanic, not just intent weights', pool.mechanics === pool.count);
     ok('the four new ones are all present', pool.newOnes === 4);
     // The dossier used to read .name off the passive id - a string - and print an empty block
     // headed "Command" for every commander that had one.
@@ -41,25 +47,31 @@ module.exports = {
     // behind a generator - as the Warlord. The first cycle is sorted by threat now, with
     // enough jitter that it stays a bias rather than a gate.
     const shaped = await page.evaluate(() => {
-      const rated = BOSS_POOL.every(b => [1, 2, 3].includes(b.threat));
+      // The three-point scale rates the road. The last warlord is deliberately off it - it is
+      // not a draw the shuffle can make, so rating it against the others would be meaningless.
+      const rated = BOSS_ROTATION.every(b => [1, 2, 3].includes(b.threat));
+      const above = BOSS_POOL.filter(b => b.final).every(b => b.threat > 3);
       const mix = {};
+      // Read off bossOrder rather than off sectors: the last sector hands over the ending
+      // rather than a draw, so walking depths would sample a commander the shuffle never deals.
       for (let run = 0; run < 1200; run++) {
         runSeed = null; bossSalt = `shape${run}`;
-        for (let s = 1; s <= BOSS_POOL.length; s++) {
-          const t = bossForSector(s).threat;
-          (mix[s] = mix[s] || { 1: 0, 2: 0, 3: 0 })[t]++;
-        }
+        bossOrder(0).forEach((idx, i) => {
+          const t = BOSS_ROTATION[idx].threat;
+          (mix[i + 1] = mix[i + 1] || { 1: 0, 2: 0, 3: 0 })[t]++;
+        });
       }
       bossSalt = 'w0';
       const pct = (s, t) => 100 * mix[s][t] / (mix[s][1] + mix[s][2] + mix[s][3]);
       // What an unbiased draw would give, as the yardstick for "flat".
-      const flat = t => 100 * BOSS_POOL.filter(b => b.threat === t).length / BOSS_POOL.length;
-      return { rated,
+      const flat = t => 100 * BOSS_ROTATION.filter(b => b.threat === t).length / BOSS_ROTATION.length;
+      return { rated, above,
                s1light: pct(1, 1), s1heavy: pct(1, 3),
                s4: [pct(4, 1), pct(4, 2), pct(4, 3)], flat: [flat(1), flat(2), flat(3)],
-               lastHeavy: pct(BOSS_POOL.length, 3) };
+               lastHeavy: pct(BOSS_ROTATION.length, 3) };
     });
-    ok('every commander is rated for how much work it is', shaped.rated);
+    ok('every commander on the road is rated for how much work it is', shaped.rated);
+    ok('and the one at the end of it is rated above all of them', shaped.above);
     ok(`the opening sector leans light (${shaped.s1light.toFixed(0)}% against ${shaped.flat[0].toFixed(0)}% flat)`,
       shaped.s1light > shaped.flat[0] * 1.6);
     ok(`but a heavy one can still open a run (${shaped.s1heavy.toFixed(1)}%)`,
@@ -305,9 +317,9 @@ module.exports = {
       const listed = BOSS_POOL.every(b => text.includes(b.name));
       const dossiers = BOSS_POOL.every(b => /WARLORD/.test(dossierHtml(b.name)));
       bestiary = {}; saveMeta();
-      return { roster: roster.length, listed, dossiers };
+      return { roster: roster.length, listed, dossiers, commanders: BOSS_POOL.length };
     });
-    ok('all seven file in the bestiary', book.roster === 7 && book.dossiers);
+    ok(`all ${book.commanders} file in the bestiary`, book.roster === book.commanders && book.dossiers);
     ok('and the manual lists every one', book.listed);
 
     // ---- a portrait that has not been drawn yet falls back rather than breaking ----

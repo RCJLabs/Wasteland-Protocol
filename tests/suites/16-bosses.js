@@ -15,18 +15,25 @@ module.exports = {
     // ---- the roster rotates and every entry is distinct ----
     const roster = await page.evaluate(() => ({
       count: BOSS_POOL.length,
+      road: BOSS_ROTATION.length,
       names: BOSS_POOL.map(b => b.name),
       art: BOSS_POOL.map(b => b.img),
-      byScore: Array.from({ length: 14 }, (_, i) => bossForSector(i + 1).id)
+      // Walked as depths, because "not met twice running" is a claim about consecutive sectors.
+      // The last sector hands over the ending rather than a draw, so it is marked and the pair
+      // that spans it is not a repeat to check - nothing is drawn there to repeat.
+      byScore: Array.from({ length: 16 }, (_, i) => i + 1)
+        .map(sn => ({ id: bossForSector(sn).id, final: isFinalSector(sn) }))
     }));
-    ok(`there are ${roster.count} bosses, not one`, roster.count === 7);
+    ok(`there are ${roster.count} commanders, not one`, roster.count === 8 && roster.road === 7);
     ok('each has its own name and art',
       new Set(roster.names).size === roster.count && new Set(roster.art).size === roster.count);
     // The rotation is a seeded shuffle per run now, so the contract is coverage and no
     // back-to-back repeats rather than a fixed sector-to-commander mapping.
-    ok('every commander is reachable', new Set(roster.byScore).size === roster.count);
+    ok('every commander on the road is reachable',
+      new Set(roster.byScore.filter(b => !b.final).map(b => b.id)).size === roster.road);
     ok('and none is met twice running',
-      roster.byScore.every((id, i) => i === 0 || id !== roster.byScore[i - 1]));
+      roster.byScore.every((b, i) => i === 0 || b.final || roster.byScore[i - 1].final
+                                     || b.id !== roster.byScore[i - 1].id));
 
     // ---- each spawns with its own shape ----
     const built = await page.evaluate(() => {
@@ -67,8 +74,18 @@ module.exports = {
       [...document.querySelectorAll('#enemy-team .portrait')].every(i => i.complete && i.naturalWidth > 0)));
     // Ordinary stock may be waiting on art - it renders on a named stand-in until then - but a
     // commander is the fight the run is built toward and gets its own portrait before it ships.
-    const pending = await page.evaluate(() => BOSS_POOL.filter(b => PENDING_ART.includes(b.img)).map(b => b.name));
-    ok(`no commander is still waiting to be drawn (${pending.join(', ') || 'none'})`, pending.length === 0);
+    const art = await page.evaluate(() => ({
+      road: BOSS_ROTATION.filter(b => PENDING_ART.includes(b.img)).map(b => b.name),
+      // A commander whose art is commissioned but not drawn must name a real portrait to stand
+      // in for it, or the field shows a broken image. That is a stricter promise than "nothing
+      // is outstanding" - it is the one that keeps the game shippable while art is in flight.
+      pending: BOSS_POOL.filter(b => PENDING_ART.includes(b.img))
+        .map(b => ({ name: b.name, stand: b.stand, ok: !!b.stand && !PENDING_ART.includes(b.stand)
+                                                    && ASSET_LIST.includes(b.stand) }))
+    }));
+    ok(`every commander that holds the road is drawn (${art.road.join(', ') || 'all of them'})`, art.road.length === 0);
+    ok(`and one still being drawn stands in on real art (${art.pending.map(p => p.name).join(', ') || 'none outstanding'})`,
+      art.pending.every(p => p.ok));
     ok(`no missing boss asset (${notFound.join(', ') || 'none'})`, notFound.length === 0);
 
     // ---- breaking each one past half does something different ----

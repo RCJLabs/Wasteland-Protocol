@@ -13,6 +13,9 @@ module.exports = {
       const stock = Object.values(ENEMY_POOL).flat();
       return {
         total: r.length, stock: stock.length, bosses: r.filter(e => e.boss).length,
+        // Read off the pool rather than pinned: the last warlord joined it and files like the
+        // rest, and a new commander should file itself rather than need this line edited.
+        commanders: BOSS_POOL.length, road: BOSS_ROTATION.length,
         named: r.every(e => e.name && e.faction && e.resistances),
         sigsOnStock: r.filter(e => !e.boss).every(e => e.sig && ENEMY_SIGS[e.sig]),
         factions: [...new Set(r.map(e => e.faction))].sort().join(),
@@ -21,7 +24,8 @@ module.exports = {
       };
     });
     ok(`every hostile has a file (${roster.total} = ${roster.stock} stock + ${roster.bosses} warlords)`,
-      roster.total === roster.stock + roster.bosses && roster.stock >= 10 && roster.bosses === 7);
+      roster.total === roster.stock + roster.bosses && roster.stock >= 10
+      && roster.bosses === roster.commanders && roster.commanders === roster.road + 1);
     ok('each named, factioned and with resistances', roster.named);
     ok('every ordinary type carries a real signature', roster.sigsOnStock);
     // Read off the pools, so a new faction files itself rather than needing this line edited.

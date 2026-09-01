@@ -43,6 +43,37 @@ commander should read as roughly twice the bulk of a regular raider.
 > unhurried - the posture of someone who expects other people to do the fighting. Accent
 > colour: cold steel blue.
 
+### `enemy_boss_ossuary.webp` — The Ossuary *(outstanding)*
+*The last warlord. Sector 7 is the end of the road and this is what is standing on it.*
+
+It is not one of the seven that hold the road - it is what they answer to, and it has been
+collecting them for far longer than the player has. The design note that matters: it is doing
+the same thing you are. You take a skull off every commander you fell and build the Citadel out
+of them; this one built itself. Read it as a throne that stands up, not as a bigger raider.
+Scale 2.5, the largest thing in the game.
+
+> A colossal warlord throned in bone: a towering armoured figure whose pauldrons, breastplate
+> and crown are lashed together from the skulls and plate of other warlords, trophy helms wired
+> along a rack at its back like a bone standard, a huge chained cleaver held point-down in the
+> earth with both hands resting on the pommel, tattered banners of flayed hide hanging from its
+> arms, a blank iron death-mask with no eyeholes. Standing utterly still, chin lifted, as though
+> it has been waiting a very long time. Accent colour: cold bone-white against dead black iron.
+
+---
+
+### `bg_ossuary.webp` — the last arena *(outstanding, optional)*
+*The final fight currently reuses `bg_thunderdome.webp`, which works. This would be better.*
+
+Follow the grounds brief further down this file, not the portrait brief - it is a backdrop.
+If it lands, it also needs a `GROUND_LIFT` entry in `game.js` calibrated the way the others
+were, or the squad stands on blackness.
+
+> A vast open bowl of cracked earth ringed by a wall built entirely of stacked skulls and
+> scavenged armour plate, iron standards driven into the ground at intervals, a low bone-white
+> haze on the horizon, no structures and no figures. Wide, empty, and quiet.
+
+---
+
 ### `enemy_hound_bulldog.webp` — Bulldog
 *The Marshal's hound, and the fight's actual first problem.*
 

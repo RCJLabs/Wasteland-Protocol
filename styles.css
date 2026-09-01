@@ -80,7 +80,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .shop-node { border-color: #3aa17e; box-shadow: 0 0 10px rgba(58, 161, 126, 0.5); }
 .shop-node .node-lbl { color: #3aa17e; }
 
-#screen-event, #screen-camp { display: none; flex-direction: column; justify-content: center; align-items: center; padding: 20px; height: 100%; box-sizing: border-box; background: linear-gradient(rgba(15,15,15,0.9), rgba(5,5,5,0.9)); }
+#screen-event, #screen-camp, #screen-victory { display: none; flex-direction: column; justify-content: center; align-items: center; padding: 20px; height: 100%; box-sizing: border-box; background: linear-gradient(rgba(15,15,15,0.9), rgba(5,5,5,0.9)); }
 .event-box { background: #050505; border: 2px solid #B8860B; padding: 25px; width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; text-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.8); }
 .event-title { color: #B8860B; font-size: 22px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; border-bottom: 1px solid #333; padding-bottom: 10px; }
 .event-desc { color: #ccc; font-size: 14px; line-height: 1.6; margin-bottom: 15px; }
@@ -158,6 +158,12 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .runover-lines { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #aaa; border-top: 1px solid #222; border-bottom: 1px solid #222; padding: 10px 0; margin-bottom: 14px; }
 .runover-line { display: flex; justify-content: space-between; }
 .runover-line span:last-child { color: #ccc; font-weight: bold; }
+.title-wins { text-align: center; font-size: 11px; letter-spacing: 2px; color: #c9a84a; margin-bottom: 8px; }
+/* The last sector counts the same as every other one; it just says so in gold. */
+.sector-last { color: #c9a84a; }
+.runover-score.score-won { color: #c9a84a; text-shadow: 2px 2px 0 #4a3a10; }
+#victory-title { font-size: clamp(24px, 8vw, 34px); text-shadow: 2px 2px 0 #4a3a10; }
+.victory-sub { text-align: center; font-size: 11px; letter-spacing: 2px; color: #8a7a3a; text-transform: uppercase; margin-bottom: 10px; }
 #weather-banner { text-align: center; font-size: 11px; font-weight: bold; padding: 4px; letter-spacing: 1px; display: none; text-shadow: 1px 1px 2px #000; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
 /* The ground reads quieter than the sky: weather is an event happening to the fight, ground is
    the fight's own floor. Each terrain keeps one colour across the map dot and this line. */
@@ -764,6 +770,9 @@ button.reach-short { border-color: #7a5a20; }
 .camp-walk-go { border-color: #6B8E23; color: #6B8E23; font-weight: bold; }
 .chronicle-walked { border-color: #3d5216; }
 .chronicle-walked .chronicle-epitaph b { color: #6B8E23; letter-spacing: 1px; }
+.chronicle-won { border-color: #6a5720; background: linear-gradient(90deg, rgba(201,168,74,0.07), transparent); }
+.chronicle-won .chronicle-epitaph b { color: #c9a84a; letter-spacing: 1px; }
+.career-won span:last-child { color: #c9a84a; }
 
 /* A node holding a known composition rather than a loose patrol. The name in the label is the
    information; the colour is what makes it scannable against a map of plain faction nodes.

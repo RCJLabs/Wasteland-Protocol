@@ -6,13 +6,13 @@
 // Art that is commissioned but not yet drawn. Anything listed here is kept out of the
 // preloader and the service worker cache so neither chases a file that does not exist, and
 // the portrait fallback covers it on the field. Empty is the healthy state.
-const PENDING_ART = [];
+const PENDING_ART = ['enemy_boss_ossuary.webp'];
 const ASSET_LIST = [
     "bg_title.webp", "bg_combat.webp", "bg_thunderdome.webp", "bg_refinery.webp", "bg_highway.webp", "bg_canyon.webp", "bg_foundry.webp", "bg_nest.webp",
     "hero_bruiser.webp", "hero_medic.webp", "hero_scavenger.webp", "hero_pyro.webp", "hero_shotgunner.webp", "hero_sniper.webp", "hero_hound.webp",
     "hero_fiend.webp", "hero_hazmat.webp", "hero_harpooner.webp",
     "enemy_dog.webp", "enemy_hound_bulldog.webp", "enemy_mutant.webp", "enemy_chem.webp", "enemy_raider.webp", "enemy_psycho.webp", "enemy_sniper.webp", "enemy_juggernaut.webp", "enemy_drone.webp", "enemy_turret.webp", "enemy_warrig.webp", "enemy_boss.webp", "enemy_boss_mech.webp", "enemy_boss_vulture.webp",
-    "enemy_boss_vatborn.webp", "enemy_boss_marshal.webp", "enemy_boss_stormcaller.webp", "enemy_boss_bastion.webp",
+    "enemy_boss_vatborn.webp", "enemy_boss_marshal.webp", "enemy_boss_stormcaller.webp", "enemy_boss_bastion.webp", "enemy_boss_ossuary.webp",
     "enemy_choir_acolyte.webp", "enemy_choir_censer.webp", "enemy_choir_reliquary.webp", "enemy_choir_hierophant.webp",
     "enemy_carrion_rat.webp", "enemy_carrion_moth.webp", "enemy_carrion_worm.webp", "enemy_carrion_brood.webp",
     "bg_congregation.webp", "bg_carrionfield.webp"
@@ -498,11 +498,85 @@ const BOSS_PASSIVES = {
     STORMBRINGER: { name: 'Stormbringer', desc: 'Turns the sky over on its own clock, whatever the forecast promised. Every change lands on both sides of the field.',
                     state: ent => ent.stormTurn ? ` \u2022 ${Math.max(0, ent.stormTurn - (ent.stormClock || 0))} TO TURN` : '' },
     WARDED:  { name: 'Warded', desc: 'A shield it did not build. While the generator stands, everything you land on the Bastion is soaked to a fraction. Kill the generator first.',
-               state: ent => bossRetinueUp(ent, 'wardId') ? ' \u2022 WARD UP' : ' \u2022 WARD DOWN' }
+               state: ent => bossRetinueUp(ent, 'wardId') ? ' \u2022 WARD UP' : ' \u2022 WARD DOWN' },
+    // The one passive in the game that is a rule rather than a number: it counts its own dead,
+    // and at the end of the fight it spends what it counted. Every add you clear off it is a
+    // point it will charge you for later, and the fight says so from the first turn.
+    TALLY:   { name: 'The Tally', desc: 'Takes a count of every one of its own that falls: +4 armour and +6% damage each, to eight. Halfway down it raises the commanders you already felled, and while any of them stands it takes 30% of what you land on it. Broken past a quarter it sheds the armour and spends the count on damage instead.',
+               state: ent => (ent.revenantWard && activeEntities.some(e => e.classType === 'REVENANT' && e.hp > 0) ? ' \u2022 RAISED UP' : '')
+                           + (ent.tallyStacks ? ` \u2022 TALLY ${ent.tallyStacks}/${(ent.tally || {}).max || 8}` : ' \u2022 TALLY 0') }
 };
 // Whether the thing a commander is hiding behind is still standing.
 function bossRetinueUp(ent, key) {
     return !!(ent && ent[key] && activeEntities.some(e => e.id === ent[key] && e.hp > 0));
+}
+
+// ── The Tally ───────────────────────────────────────────────────────────────────────────
+// Every fight in this game teaches the same reflex: clear the adds off the commander, then
+// kill the commander. The last warlord is built to charge for that. Each of its own that
+// falls is +4 armour and +6% damage while the fight lasts - visible on its passive chip the
+// whole time, so it is a warning and not a trap - and broken past a quarter it sheds the
+// armour and puts the count into the swing instead. Kill everything and it hits like the
+// weight of it; kill nothing and it is a fast unarmoured thing you can burn down, standing in
+// a crowd. Neither line is free.
+function noteTally(dead) {
+    if (!dead || dead.isPlayer) return;
+    const keeper = activeEntities.find(e => e.classType === 'BOSS' && e.hp > 0 && e.tally && e.id !== dead.id);
+    if (!keeper) return;
+    const t = keeper.tally;
+    if ((keeper.tallyStacks || 0) >= t.max) return;
+    keeper.tallyStacks = (keeper.tallyStacks || 0) + 1;
+    keeper.armor += t.armor; keeper.baseArmor = (keeper.baseArmor || 0) + t.armor;
+    keeper.dmgBase = Math.ceil(keeper.dmgBase * (1 + t.dmg));
+    log(`> ${keeper.name} writes ${dead.name} down. Tally ${keeper.tallyStacks}/${t.max}.`, 'log-dmg');
+    setTimeout(() => spawnFCT(keeper.id, `TALLY ${keeper.tallyStacks}`, 'fct-status'), 260);
+}
+
+// The ossuary opens: the commanders this expedition already put in the ground get up, wearing
+// their own art, at a fraction of what they were. A run that fought its way here past six
+// warlords meets all the ones it can; a run that routed around them meets fewer, which is its
+// own reward for having done so.
+function raiseFelled(boss, count, mult, dmgMult) {
+    const ids = ((runStats && runStats.warlords) || []).slice(-count).reverse();
+    const up = [];
+    ids.forEach((id, i) => {
+        const b = BOSS_POOL.find(x => x.id === id);
+        if (!b || b.final) return;
+        const u = {
+            id: `revenant_${i}`, name: `${b.name}, Raised`, classType: 'REVENANT', range: b.range,
+            maxHp: Math.floor(300 * b.hpMult * mult * REVENANT.hp),
+            hp: Math.floor(300 * b.hpMult * mult * REVENANT.hp),
+            speed: b.speed, armor: Math.floor(b.armor * REVENANT.armor),
+            baseArmor: Math.floor(b.armor * REVENANT.armor), isPlayer: false,
+            dmgBase: Math.floor(34 * b.dmgMult * dmgMult * REVENANT.dmg),
+            img: b.img, stand: b.stand || null, scale: b.scale * 0.75, hpDrop: 0,
+            stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
+            resistances: { ...b.resistances }, sig: null, sigCd: 0
+        };
+        u.intent = rollIntent(u);
+        activeEntities.push(u); up.push(u.name);
+    });
+    if (up.length) log(`> ${up.join(' and ')} ${up.length === 1 ? 'stands' : 'stand'} up again.`, 'log-dmg');
+    else log(`> The ossuary opens on nothing. It has no one of yours to raise.`, 'log-status');
+    return up.length;
+}
+// What a raised commander keeps of itself. Low enough that two of them are a problem to solve
+// rather than a second boss fight, high enough that ignoring them loses the fight.
+const REVENANT = { hp: 0.35, dmg: 0.55, armor: 0.5 };
+
+// The last tally: it stops counting and spends. Every point of armour the count put on comes
+// off and goes into the swing, so the number on the passive chip all fight is the number that
+// arrives here.
+function spendTally(enemy, rate) {
+    const n = enemy.tallyStacks || 0;
+    const shed = (enemy.tally ? enemy.tally.armor : 0) * n;
+    enemy.armor = Math.max(0, enemy.armor - shed);
+    enemy.baseArmor = Math.max(0, (enemy.baseArmor || 0) - shed);
+    if (n > 0) enemy.dmgBase = Math.ceil(enemy.dmgBase * (1 + rate * n));
+    log(n > 0
+        ? `> It sheds ${shed} armour and puts ${n} of its own into the swing.`
+        : `> It has nothing to spend. You never gave it one.`, n > 0 ? 'log-dmg' : 'log-heal');
+    return n;
 }
 
 // One Warlord fought at every depth made the back half of a run repetitive, so each sector
@@ -641,8 +715,50 @@ const BOSS_POOL = [
         grudge: { cry: 'SECONDARY WARD ONLINE - IT BROUGHT TWO!', name: 'SECOND WARD',
                   tell: 'A second generator drops in, and the soak comes back with it.',
                   reWard: true }
+    },
+    // ── The last warlord ────────────────────────────────────────────────────────────────
+    // Seven sectors, seven commanders, and then nothing: currentSector++ ran without a ceiling,
+    // bossForSector lapped the pool forever with a fresh shuffle each time round, and the
+    // comment over computeScore said the quiet part out loud - "Endless scoring". A run could
+    // be long or short but never won. Extraction (A01) gave the player a way to stop; it never
+    // gave them a way to finish.
+    //
+    // The road ends at sector 7 now, and this is what is standing at the end of it. It is not
+    // in the rotation and never has been - bossOrder deals only the seven above - so nothing
+    // about sectors 1 to 6 changes, and a squad meets this one exactly once, on the far side of
+    // a full lap of everybody else.
+    //
+    // What makes it a final fight rather than a big one is that it is doing the same thing the
+    // player is. You take a skull off every commander you fell and build the Citadel out of
+    // them; this one has been doing that longer and is standing on the result. So it counts its
+    // own dead, and at the end it spends the count - which turns "clear the adds off the boss",
+    // the reflex every fight before this one taught, into the way you lose.
+    {
+        id: 'OSSUARY', final: true, threat: 4, name: 'The Ossuary', short: 'OSSUARY',
+        img: 'enemy_boss_ossuary.webp', stand: 'enemy_boss_bastion.webp', scale: 2.5,
+        range: 'melee', hpMult: 1.5, dmgMult: 0.95, speed: 8, armor: 20,
+        resistances: { phys: 12, bio: 15, energy: 8 },
+        passive: 'TALLY',
+        blurb: 'It has been collecting warlords for longer than you have. What it counts, it eventually spends.',
+        bg: 'bg_thunderdome.webp',
+        banner: '\u{1F480} THE ROAD ENDS HERE: All units deal +20% DMG \u{1F480}',
+        intents: [['ATTACK', 0.30], ['HEAVY', 0.25], ['AOE', 0.25], ['STATUS', 0.10], ['DEFEND', 0.10]],
+        // Every one of its own that falls is written down.
+        tally: { armor: 4, dmg: 0.06, max: 8 },
+        // Halfway down it opens the ossuary: the commanders this expedition already put in the
+        // ground get up, wearing their own art, at a fraction of what they were.
+        enrage: { cry: 'THE OSSUARY OPENS - THEY ALL GET UP!', dmgScale: 1.15, raiseFelled: 2, revenantWard: 0.3 },
+        // The third gear is not a grudge here - it always has one, because this is the last
+        // thing in the game and it does not need to have met you before to have a last word.
+        grudge: { cry: 'THE LAST TALLY - IT SPENDS WHAT IT COUNTED!', name: 'LAST TALLY',
+                  tell: 'The armour comes off and goes into the swing. Everything you cleared off it is in that number.',
+                  spendTally: 0.12 }
     }
 ];
+// The rotation is the seven that hold the road. The last warlord is not one of them and is
+// never dealt by depth - bossForSector hands it over at the final sector and nowhere else.
+const BOSS_ROTATION = BOSS_POOL.filter(b => !b.final);
+const FINAL_BOSS = BOSS_POOL.find(b => b.final) || null;
 
 // ── The grudge ──────────────────────────────────────────────────────────────────────────
 // A commander you have killed does not forget it. Every warlord felled is written down against
@@ -691,7 +807,7 @@ function bossOrder(cycle) {
     // daily seed is set - the order has to be stable across every call in a run, or the map
     // would advertise one warlord and the fight would deliver another.
     const rng = mulberry32(seedFromString(`boss:${runSeed || bossSalt}:${cycle}`));
-    const idx = BOSS_POOL.map((_, i) => i);
+    const idx = BOSS_ROTATION.map((_, i) => i);
     for (let i = idx.length - 1; i > 0; i--) {
         const j = Math.floor(rng() * (i + 1));
         [idx[i], idx[j]] = [idx[j], idx[i]];
@@ -701,7 +817,7 @@ function bossOrder(cycle) {
     // commander can still open a run, it is just no longer as likely as a light one. Later
     // cycles keep the flat shuffle: by sector 8 the squad has earned the whole roster.
     if (cycle === 0) {
-        const key = new Map(idx.map(i => [i, (BOSS_POOL[i].threat || 2) + rng() * BOSS_THREAT_JITTER]));
+        const key = new Map(idx.map(i => [i, (BOSS_ROTATION[i].threat || 2) + rng() * BOSS_THREAT_JITTER]));
         idx.sort((a, b) => key.get(a) - key.get(b));
     }
     if (cycle > 0) {
@@ -711,10 +827,16 @@ function bossOrder(cycle) {
     }
     return idx;
 }
+// Sector 7 is the end of the road and hands over the last warlord; every other depth walks the
+// rotation exactly as it always has. Pressing on past the ending puts the rotation back - the
+// post-game is the old endless game, one sector further along.
+const FINAL_SECTOR = 7;
+function isFinalSector(sector = currentSector) { return sector === FINAL_SECTOR; }
 function bossForSector(sector = currentSector) {
+    if (FINAL_BOSS && isFinalSector(sector)) return FINAL_BOSS;
     const i = Math.max(1, sector) - 1;
-    const n = BOSS_POOL.length;
-    return BOSS_POOL[bossOrder(Math.floor(i / n))[i % n]];
+    const n = BOSS_ROTATION.length;
+    return BOSS_ROTATION[bossOrder(Math.floor(i / n))[i % n]];
 }
 
 // Four relics and one elite node per sector meant the whole pool was owned by sector four and
@@ -1588,6 +1710,14 @@ const CODEX = [
         `Skulls taken from commanders build the Citadel, and it has ${CITADEL_SPOTS.length} places to spend them - two of which need something else standing first.`,
         'Depth is worth far more than any single haul: pushing one sector deeper always beats farming the one you are on.'
     ] },
+    { id: 'ENDING', title: 'THE END OF THE ROAD', body: () => [
+        `The road runs ${FINAL_SECTOR} sectors. It used to run forever - the map kept generating, the commanders kept cycling, and an expedition could be long or short but never finished.`,
+        `Sector ${FINAL_SECTOR} is the last one. ${FINAL_BOSS ? FINAL_BOSS.name : 'The last warlord'} is at the top of it, it is not one of the ${BOSS_ROTATION.length} that hold the road, and it is never dealt at any other depth.`,
+        FINAL_BOSS ? `${FINAL_BOSS.blurb} ${(BOSS_PASSIVES[FINAL_BOSS.passive] || {}).desc || ''}` : '',
+        'Halfway down it opens the ossuary and the commanders this expedition already put in the ground get up again, at a fraction of what they were - and while any of them stands, nothing you land on the warlord lands properly. What you killed on the way here is what stands between you and it.',
+        `Felling it wins the expedition. The win banks the moment it goes down - ${VICTORY.skulls} Skulls and a x${VICTORY.scoreMult} score - so nothing you do afterwards can take it back.`,
+        'And afterwards is still there. Winning puts a question rather than a full stop: walk out with it, which pays the extraction bonus on top, or press on past the gate, where the rotation resumes, the scaling keeps climbing, and the run ends the old ways.'
+    ] },
     { id: 'SCARS', title: 'GOING DOWN', body: () => [
         `Nobody on this roster dies at zero health. They go down, and a clock starts: ${BLEED_OUT} of their own turns, counted down over their head, and at the end of it they are gone from the expedition for good.`,
         `Stopping the clock is a heal - Cauterize, a Stim Dart, a Med-Stim, anything that lifts them above zero. Those are the only moves that reach somebody on the floor.`,
@@ -2231,6 +2361,8 @@ const ACTIONS = {
     'take-doctrine':    el => takeDoctrine(el.dataset.id),
     'camp-extract':     () => armExtract(),
     'camp-extract-go':  () => extractRun(),
+    'victory-walk':     () => victoryWalk(),
+    'victory-press':    () => victoryPress(),
     'camp-finish':      () => finishCamp(),
 
     'queue':            el => queueAction(el.dataset.move, el.dataset.variant),
@@ -3241,12 +3373,13 @@ function renderChronicle() {
         `<div class="career-line"><span>EXPEDITIONS</span><span>${merged.runs}</span></div>
          <div class="career-line"><span>HOSTILES KILLED</span><span>${merged.kills.toLocaleString()}</span></div>
          <div class="career-line"><span>DEEPEST EVER</span><span>SECTOR ${merged.deepestSector}</span></div>
+         ${careerWins > 0 ? `<div class="career-line career-won"><span>ROAD WALKED</span><span>\u2620 ${careerWins}</span></div>` : ''}
          <div class="career-line"><span>MOST FIELDED</span><span>${most ? `${most[0]} (${most[1]})` : '—'}</span></div>`;
-    // Two kinds of ending are on this list now, so it has to be possible to tell at a glance
-    // which runs were walked out of and which the wasteland kept.
+    // Three kinds of ending are on this list now - the wasteland kept them, they walked out, or
+    // they finished it - so it has to be possible to tell which at a glance.
     document.getElementById('chronicle-list').innerHTML = entries.length ? entries.map(e =>
-        `<div class="chronicle-entry${e.extracted ? ' chronicle-walked' : ''}">
-            <div class="chronicle-epitaph">${e.extracted ? '<b>EXTRACTED</b> \u00B7 ' : ''}${e.epitaph || ''}</div>
+        `<div class="chronicle-entry${e.won ? ' chronicle-won' : e.extracted ? ' chronicle-walked' : ''}">
+            <div class="chronicle-epitaph">${e.won ? '<b>\u2620 THE ROAD ENDED</b> \u00B7 ' : e.extracted ? '<b>EXTRACTED</b> \u00B7 ' : ''}${e.epitaph || ''}</div>
             <div class="chronicle-facts">
                 <span>${(e.score || 0).toLocaleString()} PTS</span>
                 <span>S${e.sector || 1}·T${e.tier || 1}</span>
@@ -3274,8 +3407,10 @@ function endRun() {
         when: Date.now(), score, sector: runStats.deepestSector, tier: runStats.deepestTier,
         kills: runStats.kills || 0, nodes: runStats.nodes || 0, withdrawals: runStats.withdrawals || 0,
         contracts: runStats.contracts || [], relics: activeRelics.map(r => r.name),
-        seed: runSeed, extracted: !!runStats.extracted,
-        epitaph: runStats.extracted
+        seed: runSeed, extracted: !!runStats.extracted, won: !!runStats.won,
+        epitaph: runStats.won
+            ? `Walked the whole road. ${FINAL_BOSS ? FINAL_BOSS.name : 'The last warlord'} went down at Sector ${runStats.wonAtSector || FINAL_SECTOR}.`
+            : runStats.extracted
             ? `Walked out at Sector ${runStats.deepestSector}, Tier ${runStats.deepestTier}.`
             : epitaphFor(runStats),
         fallen: (runStats.fallen || []).map(f => ({ name: f.name, sector: f.sector, tier: f.tier })),
@@ -3314,15 +3449,22 @@ function heirloomRelic() {
 function renderRunOver(score, isBest, seedPrev = null) {
     switchScreen('screen-runover');
     const walked = !!(runStats && runStats.extracted);
-    document.getElementById('runover-title').innerText = walked ? 'EXTRACTED' : 'RUN OVER';
-    document.getElementById('runover-title').style.color = walked ? '#6B8E23' : '#ff4444';
-    // The frame has to agree with the headline - a red box around EXTRACTED reads as a defeat.
-    document.getElementById('runover-box').style.borderColor = walked ? '#6B8E23' : '#8B0000';
-    document.getElementById('runover-desc').innerText = walked
+    // Three endings now, and the frame has to agree with the headline in all three - a red box
+    // around EXTRACTED read as a defeat, and gold on a wipe would read as a win.
+    const won = !!(runStats && runStats.won);
+    const tone = won ? '#c9a84a' : walked ? '#6B8E23' : '#ff4444';
+    document.getElementById('runover-title').innerText = won ? 'THE ROAD ENDED' : walked ? 'EXTRACTED' : 'RUN OVER';
+    document.getElementById('runover-title').style.color = tone;
+    document.getElementById('runover-box').style.borderColor = won ? '#c9a84a' : walked ? '#6B8E23' : '#8B0000';
+    document.getElementById('runover-desc').innerText = won
+        ? `They went the whole way and came back. ${careerWins === 1 ? 'The first squad to do it.' : `That is ${careerWins} squads that have.`}`
+        : walked
         ? 'They walked out of it. Everything the expedition earned is banked, and the squad is still standing.'
         : 'The wasteland claimed them. What they salvaged reaches the Citadel.';
     const st = runStats;
-    document.getElementById('runover-score').innerText = `${score.toLocaleString()} PTS`;
+    const scoreEl = document.getElementById('runover-score');
+    scoreEl.innerText = `${score.toLocaleString()} PTS`;
+    scoreEl.classList.toggle('score-won', won);
     document.getElementById('runover-best').innerText = isBest ? '\u2605 NEW PERSONAL BEST \u2605' : `BEST: ${bestScore.toLocaleString()} PTS`;
     const lines = [
         ['DEPTH REACHED', `SECTOR ${st.deepestSector} \u00B7 TIER ${st.deepestTier}`],
@@ -3349,6 +3491,10 @@ function renderRunOver(score, isBest, seedPrev = null) {
     // happened to pass; the rest is the thread the expedition actually carried.
     const faces = facesMet();
     if (faces.length) lines.push(['FACES MET', faces.map(f => `${f.name} (${f.band.label.toLowerCase()})`).join(', ')]);
+    // The ending goes above everything, including the depth - on the one run in a career that
+    // has one, it is the only line that matters.
+    if (st.won) lines.unshift(['THE LAST WARLORD',
+        `${FINAL_BOSS ? FINAL_BOSS.name.toUpperCase() : 'DOWN'} \u00B7 S${st.wonAtSector || FINAL_SECTOR} \u00B7 \u00D7${VICTORY.scoreMult}`]);
     // A score is only comparable if it says what it was earned under.
     if (st.contractMult && st.contractMult > 1) {
         lines.push(['CONTRACT BONUS', `x${st.contractMult.toFixed(2)}`]);
@@ -3391,6 +3537,10 @@ function afterNode() {
     if (consequencesDue().length) { resolveConsequence(); return; }
     if (pendingRelicOffer && pendingRelicOffer.length) { renderRelicOffer(); return; }
     if (pendingPerkOffers.length) { renderPerkOffer(); return; }
+    // The road ending is the last thing the node chain does, so the commander's drop is chosen
+    // and the promotions are spent before the question is put - a player deciding whether to
+    // walk out should be looking at the squad they would be walking out with.
+    if (runStats && runStats.won && !runStats.winShown) { renderVictory(); return; }
     renderMap();
 }
 
@@ -3416,10 +3566,11 @@ function takeRelic(index) {
 }
 
 let bestScore = 0; let bestSector = 0;
+let careerWins = 0;   // expeditions that reached the end of the road, meta-persisted
 
-function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, mastery, bestiary, seenPrompts, grudges })); }
+function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, careerWins, mastery, bestiary, seenPrompts, grudges })); }
 
-function newRunStats() { return { extracted: false, doctrine: null, doctrineMult: 1, kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, recruited: 0, fallen: [], deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
+function newRunStats() { return { extracted: false, won: false, warlords: [], doctrine: null, doctrineMult: 1, kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, recruited: 0, fallen: [], deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
 
 // Endless scoring: depth is worth far more than any single haul, so pushing one sector
 // deeper always beats farming the one you are on.
@@ -3454,6 +3605,92 @@ function extractSkulls(st) {
 function canExtract() {
     return !!runStats && currentSector >= EXTRACT.minSector && !combatActive;
 }
+// ── The end of the road ─────────────────────────────────────────────────────────────────
+// A run could be long or short but never won. Every expedition ended one of two ways - the
+// squad wiped out of fallbacks, or the player called it at a camp and walked out (A01) - and
+// both of those are stopping, not finishing. Sixty simulated expeditions ended sixty times
+// with a wipe; nothing in the game had ever said "you did it".
+//
+// Sector 7 is the end of the road. Felling what waits there is a win, and it is banked the
+// moment the commander goes down rather than when the player gets home - so an ending cannot
+// be taken back off you by a bad decision made afterwards.
+//
+// That afterwards is deliberately still there. The endless game is what this was for five
+// phases and a lot of people's high scores; capping the map at 7 would have deleted it. So
+// the win puts a question rather than a full stop: walk out with it, or press on into sector
+// 8 and beyond, where the rotation resumes and the run ends the old ways.
+//
+// Measured over sixty fresh careers on a simulated player that barely heals - the floor of what
+// a person can do rather than the middle of it: 8% of expeditions end the road, and every one
+// that reached sector 7 got through the fight (5 of 5 in that sample, 8 of 9 across both taken
+// since the ward went in). The gate is therefore the road and not the last warlord, which is
+// deliberate. A final commander that ends one career in ten at the last node is a capstone; one
+// that ends half of them is a wall in the worst place a roguelite can put one.
+const VICTORY = {
+    skulls: 7,        // one for each commander that held the road between here and the gate
+    scoreMult: 1.5    // what finishing is worth, on top of the depth that got you here
+};
+
+// The commanders felled on the way, which is never the last one - it is not one of the seven
+// that hold the road and must not be counted among them.
+function roadWarlords(st) {
+    return ((st || runStats || {}).warlords || []).filter(id => BOSS_ROTATION.some(b => b.id === id));
+}
+function noteVictory() {
+    if (!runStats || runStats.won) return;
+    runStats.won = true;
+    runStats.wonAtSector = currentSector;
+    bossSkulls += VICTORY.skulls;
+    careerWins++;
+    saveMeta();
+    playSFX('overdrive');
+    log(`> THE ROAD ENDS. The last warlord is down and the way through is open. +${VICTORY.skulls} \uD83D\uDC80.`, 'log-heal');
+}
+
+// The question, put on the far side of the fight. Both answers are real: the win is already
+// banked either way, so pressing on risks nothing that was earned and the walk out is not the
+// safe option so much as the one that stops.
+function renderVictory() {
+    if (!runStats) { renderMap(); return; }
+    runStats.winShown = true;
+    switchScreen('screen-victory');
+    const standing = playerRoster.filter(p => p.hp > 0).length;
+    document.getElementById('victory-desc').innerHTML =
+        `<div class="victory-sub">${careerWins === 1 ? 'the first time' : `${careerWins} times now`}</div>`
+        + `The last warlord is down and the gate behind it is open. Everything this expedition earned `
+        + `is banked and the win is on the record whatever you do next.`;
+    const lines = [
+        ['WARLORDS FELLED', `${roadWarlords(runStats).length} on the road, and the last one`],
+        ['STILL STANDING', `${standing} operator${standing === 1 ? '' : 's'}`],
+        ['BANKED', `\uD83D\uDC80 +${VICTORY.skulls} \u00B7 SCORE \u00D7${VICTORY.scoreMult}`]
+    ];
+    if ((runStats.fallen || []).length)
+        lines.splice(1, 0, ['PAID FOR IT', runStats.fallen.map(f => f.name).join(', ')]);
+    document.getElementById('victory-lines').innerHTML = lines
+        .map(([k, v]) => `<div class="runover-line"><span>${k}</span><span>${v}</span></div>`).join('');
+    document.getElementById('victory-choices').innerHTML =
+        `<button data-action="victory-walk">WALK OUT \u2014 END IT HERE</button>`
+        + `<button data-action="victory-press">PRESS ON \u2014 SECTOR ${FINAL_SECTOR + 1} AND WHATEVER IS PAST IT</button>`;
+}
+// Walking out on a win takes the extraction bonus too: it is the same act, done from the far
+// side of the gate rather than from a camp short of it.
+function victoryWalk() {
+    if (!runStats || !runStats.won) return;
+    noteDepth();
+    runStats.extracted = true;
+    bossSkulls += extractSkulls(runStats);
+    playSFX('overdrive');
+    endRun();
+}
+// Past the gate the game is the one it always was: the rotation resumes at sector 8, the
+// scaling keeps climbing, and this run can still be extracted from or lost. The win stays won.
+function victoryPress() {
+    if (!runStats || !runStats.won) return;
+    // Nothing special: the map is already sitting on a cleared sector and already knows how to
+    // offer the next one. Pressing on is declining to stop, not a separate route.
+    renderMap();
+}
+
 function extractRun() {
     if (!canExtract()) return;
     noteDepth();
@@ -3472,7 +3709,9 @@ function computeScore(st) {
     // not re-scored by whatever the next expedition signs up for.
     // Walking out pays for itself; dying banks the raw figure.
     const out = st.extracted ? 1 + extractBonus(st) : 1;
-    return Math.floor(base * (st.contractMult || 1) * (st.protocolMult || 1) * (st.doctrineMult || 1) * out);
+    // Reaching the end of the road is worth more than the depth it took to get there.
+    const win = st.won ? VICTORY.scoreMult : 1;
+    return Math.floor(base * (st.contractMult || 1) * (st.protocolMult || 1) * (st.doctrineMult || 1) * out * win);
 }
 
 function noteDepth() {
@@ -3486,7 +3725,7 @@ function loadMeta() {
     if (d && d !== CORRUPT) {
         bossSkulls = d.bossSkulls || 0;
         metaUpgrades = { ...metaUpgrades, ...(d.metaUpgrades || {}) };
-        bestScore = d.bestScore || 0; bestSector = d.bestSector || 0;
+        bestScore = d.bestScore || 0; bestSector = d.bestSector || 0; careerWins = d.careerWins || 0;
         mastery = (d.mastery && typeof d.mastery === 'object') ? d.mastery : {};
         grudges = (d.grudges && typeof d.grudges === 'object' && !Array.isArray(d.grudges)) ? d.grudges : {};
         bestiary = (d.bestiary && typeof d.bestiary === 'object' && !Array.isArray(d.bestiary)) ? d.bestiary : {};
@@ -3630,6 +3869,9 @@ function showOutpostNotice(msg) {
 function renderTitleScreen() {
     switchScreen('screen-title'); let menuHTML = '';
     if (bestScore > 0) menuHTML += `<div style="text-align:center; font-size:11px; letter-spacing:2px; color:#B8860B; margin-bottom:6px;">BEST RUN: ${bestScore.toLocaleString()} PTS \u00B7 SECTOR ${bestSector}</div>`;
+    // The one line on this screen that is not a number about how well you did. It says whether
+    // the game has been finished, which nothing here could say before.
+    if (careerWins > 0) menuHTML += `<div class="title-wins">\u2620 THE ROAD WALKED ${careerWins === 1 ? 'ONCE' : `\u00D7${careerWins}`}</div>`;
     const lastWord = latestEpitaph();
     if (lastWord) menuHTML += `<div class="title-epitaph">"${lastWord}"</div>`;
     if (!Store.working) menuHTML += `<div class="title-warning">⚠ STORAGE UNAVAILABLE — THIS RUN WILL NOT BE SAVED</div>`;
@@ -4203,7 +4445,16 @@ function renderMap() {
     switchScreen('screen-map');
     noteDepth();
     document.getElementById('scrap-display').innerText = formatStat(scrap);
-    document.getElementById('map-sector-lbl').innerText = currentSector;
+    // Depth was a number that only went up. On the road to the gate it is a distance to it -
+    // and it has to fit the stat box, which "7 - LAST" did not: it rendered as "7 - LA...".
+    // The node, the banner and the briefing all say "last" in full; this only has to count.
+    const secLbl = document.getElementById('map-sector-lbl');
+    secLbl.innerText = currentSector <= FINAL_SECTOR ? `${currentSector} / ${FINAL_SECTOR}` : `${currentSector}`;
+    secLbl.classList.toggle('sector-last', isFinalSector());
+    secLbl.title = isFinalSector() ? 'The last sector. The road ends at the commander above it.'
+                 : currentSector < FINAL_SECTOR ? `${FINAL_SECTOR - currentSector} to the end of the road.`
+                 : 'Past the gate.';
+    if (isFinalSector()) firePrompt('LAST');
     document.getElementById('map-score-lbl').innerText = formatStat(computeScore(runStats));
 
     // The front rides the header for the whole sector; entering the sector gets the splash.
@@ -4288,7 +4539,8 @@ function renderMap() {
         // patrol, and the difference is the information the player is routing on.
         const nf = formationById(n.formation);
         if (nf) { lbl = nf.name.toUpperCase(); hint = `${n.type} \u2014 ${nf.name}: ${nf.note}`; }
-        if (n.type === 'BOSS') { const bb = bossForSector(); icon = '💀'; lbl = risenShort(bb, grudgeOn(bb.id)); }
+        if (n.type === 'BOSS') { const bb = bossForSector(); icon = bb.final ? '\u2620' : '💀'; lbl = risenShort(bb, grudgeOn(bb.id));
+            if (bb.final) hint = `${bb.name} \u2014 the road ends here. ${bb.blurb}`; }
         else if (n.type === 'BEASTS') icon = '☣️';
         else if (n.type === 'MECH') icon = '⚙️';
         // Three factions shared the default target icon, which was already thin; now that the
@@ -5242,6 +5494,8 @@ const PROMPTS = [
     { id: 'CURSE',     title: 'A CURSED RELIC',  body: 'Cursed relics carry a real upside and a real cost, and they are never dealt at random - this one is on the table because you can refuse it. Read the second half of the line before you take it.' },
     { id: 'ROUTE',     title: 'THE ROUTE IS A PLAN', body: 'Taking a node commits you to what it connects to. Elites and warlords pay the most; camps and the Armory cost you a node but keep the squad standing. Look two tiers ahead before you step.' },
     { id: 'EXTRACT',   title: 'YOU CAN WALK OUT', body: 'An expedition does not have to end with the squad on the floor. Calling it at a camp banks everything the run earned with a bonus that grows the deeper you got, sends a Skull to the Citadel for every sector you cleared, and brings whatever relic you are carrying home with you. It also ends the run - and score climbs far faster with depth than the bonus does, so pushing on is worth more if you survive it. That is the whole question: is the squad in front of you good for one more sector?' },
+    { id: 'LAST',      title: 'THE ROAD ENDS HERE', body: 'This is the last sector. The commander at the top of it is not one of the seven that hold the road - it is what they answer to, it is not in the rotation, and putting it down is how an expedition is won rather than merely survived. Nothing about the way there changes: ten tiers, the same branching routes, the same fights. Only the thing at the top is different, and it is standing on everything it has outlived. Winning does not force you home - the road past the gate is still there, and the win is banked before you decide.' },
+    { id: 'TALLY',     title: 'IT IS COUNTING', body: 'The last warlord writes down every one of its own that falls in front of it: more armour and more damage for each, up to eight, and the count rides its passive chip where you can watch it climb. Halfway down it raises the commanders you already felled, and while any of them stands it takes 30% of what you land on it - so they have to come down, and every one that does is another point on the count. Broken past a quarter it stops counting and spends: the armour comes off and goes into the swing, and everything you cleared off it is in that number.' },
     { id: 'GRUDGE',    title: 'IT REMEMBERS YOU', body: 'You have felled this commander before, and it has come back for it - heavier, faster, better armoured, and holding a move it never needed against you the first time. That move opens under a quarter health, after the enrage you already know about, and the fight log names it at the door so you can plan around it. A warlord is the one fight you cannot walk away from, so it pays for the trouble: felling a risen one banks an extra Skull for every grudge it was carrying.' },
     { id: 'BLEEDOUT',  title: 'THEY ARE BLEEDING OUT', body: 'That operator is on the floor with a clock over them, counted in their own turns. Run it out and they are gone for the rest of the expedition - there is no reviving them at the Outpost any more. Heal them where they lie (Cauterize, a Med-Stim, the STIM tactic), or end the fight: winning it, running from it and being dragged off it all get them clear. Only the clock kills.' },
     { id: 'RECRUIT',   title: 'SOMEONE WORTH SIGNING', body: 'The seven you start with are not everyone out here. A survivor brings a verb none of them has - a grinder for the front rank, a decontaminator for the middle, or a line that can haul what is hiding at the back of the enemy out where you can reach it. They cost Scrap, they arrive hurt, and there are only three in the whole wasteland. They join the bench: put them in the line at the Outpost.' },
@@ -5553,9 +5807,19 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
             img: b.img, scale: b.scale, hpDrop: 0,
             stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
             resistances: { ...b.resistances }, phase: 1,
-            grudge: g, grudgeMove: g > 0 ? (b.grudge || null) : null,
+            grudge: g,
+            // A grudge phase is the gear a commander only shows to somebody who already beat
+            // it. The last warlord always has one: it is the end of the game and does not need
+            // to have met you before to have a last word.
+            grudgeMove: (b.final || g > 0) ? (b.grudge || null) : null,
             intents: b.intents, bossPassive: b.passive || null, enrage: b.enrage
         };
+        if (b.final) boss.isFinal = true;
+        // Kept on the entity because the ossuary raises units mid-fight, long after the scale
+        // factors this function was called with have gone out of scope.
+        boss.__mult = mult; boss.__dmgMult = dmgMult;
+        if (b.stand) boss.stand = b.stand;
+        if (b.tally) { boss.tally = { ...b.tally }; boss.tallyStacks = 0; }
         if (b.isHovering) boss.isHovering = true;
         if (b.sink) boss.sink = b.sink;
         if (b.dmgType) boss.dmgType = b.dmgType;
@@ -6046,6 +6310,7 @@ function initiateCombat(nodeType, isEliteNode) {
     const dmgMult = difficultyMult * (1 + ((currentTier - 1) * TIER_DMG_GROWTH)) * Math.pow(SECTOR_DMG_SCALE, currentSector - 1);
     
     activeEntities = [...deployedRoster, ...generateEnemies(nodeType, mult, isEliteNode, dmgMult, currentFormation)];
+    if (activeEntities.some(e => e.isFinal)) firePrompt('TALLY');
     // Whoever the squad ran from is here, carrying the wounds it already put on them. They are
     // spent the moment they arrive, so running twice does not stack a mob.
     if (pursuit && pursuit.units && pursuit.units.length) {
@@ -7061,6 +7326,16 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     if (hasSig(t, 'RIOT_PLATE') && (t.plate || 0) > 0) cd = Math.max(1, Math.floor(cd * 0.5));
     // A ward holds until its generator falls; a lieutenant's cover is worth heavy plate.
     if (t.wardId && activeEntities.some(e => e.id === t.wardId && e.hp > 0)) cd = Math.max(1, Math.floor(cd * (t.wardSoak || 0.15)));
+    // The raised stand between you and it. Measured before this existed: the ossuary opened,
+    // two commanders got up, and the squad shot straight past them into the boss - twelve runs,
+    // two raised every time, and a mean tally of 0.3. With nothing behind the adds to protect,
+    // ignoring them was strictly correct, so neither the ossuary nor the tally it feeds was a
+    // decision at all. Now leaving them up costs you the damage, and putting them down costs
+    // you the tally. That is the fight - and it is what squads actually do: over sixty careers
+    // the line went from 0 of 3 clearing the raised to 5 of 5, and the mean tally the warlord
+    // died holding went from 0.0 to 0.8. Before the ward, one of the two branches did not exist.
+    if (t.revenantWard && activeEntities.some(e => e.classType === 'REVENANT' && e.hp > 0))
+        cd = Math.max(1, Math.floor(cd * t.revenantWard));
     if (t.escortId && activeEntities.some(e => e.id === t.escortId && e.hp > 0)) ac += (t.escortArmor || 20);
     if ((abilityStr === 'SLUG_SHOT' && hasTrait(attacker, 'BREACHING_ROUNDS')) ||
         (abilityStr === 'QUICK_SHOT' && hasTrait(attacker, 'PIERCING_ROUNDS'))) ac = 0;
@@ -7145,6 +7420,10 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
             setTimeout(() => spawnFCT(owed.id, `+${fed}`, 'fct-heal'), 260);
         }
     }
+    // The Tally: it writes down every one of its own that falls. Read on the same moment as
+    // Blood Debt above and deliberately not the same thing - that one heals, this one is a
+    // debt the fight collects on later.
+    if (target.hp <= 0 && !target.isPlayer) noteTally(target);
     if (target.hp <= 0 && target.isPlayer && !attacker.isPlayer) noteBestiary(typeNameOf(attacker), 'felled');
     // The chronicle's witness: whoever lands the blow that drops an operator is on record.
     if (target.hp <= 0 && target.isPlayer && runStats)
@@ -7259,6 +7538,8 @@ function openGrudgePhase(enemy) {
         for (let i = 0; i < gm.venomBurst && enemy.venomStacks < enemy.venom.max; i++) venomDose(enemy, true);
     }
     if (gm.aura) enemy.aura = gm.aura;
+    // The last tally.
+    if (gm.spendTally) spendTally(enemy, gm.spendTally);
     // The Stormcaller stops waiting for the sky.
     if (gm.stormTurn) { enemy.stormTurn = gm.stormTurn; enemy.stormClock = 0; }
     if (gm.skyToll) enemy.skyToll = gm.skyToll;
@@ -7419,6 +7700,17 @@ function executeEnemyAi(enemy) {
 
         if (e.dmgScale) enemy.dmgBase = Math.floor(enemy.dmgBase * e.dmgScale);
         if (e.speedBonus) enemy.speed += e.speedBonus;
+        // The ossuary opens. Whatever gets up feeds the tally again when it goes back down.
+        // renderField, not fitEnemyRow: the row-fitting takes the team element and the scales
+        // it is fitting, and the units that just walked on do not exist in the DOM yet.
+        if (e.raiseFelled) {
+            const up = raiseFelled(enemy, e.raiseFelled, enemy.__mult || 1, enemy.__dmgMult || 1);
+            if (up && e.revenantWard) {
+                enemy.revenantWard = e.revenantWard;
+                log(`> While they stand, nothing you land on it lands properly.`, 'log-status');
+            }
+            renderField();
+        }
         if (e.armorBonus) { enemy.armor += e.armorBonus; enemy.baseArmor = (enemy.baseArmor || 0) + e.armorBonus; }
         if (e.forceAoe) enemy.forceAoe = true;
 
@@ -7717,11 +8009,15 @@ function checkWinState() {
                     bossSkulls += owed;
                     log(`> It came back for you ${owed === 1 ? 'once' : `${owed} times`} and you put it down anyway. +${owed} extra 💀.`, "log-heal");
                 }
+                // Which commanders this expedition put down, in order - the ossuary raises
+                // them at the end of the road, so this is a record the game reads back.
+                if (runStats) { runStats.warlords = runStats.warlords || []; runStats.warlords.push(felled.bossId); }
                 noteGrudge(felled.bossId);
                 const g = grudgeOn(felled.bossId);
                 log(g > 1 ? `> That is ${g} times you have put it down. It will be worse.`
                           : `> It goes down hard. It will remember that.`, "log-status");
             }
+            if (felled && felled.isFinal) noteVictory();
             saveMeta(); log(`> VICTORY! Warlord Skull acquired!`, "log-heal");
             checkBountyProgress('BOSS');
             // Felling a commander refunds a fallback, up to the allowance. Measured before this,
@@ -7844,6 +8140,8 @@ globalThis.WP = {
     // entry points and pure helpers the suites exercise
     EXTRACT, extractBonus, extractSkulls, canExtract, extractRun, extractPitch, armExtract, renderCamp,
     bossRetinueUp, GRUDGE, RISEN_MARK, grudgeOn, noteGrudge, risenName, risenShort, openGrudgePhase,
+    FINAL_SECTOR, FINAL_BOSS, BOSS_ROTATION, isFinalSector, VICTORY, noteTally, raiseFelled, REVENANT,
+    spendTally, noteVictory, renderVictory, victoryWalk, victoryPress, roadWarlords,
     BLEED_OUT, DRAGGED_CLEAR, REACHES_THE_DOWN, isDown, bleedingOut, goDown, tickBleedOut,
     SCAR_POOL, SCAR_CHANCE, SCAR_MAX, SCAR_TREAT_COST, scarById, hasScar, scarsOf, scarFits,
     applyScarStats, removeScarStats, giveScar, markScars, healScar,
@@ -7957,5 +8255,6 @@ globalThis.WP = {
     get combatActive() { return combatActive; }, set combatActive(v) { combatActive = v; },
     get pendingAction() { return pendingAction; }, set pendingAction(v) { pendingAction = v; },
     get bestScore() { return bestScore; }, set bestScore(v) { bestScore = v; },
+    get careerWins() { return careerWins; }, set careerWins(v) { careerWins = v; },
     get bestSector() { return bestSector; }, set bestSector(v) { bestSector = v; },
 };

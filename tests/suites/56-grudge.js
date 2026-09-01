@@ -50,7 +50,10 @@ module.exports = {
     // ---- what comes back ----
     const risen = await page.evaluate(() => {
       const rows = [];
-      for (const b of BOSS_POOL) {
+      // The grudge is a promise about the road: a commander shows its third gear only to
+      // somebody it already lost to. The last warlord is the stated exception - it always has
+      // one - so it is measured on its own line below rather than folded in here.
+      for (const b of BOSS_ROTATION) {
         if (window.__sectorOf(b.id) === null) continue;
         const cold = window.__stage(b.id, 0);
         const c = { id: cold.bossId, hp: cold.maxHp, dmg: cold.dmgBase, armor: cold.armor,
@@ -60,11 +63,15 @@ module.exports = {
           hot: { id: hot.bossId, hp: hot.maxHp, dmg: hot.dmgBase, armor: hot.armor,
                  speed: hot.speed, name: hot.name, move: !!hot.grudgeMove } });
       }
-      return { rows, hp: GRUDGE.hp, dmg: GRUDGE.dmg };
+      const last = BOSS_POOL.find(b => b.final);
+      const lastCold = last && window.__sectorOf(last.id) !== null ? window.__stage(last.id, 0) : null;
+      return { rows, hp: GRUDGE.hp, dmg: GRUDGE.dmg, road: BOSS_ROTATION.length,
+               lastAlwaysArmed: !!(lastCold && lastCold.grudgeMove) };
     });
-    ok(`every commander was measured as itself (${risen.rows.length})`,
-      risen.rows.length === 7 && risen.rows.every(r => r.cold.id === r.want && r.hot.id === r.want));
+    ok(`every commander on the road was measured as itself (${risen.rows.length})`,
+      risen.rows.length === risen.road && risen.rows.every(r => r.cold.id === r.want && r.hot.id === r.want));
     ok('a commander meeting you for the first time is unchanged', risen.rows.every(r => !r.cold.move));
+    ok('and the last warlord is the one exception - it is armed cold', risen.lastAlwaysArmed);
     ok('one that has lost to you comes back with more of everything',
       risen.rows.every(r => r.hot.hp > r.cold.hp && r.hot.dmg > r.cold.dmg
         && r.hot.armor > r.cold.armor && r.hot.speed > r.cold.speed));

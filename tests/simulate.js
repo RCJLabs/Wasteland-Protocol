@@ -84,6 +84,10 @@ const AUGMENTS_ON = flag('augments', 'on') !== 'off';
 // when the squad is worn down. `off` (the default) is the old behaviour, for comparison.
 const EXTRACT_RAW = flag('extract', 'off');
 const EXTRACT_AT = EXTRACT_RAW === 'off' ? 99 : Number(EXTRACT_RAW);
+// What a run does when it reaches the end of the road. 'walk' takes the ending and stops,
+// which is what the feature is for; 'press' declines it and carries on into the post-game, so
+// the endless half of the game can still be measured.
+const ENDING = flag('ending', 'walk');
 // A commander's offer deals three cards and sometimes one of them is cursed. This file took
 // `offer.find(RARE) || offer[0]`, which is two opinions dressed as one: prefer a rare, and
 // otherwise take whatever happens to sit first. "Cursed relics are refused" was that policy
@@ -163,8 +167,9 @@ const FACES = flag('faces', 'warm');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy }) => {
-  const stat = { sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy }) => {
+  const stat = { won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
+                 sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, ground: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
@@ -802,10 +807,24 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (runStats.bosses < stat.bosses) {
         runStats.bosses = stat.bosses; bossSkulls++;
         const felled = activeEntities.find(e => e.classType === 'BOSS');
-        if (felled && felled.bossId) { stat.bossGrudge.push(felled.grudge || 0); noteGrudge(felled.bossId); }
+        if (felled && felled.bossId) {
+          stat.bossGrudge.push(felled.grudge || 0); noteGrudge(felled.bossId);
+          runStats.warlords = runStats.warlords || []; runStats.warlords.push(felled.bossId);
+          // The win banks inside checkWinState, and this loop reaches checkWinState for about
+          // seven kills in eight - a fight ended by a bleed tick or a death effect never gets
+          // there. Reconciled rather than added, exactly as the skull above is: without this,
+          // one win in eight would have gone unrecorded and the rate read low.
+          if (felled.isFinal) noteVictory();
+        }
         // The engine did not count this kill, so it did not stage the offer either. Stage it.
         if (!pendingRelicOffer) { const o = rollRelicOffer(); if (o.length) pendingRelicOffer = o; }
       }
+      // What the ossuary raised, and what it was holding when it died - the two numbers that
+      // say whether the last fight is doing what it was built to do.
+      const last = activeEntities.find(e => e.isFinal);
+      if (last) { stat.raised = activeEntities.filter(e => e.classType === 'REVENANT').length;
+                  stat.stillUp = activeEntities.filter(e => e.classType === 'REVENANT' && e.hp > 0).length;
+                  stat.tallyAtEnd = last.tallyStacks || 0; }
       // The engine stages a commander's relic as pendingRelicOffer and waits for a player to
       // pick a card. This file never touched pendingRelicOffer, so once the double-count fix
       // made it defer to the engine's own count, every commander relic was staged and then
@@ -839,6 +858,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     scrap += Math.floor((20 + currentTier * 20) * (node.elite ? 2 : 1) * sectorRewardMult());
     runStats.scrapEarned += 40;
     currentTier++; noteDepth();
+
+    // The end of the road. The engine puts this question on a screen with two buttons; here it
+    // is a policy, so both answers can be measured. Either way the win is already banked - what
+    // the policy decides is only whether the expedition stops on it.
+    if (runStats.won && !runStats.winShown) {
+      runStats.winShown = true;
+      stat.won = true; stat.wonAt = runStats.wonAtSector || currentSector;
+      stat.roadWarlords = roadWarlords(runStats).length;
+      if (endingPolicy !== 'press') { stat.endedBy = 'won'; victoryWalk(); break; }
+    }
     spend();
 
     noteBoard();
@@ -883,12 +912,14 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const errors = [];
   let ALL_FORMATION_IDS = [];
   let SCAR_IDS = [];
+  let FINAL_SECTOR_N = 7;
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(`http://127.0.0.1:${port}/index.html`);
   await page.waitForTimeout(800);
   await page.evaluate(() => { globalSettings.sfx = false; });
   ALL_FORMATION_IDS = await page.evaluate(() => ALL_FORMATIONS.map(f => f.id));
   SCAR_IDS = await page.evaluate(() => SCAR_POOL.map(sc => sc.id));
+  FINAL_SECTOR_N = await page.evaluate(() => FINAL_SECTOR);
 
   console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}, tactics ${TACTICS}, relics ${RELICS}, meta ${META}, faces ${FACES}` +
               (CONTRACTS.length ? ` under ${CONTRACTS.join(', ')}` : '') +
@@ -896,7 +927,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -985,6 +1016,30 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const ends = {};
   results.forEach(r => { ends[r.endedBy] = (ends[r.endedBy] || 0) + 1; });
   line('ended by', Object.entries(ends).map(([k, v]) => `${k} ${v}`).join(', '));
+
+  // The number the ending exists to be judged on. A win has to be a good run and not a typical
+  // one - if every run wins the gate is too shallow, and if none does the content does not
+  // exist. Every figure here is measured on a player that barely heals and never rethinks a
+  // line, so it is the floor of what a person can do rather than the middle of it.
+  const wins = results.filter(r => r.won);
+  const reached = results.filter(r => r.sector >= FINAL_SECTOR_N);
+  line(`reached sector ${FINAL_SECTOR_N}`, `${reached.length} of ${n} (${Math.round(reached.length / n * 100)}%)`);
+  line('  and won it', reached.length ? `${wins.length} of ${reached.length} (${Math.round(wins.length / reached.length * 100)}%)`
+                                      : 'no run got that far');
+  line('runs that ended the road', `${wins.length} of ${n} (${Math.round(wins.length / n * 100)}%)`);
+  if (wins.length) {
+    line('  warlords felled on the way, mean', (wins.reduce((a, r) => a + r.roadWarlords, 0) / wins.length).toFixed(1));
+    line('  raised by the ossuary, mean', (wins.reduce((a, r) => a + r.raised, 0) / wins.length).toFixed(1));
+    // Two ways through the last phase and this says which one the squad took. Clearing the
+    // raised lifts the ward and arms the finish; grinding the warlord at 30% leaves it with
+    // nothing to spend. Both are real lines - what would be wrong is only one of them existing.
+    const ground = wins.filter(r => r.stillUp > 0).length;
+    line('  ground through the ward', `${ground} of ${wins.length}`);
+    line('  cleared the raised first', `${wins.length - ground} of ${wins.length}`);
+    line('  tally it died holding, mean', (wins.reduce((a, r) => a + r.tallyAtEnd, 0) / wins.length).toFixed(1));
+    const ws = wins.map(r => r.score).sort((a, b) => a - b);
+    line('  score on a won run, median', pct(ws, 0.5).toLocaleString());
+  }
   const walked = results.filter(r => r.extracted);
   line('walked out', `${walked.length} of ${n}`);
   if (walked.length) {
