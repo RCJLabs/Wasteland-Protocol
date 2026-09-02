@@ -2468,18 +2468,44 @@ const EVENT_POOL = [
         // She will not lend twice into the same debt, and she lends cheaper to someone who paid.
         const owing = owesVela();
         const owed = castStanding('VELA') >= 1 ? 320 : 400;
+        // What the paper already on the table says, rather than what a new loan would cost.
+        const owedNow = (pendingConsequences.find(c => c.kind === 'DEBT') || {}).amount || owed;
         const list = [];
         if (!owing) list.push(
           { label: `Borrow 200 Scrap (owe ${owed} in ${DEBT_TERM} nodes)`, canAfford: () => true,
             execute: () => { scrap += 200; bookConsequence('DEBT', CONSEQUENCE_FUSE.DEBT, { amount: owed }); playSFX('click');
               return `She counts out 200 Scrap without looking at you. '${DEBT_TERM} nodes. ${owed}.'`; } });
         else list.push(
+          // Settling at the table, rather than waiting to be found. Vela's standing used to move
+          // in exactly two places - the fuse coming due, and a shakedown that only exists once
+          // you are already at BAD BLOOD - so from neutral there was nothing on this screen that
+          // could raise her. Measured over 30 runs she reached a gate 0 times in 9 appearances
+          // while every other face reached one in most of theirs. Paying early is the obvious
+          // thing to offer a woman who lends for a living, and it is the move that opens VELA'S
+          // LEDGER, the thread that wants standing 2 AND no outstanding paper.
+          { label: `Settle up now (-${owedNow} Scrap)`, canAfford: () => scrap >= owedNow,
+            execute: () => { scrap -= owedNow;
+              pendingConsequences = pendingConsequences.filter(c => c.kind !== 'DEBT');
+              noteCast('VELA', 2); playSFX('click');
+              return `You put it on the hood before she asks. She counts it twice, writes it down as paid, and deals you back in.`; } },
           { label: "Ask for more (she refuses)", canAfford: () => false,
             execute: () => "She does not deal you in twice." });
         list.push(
-          { label: "Sell her a favour instead (+80 Scrap, -1 Tech)", canAfford: () => materials.tech >= 1,
-            execute: () => { materials.tech -= 1; scrap += 80; noteCast('VELA', 1); playSFX('click');
+          // Any one component, not the rarest one. This was Tech only, which is the material a
+          // run is least likely to be holding, so the single at-the-table move she had was
+          // itself usually greyed out.
+          { label: "Sell her a favour instead (+80 Scrap, -1 component)",
+            canAfford: () => MATERIAL_KINDS.some(k => materials[k] >= 1),
+            execute: () => { const k = MATERIAL_KINDS.find(x => materials[x] >= 1);
+              materials[k] -= 1; scrap += 80; noteCast('VELA', 1); playSFX('click');
               return "She takes the component, turns it over once, and pays you 80 Scrap for it."; } },
+          // Something for a squad carrying neither scrap nor components: her regard, bought on
+          // credit. In her idiom exactly - she is happy to be owed.
+          { label: `Put your name to someone else's paper (owe 150 in ${DEBT_TERM} nodes)`,
+            canAfford: () => !owesVela(),
+            execute: () => { bookConsequence('DEBT', CONSEQUENCE_FUSE.DEBT, { amount: 150 });
+              noteCast('VELA', 1); playSFX('click');
+              return "She slides a second card across and taps the corner. 'You're good for it. That's the part that matters.'"; } },
           { label: "Walk away", canAfford: () => true, execute: () => "She deals another hand. 'Smart. Most of them aren't.'" });
         return list;
       } },
@@ -3760,6 +3786,7 @@ function executeSelfAction(type) {
 //
 // One table, read by the workbench, the bag and the deck, so the three cannot drift.
 const MATERIAL_ICON = { parts: '\u2699\uFE0F', chems: '\uD83E\uDDEA', tech: '\uD83D\uDCBB' };
+const MATERIAL_KINDS = Object.keys(MATERIAL_ICON);
 // ── What can be bolted onto an operator ─────────────────────────────────────────────────
 // Three permanent upgrades, and until D03 they had no ceiling of any kind: installAugment
 // pushed onto char.augments and the buttons were enabled on whether you could afford the
@@ -9551,7 +9578,7 @@ globalThis.WP = {
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField,
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
-    AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
