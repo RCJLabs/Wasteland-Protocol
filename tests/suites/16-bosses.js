@@ -191,6 +191,14 @@ module.exports = {
     };
 
     await stagedFight('MATRIARCH');
+    // The Matriarch hovers, and `.hovering` is an infinite 3s translateY - so a bounding box
+    // read off her portrait is a sample of an animation, not a measurement of where she stands.
+    // That is what made this read flaky rather than any amount of settling: traced frame by
+    // frame it does not converge on a wrong value and stay there, it walks 16 -> 14 -> 9 -> 4
+    // -> -2 -> -7 -> -15 and keeps going, and a stability loop only ever caught it near the top
+    // of the arc where the sprite is slowest. Motion off is a mode the game supports and the
+    // one this assertion is actually about: the staging, not the float.
+    await page.evaluate(() => { globalSettings.motion = 'off'; applyTextScale(); });
     const staging = await page.evaluate(async () => {
       // Sprite geometry settles a frame or two after the images decode, and a queued turn timer
       // can re-render underneath a single read. Measure until two consecutive frames agree.
@@ -212,12 +220,6 @@ module.exports = {
       // itself before the image arrives and moves everything. Wait for the pixels first.
       const shots = [...document.querySelectorAll('img.portrait')];
       await Promise.all(shots.map(img => (img.decode ? img.decode() : Promise.resolve()).catch(() => {})));
-      // And decoding is not the last thing that moves: the field re-fits itself from a
-      // portrait's LOAD handler, which runs after decode() resolves - so the loop below could
-      // agree with itself three times over and still be reading the row before it was rescaled.
-      // Waiting on stability was the old guard and it went on failing at -20px in a full
-      // battery against 16px on its own, because a not-yet-refitted row is perfectly stable.
-      // So wait for the event that actually moves things, then for the frames it moves them in.
       await Promise.all(shots.map(img => img.complete ? Promise.resolve() : new Promise(r => {
         img.addEventListener('load', r, { once: true });
         img.addEventListener('error', r, { once: true });
@@ -257,6 +259,8 @@ module.exports = {
     ok('the two lines are not crowded together', staging.lineGap >= 30);
     ok('neither side is clipped off screen', !staging.leftClipped && !staging.rightClipped);
     ok('the field still does not scroll sideways', staging.pageScroll <= 0);
+    // Handed back, so nothing below this measures a game with the animations switched off.
+    await page.evaluate(() => { globalSettings.motion = 'auto'; applyTextScale(); });
 
     // Only some commanders carry a sink; ask for one that does not rather than trusting a sector.
     const flatFooted = await page.evaluate(() => (BOSS_POOL.find(b => !b.sink) || BOSS_POOL[0]).id);

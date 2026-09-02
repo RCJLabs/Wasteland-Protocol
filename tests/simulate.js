@@ -392,6 +392,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const byClass = c => playerRoster.filter(p => c.includes(p.classType));
   const pickFrom = list => list[Math.floor(Math.random() * list.length)];
   const draft = [];
+  let wantDoctrine = null;   // aimed at while drafting; banked below, once ranks are real
   if (draftPolicy === 'random') {
     // No shape at all: whatever the roster hands you. This is the floor.
   } else if (draftPolicy.startsWith('doctrine:')) {
@@ -402,7 +403,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       doctrineOffer = [want];
       const shuffled = [...playerRoster].sort(() => Math.random() - 0.5);
       shuffled.forEach(c => { if (draft.length < slots.length && d.holds([...draft, c])) draft.push(c); });
-      if (d.holds(draft)) { activeDoctrine = want; stat.doctrine = want; }
+      wantDoctrine = want;
     }
   } else if (draftPolicy === 'doctrine' && doctrineOffer.length) {
     // Take one at random and field a line that keeps it. Anything the doctrine will not have
@@ -411,7 +412,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     const d = doctrineById(want);
     const shuffled = [...playerRoster].sort(() => Math.random() - 0.5);
     shuffled.forEach(c => { if (draft.length < slots.length && d.holds([...draft, c])) draft.push(c); });
-    if (d.holds(draft)) { activeDoctrine = want; stat.doctrine = want; }
+    wantDoctrine = want;
   } else if (draftPolicy.startsWith('only:')) {
     const want = draftPolicy.slice(5);
     const one = byClass([want])[0];
@@ -422,12 +423,30 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   }
   while (draft.length < slots.length) {
     const rest = playerRoster.filter(p => !draft.includes(p));
-    const d = doctrineById(activeDoctrine);
+    const d = doctrineById(wantDoctrine);
     const legal = d ? rest.filter(c => d.holds([...draft, c])) : rest;
     if (!legal.length) break;
     draft.push(pickFrom(legal));
   }
   draft.forEach((p, i) => { p.gridPos = slots[i]; });
+  // Banked here rather than during the draft, because a doctrine can ask about the SHAPE of the
+  // line and not only its membership - THE WALL wants to know who is holding rank 1, and nobody
+  // is standing anywhere until the line above. Asking earlier answered no for every such rule.
+  {
+    const standing = playerRoster.filter(p => p.gridPos > 0);
+    let take = null;
+    if (wantDoctrine) { const d = doctrineById(wantDoctrine); if (d && d.holds(standing)) take = wantDoctrine; }
+    // And a player who is not building AROUND a doctrine still reads the three offers and takes
+    // one their line already keeps. Without this the default policy had no branch that could
+    // take a doctrine at all, so "zero taken across 24 expeditions" was guaranteed by this file
+    // rather than measured from the game - the same shape of hole D07 found four moves in.
+    if (!take && draftPolicy !== 'random') {
+      take = doctrineOffer.find(id => { const d = doctrineById(id); return d && d.holds(standing); }) || null;
+    }
+    if (take) { activeDoctrine = take; stat.doctrine = take; }
+    stat.doctrineOffered = doctrineOffer.slice();
+    stat.doctrineLive = doctrineOffer.filter(id => { const d = doctrineById(id); return d && d.holds(standing); });
+  }
   // The real deploy button is what applies a doctrine's edge and banks its multiplier, so the
   // sim goes through it rather than around it.
   musterDeploy();
@@ -1332,8 +1351,27 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('score, median', pct(nums('score'), 0.5).toLocaleString());
 
   const withDoc = results.filter(r => r.doctrine);
-  if (withDoc.length) {
+  const offered = results.filter(r => (r.doctrineOffered || []).length);
+  if (withDoc.length || offered.length) {
     console.log('\n── DOCTRINES ' + '─'.repeat(44));
+    // Whether the muster put a real question is the thing to read first. Four prohibitions
+    // greyed out is not a choice, and a block that only printed when somebody TOOK one could
+    // not say so - it just did not print.
+    if (offered.length) {
+      const liveCounts = offered.map(r => (r.doctrineLive || []).length);
+      const anyLive = liveCounts.filter(c => c > 0).length;
+      line('musters with a live offer', `${anyLive} of ${offered.length}`);
+      line('  offers live, mean of 3', (liveCounts.reduce((a, b) => a + b, 0) / offered.length).toFixed(2));
+      const seen = {}, live = {};
+      offered.forEach(r => {
+        (r.doctrineOffered || []).forEach(id => { seen[id] = (seen[id] || 0) + 1; });
+        (r.doctrineLive || []).forEach(id => { live[id] = (live[id] || 0) + 1; });
+      });
+      Object.keys(seen).sort((a, b) => (live[b] || 0) - (live[a] || 0)).forEach(id =>
+        line(`  ${id}`, `offered ${seen[id]}, live ${live[id] || 0}`));
+      const dead = Object.keys(seen).filter(id => !live[id]);
+      line('  never live when offered', dead.length ? dead.join(', ') : 'none');
+    }
     line('runs that took one', `${withDoc.length} of ${n}`);
     const kept = withDoc.filter(r => r.doctrineKept).length;
     line('  still keeping it at the end', `${kept} of ${withDoc.length}`);

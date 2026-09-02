@@ -1421,6 +1421,33 @@ function protocolMult() { return ascension > 0 ? PROTOCOLS[Math.min(ascension, P
 //
 // `holds` reads the deployed line and nothing else, so it can be re-asked after every change:
 // the muster, a recruit signed on, an operator lost and the ranks closed behind them.
+// Measured after, 30 expeditions on `--meta fresh`, against a build where the four above were
+// the whole table:
+//
+//                                 before      after
+//   musters with a live offer      0 of 30    22 of 30
+//   offers live, mean of three       0.00        1.00
+//   runs that took one             0 of 30    22 of 30
+//     still keeping it at the end       -     22 of 22
+//
+//   THE WALL                              offered 19, live 18
+//   BROAD SPECTRUM                        offered 23, live 10
+//   FIELD SURGERY                         offered  9, live  2
+//   NO HANDS / CONSCRIPTS / LIGHT ORDER   offered 39, live  0
+//
+// Two things to be honest about in that table.
+//
+// THE WALL reads as free - live 18 times in 19 - and it is not that free for a person. The
+// simulator's default draft opens with "someone to hold the front", picked from the Bruiser and
+// the Shotgunner, which is THE WALL's rule restated; it satisfies the doctrine by construction.
+// It is priced lowest of the seven for the same reason it measures highest. A player who fronts
+// a Hound or drafts nothing that swings fails it, and the suite holds both of those cases.
+//
+// And the three old prohibitions are still never live under a policy that is not building
+// around them, which is correct rather than a miss: they are commitments made at the muster,
+// and the fix here was never to soften them - it was that when all four were commitments there
+// was nothing to decide between. The draw now offers a promise you can keep alongside promises
+// you would have to build for.
 const DOCTRINE_DRAW = 3;      // how many are offered
 const DOCTRINES = [
     { id: 'FIELD_SURGERY', name: 'FIELD SURGERY', bonus: 0.12,
@@ -1441,9 +1468,47 @@ const DOCTRINES = [
       // Meaningless until there is a habit to break: on a save with no history every class is
       // an unfamiliar one, and the doctrine would pay 35% for whatever you were going to do.
       offerable: () => doctrineFavourites.length >= 3,
-      holds: line => line.length > 0 && line.every(c => !doctrineFavourites.includes(c.classType)) }
+      holds: line => line.length > 0 && line.every(c => !doctrineFavourites.includes(c.classType)) },
+
+    // ── Doctrines that ask for a composition rather than a refusal ───────────────────────
+    // Every one of the four above is a prohibition, and each asks all three deployed slots to
+    // give something up. Measured over 24 expeditions, that came to zero doctrines taken - the
+    // simulator's DOCTRINES block never printed, because no run ever carried one - and the
+    // muster showed all three offers greyed with "the line as it stands does not keep this".
+    // A choice nobody can take is not a choice, and a draw of three from four where all four
+    // are refusals is the same non-decision three times over.
+    //
+    // These three are satisfied by lines a player would want anyway, which is the point: the
+    // question becomes which composition to build toward rather than what to do without.
+    { id: 'BROAD_SPECTRUM', name: 'BROAD SPECTRUM', bonus: 0.14,
+      rule: 'The line answers in all three damage types.',
+      edge: 'Every swing lands as if the target resisted 10 less.',
+      // Almost everyone carries something physical, so in practice this asks for one operator
+      // who lands bio and one who lands energy - a Medic and a Pyro, a Hound and a Scavenger.
+      holds: line => line.length > 0 && ['phys', 'bio', 'energy'].every(t =>
+          line.some(c => deckFor(c).some(a => a.act !== 'self' && damageTypeOf(a.move) === t))) },
+
+    { id: 'THE_WALL', name: 'THE WALL', bonus: 0.12,
+      rule: 'The front rank is the toughest in the line, and swings.',
+      edge: 'The front rank opens every fight braced, covering the ranks behind it.',
+      // The sensible arrangement, paid for. A line that puts its sniper in front fails it, and
+      // so does one drafted without anybody who owns a melee ability.
+      holds: line => {
+          const front = line.find(c => c.gridPos === 1);
+          if (!front || line.length < 2 || !carriesMelee(front)) return false;
+          return line.every(c => c.id === front.id || baseHpOf(c) <= baseHpOf(front));
+      } },
+
+    { id: 'OLD_GUARD', name: 'OLD GUARD', bonus: 0.15,
+      rule: 'Every operator in the line is a veteran of their class.',
+      edge: 'Deployed veterans hit 10% harder.',
+      // CONSCRIPTS' mirror, and gated the same way for the same reason: on a save with no
+      // history nobody is a veteran, and an offer that cannot be met is the thing being fixed.
+      offerable: () => Object.keys(mastery || {}).filter(c => masteryRank(c) >= VETERAN_RANK).length >= 3,
+      holds: line => line.length > 0 && line.every(c => masteryRank(c.classType) >= VETERAN_RANK) }
 ];
 const LIGHT_ORDER_HP = 55;
+const VETERAN_RANK = 2;        // dossier rank II - what OLD GUARD counts as a veteran
 // Who is actually carrying something that swings, read off the operator's real deck rather
 // than asserted here. Two things a hand-kept list gets wrong: the Shotgunner reads as a
 // front-liner and is two-thirds ranged, and the Scavenger picks up a knife at dossier rank III
@@ -7240,6 +7305,14 @@ function initiateCombat(nodeType, isEliteNode) {
     // be cleared here or it rides into the next node.
     playerRoster.forEach(ent => { ent.stunnedTurns = 0; ent.bleedingTurns = 0; ent.armorTurns = 0; ent.armor = 0;
         ent.oiledTurns = 0; ent.corrodedTurns = 0; ent.markedTurns = 0; ent.guardTurns = 0; });
+    // THE WALL: whoever is holding the front opens already braced. Set after the clear above
+    // so it survives it, and worth the same as an Iron Guard the squad did not have to spend
+    // a turn on - including the part where hits aimed past them are taken by them instead.
+    if (hasDoctrine('THE_WALL')) {
+        const front = deployedRoster.find(p => p.gridPos === 1 && p.hp > 0);
+        if (front) { front.armor += 15; front.armorTurns = 2; front.guardTurns = 2;
+            log(`> ${front.name} is already set. THE WALL holds.`, 'log-status'); }
+    }
     // SHELL SHOCK: the fight starts without them. Set after the clear above, so it survives it.
     deployedRoster.filter(p => p.hp > 0 && hasScar(p, 'SHELL_SHOCK')).forEach(p => {
         p.stunnedTurns = 1;
@@ -8198,6 +8271,11 @@ function resolveAction(targetId) {
         if (hasTrait(actEnt, 'CATALYST') && (target.corrodedTurns || 0) > 0) dmgMult *= 1.25;
         if (hasTrait(actEnt, 'SLACK_LINE') && dist === 0) dmgMult *= 1.25;
         snap('perks, quirks & bonds');
+        // OLD GUARD, on its own line: a doctrine the player is paying a whole run's
+        // composition for should be visible in the arithmetic rather than folded into
+        // somebody else's layer.
+        if (hasDoctrine('OLD_GUARD') && actEnt.gridPos > 0) dmgMult *= 1.10;
+        snap('doctrine');
         // Over The Top, still burning. Its own layer in the breakdown, because the whole point
         // is that you can see it and time the turns you spend under it.
         if ((actEnt.chargeTurns || 0) > 0) dmgMult *= CHARGE_MULT;
@@ -8388,6 +8466,11 @@ function resolveAction(targetId) {
 function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
 
     let rv = t.resistances[atkType] || 0;
+    // BROAD SPECTRUM: a line carrying an answer in every type finds the seam in whatever it
+    // is shooting at. Only ever eases a resistance toward zero - it does not turn a resistant
+    // target into a weak one, and it cannot open an immunity, which is a wall by design.
+    if (hasDoctrine('BROAD_SPECTRUM') && attacker && attacker.isPlayer && !t.isPlayer
+        && rv > 0 && rv < 100) rv = Math.max(0, rv - 10);
     // Corrosion eats plating outright - the counter to a unit that re-plates itself each turn.
     // Ashfall cakes onto everything - and corrodes off it with the rest of the plating.
     const w = sky();
@@ -9398,7 +9481,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField,
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
-    ELITE_AFFIXES, affixById, affixesOn, hasAffix, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants

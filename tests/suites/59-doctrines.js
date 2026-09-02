@@ -68,12 +68,31 @@ module.exports = {
     const each = await page.evaluate(() => DOCTRINES.map(d => {
       __run();
       doctrineFavourites = ['BRUISER', 'MEDIC', 'SHOTGUNNER'];   // so CONSCRIPTS has something to ban
+      // ...and so OLD GUARD has veterans to ask for. Both of those doctrines read career state
+      // rather than the line alone, and a doctrine that cannot be offered on this save is not
+      // the same claim as one that cannot be fielded.
+      mastery = Object.fromEntries(playerRoster.map(c => [c.classType, MASTERY_RANKS[VETERAN_RANK]]));
       doctrineOffer = [d.id];
       playerRoster.forEach(c => { c.gridPos = 0; });
-      const line = [];
-      playerRoster.forEach(c => { if (line.length < 3 && d.holds([...line, c])) line.push(c); });
+      // Arrange, then ask. This used to add operators one at a time and ask after each, which
+      // assumes a rule is monotone in membership and that ranks do not matter - neither holds
+      // for a doctrine about the SHAPE of the line. THE WALL wants to know who is standing in
+      // rank 1 and refuses a line of one, so the incremental build could never start it.
+      const pool = playerRoster.slice(0, 7);
+      let line = [];
+      outer:
+      for (let a = 0; a < pool.length; a++)
+        for (let b = 0; b < pool.length; b++)
+          for (let c = 0; c < pool.length; c++) {
+            if (a === b || b === c || a === c) continue;
+            const trio = [pool[a], pool[b], pool[c]];
+            pool.forEach(p => { p.gridPos = 0; });
+            trio.forEach((p, i) => { p.gridPos = i + 1; });
+            if (d.holds(trio)) { line = trio; break outer; }
+          }
+      pool.forEach(p => { p.gridPos = 0; });
       line.forEach((c, i) => { c.gridPos = i + 1; });
-      const buildable = d.holds(deployedLine());
+      const buildable = line.length > 0 && d.holds(deployedLine());
       takeDoctrine(d.id);
       musterDeploy();
       const st = { ...runStats };
