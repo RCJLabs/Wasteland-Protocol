@@ -9,7 +9,19 @@ try { ({ chromium } = require('playwright')); }
 catch (e) { ({ chromium } = require('playwright-core')); }
 
 const ROOT = path.join(__dirname, '..');
-const SUITES = fs.readdirSync(path.join(__dirname, 'suites')).filter(f => f.endsWith('.js')).sort();
+// Every suite by default. Any arguments are substrings matched against the filename, so a
+// single suite or a band of them can be run on its own:
+//
+//   node tests/run.js                 all of them
+//   node tests/run.js 81              just 81-augments
+//   node tests/run.js 70- 71- 72-     a band
+//
+// The whole battery is still what a change is judged on - this is for the loop before that,
+// and for getting through the gate in pieces when the machine will not hold a long run.
+const ONLY = process.argv.slice(2).filter(a => !a.startsWith('-'));
+const ALL_SUITES = fs.readdirSync(path.join(__dirname, 'suites')).filter(f => f.endsWith('.js')).sort();
+const SUITES = ONLY.length ? ALL_SUITES.filter(f => ONLY.some(o => f.includes(o))) : ALL_SUITES;
+if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join(', ')}`); process.exit(2); }
 
 (async () => {
   const { server, port } = await serve(ROOT);

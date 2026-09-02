@@ -131,6 +131,10 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .upg-btn { flex: 1; min-width: 30%; padding: 10px; background: #111; color: #ccc; border: 1px solid #444; cursor: pointer; font-family: monospace; font-size: 12px; transition: 0.2s;}
 .upg-btn:hover:not(:disabled) { background: #333; border-color: #888; color: #fff;}
 .upg-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+/* How many slots are left, next to what is already bolted on. The list used to only ever
+   grow and could say neither. */
+.aug-slots { color: #4488ff; font-size: 10px; font-variant-numeric: tabular-nums; }
+.aug-full { color: #6f7c8a; }
 .sub-menu-btn { min-width: 45%; } 
 
 .pos-btn-1 { border-color: #8B0000; color: #ff5555; background: #2a0a0a; } 

@@ -2148,7 +2148,9 @@ const CODEX = [
     ] },
     { id: 'BAG', title: 'THE BAG', body: () => [
         'Four schematics at the workbench, four slots in the bag, and using one in a fight costs the operator\u2019s whole turn. They are the only thing in the game that answers a problem the squad you brought cannot: a hostile winding up out of everyone\u2019s reach, a stun on the one operator who could have stopped it.',
-        'The same three materials buy augments, which are permanent and per-operator, so every consumable made is an augment not installed. The bag is what you spend on the run in front of you.',
+        `The same three materials buy augments, which are permanent and per-operator, so every consumable made is an augment not installed. The bag is what you spend on the run in front of you.`,
+        `Every operator has ${AUGMENT_SLOTS} augment slots and no more. Three of one is a build; one of each is a checklist. ` +
+            AUGMENTS.map(a => `${a.name} ${a.short} (${a.cost} ${MATERIAL_ICON[a.mat]})`).join(', ') + '.',
         ...Object.entries(ITEM_DATA).map(([id, i]) => `${i.label} (${itemCost(id)}) \u2014 ${i.desc}`)
     ] },
     { id: 'BENCH', title: 'THE BENCH', body: () => [
@@ -3758,6 +3760,37 @@ function executeSelfAction(type) {
 //
 // One table, read by the workbench, the bag and the deck, so the three cannot drift.
 const MATERIAL_ICON = { parts: '\u2699\uFE0F', chems: '\uD83E\uDDEA', tech: '\uD83D\uDCBB' };
+// ── What can be bolted onto an operator ─────────────────────────────────────────────────
+// Three permanent upgrades, and until D03 they had no ceiling of any kind: installAugment
+// pushed onto char.augments and the buttons were enabled on whether you could afford the
+// materials, so a long run bought +20 health, +4 damage or +3 speed as many times as the
+// wasteland handed out parts. That is the defect C04 fixed on the Citadel - an uncapped power
+// source a long run buys its way past - and it survived here because the SIMULATOR has capped
+// itself at three a head since augments were first simulated. Every balance figure this repo
+// has taken was measured against a cap the game did not have, so the uncapped game has never
+// been measured at all; three is chosen to match what those readings already assumed.
+//
+// Slots, not one of each: three of the same is a decision (a sniper carrying nothing but
+// optics) and one of each is a checklist that ends every operator identically.
+const AUGMENT_SLOTS = 3;
+const AUGMENTS = [
+    { id: 'PLATING', name: 'SUB-DERMAL PLATING', short: '+20 HP',  mat: 'parts', cost: 3,
+      tag: 'Plating', apply: c => { c.maxHp += 20; c.hp += 20; } },
+    { id: 'OPTICS',  name: 'OPTICS',             short: '+4 DMG',  mat: 'tech',  cost: 2,
+      tag: 'Optics',  apply: c => { c.dmgBase += 4; } },
+    { id: 'PUMP',    name: 'ADRENAL PUMP',       short: '+3 SPD',  mat: 'chems', cost: 2,
+      tag: 'Pump',    apply: c => { c.speed += 3; } }
+];
+function augmentById(id) { return AUGMENTS.find(a => a.id === id) || null; }
+function augmentsOn(ch) { return (ch && ch.augments) || []; }
+function augmentSlotsLeft(ch) { return Math.max(0, AUGMENT_SLOTS - augmentsOn(ch).length); }
+// A save from before the cap can be carrying more than three. Nothing is taken back - the
+// materials were spent - it simply cannot buy a fourth.
+function canAugment(ch, id) {
+    const a = augmentById(id);
+    return !!a && augmentSlotsLeft(ch) > 0 && materials[a.mat] >= a.cost;
+}
+
 const ITEM_DATA = {
     MED_STIM:   { label: '💉 Med-Stim',   action: 'ITEM_MED',        short: 'Heal 30',
                   mats: { chems: 2 },
@@ -5510,8 +5543,22 @@ function renderOutpost() {
 
     const cybC = document.getElementById('cybernetics-roster'); const cybCards = [];
     playerRoster.forEach(char => {
-        let augList = char.augments && char.augments.length > 0 ? char.augments.join(', ') : 'NONE'; let canPlating = materials.parts >= 3; let canOptics = materials.tech >= 2; let canPump = materials.chems >= 2;
-        cybCards.push(`<div class="upgrade-card"> <div class="upgrade-header"><span>${char.name}</span><span style="color:#4488ff; font-size:10px;">AUGS: ${augList}</span></div> <div class="upgrade-stats"><span>MAX HP: ${char.maxHp}</span><span>BASE DMG: ${char.dmgBase}</span><span>SPEED: ${char.speed}</span></div> <div class="upgrade-btn-group"> <button class="upg-btn" style="border-color:#4488ff;" ${!canPlating ? 'disabled' : ''} data-action="augment" data-id="${char.id}" data-kind="PLATING">SUB-DERMAL PLATING (+20 HP) [3 ⚙️]</button> <button class="upg-btn" style="border-color:#4488ff;" ${!canOptics ? 'disabled' : ''} data-action="augment" data-id="${char.id}" data-kind="OPTICS">OPTICS (+4 DMG) [2 💻]</button> <button class="upg-btn" style="border-color:#4488ff;" ${!canPump ? 'disabled' : ''} data-action="augment" data-id="${char.id}" data-kind="PUMP">ADRENAL PUMP (+3 SPD) [2 🧪]</button> </div> </div>`);
+        // What they are carrying and how much room is left, because a list that only ever grew
+        // could not say either. A full operator says FULL rather than printing four names.
+        const worn = augmentsOn(char);
+        const left = augmentSlotsLeft(char);
+        const augList = worn.length ? worn.join(', ') : 'NONE';
+        const slotTag = left > 0 ? `${worn.length}/${AUGMENT_SLOTS}` : 'FULL';
+        const btns = AUGMENTS.map(a => {
+            const can = canAugment(char, a.id);
+            return `<button class="upg-btn aug-btn" ${can ? '' : 'disabled'} data-action="augment"`
+                 + ` data-id="${char.id}" data-kind="${a.id}">${a.name} (${a.short})`
+                 + ` [${a.cost} ${MATERIAL_ICON[a.mat]}]</button>`;
+        }).join(' ');
+        cybCards.push(`<div class="upgrade-card"> <div class="upgrade-header"><span>${char.name}</span>`
+          + `<span class="aug-slots${left === 0 ? ' aug-full' : ''}">AUGS ${slotTag}: ${augList}</span></div>`
+          + ` <div class="upgrade-stats"><span>MAX HP: ${char.maxHp}</span><span>BASE DMG: ${char.dmgBase}</span><span>SPEED: ${char.speed}</span></div>`
+          + ` <div class="upgrade-btn-group"> ${btns} </div> </div>`);
     });
 
     cybC.innerHTML = cybCards.join('');
@@ -5527,7 +5574,20 @@ function craftItem(item) {
     inventory.push(item); checkBountyProgress('CRAFT');
     saveGameState(); renderOutpost();
 }
-function installAugment(charId, type) { let char = playerRoster.find(c => c.id === charId); if (!char.augments) char.augments = []; if (type === 'PLATING' && materials.parts >= 3) { materials.parts -= 3; char.maxHp += 20; char.hp += 20; char.augments.push('Plating'); } else if (type === 'OPTICS' && materials.tech >= 2) { materials.tech -= 2; char.dmgBase += 4; char.augments.push('Optics'); } else if (type === 'PUMP' && materials.chems >= 2) { materials.chems -= 2; char.speed += 3; char.augments.push('Pump'); } saveGameState(); renderOutpost(); }
+function installAugment(charId, type) {
+    const char = playerRoster.find(c => c.id === charId);
+    if (!char) return false;
+    if (!char.augments) char.augments = [];
+    // Asked here rather than trusted from the button: a stale screen must not be able to fit a
+    // fourth, and the simulator drives this function directly.
+    if (!canAugment(char, type)) return false;
+    const a = augmentById(type);
+    materials[a.mat] -= a.cost;
+    a.apply(char);
+    char.augments.push(a.tag);
+    saveGameState(); renderOutpost();
+    return true;
+}
 function assignSlot(charId, newSlot) {
     // Short Handed is a condition for the whole expedition, not just its first node.
     if (hasContract('SHORT_HANDED') && newSlot === 3) { activePosSelector = null; renderOutpost(); return; }
@@ -9490,7 +9550,8 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField,
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
-    ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
+    AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants

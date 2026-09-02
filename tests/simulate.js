@@ -542,13 +542,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       let aGuard = 0;
       while (aGuard++ < 8) {
         const who = playerRoster.filter(c => c.gridPos > 0);
-        const target = who.find(c => (c.augments || []).length < 3);
+        // Read off the game. This file capped itself at three a head for as long as it has
+        // simulated augments, while the game had no cap at all - so every balance figure in
+        // this repo was taken against a ceiling that did not exist. D03 gave the game the
+        // ceiling; this asks for it rather than keeping a second copy of the number.
+        const target = who.find(c => augmentSlotsLeft(c) > 0);
         if (!target) break;
         const had = (target.augments || []).length;
-        if (materials.parts >= 3) installAugment(target.id, 'PLATING');
-        else if (materials.tech >= 2) installAugment(target.id, 'OPTICS');
-        else if (materials.chems >= 2) installAugment(target.id, 'PUMP');
-        else break;
+        // Affordability is asked of the game, the same way crafting does it, so repricing an
+        // augment cannot leave this file buying at yesterday's price.
+        const afford = AUGMENTS.find(a => canAugment(target, a.id));
+        if (!afford) break;
+        installAugment(target.id, afford.id);
         if ((target.augments || []).length === had) break;
         stat.augments++;
       }
