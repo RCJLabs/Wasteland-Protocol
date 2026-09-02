@@ -434,10 +434,22 @@ button.reach-short { border-color: #7a5a20; }
 .relic-rare .relic-card-desc { color: #c8b6d8; }
 
 /* Expedition contracts: optional conditions taken before deploying. */
+/* The whole screen scrolls, the way the Outpost and the Citadel's settings do. It used to be a
+   fixed-height column with ONE inner scroller - the optional conditions - and everything else
+   flex-shrinking around it. Three order cards is most of a phone, so the conditions list was
+   squeezed to 220px of its 418px on a tall handset, to 35px on a 400px one, and to exactly
+   zero at 320px, where the DEPLOY button also sat below the fold behind `overflow: hidden`.
+   The feature was not hidden by a z-index; it was allocated no height and then clipped. */
 #screen-contracts { display: none; flex-direction: column; padding: 20px; height: 100%; box-sizing: border-box;
-  overflow: hidden; background: linear-gradient(rgba(14,12,8,0.95), rgba(0,0,0,0.98)); }
+  overflow-y: auto; background: linear-gradient(rgba(14,12,8,0.95), rgba(0,0,0,0.98)); }
+/* A guard rather than load-bearing: column flex items default to min-height:auto and so will
+   not shrink below their content on their own. What collapsed the conditions list was the
+   `min-height: 0` that used to sit on it, which switches that protection off - so this is here
+   to stop the next `min-height: 0` from doing it again. Removing this line alone breaks
+   nothing today, which is worth knowing before someone deletes it thinking it does. */
+#screen-contracts > * { flex-shrink: 0; }
 .contract-note { font-size: 11px; line-height: 1.5; color: #8a8578; margin-bottom: 12px; flex-shrink: 0; }
-.contract-list { display: flex; flex-direction: column; gap: 10px; flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.contract-list { display: flex; flex-direction: column; gap: 10px; }
 .contract-card { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 10px 12px;
   line-height: 1.4; border-color: #4a463c; color: #8a8578; }
 .contract-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; width: 100%; }
@@ -445,7 +457,12 @@ button.reach-short { border-color: #7a5a20; }
 .contract-bonus { font-size: 11px; font-variant-numeric: tabular-nums; }
 .contract-desc { font-size: 10.5px; white-space: normal; opacity: 0.85; }
 .contract-on { border-color: #B8860B; color: #d9a93d; box-shadow: 0 0 10px rgba(184,134,11,0.2) inset; }
-.contract-footer { flex-shrink: 0; padding-top: 12px; }
+/* Pinned to the bottom of the scroll, because making the page scroll pushed DEPLOY off it on
+   every handset - trading a feature you could not reach for an action you could not reach.
+   The conditions scroll underneath it; the button never leaves. */
+.contract-footer { flex-shrink: 0; padding: 12px 0 0; position: sticky; bottom: -20px;
+  background: linear-gradient(rgba(0,0,0,0.86), rgba(0,0,0,0.98) 22%); margin: 0 -20px; padding-left: 20px;
+  padding-right: 20px; padding-bottom: 20px; }
 .contract-mult { text-align: center; font-size: 13px; font-weight: bold; letter-spacing: 1px;
   color: #B8860B; margin-bottom: 10px; font-variant-numeric: tabular-nums; }
 .contract-back { border-color: #888; color: #888; margin-top: 8px; }
@@ -508,11 +525,20 @@ button.reach-short { border-color: #7a5a20; }
 
 
 /* The muster: who rolled what, who stands where, before the first node is taken. */
+/* Scrolls as a page, for the same reason the contracts screen does. Three doctrine cards, a
+   reroll line and a job line sat above a single inner scroller, and at 320px they left the
+   squad list 24px of its 733px - the screen where you choose who deploys, with room for a
+   quarter of one operator. Found while fixing the same shape on the contracts screen. */
 #screen-muster { display: none; flex-direction: column; padding: 20px; height: 100%; box-sizing: border-box;
-  overflow: hidden; background: linear-gradient(rgba(10,12,8,0.95), rgba(0,0,0,0.98)); }
+  overflow-y: auto; background: linear-gradient(rgba(10,12,8,0.95), rgba(0,0,0,0.98)); }
+#screen-muster > * { flex-shrink: 0; }   /* the same guard, for the same reason */
+/* Pinned, so the way out of the muster never scrolls off it. */
+#muster-deploy { position: sticky; bottom: -20px; margin: 0 -20px; padding: 12px 20px 20px;
+  background: linear-gradient(rgba(0,0,0,0.86), rgba(0,0,0,0.98) 22%); border-left: 0; border-right: 0;
+  border-bottom: 0; }
 .muster-head { display: flex; justify-content: flex-end; font-size: 11px; letter-spacing: 1px;
   color: #B8860B; margin-bottom: 8px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
-.muster-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.muster-list { display: flex; flex-direction: column; gap: 8px; }
 .muster-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center;
   border: 1px solid #33301f; padding: 8px 10px; opacity: 0.65; }
 .muster-row.muster-deployed { border-color: #6B8E23; opacity: 1; }
