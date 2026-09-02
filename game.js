@@ -1346,31 +1346,40 @@ function noteSeedBest(seed, score) {
 // `ascension >= 2` spelled out at the call site, which meant the ladder's order and its effects
 // were two separate facts that had to agree - reorder the table and BLOODRITE silently becomes
 // whatever now sits third.
-// ── What a rung is worth ────────────────────────────────────────────────────────────────
-// These numbers are NOT justified by the current build, and the honest thing is to say so
-// rather than to keep quoting the measurement they came from.
+// ── What a rung is worth, re-measured at D12 ────────────────────────────────────────────
+// These numbers are right, and the previous note in this place - which said they were not -
+// was measured on a build two features older. Seven arms of 40 carried expeditions, difficulty
+// 1, line draft, warm faces. Raw is exact: every run in a sample carries the same protocolMult
+// and computeScore multiplies by it, so raw = median / mult.
 //
-// They were set against C05's reading of rungs 0/4/8 - median depth 6/4/2, raw score shares
-// 1.00/0.78/0.30 - which showed the first half of the ladder overpaying and the top half
-// slightly underpaying. Re-measured on the C10 build, 24 runs a rung on the same instrument:
+//   rung   raw median   90% interval      depth    shipped   break-even
+//     0        31,998   18,624 - 36,880   5 [3-6]     1.00        1.00
+//     2        26,030   23,678 - 32,441   4 [4-6]     1.30        1.23
+//     4        18,648   16,160 - 24,696   3 [3-4]     1.70        1.72
+//     5        15,340   10,970 - 22,954   3 [2-4]     1.95        2.09
+//     6        18,486   13,148 - 30,318   3 [2-5]     2.25        1.73
+//     6        22,965   18,020 - 25,955   4 [3-4]     2.25        1.39   (second sample)
+//     8        10,354    9,462 - 14,961   2 [2-3]     3.00        3.09
 //
-//   rung 0   median 37,435 at x1.00   raw 37,435   share 1.000
-//   rung 4   median 13,338 at x1.35   raw  9,880   share 0.264   break-even x3.79
-//   rung 8   median 30,567 at x3.45   raw  8,860   share 0.237   break-even x4.23
+// Rungs 2, 4, 5 and 8 land within 7% of what they charge. Nothing here justifies moving a
+// multiplier, and the C10 reading that wanted rung 4 near x3.8 and rung 8 near x4.2 is
+// superseded: on this build those two are separated and break even at 1.72 and 3.09, which is
+// what they already cost. D01 and D02 moved the game underneath the ladder - IRONSIDE is rung
+// one, and elites with a teeth budget compound up every rung above it.
 //
-// (Raw is exact: every run in a sample carries the same protocolMult and computeScore
-// multiplies by it, so raw = median / mult.)
+// Rung 6 is the one loose end, and it is loose rather than wrong. Its point estimate says a
+// 30% overpay, its second sample says 61%, and the two disagree with each other by a quarter -
+// so what the pair actually establishes is that forty runs does not resolve rung 6. Its
+// interval overlaps every other rung's. Reading "LONG SHADOW makes the run easier" out of that
+// was a mistake caught by the interval and then by the code: the protocol floors every
+// commander's grudge at one, which is +20% health, +12% damage, more armour and more speed,
+// and a grudge phase. It cannot make a run easier. The number was noise wearing a mechanism.
 //
-// Two things changed underneath the ladder. The base game got EASIER - rung 0 went from median
-// depth 6 to 7 and from 6 wins in 24 to 10 - while rungs 4 and 8 collapsed onto each other,
-// 0.26 against 0.24, when they used to be 0.78 against 0.30. So the ladder's entire cost now
-// sits in its first four rungs and the top four add almost nothing.
-//
-// Repricing against that would set rung 4 near x3.8 and rung 8 near x4.2, which fixes the
-// arithmetic and leaves a ladder where climbing from 4 to 8 costs nothing and pays 11% more.
-// The multipliers are not the defect any more; the spacing of the effects is. That is D12, and
-// it is blocked on D07 - the instrument that measured all of this cannot use a self-action, so
-// it has never guarded, vented or gone over the top, and three classes lean on exactly those.
+// What forty runs an arm CAN say is which pairs are separated at all: 0-8, 2-5, 2-8, 4-8 and
+// 6-8. No two ADJACENT rungs are, which is the honest ceiling on this sample size - the ladder
+// demonstrably costs something end to end, and no single step of it has been individually
+// measured. Anyone wanting to price one rung against its neighbour needs a great deal more
+// than forty, and should read the coverage table at the top of tests/simulate.js first.
 const PROTOCOLS = [
     { id: 'IRONSIDE',   name: 'PROTOCOL: IRONSIDE',    mult: 1.15, desc: 'Every elite arrives affixed.' },
     { id: 'BLOODRITE',  name: 'PROTOCOL: BLOODRITE',   mult: 1.30, desc: 'Warlords enrage at 60% health instead of 50%.' },

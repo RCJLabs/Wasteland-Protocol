@@ -18,6 +18,24 @@
 // baseline run in the same session. Wipes per run is the stable figure and sits near 4.5
 // across every sample ever taken here; if lethality is the question, thirty will do.
 //
+// ── And since D12, the file says how sure it is ─────────────────────────────────────────
+// "150+ before believing anything" is a rule of thumb standing in for an error bar, and a rule
+// of thumb cannot tell you whether the two arms in front of you differ. Every median this file
+// prints now carries a bootstrap 90% interval: resample the runs with replacement, take the
+// median of each resample, keep the middle 90% of those.
+//
+// Checked against distributions whose median is known, 300 trials each, including a lognormal
+// one shaped like an expedition score:
+//
+//                          n=30    n=40    n=60   n=150
+//   covers the true median   85%     88%     90%     91%     (nominal 90%)
+//   interval width           81%     70%     58%     35%     (as a share of the median)
+//
+// So the old rule was about right - roughly 150 runs buys a score median worth +-17% - and it
+// was never the useful statement. Two arms whose intervals overlap have not been shown to
+// differ, and that can be said at forty runs. Slightly under-covering at thirty on a
+// heavy tail is the honest cost of a small sample, and is itself worth knowing.
+//
 // This is written down because a claim was published off a thirty-run pair and was wrong:
 // N11 was reported as +49% median score. Re-measured at 150 against its own predecessor it
 // is 14,460 -> 11,455, which is not an increase at all.
@@ -99,6 +117,34 @@
 //
 // The lesson for anyone reading a figure out of this header: a balance reading is about the
 // build it was taken on. Five feature commits moved this one enough to invert its conclusion.
+//
+// ── D12: and then two more commits inverted it back ────────────────────────────────────
+// Both paragraphs above are now history. Re-measured after D01 and D02, seven arms of 40
+// carried expeditions each, this time with an interval on every median:
+//
+//   rung   raw median   90% interval      shipped   break-even
+//     0        31,998   18,624 - 36,880      1.00        1.00
+//     2        26,030   23,678 - 32,441      1.30        1.23
+//     4        18,648   16,160 - 24,696      1.70        1.72
+//     5        15,340   10,970 - 22,954      1.95        2.09
+//     6        18,486   13,148 - 30,318      2.25        1.73
+//     6        22,965   18,020 - 25,955      2.25        1.39   (second sample)
+//     8        10,354    9,462 - 14,961      3.00        3.09
+//
+// Rungs 4 and 8 are separated again and break even at 1.72 and 3.09 - which is 1.70 and 3.00,
+// the numbers that were already shipped. The reprice this file argued for would have been
+// wrong by more than a factor of two. Nothing was changed.
+//
+// Rung 6's two samples disagree with each other by a quarter and overlap every other arm, so
+// forty runs does not resolve it. The first sample invited a story - LONG SHADOW makes the run
+// EASIER - and the interval refused it, after which the code settled it: the protocol floors
+// every commander's grudge at one, which is more health, more damage, more armour, more speed
+// and a grudge phase. It cannot make a run easier. That is the failure mode this whole file
+// exists to catch, and it caught it on the same afternoon the intervals were added.
+//
+// The pairs actually separated at forty an arm: 0-8, 2-5, 2-8, 4-8, 6-8. No two ADJACENT rungs
+// are. The ladder demonstrably costs something end to end; no single step of it has been
+// individually measured, and pricing one rung against its neighbour needs far more than forty.
 
 // ── What the learned moves cost, measured after C09 ─────────────────────────────────────
 // From the second meeting a commander trades one of its intents for something it picked up
@@ -1209,6 +1255,32 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const nums = key => results.map(r => r[key]).sort((a, b) => a - b);
   const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
   const pct = (a, p) => a[Math.min(a.length - 1, Math.floor(a.length * p))];
+  // How wide that median actually is at the sample size taken. Every bad balance claim in this
+  // file's history was a point estimate compared against another point estimate - N11 reported
+  // +49% and re-measured to a DECREASE, and a ladder reprice was derived, applied and reverted
+  // inside one session. The note at the top says "150+ before believing anything about score",
+  // which is a rule of thumb standing in for the thing you actually want: an error bar.
+  //
+  // Resample the runs with replacement, take the median of each resample, and report the middle
+  // 90% of those medians. Two arms whose intervals overlap have not been shown to differ, at
+  // whatever N was affordable - which is a statement this file can make at 60 runs and could
+  // never make at 150 without one.
+  const bootCI = (a, p = 0.5, draws = 2000) => {
+    if (!a.length) return [0, 0];
+    const meds = [];
+    for (let i = 0; i < draws; i++) {
+      const s2 = new Array(a.length);
+      for (let j = 0; j < a.length; j++) s2[j] = a[(Math.random() * a.length) | 0];
+      s2.sort((x, y) => x - y);
+      meds.push(pct(s2, p));
+    }
+    meds.sort((x, y) => x - y);
+    return [meds[(draws * 0.05) | 0], meds[(draws * 0.95) | 0]];
+  };
+  const withCI = (a, fmt = (v => v)) => {
+    const [lo, hi] = bootCI(a);
+    return `${fmt(pct(a, 0.5))}   [90% ${fmt(lo)} to ${fmt(hi)}]`;
+  };
   const line = (label, v) => console.log(`  ${String(label).padEnd(26)} ${v}`);
 
   const signed = {};
@@ -1302,7 +1374,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   console.log('\n── WHERE RUNS END ' + '─'.repeat(40));
   const sectors = nums('sector');
-  line('deepest sector, median', pct(sectors, 0.5));
+  line('deepest sector, median', withCI(sectors));
   line('  mean / p10 / p90', `${mean(sectors).toFixed(1)} / ${pct(sectors, 0.1)} / ${pct(sectors, 0.9)}`);
   line('range', `${sectors[0]} to ${sectors[sectors.length - 1]}`);
   const ends = {};
@@ -1347,8 +1419,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     if (pushedOn.length) line('    pushed on instead, median score',
       pct(pushedOn.map(r => r.score).sort((a, b) => a - b), 0.5).toLocaleString());
   }
-  line('nodes cleared, median', pct(nums('nodes'), 0.5));
-  line('score, median', pct(nums('score'), 0.5).toLocaleString());
+  line('nodes cleared, median', withCI(nums('nodes')));
+  line('score, median', withCI(nums('score'), v => v.toLocaleString()));
+  // What the run scored BEFORE the ladder's multiplier, which is the only number that
+  // says whether a rung's price is earned. protocolMult is a clean factor in computeScore,
+  // so dividing it back out is exact rather than an approximation.
+  if (RUNG > 0) {
+    // Read straight off the table rather than by setting `ascension` and asking - a report
+    // that mutates run state to measure it is one restart away from being the bug it found.
+    const m = await page.evaluate(r => PROTOCOLS[Math.min(r, PROTOCOLS.length) - 1].mult, RUNG);
+    line(`raw score, median (\u00F7${m.toFixed(2)})`, withCI(nums('score').map(v => Math.round(v / m)), v => v.toLocaleString()));
+  }
 
   const withDoc = results.filter(r => r.doctrine);
   const offered = results.filter(r => (r.doctrineOffered || []).length);
