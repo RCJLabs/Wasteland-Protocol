@@ -314,6 +314,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, ground: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
+                 affixes: {}, champions: 0, eliteUnits: 0, affixedUnits: 0,
                  promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
@@ -777,6 +778,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // reading was taken from. Counted once per run per class, as before.
     playerRoster.filter(p => p.gridPos > 0)
       .forEach(p => { if (!stat.deployed.includes(p.classType)) stat.deployed.push(p.classType); });
+    // What an elite node actually fielded. Counted off the units rather than off the roll, so
+    // an affix that stops being handed out shows up here as a zero instead of going unnoticed -
+    // which is exactly how ARMORED spent its whole life decaying.
+    if (elite) {
+      activeEntities.filter(e => !e.isPlayer).forEach(e => {
+        stat.eliteUnits++;
+        const worn = affixesOn(e);
+        if (worn.length) stat.affixedUnits++;
+        if (worn.length > 1) stat.champions++;
+        worn.forEach(a => { stat.affixes[a] = (stat.affixes[a] || 0) + 1; });
+      });
+    }
     // Scars are dealt inside recoverDowned, and every ending reaches it - including withdraw(),
     // which does it for itself. So the snapshot is taken at the door and the diff read at each
     // exit rather than at any one of them.
@@ -1345,6 +1358,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('fights per run, median', pct(nums('fights'), 0.5));
   line('bosses felled, mean', mean(nums('bosses')).toFixed(2));
   line('elites broken, mean', mean(nums('elites')).toFixed(2));
+  const eliteUnits = results.reduce((a, r) => a + (r.eliteUnits || 0), 0);
+  const affixed = results.reduce((a, r) => a + (r.affixedUnits || 0), 0);
+  const champs = results.reduce((a, r) => a + (r.champions || 0), 0);
+  if (eliteUnits) {
+    line('hostiles on elite nodes', `${eliteUnits}, ${(affixed / eliteUnits * 100).toFixed(0)}% affixed, ${champs} champions`);
+    const seen = {};
+    results.forEach(r => Object.entries(r.affixes || {}).forEach(([k, v]) => { seen[k] = (seen[k] || 0) + v; }));
+    const declared = await page.evaluate(() => ELITE_AFFIXES.map(a => a.id));
+    line('  affixes worn', declared.map(a => `${a} ${seen[a] || 0}`).join(', '));
+    const cold = declared.filter(a => !seen[a]);
+    line('  never handed out', cold.length ? cold.join(', ') : 'none');
+  }
   line('wipes per run, mean', mean(nums('wipes')).toFixed(2));
   line('withdrawals per run, mean', WITHDRAW_POLICY ? mean(nums('withdrawals')).toFixed(2) : 'policy off');
   line('regroups spent, mean', mean(nums('regroupsSpent')).toFixed(2));

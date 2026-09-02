@@ -77,7 +77,11 @@ module.exports = {
       ascension = 0;
       return { base, risen };
     });
-    ok('below the rung, a cold roll leaves elites plain', affixed.base.affixed === 0);
+    // D01 gave every elite node a champion, which is armed whatever the roll says - so a cold
+    // roll leaves exactly one hostile affixed rather than none. The rung's own claim is
+    // untouched and is what the pair still separates: without it, one; with it, all of them.
+    ok('below the rung, a cold roll arms only the champion',
+       affixed.base.affixed === 1 && affixed.base.size > 1);
     ok('on it, every elite arrives affixed', affixed.risen.affixed === affixed.risen.size && affixed.risen.size > 0);
 
     // ---- rung II: warlords enrage at 60% ----

@@ -2020,6 +2020,8 @@ const CODEX = [
         'Nodes show their faction, a weather forecast and the ground, so route around trouble or into it on purpose.',
         ...TERRAIN_IDS.filter(k => TERRAIN[k].banner).map(k => `${TERRAIN[k].name} \u2014 ${TERRAIN[k].desc} ${TERRAIN[k].banner.replace(/[^A-Za-z0-9 :,.%+-]/g, '').trim()}`),
         'Two elite fights per sector, at different depths, never forced - there is always another road. An elite drops a relic.',
+        'An elite node arms its hostiles: most of them carry an affix, and exactly one - the champion - carries two. Tap a hostile to read what it is carrying.',
+        ...ELITE_AFFIXES.map(a => `${a.name} \u2014 ${a.desc}`),
         'A commander drops a choice of three.',
         `A wipe spends a regroup - ${BASE_REGROUPS} to start, more from the Citadel - and the squad comes back with tuned weapons. Felling a commander refunds one. Out of regroups ends the run and banks the score.`,
         `Retreating is the other way out of a fight: ${RETREAT.cost} Scrap plus ${RETREAT.perDepth} a node deep, for a ${Math.round(RETREAT.base * 100)}% break that drops ${Math.round(RETREAT.perFoe * 100)}% for every hostile still standing. It buys another go at the same node with the fight rolled fresh; a failed break costs the Scrap and the turn.`,
@@ -6083,6 +6085,79 @@ const ENEMY_SIGS = {
 // at two it is just fast, fragile things. Everything Carrion counts toward the floor, but only
 // the small ones get the reduction - so the Brood Mother is a full-damage target who is
 // nonetheless holding the swarm's cover up by standing there.
+// ── What an elite node is made of ────────────────────────────────────────────────────────
+// An affix is bolted onto ordinary stock at an elite node; a signature belongs to a species.
+// That is the whole difference, and it is why FRENZIED and the Psycho's FRENZY can share a
+// root without being the same thing.
+//
+// This was three bare strings in an array inside generateEnemies, with two of the effects
+// written at the roll site and the third six thousand lines away in the enemy hit path. The
+// cost of having no table showed up as measurement: ARMORED handed out +30 health and +15
+// armour FLAT, tuned when a unit had about 70 health, and everything around it scales. By
+// sector five the same unit carries 234 and the affix is worth a third of what it was, so
+// the game's designated harder fight got steadily less hard the further you went - a squad
+// wiped on an elite node 0 times in 178 visits, and 3 in 190 after the simulator was taught
+// to brace. Both numbers are the same finding: an elite was a normal fight wearing a name.
+//
+// So the numbers are proportional now, and they live in one place where the next one cannot
+// quietly decay. `apply` is handed the fight's own scale factors, which is what a flat figure
+// has to be multiplied through to keep the weight it was tuned at.
+// Measured after, 30 expeditions each on `--meta fresh`, against the same build with the old
+// three-affix roll:
+//
+//                              before      after
+//   wipes at tier 9               2          11
+//   wipes at tier 10            123         117
+//   tier 10's share of them      89%         87%
+//   wipes on an elite node      3/138       4/135
+//   withdrawals per run          4.57       5.27
+//   deepest sector, median         5           4
+//   reached sector 7           9 of 30     7 of 30
+//
+// Tier 9 is where it landed, and that is the row worth reading: eleven where the old rate
+// predicts two is not a sample artefact (P(>=11) is about 7e-6), and it is the deepest ordinary
+// tier - a squad that spent more getting past the elites arrives there worn and cannot always
+// walk out in time. The elite node's own number barely moved, 2% to 3%, and that is the whole
+// lesson of this file's diagnosis rather than a disappointment: every non-boss fight has an
+// exit that is never lethal, so a harder elite is answered by leaving it. Withdrawals rose 15%.
+// You cannot make the corridor kill; you can make it cost, and the cost comes due at tier 9.
+//
+// It also cost depth - a median sector and two runs' worth of sector-7 reach. That is a real
+// price and it is recorded rather than tuned away: depth at thirty runs is exactly the figure
+// the note at the top of tests/simulate.js says not to believe under 150, and the last time a
+// number here was chased off an under-powered sample it had to be reverted. If it is judged too
+// steep once D12 re-baselines properly, the levers are both in the table below - ARMORED's
+// multiplier, and whether a champion carries two.
+const ELITE_AFFIXES = [
+    { id: 'FRENZIED', name: 'FRENZIED',
+      desc: 'Comes in fast and swinging: +40% damage, +4 speed.',
+      apply: (u) => { u.dmgBase = Math.floor(u.dmgBase * 1.4); u.speed += 4; } },
+    { id: 'ARMORED',  name: 'ARMORED',
+      desc: 'Up-armoured: half again the health, behind plate that blunts every hit.',
+      apply: (u, mult, dmgMult) => {
+          const hp = Math.floor(u.maxHp * 1.5); u.maxHp = hp; u.hp = hp;
+          // Armour is a flat subtraction from a landed hit, so it has to be measured against
+          // what the player hits for - which is what dmgMult tracks - rather than left at the
+          // sector-1 figure it was written as.
+          u.armor += Math.floor(15 * dmgMult); u.baseArmor = u.armor;
+      } },
+    { id: 'VAMPIRIC', name: 'VAMPIRIC',
+      desc: 'Drinks: heals half of every hit it lands.',
+      apply: () => {} },          // paid out where the hit lands - see the enemy strike path
+    { id: 'SEPTIC',   name: 'SEPTIC',
+      desc: 'Filthy: everything it lands leaves the wound bleeding.',
+      apply: () => {} }           // likewise
+];
+function affixById(id) { return ELITE_AFFIXES.find(a => a.id === id) || null; }
+// A champion carries two, so this is the list rather than the one. `eliteType` stays the first
+// of them: it names the unit, draws the glow, and is what a save from an older build carries.
+function affixesOn(ent) {
+    if (!ent) return [];
+    if (Array.isArray(ent.eliteTypes)) return ent.eliteTypes;
+    return ent.eliteType ? [ent.eliteType] : [];
+}
+function hasAffix(ent, id) { return affixesOn(ent).includes(id); }
+
 const TEEMING_FLOOR = 3;
 function carrionStanding() {
     return activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.classType === 'VERMIN').length;
@@ -6396,7 +6471,9 @@ function bestiaryRecord(name) { return bestiaryRoster().find(e => e.name === nam
 // The name a unit is filed under: an affix is a modifier on a type, not a type of its own.
 function typeNameOf(ent) {
     if (!ent || ent.isPlayer) return null;
-    return ent.eliteType ? String(ent.name).replace(`*${ent.eliteType}* `, '') : ent.name;
+    // The prefix is whatever the affixes wrote, and a champion writes two of them, so this
+    // takes the whole bracket rather than rebuilding it from one id and missing.
+    return ent.eliteType ? String(ent.name).replace(/^\*[^*]*\*\s*/, '') : ent.name;
 }
 
 // Where a type first becomes reachable, in the coordinates the player actually navigates.
@@ -6444,7 +6521,17 @@ function renderDossier() {
     if (!el) return;
     const ent = inspecting ? activeEntities.find(e => e.id === inspecting) : null;
     if (!ent) { el.style.display = 'none'; el.innerHTML = ''; return; }
-    el.innerHTML = dossierHtml(typeNameOf(ent))
+    // The species file, then whatever was bolted onto THIS one. The file is looked up by the
+    // stripped name, so without this the card for a *VAMPIRIC* Raider was a plain Raider's -
+    // the red glow and the bracket in the name were the only word the player ever got about
+    // what an affix does, and neither says what it does.
+    const worn = affixesOn(ent).map(affixById).filter(Boolean);
+    const affixCard = worn.length ? `<div class="dossier-body dossier-affix">
+        <div class="dossier-sub">ELITE \u00B7 ${worn.length > 1 ? 'CHAMPION' : 'AFFIXED'}</div>
+        ${worn.map(a => `<div class="dossier-sig"><span class="dossier-sig-name">${a.name}</span>
+            <span class="dossier-sig-desc">${a.desc}</span></div>`).join('')}
+    </div>` : '';
+    el.innerHTML = dossierHtml(typeNameOf(ent)) + affixCard
         + `<button class="dossier-close" data-action="dossier-close">CLOSE</button>`;
     el.style.display = 'flex';
 }
@@ -6727,6 +6814,8 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
     if (nodeType === 'CHOIR' && choirWord) sZ = Math.max(2, sZ + choirWord);
     if (composed) sZ = roster.length;
     let squad = [];
+    // Picked before the loop so exactly one unit is the champion, whatever the roll does.
+    const championIdx = isEliteNode ? Math.floor(Math.random() * sZ) : -1;
     for (let i = 0; i < sZ; i++) {
         // Above mid-game, loose squads can pick up an attached specialist from another faction.
         // A formation is what it is - the whole point is that the shape is the same every time.
@@ -6746,11 +6835,19 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
         // sector without needing a curve of its own.
         if (hasSig(t, 'RIOT_PLATE')) t.plate = Math.floor(hp * 0.5);
         
-        if (isEliteNode && (hasProtocol('IRONSIDE') || Math.random() < 0.6)) {
-            let affixes = ['FRENZIED', 'ARMORED', 'VAMPIRIC'];
-            t.eliteType = affixes[Math.floor(Math.random() * affixes.length)]; t.name = `*${t.eliteType}* ${t.name}`;
-            if (t.eliteType === 'FRENZIED') { t.dmgBase = Math.floor(t.dmgBase * 1.4); t.speed += 4; }
-            if (t.eliteType === 'ARMORED') { t.maxHp += 30; t.hp += 30; t.armor += 15; }
+        // One unit on an elite node is the champion and carries two affixes. That is the half
+        // of the teeth budget that does not depend on the roll: IRONSIDE still buys the RATE
+        // every unit is affixed at, so the protocol keeps its own meaning and stacks with this
+        // rather than being replaced by it.
+        if (isEliteNode && (i === championIdx || hasProtocol('IRONSIDE') || Math.random() < 0.6)) {
+            const pool = ELITE_AFFIXES.slice();
+            const take = () => pool.splice(Math.floor(Math.random() * pool.length), 1)[0];
+            const worn = [take()];
+            if (i === championIdx && pool.length) worn.push(take());
+            t.eliteTypes = worn.map(a => a.id);
+            t.eliteType = t.eliteTypes[0];
+            t.name = `*${t.eliteTypes.join(' ')}* ${t.name}`;
+            worn.forEach(a => a.apply(t, mult, dmgMult));
         }
         t.intent = rollIntent(t);
         squad.push({ ...t, id: `e${i}_${Date.now()}`, isPlayer: false });
@@ -7233,7 +7330,15 @@ function log(msg, styleClass = "log-dmg", hitId = null) {
 }
 
 function renderQueue() {
-    const qStr = turnQueue.map(e => { if (e.hp <= 0) return ''; return (e.stunnedTurns > 0 ? '!' : '') + e.name.substring(0,3).toUpperCase(); }).filter(s => s !== '').join(' > ');
+    // Three letters of the NAME meant an affixed hostile read as '*FR' or '*VA' - the affix's
+    // own prefix, three letters of which say nothing about who is about to act. The species
+    // is what the strip is for; the asterisk carries the other fact without eating the name.
+    const qStr = turnQueue.map(e => { if (e.hp <= 0) return '';
+        // typeNameOf files a HOSTILE under its species and answers null for an operator, which
+        // is the whole squad in this list - so the operator's own name is what labels them.
+        const who = (e.isPlayer ? e.name : typeNameOf(e)) || e.name || '';
+        return (e.stunnedTurns > 0 ? '!' : '') + (affixesOn(e).length ? '*' : '')
+             + who.substring(0, 3).toUpperCase(); }).filter(s => s !== '').join(' > ');
     document.getElementById('queue-display').innerText = `Q: ${qStr}`;
 }
 
@@ -9061,7 +9166,10 @@ function executeEnemyAi(enemy) {
 
         applyDamageHit(enemy, target, rawDmg, t, 'BASIC');
 
-        if (enemy.eliteType === 'VAMPIRIC') { let heal = Math.max(1, Math.floor(rawDmg * 0.5)); enemy.hp = Math.min(enemy.maxHp, enemy.hp + heal); setTimeout(() => spawnFCT(enemy.id, `+${heal}`, "fct-heal"), 300); }
+        // Affixes that pay out on contact rather than at the muster. Read off the list, so a
+        // champion carrying two of them gets both.
+        if (hasAffix(enemy, 'VAMPIRIC')) { let heal = Math.max(1, Math.floor(rawDmg * 0.5)); enemy.hp = Math.min(enemy.maxHp, enemy.hp + heal); setTimeout(() => spawnFCT(enemy.id, `+${heal}`, "fct-heal"), 300); }
+        if (hasAffix(enemy, 'SEPTIC') && target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns || 0, 2); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
 
         if (intent.type === 'STATUS' || ["Mutant", "Attack Dog", "War Hound", "Chem Fiend"].includes(enemy.name)) { 
             if (Math.random() < 0.5 || hasTrait(target, 'UNSHAKEABLE')) { target.bleedingTurns = 2; setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
@@ -9290,7 +9398,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField,
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
-    damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    ELITE_AFFIXES, affixById, affixesOn, hasAffix, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants

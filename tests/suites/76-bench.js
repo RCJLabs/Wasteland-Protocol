@@ -133,7 +133,11 @@ module.exports = {
     const qm = await page.evaluate(() => {
       // The salvage is dealt on the win path of a real fight, not in collectLoot.
       const haul = job => {
-        let total = 0; const N = 40;
+        // 40 was not enough to hold a +-0.25 tolerance: sampled eight times the difference
+        // ran 0.85 to 1.23, and a battery caught it at 1.25 - a real flake rather than a
+        // real regression. At 150 the same measurement sits between 0.92 and 1.05, so the
+        // tolerance keeps its meaning instead of being widened around the noise.
+        let total = 0; const N = 150;
         for (let i = 0; i < N; i++) {
           const { bench } = __fresh();
           currentSector = 2; currentTier = 3;

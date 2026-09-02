@@ -210,19 +210,26 @@ module.exports = {
       // Settling on two matching frames is not enough on its own: an undecoded sprite has a
       // stable wrong height for several frames running, and the loop below happily agrees with
       // itself before the image arrives and moves everything. Wait for the pixels first.
-      await Promise.all([...document.querySelectorAll('img.portrait')]
-        .map(img => (img.decode ? img.decode() : Promise.resolve()).catch(() => {})));
-      // And decoding is not the last thing that moves either: the field re-fits itself when a
-      // portrait's load event lands, which is after decode() resolves, so a single pair of
-      // matching frames can agree just before the row is rescaled. Measured once at -20px in a
-      // full battery and 16px on its own. Three consecutive agreements, and more patience.
+      const shots = [...document.querySelectorAll('img.portrait')];
+      await Promise.all(shots.map(img => (img.decode ? img.decode() : Promise.resolve()).catch(() => {})));
+      // And decoding is not the last thing that moves: the field re-fits itself from a
+      // portrait's LOAD handler, which runs after decode() resolves - so the loop below could
+      // agree with itself three times over and still be reading the row before it was rescaled.
+      // Waiting on stability was the old guard and it went on failing at -20px in a full
+      // battery against 16px on its own, because a not-yet-refitted row is perfectly stable.
+      // So wait for the event that actually moves things, then for the frames it moves them in.
+      await Promise.all(shots.map(img => img.complete ? Promise.resolve() : new Promise(r => {
+        img.addEventListener('load', r, { once: true });
+        img.addEventListener('error', r, { once: true });
+      })));
+      await frame(); await frame();
       let prev = read(), same = 0;
-      for (let i = 0; i < 30; i++) {
+      for (let i = 0; i < 60; i++) {
         await frame(); await frame();
         const now = read();
         same = now === prev ? same + 1 : 0;
         prev = now;
-        if (same >= 3) break;
+        if (same >= 6) break;
       }
       return prev;
     }).then(async settled => {
