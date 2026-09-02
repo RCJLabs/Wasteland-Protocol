@@ -119,6 +119,61 @@
 // reaching the gate went up rather than down, so this is a fight that got harder to open
 // rather than a wall that moved. That is what a trade should look like: the commander is doing
 // something else, not something strictly more.
+// ── Four moves this file could not pick, repaired at D07 ─────────────────────────
+// The "never used" line was read for a long time as a list of content nobody wants. Four of
+// its entries were nothing of the kind - they were moves the policy below had no branch that
+// could reach:
+//
+//   IRON_GUARD, OVER_THE_TOP, PURGE_VALVE   the game's only three self-actions. The fallback
+//                                           ranking filters `act !== 'self'` and nothing else
+//                                           ever set them, so they could not be chosen.
+//   RAD_SHOT                                ranged, no cooldown - scored identically to the
+//                                           Medic's PISTOL one line above it, and a stable
+//                                           sort gives a tie to the earlier entry every time.
+//
+// So every reading this file has ever given about how long a line holds came from a player who
+// could not brace, could not vent, and never fired one of the Medic's two triggers. That is the
+// instrument D01's difficulty findings were taken from, which is why this was repaired first.
+//
+// Matched pair, 30 expeditions each, `--meta fresh` (the configuration this file's own notes
+// say a question about the game a player meets has to be asked against - it also keeps runs
+// independent, so a policy that plays better cannot buy itself a bigger Citadel and compound
+// the difference):
+//
+//                                before      after
+//   never used                   4 moves     none
+//   deepest sector, median          4          5
+//     mean                         3.8        4.5
+//   reached sector 7             6 of 30    9 of 30
+//   ended by                     won 4      won 6
+//   nodes cleared, median          70         80
+//   wipes per run, mean           4.00       4.60
+//   actor turns per fight         18.9       20.1
+//   wipes at tier 10             104/120    123/138
+//   wipes on an elite node        0/120      3/138
+//
+// Read it in that order. The first row is the repair and the only one that needed no sample at
+// all. The rows under it move together and all one way - a squad that braces lives longer, so
+// it fights more, clears more and dies further along - but depth and score are exactly the
+// figures the note at the top of this file says not to believe under 150 runs, and thirty is
+// thirty. Treat them as consistent, not as measured.
+//
+// Two rows ARE settled, because both are shares over thousands of events rather than medians
+// over thirty runs, and both matter to what is queued:
+//
+//   Tier 10 still takes 89% of every wipe (it was 87%). The nine tiers under the commander are
+//   not the fight, and that now survives a player who braces - so it is the game's shape, not
+//   an artefact of a passive simulator.
+//
+//   An elite node went from never fatal to fatal 2% of the time. Still not a threat; no longer
+//   literally zero.
+//
+// The classes line changed meaning at the same time and is not comparable across the pair: it
+// used to be the opening draft, read once at the muster, and is now everyone who actually stood
+// in a line. Recruits appear in it for the first time (HARPOONER 9, HAZMAT 9, TRENCH_FIEND 4 of
+// 30), and SCAVENGER goes 8 -> 17 - it was being fielded off the bench all along and the line
+// could not see it. Any reading about classes that never leave the Outpost has to start again
+// from the second number.
 const path = require('path');
 const { serve } = require('./server');
 
@@ -375,6 +430,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // The real deploy button is what applies a doctrine's edge and banks its multiplier, so the
   // sim goes through it rather than around it.
   musterDeploy();
+  // The opening draft, so a run that never reaches a fight still reports who it picked.
+  // Everyone who actually stands in a line is added at the door of each fight below.
   stat.deployed = playerRoster.filter(p => p.gridPos > 0).map(p => p.classType);
   stat.doctrineKept = !!activeDoctrine && !doctrineBroken;
   const bountiesAtStart = () => activeBounties.map(b => b.desc).join('|');
@@ -616,13 +673,77 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       const blast = deck.find(a => isAoe(a.move));
       if (blast) chosen = blast;
     }
-    // 3. Otherwise the best thing available: a special off cooldown beats the basic attack (it
+    // 3. The three moves that are not aimed at anybody. This file could not pick one until D07:
+    //    the fallback below filters `act !== 'self'`, nothing else ever set them, and so Iron
+    //    Guard, Over The Top and Purge Valve - the only three self-actions in the game - sat in
+    //    the "never used" line of every report it has ever printed. They were not dead content;
+    //    they had never been measurable, and every reading this file has given about how long a
+    //    line holds was taken from a player who could not brace.
+    //
+    //    Each is written as the case where a player would obviously take it, off what the screen
+    //    already shows - health bars, status chips, and the intent forecast - rather than off any
+    //    arithmetic copied out of the engine.
+    const has = mv => deck.find(a => a.move === mv);
+    // The forecast is the expensive read on this file's hot path - it prices every intent on
+    // the board - so the round is only totalled if a move that cares about it is actually in
+    // hand, and then only once.
+    let incomingMemo = null;
+    const incoming = () => (incomingMemo === null
+      ? (incomingMemo = foes.reduce((a, f) => a + threat(f), 0)) : incomingMemo);
+    const line = () => activeEntities.filter(e => e.isPlayer && e.hp > 0);
+
+    if (!chosen && has('PURGE_VALVE')) {
+      // PURGE VALVE clears bleed, oil and corrosion off the whole squad and patches everyone.
+      // Two people carrying something is the moment; one is not worth a turn.
+      const up = line();
+      const fouled = up.filter(e => (e.bleedingTurns || 0) > 0 || (e.oiledTurns || 0) > 0
+                                 || (e.corrodedTurns || 0) > 0).length;
+      const pool = up.reduce((a, e) => a + e.hp, 0);
+      if (fouled >= 2 || (fouled >= 1 && pool < up.length * 40)) chosen = has('PURGE_VALVE');
+    }
+    if (!chosen && has('IRON_GUARD')) {
+      // IRON GUARD braces and covers the ranks BEHIND the guard - the engine redirects a hit
+      // onto whoever is braced in FRONT of the mark - so it is worth a turn only when somebody
+      // is actually behind this operator and the round coming in is a real one.
+      const up = line();
+      const covering = up.some(e => e.id !== actor.id && e.gridPos > actor.gridPos);
+      const pool = up.reduce((a, e) => a + e.hp, 0);
+      if (covering && incoming() > pool * 0.18) chosen = has('IRON_GUARD');
+    }
+    if (!chosen && has('OVER_THE_TOP')) {
+      // OVER THE TOP is paid for in blood and spent over the turns after it, so it wants a
+      // healthy operator and a fight with enough left in it to spend the charge on.
+      const fight = foes.reduce((a, f) => a + f.hp, 0);
+      if (actor.hp > actor.maxHp * 0.6 && fight > incoming() * 2) chosen = has('OVER_THE_TOP');
+    }
+
+    // 4. Otherwise the best thing available: a special off cooldown beats the basic attack (it
     //    has a cooldown because it is worth more), and a swing that lands soft loses to one
-    //    that does not.
+    //    that does not. Self-actions are out of THIS ranking on purpose - they are not swings,
+    //    and they get their own cases above rather than being sorted against damage.
+    //
+    //    The third term is the enemy card. Without it this ranking read reach and cooldown and
+    //    nothing else, so ANY two moves alike in both scored identically - and a stable sort
+    //    hands a tie to whichever sits earlier in the deck, the same one, every turn, in every
+    //    sample this file has ever printed. That is the whole story of RAD_SHOT: ranged, no
+    //    cooldown, sitting one line below the Medic's PISTOL, which is also ranged with no
+    //    cooldown. It lost that tie 803 times in twelve runs and was written up as a move
+    //    nobody uses. It was a move this file could not pick. Reading the resistances - which
+    //    the dossier prints as RESISTS / WEAK / IMMUNE, so the player has them too - separates
+    //    a bio trigger from a physical one and lets the tie be decided by the target.
     if (!chosen) {
       const usable = deck.filter(a => a.act !== 'self');
-      const rank = a => (a.cd ? 2 : 1) + (foes.some(f => !soft(a.move, f)) ? 2 : 0);
-      chosen = usable.sort((a, b) => rank(b) - rank(a))[0] || deck[0];
+      const bites = a => {
+        const f = pickFoe(a.move);
+        if (!f) return 0;
+        const r = (f.resistances || {})[damageTypeOf(a.move)] || 0;
+        return r >= 100 ? -4 : r < 0 ? 1 : r > 5 ? -1 : 0;
+      };
+      const rank = a => (a.cd ? 2 : 1) + (foes.some(f => !soft(a.move, f)) ? 2 : 0) + bites(a);
+      // Scored once per move and then sorted on the scores. Ranking inside the comparator
+      // would re-run pickFoe - which forecasts every foe on the field - O(n log n) times a
+      // turn instead of once a move, and this file is slow enough already.
+      chosen = usable.map(a => [rank(a), a]).sort((x, y) => y[0] - x[0]).map(x => x[1])[0] || deck[0];
     }
     if (!target) target = pickFoe(chosen.move);
     if (chosen.act === 'self') { stat.moves[chosen.move] = (stat.moves[chosen.move] || 0) + 1; executeSelfAction(chosen.move); return true; }
@@ -649,6 +770,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const fight = (nodeType, elite) => {
     initiateCombat(nodeType, elite);
     stat.fights++;
+    // Who is on the field, not who was picked. This was read once at the muster, so a recruit
+    // signed in sector 3 and fielded for the rest of the run never appeared in the classes line,
+    // and neither did anyone brought in off the bench. The line said who was drafted while
+    // reading as who fought - and it is the line the "classes that never leave the Outpost"
+    // reading was taken from. Counted once per run per class, as before.
+    playerRoster.filter(p => p.gridPos > 0)
+      .forEach(p => { if (!stat.deployed.includes(p.classType)) stat.deployed.push(p.classType); });
     // Scars are dealt inside recoverDowned, and every ending reaches it - including withdraw(),
     // which does it for itself. So the snapshot is taken at the door and the diff read at each
     // exit rather than at any one of them.
