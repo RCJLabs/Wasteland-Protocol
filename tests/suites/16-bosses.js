@@ -69,9 +69,15 @@ module.exports = {
 
     // ---- their art loads ----
     await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 2; currentTier = 6; initiateCombat('BOSS', false); });
-    await page.waitForTimeout(900);
-    ok('boss art renders', await page.evaluate(() =>
-      [...document.querySelectorAll('#enemy-team .portrait')].every(i => i.complete && i.naturalWidth > 0)));
+    // D18: this waited a flat 900ms and then asserted the pixels had arrived, which is a race
+    // rather than a check - it is the one assertion in this suite that was reproduced failing
+    // under contention (once in six concurrent browsers), and what it reported was a slow
+    // decode, not missing art. Wait for the condition, bounded, and then assert it: art that
+    // genuinely never loads still fails, art that is merely late no longer does.
+    const decoded = () => page.waitForFunction(
+      () => [...document.querySelectorAll('#enemy-team .portrait')].every(i => i.complete && i.naturalWidth > 0),
+      null, { timeout: 8000 }).then(() => true, () => false);
+    ok('boss art renders', await decoded());
     // Ordinary stock may be waiting on art - it renders on a named stand-in until then - but a
     // commander is the fight the run is built toward and gets its own portrait before it ships.
     const art = await page.evaluate(() => ({
@@ -187,17 +193,32 @@ module.exports = {
       await page.waitForFunction(
         () => [...document.querySelectorAll('.portrait')].every(i => i.complete && i.naturalWidth > 0),
         null, { timeout: 8000 });
+      // D18: and then stand the fight down before anything is measured. Every caller below reads
+      // static geometry - a sink, a baseline, an arena - but all of it was being read off a fight
+      // that was still running, with the fastest commander in the game swinging at the very
+      // operator the read is pinned to. Instrumented, the pinned hero drops 400 -> 298 HP inside
+      // the measurement window. Nothing about that changes the staging; it changes whether the
+      // thing being measured is still there. A downed operator's portrait rotates 78 degrees
+      // (.entity.dead.dying), which sweeps the bottom edge the read is differencing, and a lost
+      // one leaves playerRoster entirely, so getElementById returns null and the read goes NaN -
+      // and NaN fails every comparison silently. Load never moved the sprites; it stretched the
+      // window until the fight got far enough to matter.
+      await page.evaluate(() => { combatActive = false; });
       await page.waitForTimeout(200);
     };
 
     await stagedFight('MATRIARCH');
-    // The Matriarch hovers, and `.hovering` is an infinite 3s translateY - so a bounding box
-    // read off her portrait is a sample of an animation, not a measurement of where she stands.
-    // That is what made this read flaky rather than any amount of settling: traced frame by
-    // frame it does not converge on a wrong value and stay there, it walks 16 -> 14 -> 9 -> 4
-    // -> -2 -> -7 -> -15 and keeps going, and a stability loop only ever caught it near the top
-    // of the arc where the sprite is slowest. Motion off is a mode the game supports and the
-    // one this assertion is actually about: the staging, not the float.
+    // The note that used to sit here blamed `.hovering`, an infinite 3s translateY, for the walk
+    // this read once traced (16 -> 14 -> 9 -> 4 -> -2 -> -7 -> -15). The Matriarch does not hover
+    // - isHovering is carried by the Drone and the Blight Moth and by nothing else, and this very
+    // suite asserts she stalks on the ground about a hundred lines above. Nor is the number a
+    // sample of any sprite animation: b.bottom - h.bottom is exactly --sprite-sink, which is why
+    // it reads 16 whatever the sprites are doing - forcing --field-fit from 1 to 0.6, which
+    // resizes every portrait on the field, moves it not one pixel across 24 frames.
+    // What was moving underneath the read was the fight itself, which stagedFight now stands down
+    // before returning. Motion stays off across the measurement anyway: it is what the assertion
+    // is about (the staging, not the float), and it pins .portrait's `transition: all 0.2s` at
+    // 0.01ms so a late re-render cannot interpolate geometry under a read either.
     await page.evaluate(() => { globalSettings.motion = 'off'; applyTextScale(); });
     const staging = await page.evaluate(async () => {
       // Sprite geometry settles a frame or two after the images decode, and a queued turn timer
@@ -316,7 +337,12 @@ module.exports = {
     await page.reload();
     await page.waitForTimeout(700);
     await page.click('.title-btn.btn-continue');
-    await page.waitForTimeout(900);
+    // D18: same fixed-sleep race as the art check above - wait for the arena to actually be
+    // painted rather than for a number of milliseconds to pass.
+    await page.waitForFunction(
+      () => /\.webp/.test(getComputedStyle(document.getElementById('combat-sky-layer')).backgroundImage)
+            && document.getElementById('weather-banner').innerText.trim().length > 8,
+      null, { timeout: 8000 }).catch(() => {});
     const resumed = await page.evaluate(() => ({
       bg: (getComputedStyle(document.getElementById('combat-sky-layer')).backgroundImage.match(/([a-z0-9_]+\.webp)/) || [])[1],
       banner: document.getElementById('weather-banner').innerText
