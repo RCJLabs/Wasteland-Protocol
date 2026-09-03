@@ -6876,14 +6876,28 @@ const FORMATIONS = {
           note: 'It dies loudly, and then something raises it.',
           units: ['Hierophant', 'Reliquary', 'Acolyte'] }
     ],
+    // D14: the Carrion's own table used to open its second and third formation one and five
+    // tiers after its first, where every other faction leaves five or more - so THE_SWARM was
+    // never alone for more than a single tier before splitting two, then three ways, and it
+    // measured at 5.6% of Carrion fights against 10.6-13.6% for the other factions' equivalent
+    // opener (MOB, THE_PACK, AIR_COVER, PROCESSION). Retimed to the gap BEASTS already uses off
+    // its own opener (THE_PACK at 4, RUN_DOWN five tiers later at 9): RISING_FLIGHT moves from 5
+    // to 9 and UNDERTOW from 9 to 11, each still at or above the tier its own units unlock at
+    // (Blight Moth 5, Gorge Worm 9) so nothing is offered before it can be fielded. Measured
+    // over 3,000 modelled sectors: THE_SWARM 5.4% -> 9.6% of Carrion fights, RISING_FLIGHT
+    // 19.5% -> 17.2%, UNDERTOW 16.5% -> 14.7%, THE_NEST unchanged at 13.2% - not narrowed to
+    // THE_SWARM's old rate, but a real move toward its siblings rather than an average that
+    // holds while the shape stays the same. THE_NEST, filed alongside THE_SWARM in the same
+    // brief, measured fine on its own (13.2%, in the pack with CONVOY and THE_RITE) and is
+    // untouched.
     CARRION: [
         { id: 'THE_SWARM', name: 'The Swarm', minTier: 4, fadeAt: 10,
           note: 'Thin it to two before it stops shrugging everything off.',
           units: ['Carrion Rat', 'Carrion Rat', 'Carrion Rat', 'Carrion Rat'] },
-        { id: 'RISING_FLIGHT', name: 'Rising Flight', minTier: 5,
+        { id: 'RISING_FLIGHT', name: 'Rising Flight', minTier: 9,
           note: 'A swarm you cannot reach, and cannot hurt while it is thick.',
           units: ['Blight Moth', 'Blight Moth', 'Blight Moth', 'Carrion Rat', 'Carrion Rat'] },
-        { id: 'UNDERTOW', name: 'Undertow', minTier: 9,
+        { id: 'UNDERTOW', name: 'Undertow', minTier: 11,
           note: 'They go under the swarm and come up in your front rank.',
           units: ['Gorge Worm', 'Gorge Worm', 'Carrion Rat', 'Carrion Rat', 'Carrion Rat'] },
         { id: 'THE_NEST', name: 'The Nest', minTier: 12,
