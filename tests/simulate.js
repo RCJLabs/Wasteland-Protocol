@@ -367,7 +367,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false,
                  booked: 0, bookedKinds: {}, augments: 0,
                  relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0,
-                 bossGrudge: [], metGrudge: [], scars: [], recovered: 0 };
+                 bossGrudge: [], metGrudge: [], scars: [], recovered: 0, clockLeft: [], downFaced: 0, downReach: 0, downByMove: 0, downByItem: 0, downByBar: 0, barSaves: 0 };
 
   // Skulls were banked and never spent: buyMetaUpgrade was called nowhere in this file. So the
   // carried sample escalated the commanders permanently - grudges are meta - while switching
@@ -593,6 +593,20 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // reading the raw table meant every one of those was measured as never used.
     const deck = deckFor(actor).filter(a => !a.cd || (actor.cooldowns[a.cd] || 0) === 0);
     if (!deck.length) return false;
+    // Was there a decision to make at all? Taken here, at the top of the turn, because the
+    // tactic block below spends the bar and would leave every measurement of it reading zero.
+    // "The squad left them there" and "the squad had nothing that reached them" are different
+    // findings and every figure published on this has added them together.
+    if (bleedingOut().length && actor.isPlayer) {
+      stat.downFaced++;
+      const byMove = deck.some(a => REACHES_THE_DOWN.includes(a.move));
+      const byItem = inventory.includes('MED_STIM') || inventory.includes('ADRENALINE');
+      const byBar = momentum >= 30;      // the STIM tactic, which takes the floor first
+      if (byMove) stat.downByMove++;
+      if (byItem) stat.downByItem++;
+      if (byBar) stat.downByBar++;
+      if (byMove || byItem || byBar) stat.downReach++;
+    }
     if (momentum >= overdriveAt()) {
       stat.moves.OVERDRIVE = (stat.moves.OVERDRIVE || 0) + 1;
       pendingAction = 'OVERDRIVE'; resolveAction(foes[0].id); return true;
@@ -600,8 +614,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // Tactics. None of the three costs an action, so the only question is what the bar buys.
     const buy = id => {
       const before = momentum;
+      // A STIM bought while somebody is on the floor IS a rescue - stimTarget takes the worst
+      // off first and the worst off is always the body. It was counted only as a tactic, so
+      // "turns spent saving them" has always been the item-and-move rescues alone, missing the
+      // one answer a squad with no medic in the line actually has.
+      const onFloor = id === 'STIM' && bleedingOut().length > 0;
       spendTactic(id);
-      if (momentum !== before) stat.moves[id] = (stat.moves[id] || 0) + 1;
+      if (momentum === before) return false;
+      stat.moves[id] = (stat.moves[id] || 0) + 1;
+      if (onFloor) { stat.saves++; stat.barSaves++; }
+      return true;
     };
     if (tacticPolicy === 'stim') {
       if (momentum >= 30 && stimTarget()) buy('STIM');
@@ -898,6 +920,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         // the five withdrawals a run. That read 12% against a 0.08 chance and looked like a bug
         // in the game rather than a bug in the tally.
         stat.recovered += bleedingOut().length;
+        bleedingOut().forEach(e => stat.clockLeft.push(e.downTurns || 0));
         withdraw(); withdraw();          // the real thing: arms, then commits
         fled = true;
         break;
@@ -932,6 +955,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // this file has printed sat on that. It also meant scars, which are dealt inside
     // recoverDowned, could not be measured at all: the rate would have read zero whatever the
     // chance was set to.
+    // How much clock was left on everyone the fight ended without picking up. This is the
+    // measurement D09 turns on: a body dragged clear on 3 of 3 fell into a fight that was
+    // already over, and the clock it started never began to bite.
+    bleedingOut().forEach(e => stat.clockLeft.push(e.downTurns || 0));
     const up = recoverDowned(won ? 'once the field is held' : 'as the squad is dragged off');
     stat.recovered += up.length;
     tallyScars();
@@ -1311,8 +1338,32 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const lostPer = results.map(r => r.lost.length).sort((a, b) => a - b);
   const recovered = results.reduce((a, r) => a + r.recovered, 0);
   line('operators put on the floor', `${downs} (${(downs / n).toFixed(1)} per run)`);
-  line('turns spent saving them', saves);
+  const barSaves = results.reduce((a, r) => a + (r.barSaves || 0), 0);
+  line('turns spent saving them', `${saves} (${barSaves} of them the STIM tactic)`);
   line('dragged clear at a fight\u2019s end', `${recovered} (${(recovered / n).toFixed(1)} per run)`);
+  // The clock as it stood when the fight ended for them, out of BLEED_OUT. Everything at the
+  // top of the range fell into a fight that was already finishing.
+  const clocks = results.flatMap(r => r.clockLeft || []);
+  const cTot = clocks.length || 1;
+  const bleed = await page.evaluate(() => BLEED_OUT);
+  const hist = {};
+  clocks.forEach(c => { hist[c] = (hist[c] || 0) + 1; });
+  line(`bleed-out clock left when picked up (of ${bleed})`,
+    Object.keys(hist).sort((a, b) => b - a)
+      .map(k => `${k} left ${(hist[k] / cTot * 100).toFixed(0)}%`).join(', ') || 'none');
+  const faced = results.reduce((a, r) => a + (r.downFaced || 0), 0);
+  const reach = results.reduce((a, r) => a + (r.downReach || 0), 0);
+  const pc = v => faced ? `${(v / faced * 100).toFixed(0)}%` : '0%';
+  const byMove = results.reduce((a, r) => a + (r.downByMove || 0), 0);
+  const byItem = results.reduce((a, r) => a + (r.downByItem || 0), 0);
+  const byBar = results.reduce((a, r) => a + (r.downByBar || 0), 0);
+  line('squad turns taken with somebody on the floor', `${faced}`);
+  line('  of those, turns with any way to reach them', `${reach} (${pc(reach)})`);
+  line('    by a move on the deck', `${byMove} (${pc(byMove)})`);
+  line('    by something in the bag', `${byItem} (${pc(byItem)})`);
+  line('    by the STIM tactic (30 momentum)', `${byBar} (${pc(byBar)})`);
+  line('  spent at least one of their own turns down',
+    `${((clocks.filter(c => c < bleed).length / cTot) * 100).toFixed(0)}%`);
   line('lost for good', `${lost} (${(lost / n).toFixed(2)} per run)`);
   line('  median / worst run', `${lostPer[Math.floor(n / 2)]} / ${lostPer[n - 1]}`);
   line('runs that lost nobody', `${results.filter(r => !r.lost.length).length} of ${n}`);
