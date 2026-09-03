@@ -1233,6 +1233,15 @@ const TERRAIN_IDS = Object.keys(TERRAIN);
 // arena, and the opening fight of a run. Both stay plain; the dial is the honest lever, and at
 // 0.75 the fights that can carry ground mostly do.
 const GROUND_CHANCE = 0.75;
+// Which of a faction's grounds it fights on. The first entry in FACTIONS[].ground is the
+// signature - the one its backdrop is a picture of - and the rest are the neighbouring places
+// it also turns up in. Split evenly, every faction donated half its ground to a NEIGHBOUR's
+// signature, which is fine for the three grounds that have several suppliers and fatal for the
+// two that have one: FLOODED comes only from the Choir and NEST only from the Carrion, so each
+// landed on 3% of fights against 20% for the shared three. Weighting the signature both closes
+// that gap and makes the rule the table already states - a refinery fights like a refinery -
+// true most of the time instead of half of it.
+const GROUND_SIGNATURE = 0.75;
 let currentTerrain = 'OPEN_ROAD'; let forecastTerrain = null;
 // One accessor, so nothing has to remember that an unknown id means "the plain one".
 function ground() { return TERRAIN[currentTerrain] || TERRAIN.OPEN_ROAD; }
@@ -1259,11 +1268,22 @@ const FACTIONS = {
 };
 const FIGHT_NODES = Object.keys(FACTIONS);
 function factionsAt(sector) { return FIGHT_NODES.filter(f => (FACTIONS[f].minSector || 1) <= sector); }
+// How deep a node really is. A tier number on its own says nothing - tier 1 of sector 5 is
+// further into a run than tier 9 of sector 1 - so everything that ramps with depth is measured
+// in these units: the enemy pool and the heavy ramp in generateEnemies, the formation draw,
+// a formation's own minTier, and, since D08, the faction draw.
+function effTierAt(tier, sector = currentSector) { return tier + (Math.max(1, sector || 1) - 1) * SECTOR_TIER_BONUS; }
 
-function rollNodeFaction(tier, rng) {
-    const biased = frontFactionBias(tier, rng);
+// Takes an effective tier, not a raw one. Filed under D08: it used to take the raw tier, so the
+// "shallow" guard below fired at tiers 1-2 of EVERY sector rather than the opening of a run,
+// and the two newest factions were shut out of a fifth of the roads they were supposed to walk.
+// It was holding back a banner rather than a difficulty: the enemy pool has always ramped on
+// effective tier, so tier 1 of sector 5 was already fielding 17 of its 18 units and 7 of its 8
+// heavies - under a raider banner, on raider ground, with a raider sky.
+function rollNodeFaction(depth, rng) {
+    const biased = frontFactionBias(depth, rng);
     if (biased) return biased;
-    if (tier < 3) return rng() < 0.55 ? 'RAIDERS' : 'BEASTS';
+    if (depth < 3) return rng() < 0.55 ? 'RAIDERS' : 'BEASTS';
     // The Choir and the Carrion are not what the wasteland shows you first: sector 1 stays the
     // three factions a new squad has tools for, and the roads widen from sector 2.
     const open = factionsAt(currentSector || 1);
@@ -1616,14 +1636,15 @@ function rollFront(rng = Math.random, sector = currentSector) {
     return deck[Math.floor(rng() * deck.length)].id;
 }
 // The generation tilt: half of everything on the roads is the front's own faction. The
-// machines stay out of the first two tiers, same as the base table.
-function frontFactionBias(tier, rng) {
+// machines stay out of the opening of a run, same as the base table - and, since D08, that
+// means the first two nodes of a NEW run rather than the first two tiers of every sector.
+function frontFactionBias(depth, rng) {
     const bias = { RAIDER_WARBAND: 'RAIDERS', MACHINE_UPRISING: 'MECH', BLOOD_MOON: 'BEASTS',
                    THE_CHOIR: 'CHOIR', CARRION_BLOOM: 'CARRION' }[sectorFront];
     if (!bias) return null;
     // The shallow tiers stay on the stock a new squad has answers for, and a faction the
-    // sector cannot field yet is never biased toward.
-    if (tier < 3 && bias !== 'RAIDERS' && bias !== 'BEASTS') return null;
+    // sector cannot field yet is never biased toward. Depth, not tier: see rollNodeFaction.
+    if (depth < 3 && bias !== 'RAIDERS' && bias !== 'BEASTS') return null;
     if (!factionsAt(currentSector || 1).includes(bias)) return null;
     return rng() < 0.5 ? bias : null;
 }
@@ -1636,7 +1657,7 @@ function generateSectorMap(rng = Math.random) {
         const cols = width === 1 ? [1] : width === 2 ? [0, 2] : [0, 1, 2];
         const tierNodes = cols.map(c => ({
             id: `n${t}_${c}`, tier: t, col: c,
-            type: t === TOTAL_TIERS ? 'BOSS' : rollNodeFaction(t, rng),
+            type: t === TOTAL_TIERS ? 'BOSS' : rollNodeFaction(effTierAt(t), rng),
             elite: false, weather: 'CLEAR', terrain: 'OPEN_ROAD', formation: null, edges: []
         }));
         byTier.push(tierNodes); nodes.push(...tierNodes);
@@ -1706,12 +1727,14 @@ function generateSectorMap(rng = Math.random) {
         // commander's arena stays plain too - the commander is the variable there.
         if (FIGHT_NODES.includes(n.type) && !(currentSector === 1 && n.tier === 1)) {
             const choices = FACTIONS[n.type].ground || [];
-            if (choices.length && rng() < GROUND_CHANCE) n.terrain = choices[Math.floor(rng() * choices.length)];
+            if (choices.length && rng() < GROUND_CHANCE)
+                n.terrain = choices.length === 1 || rng() < GROUND_SIGNATURE ? choices[0]
+                          : choices[1 + Math.floor(rng() * (choices.length - 1))];
         }
         // Who is standing there, decided now so the node can say so. The opening fight of the
         // run is a plain patrol for the same reason its sky and its ground are plain.
         if (FIGHT_NODES.includes(n.type) && !(currentSector === 1 && n.tier === 1))
-            n.formation = rollFormation(n.type, n.tier + (currentSector - 1) * SECTOR_TIER_BONUS, rng);
+            n.formation = rollFormation(n.type, effTierAt(n.tier), rng);
     });
 
     return { nodes, cols: 3 };
@@ -1908,7 +1931,7 @@ const CONSEQUENCE_POOL = {
         resolve: () => {
             // Uses the machinery a withdrawal already leans on: they turn up in the next fight
             // rather than as a screen you click past.
-            const fac = rollNodeFaction(currentTier, Math.random);
+            const fac = rollNodeFaction(effTierAt(currentTier), Math.random);
             const hp = 0.75 * difficultyMult * Math.pow(SECTOR_HP_SCALE, currentSector - 1);
             const dmg = 0.75 * difficultyMult * Math.pow(SECTOR_DMG_SCALE, currentSector - 1);
             const hunters = generateEnemies(fac, hp, false, dmg, null).slice(0, 2);
@@ -2168,6 +2191,7 @@ const CODEX = [
     { id: 'GROUND_SKY', title: 'THE GROUND AND THE SKY', body: () => [
         `Two things stand over every fight and both are on the node before you take it: what you are standing on, and what is overhead. Ground is the commoner of the two - ${Math.round(GROUND_CHANCE * 100)}% of eligible fights carry it against weather's ${Math.round(WEATHER_CHANCE * 100)}% - because the ground is where the fight is and the weather is something happening to it. Neither is dealt in the opening fight of a run.`,
         ...TERRAIN_IDS.filter(id => TERRAIN[id].banner).map(id => `${TERRAIN[id].name} \u2014 ${TERRAIN[id].desc}`),
+        `Every faction has a home ground - the floor of the place it is a picture of - and one neighbouring ground it also turns up on. ${Math.round(GROUND_SIGNATURE * 100)}% of the ground it fights on is its own, so a sector tilted toward one faction is a sector tilted onto one kind of floor.`,
         'Overhead, a faction brings its own sky, a sector front tilts the roads toward one of its own, and a commander\u2019s arena has a sky of its own that nothing else does.',
         ...WEATHER_IDS.map(id => `${WEATHER[id].name} \u2014 ${WEATHER[id].desc}`),
         'And when a faction\u2019s own sky stands over its own ground, the two make a third thing, called out on its own line under both banners:',
@@ -6926,7 +6950,7 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
     
     // Later sectors unlock tougher stock progressively rather than all at once: the old gate
     // was bypassed outright from sector 2, which dropped tier-8 units into tier-1 fights.
-    const effTier = currentTier + (currentSector - 1) * SECTOR_TIER_BONUS;
+    const effTier = effTierAt(currentTier);
 
     function poolFor(type) {
         let valid = ENEMY_POOL[type].filter(e => effTier >= e.minTier);
@@ -9576,7 +9600,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
@@ -9591,7 +9615,7 @@ globalThis.WP = {
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },

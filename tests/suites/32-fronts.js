@@ -60,20 +60,27 @@ module.exports = {
         });
         return hit / total;
       };
-      const earlyMech = (() => {
-        sectorFront = 'MACHINE_UPRISING';
-        let bad = 0;
+      // The shallows are the opening of a RUN, not the first two tiers of every sector - see
+      // D08 and rollNodeFaction. So this counts the same thing in both places: sector 1, where
+      // an uprising still must not put a machine on a new squad's first two roads, and sector
+      // 2, where the same front now can and should.
+      const shallowMech = sector => {
+        currentSector = sector; sectorFront = 'MACHINE_UPRISING';
+        let hit = 0;
         for (let i = 0; i < 25; i++) generateSectorMap(Math.random).nodes.forEach(n => {
-          if (n.type === 'MECH' && n.tier < 3) bad++;
+          if (n.type === 'MECH' && n.tier < 3) hit++;
         });
-        return bad;
-      })();
+        return hit;
+      };
+      const openingMech = shallowMech(1);
+      const earlyMech = shallowMech(2);
+      currentSector = 2;
       const r = {
         warband: share('RAIDER_WARBAND', 'RAIDERS'), base: share(null, 'RAIDERS'),
         beasts: share('BLOOD_MOON', 'BEASTS'),
         quiet: events('QUIET_ROADS'), calm: events(null),
         irr: smog('IRRADIATED'), clear: smog(null),
-        earlyMech,
+        earlyMech, openingMech,
         valid: (() => { sectorFront = 'QUIET_ROADS'; let v = 0; for (let i = 0; i < 25; i++) if (validateSectorMap(generateSectorMap(Math.random))) v++; return v; })()
       };
       sectorFront = null; currentSector = 1;
@@ -82,7 +89,10 @@ module.exports = {
     ok(`a warband owns the roads (${(gen.warband * 100).toFixed(0)}% raiders vs ${(gen.base * 100).toFixed(0)}%)`,
       gen.warband > 0.6 && gen.base < 0.55 && gen.warband > gen.base + 0.1);
     ok(`a blood moon crawls with beasts (${(gen.beasts * 100).toFixed(0)}%)`, gen.beasts > 0.55);
-    ok('the machines stay out of the shallows', gen.earlyMech === 0);
+    ok(`the machines stay out of a new squad's first two roads (${gen.openingMech} in 25 sectors)`,
+      gen.openingMech === 0);
+    ok(`but a shallow tier five sectors in is not a shallow road (${gen.earlyMech} machines)`,
+      gen.earlyMech > 0);
     ok(`quiet roads trade fights for encounters (${gen.quiet.toFixed(1)} events vs ${gen.calm.toFixed(1)})`,
       gen.quiet > gen.calm + 0.8);
     ok(`an irradiated sector hangs smog on most roads (${(gen.irr * 100).toFixed(0)}% vs ${(gen.clear * 100).toFixed(0)}%)`,

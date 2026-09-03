@@ -358,7 +358,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const stat = { order: null, fulfilled: false, won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
                  sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
-                 wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, ground: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
+                 wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, field: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  affixes: {}, champions: 0, eliteUnits: 0, affixedUnits: 0,
                  promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
@@ -1070,7 +1070,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       stat.bossMet.push({ id: b.id, grudge: grudgeOn(b.id) });
     }
     currentNodeType = node.type; isCurrentNodeElite = !!node.elite;
-    stat.ground[node.terrain || 'OPEN_ROAD'] = (stat.ground[node.terrain || 'OPEN_ROAD'] || 0) + 1;
+    // What the fight is standing under and on, recorded as the pair rather than two tallies:
+    // the marginals fall out of it, and so does the confluence, which only exists as a pair.
+    const cell = `${node.weather || 'CLEAR'}|${node.terrain || 'OPEN_ROAD'}`;
+    stat.field[cell] = (stat.field[cell] || 0) + 1;
     noteBoard();
     const outcome = fight(node.type, !!node.elite);
     if (node.type === 'BOSS') {
@@ -1539,11 +1542,30 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const faces = {};
   results.forEach(r => Object.entries(r.facesMet || {}).forEach(([k, v]) => { faces[k] = (faces[k] || 0) + v; }));
   line('faces met', Object.entries(faces).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ') || 'none');
-  const ground = {};
-  results.forEach(r => Object.entries(r.ground || {}).forEach(([k, v]) => { ground[k] = (ground[k] || 0) + v; }));
-  const groundTotal = Object.values(ground).reduce((a, b) => a + b, 0) || 1;
-  line('ground fought on', Object.entries(ground).sort((a, b) => b[1] - a[1])
-    .map(([k, v]) => `${k} ${(v / groundTotal * 100).toFixed(0)}%`).join(', ') || 'none');
+  // Every ground and every sky, including the ones that never came up, and in table order
+  // rather than sorted. Same reason the thread list below prints its zeroes: a list of what
+  // turned up cannot show you what never did, and "two of the six grounds are never fought on"
+  // is exactly the finding a sorted top-N hides. D08 was filed off this line.
+  const field = {};
+  results.forEach(r => Object.entries(r.field || {}).forEach(([k, v]) => { field[k] = (field[k] || 0) + v; }));
+  const fieldTotal = Object.values(field).reduce((a, b) => a + b, 0) || 1;
+  const marginal = pick => { const t = {};
+    Object.entries(field).forEach(([cell, v]) => { const k = pick(cell.split('|')); t[k] = (t[k] || 0) + v; });
+    return t; };
+  // The declared table first, in its own order, then anything observed that is not in it - a
+  // commander's arena sky is real and is not in WEATHER_IDS, and dropping it would make the
+  // line not add up without saying why. Both lines therefore sum to 100%.
+  const spread = (ids, tally) => [...ids, ...Object.keys(tally).filter(k => !ids.includes(k))]
+    .map(id => `${id} ${((tally[id] || 0) / fieldTotal * 100).toFixed(1)}%`).join(', ');
+  const tables = await page.evaluate(() => ({ grounds: TERRAIN_IDS, skies: ['CLEAR', ...WEATHER_IDS],
+    conf: CONFLUENCE.map(c => ({ faction: c.faction, cell: `${c.sky}|${c.ground}` })) }));
+  line('ground fought on', spread(tables.grounds, marginal(p => p[1])));
+  line('sky fought under', spread(tables.skies, marginal(p => p[0])));
+  // A faction's own sky over its own ground - the rarest thing the weather system makes, since
+  // it needs the faction, then the right one of its two grounds, then the weather roll.
+  const confTotal = tables.conf.reduce((a, c) => a + (field[c.cell] || 0), 0);
+  line('confluences', `${(confTotal / fieldTotal * 100).toFixed(1)}% of fights - ` +
+    tables.conf.map(c => `${c.faction} ${((field[c.cell] || 0) / fieldTotal * 100).toFixed(1)}%`).join(', '));
   // Every thread listed, including the ones that fired zero times - a list of what turned up
   // cannot show you what never did, and "two of six never appeared" is the whole finding.
   const threads = {};
