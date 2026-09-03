@@ -2172,7 +2172,7 @@ const CODEX = [
         `Nobody on this roster dies at zero health. They go down, and a clock starts: ${BLEED_OUT} of their own turns, counted down over their head, and at the end of it they are gone from the expedition for good.`,
         `Stopping the clock is a heal - Cauterize, a Stim Dart, a Med-Stim, the STIM tactic off the momentum bar. Those are the only things that reach somebody on the floor, and the bar is the one a squad with no medic in the line always has.`,
         `Ending the fight also stops it, however it ended: won, withdrawn from, fallen back out of, or lost outright. Whoever was still down is dragged clear.`,
-        `How much it cost them is how long they lay there. Somebody who went down as the fight was finishing comes round on ${Math.round(DRAGGED_CLEAR * 100)}% health against a ${Math.round(SCAR_CHANCE * 100)}% chance of a scar; each of their own turns spent on the floor takes ${Math.round(CLEAR_PER_TURN * 100)} points off the first and adds ${Math.round(SCAR_PER_TURN * 100)} to the second. Left through two of them it is ${Math.round((DRAGGED_CLEAR - 2 * CLEAR_PER_TURN) * 100)}% health and a ${Math.round((SCAR_CHANCE + 2 * SCAR_PER_TURN) * 100)}% roll.`,
+        `Everyone comes round on the same ${Math.round(DRAGGED_CLEAR * 100)}% of their health. What differs is what they carry out of it: somebody who went down as the fight was finishing rolls ${Math.round(SCAR_CHANCE * 100)}% for a scar, and each of their own turns spent on the floor adds ${Math.round(SCAR_PER_TURN * 100)} points to that. Left through two of them it is a ${Math.round((SCAR_CHANCE + 2 * SCAR_PER_TURN) * 100)}% roll.`,
         'Picking them up before the end - any heal, any turn spent on it - skips the roll altogether: only an operator the fight ended on top of is ever in it. So a fall is not a flat tax and it is not free either. It is a question about this fight, and the answer is worth more the earlier it comes. A scar follows them through every node left in the expedition, and scars are never rolled at the muster; they are only ever earned.',
         ...SCAR_POOL.map(sc => `${sc.name} \u2014 ${sc.desc}`),
         `At most ${SCAR_MAX} to a body and never the same one twice. The Outpost treats them one at a time for ${SCAR_TREAT_COST} Scrap, which is the only way one comes off.`
@@ -3670,19 +3670,29 @@ function noteFightWon() {
 // not "somebody fell", it is "somebody fell and this fight is still going", which is a thing
 // the player can see coming and spend a turn on.
 const BLEED_OUT = 3;          // their own turns, from falling to gone
-const DRAGGED_CLEAR = 0.25;   // the share of health they come round on when the fight ends
-const CLEAR_PER_TURN = 0.075; // less, for each of their own turns they spent on the floor
-// How many of their own turns a body has lain there, which is the whole of what D09 prices.
-// Read off the clock rather than counted, so SLOW TO RISE and MASS GRAVE - both of which start
-// a shorter clock - are handled without either of them being mentioned here.
+// Flat, and deliberately so. D09 graded this the way it grades the scar roll - 25% for a body
+// picked up on a full clock down to 10% for one left through two of its own turns - and it
+// cost the game two sectors of depth. Measured against a paired arm in the same container:
+//
+//                        graded    flat
+//   deepest sector          3       7
+//   nodes cleared          60      80
+//   wipes per run         4.1     3.1
+//
+// The mean was fine - weighted by the clocks actually measured it came to 21% against this
+// 20% - and the mean was the wrong statistic. The operators who come round on a tenth are
+// exactly the ones who lay there through the hardest fights, so they walk into the next node
+// on six health, go straight back down, and come round on a tenth again; and the wider scar
+// roll on that same body can deal CRACKED RIBS or SLOW TO RISE and make the next cycle worse.
+// A gradient here compounds into a spiral. The scar roll is where the price of lying there
+// belongs, because a scar is carried rather than fed back into the fight that dealt it.
+const DRAGGED_CLEAR = 0.2;    // the share of health they come round on when the fight ends
+// How many of their own turns a body has lain there, which is what the scar roll is charged
+// against. Read off the clock rather than counted, so SLOW TO RISE and MASS GRAVE - both of
+// which start a shorter clock - are handled without either of them being mentioned here.
 function turnsDown(ent) {
     if (!ent) return 0;
     return Math.max(0, ((ent.downFrom || BLEED_OUT) - (ent.downTurns || 0)));
-}
-// Never below a tenth: dragged clear is dragged clear, and a body that comes round on nothing
-// is a body the next fight loses for free, which is a second death for the same fall.
-function clearShare(ent) {
-    return Math.max(0.1, DRAGGED_CLEAR - CLEAR_PER_TURN * turnsDown(ent));
 }
 
 // downTurns is only ever read while hp <= 0 and is set fresh on every fall, so any heal that
@@ -3778,7 +3788,7 @@ function recoverDowned(how) {
     // Taken before the clock is cleared, and left on them for markScars below: how long they
     // lay there is what both halves of the price are charged against.
     saved.forEach(e => { e.laidThere = turnsDown(e); });
-    saved.forEach(e => { e.hp = Math.max(1, Math.floor(e.maxHp * clearShare(e))); e.downTurns = 0; });
+    saved.forEach(e => { e.hp = Math.max(1, Math.floor(e.maxHp * DRAGGED_CLEAR)); e.downTurns = 0; });
     if (saved.length) log(`> ${saved.map(e => e.name).join(' and ')} dragged clear${how ? ' ' + how : ''}.`, 'log-heal');
     const ids = saved.map(e => e.id);
     // Everything that ends a fight funnels through here, which is what makes this the one place
@@ -6607,7 +6617,7 @@ const PROMPTS = [
     { id: 'LAST',      title: 'THE ROAD ENDS HERE', body: 'This is the last sector. The commander at the top of it is not one of the seven that hold the road - it is what they answer to, it is not in the rotation, and putting it down is how an expedition is won rather than merely survived. Nothing about the way there changes: ten tiers, the same branching routes, the same fights. Only the thing at the top is different, and it is standing on everything it has outlived. Winning does not force you home - the road past the gate is still there, and the win is banked before you decide.' },
     { id: 'TALLY',     title: 'IT IS COUNTING', body: 'The last warlord writes down every one of its own that falls in front of it: more armour and more damage for each, up to eight, and the count rides its passive chip where you can watch it climb. Halfway down it raises the commanders you already felled, and while any of them stands it takes 30% of what you land on it - so they have to come down, and every one that does is another point on the count. Broken past a quarter it stops counting and spends: the armour comes off and goes into the swing, and everything you cleared off it is in that number.' },
     { id: 'GRUDGE',    title: 'IT REMEMBERS YOU', body: 'You have felled this commander before, and it has come back for it - heavier, faster, better armoured, and holding a move it never needed against you the first time. That move opens under a quarter health, after the enrage you already know about, and the fight log names it at the door so you can plan around it. A warlord is the one fight you cannot walk away from, so it pays for the trouble: felling a risen one banks an extra Skull for every grudge it was carrying.' },
-    { id: 'BLEEDOUT',  title: 'THEY ARE BLEEDING OUT', body: 'That operator is on the floor with a clock over them, counted in their own turns. Run it out and they are gone for the rest of the expedition - there is no reviving them at the Outpost any more. Heal them where they lie (Cauterize, a Med-Stim, the STIM tactic), or end the fight: winning it, running from it and being dragged off it all get them clear. Only the clock kills - but every turn they spend down is health they do not come round on and a wider chance of carrying a scar out of it, so getting to them early is worth more than getting to them at all.' },
+    { id: 'BLEEDOUT',  title: 'THEY ARE BLEEDING OUT', body: 'That operator is on the floor with a clock over them, counted in their own turns. Run it out and they are gone for the rest of the expedition - there is no reviving them at the Outpost any more. Heal them where they lie (Cauterize, a Med-Stim, the STIM tactic), or end the fight: winning it, running from it and being dragged off it all get them clear. Only the clock kills - but every turn they spend down is a wider chance of carrying a scar out of it, so getting to them early is worth more than getting to them at all.' },
     { id: 'RECRUIT',   title: 'SOMEONE WORTH SIGNING', body: 'The seven you start with are not everyone out here. A survivor brings a verb none of them has - a grinder for the front rank, a decontaminator for the middle, or a line that can haul what is hiding at the back of the enemy out where you can reach it. They cost Scrap, they arrive hurt, and there are only three in the whole wasteland. They join the bench: put them in the line at the Outpost.' },
     { id: 'ARMORY',    title: 'THE ARMORY',      body: 'A trader on the route. Gear, a marked-up relic, stims, a quirk do-over, and a bond that prepays your next regroup. Prices climb with the sector, so scrap spent early is worth more.' },
     { id: 'THREAT',    title: 'SOMEONE IS ABOUT TO DIE', body: 'The red figure over that operator is what lands on them this round if nothing changes, and it is more than they have left. Kill the thing aimed at them, brace in front of them, spend a STIM, or move them - but not nothing.' },
@@ -9684,7 +9694,7 @@ globalThis.WP = {
     ORDERS, DEFAULT_ORDER, orderById, currentOrder, orderSectors, orderBonus, isLastOrdered, renderRecall, orderHome,
     FINAL_SECTOR, FINAL_BOSS, BOSS_ROTATION, isFinalSector, VICTORY, noteTally, raiseFelled, REVENANT,
     spendTally, noteVictory, renderVictory, victoryWalk, victoryPress, roadWarlords,
-    BLEED_OUT, DRAGGED_CLEAR, CLEAR_PER_TURN, turnsDown, clearShare, REACHES_THE_DOWN, isDown, bleedingOut, goDown, tickBleedOut,
+    BLEED_OUT, DRAGGED_CLEAR, turnsDown, REACHES_THE_DOWN, isDown, bleedingOut, goDown, tickBleedOut,
     SCAR_POOL, SCAR_CHANCE, SCAR_PER_TURN, SCAR_MAX, SCAR_TREAT_COST, scarChanceFor, scarById, hasScar, scarsOf, scarFits,
     applyScarStats, removeScarStats, giveScar, markScars, healScar,
     loseOperator, recoverDowned, closeRanks,

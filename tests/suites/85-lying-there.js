@@ -17,11 +17,15 @@
 // turns cost, so the clock C02 built - which is a real clock, it takes 1.6 to 1.9 operators a
 // run - had no gradient under it at all.
 //
-// So the price is graded rather than raised. Against the spread above the new ladder averages
+// So the SCAR roll is graded rather than raised. Against the spread above the new ladder averages
 // 9.8% where the flat roll averaged 8-10%: the same total scarring, moved onto the falls that
-// actually cost something. What is NOT changed is C02's rule that ending the fight stops the
-// clock - it is the reason a fall is a question about THIS fight rather than a flat tax, and
-// the rescue counts say the system it drives is working.
+// actually cost something.
+//
+// The health they come round on was graded too, on the same reasoning, and it is not any more:
+// it cost two sectors of depth and is pinned flat below with the measurement that killed it.
+// What is NOT changed is C02's rule that ending the fight stops the clock - it is the reason a
+// fall is a question about THIS fight rather than a flat tax, and the rescue counts say the
+// system it drives is working.
 module.exports = {
   name: 'What lying there costs',
   run: async ({ page, ok, base }) => {
@@ -81,13 +85,12 @@ module.exports = {
       const { squad } = __fight(1);
       const [a] = squad;
       const at = n => { a.laidThere = n; a.downFrom = BLEED_OUT; a.downTurns = BLEED_OUT - n;
-                        return { scar: scarChanceFor(a), share: clearShare(a) }; };
+                        return { scar: scarChanceFor(a) }; };
       const rows = [0, 1, 2].map(at);
       const deep = (() => { a.laidThere = 9; a.downFrom = 12; a.downTurns = 3;
-                            return { scar: scarChanceFor(a), share: clearShare(a) }; })();
+                            return { scar: scarChanceFor(a) }; })();
       a.laidThere = 0; combatActive = false;
-      return { rows, deep, base: SCAR_CHANCE, step: SCAR_PER_TURN,
-               clear: DRAGGED_CLEAR, clearStep: CLEAR_PER_TURN };
+      return { rows, deep, base: SCAR_CHANCE, step: SCAR_PER_TURN, clear: DRAGGED_CLEAR };
     });
     const pct = x => `${(x * 100).toFixed(0)}%`;
     ok(`a fall the fight outlives is the cheapest roll there is (${pct(ladder.rows[0].scar)})`,
@@ -99,10 +102,7 @@ module.exports = {
       ladder.rows[2].scar > 0 && ladder.rows[2].scar < 0.5);
     ok(`and no clock however long makes it a certainty (${pct(ladder.deep.scar)})`,
       ladder.deep.scar < 1);
-    ok(`they come round on less for every turn they lay there ` +
-       `(${ladder.rows.map(r => pct(r.share)).join(' / ')})`,
-      ladder.rows[0].share > ladder.rows[1].share && ladder.rows[1].share > ladder.rows[2].share);
-    ok(`never on nothing, however long it was (${pct(ladder.deep.share)})`, ladder.deep.share >= 0.1);
+
 
     // ── The same total, moved onto the falls that cost something ────────────────────────
     // The claim the phase is published on, encoded so it cannot quietly become a tax. Weighted
@@ -121,9 +121,17 @@ module.exports = {
        `where the flat roll it replaces averaged 8-10%`,
       weighted > 0.06 && weighted < 0.13);
 
-    // ── End to end, through the real ending ─────────────────────────────────────────────
-    // Two operators, one dropped as the fight ends and one left through two of their own turns,
-    // picked up by the same recoverDowned call.
+    // ── The health they come round on is FLAT, and that is the finding ──────────────────
+    // This was graded too, on the same reasoning, and it cost the game two sectors of depth
+    // against a paired arm in the same container: 3 sectors and 60 nodes against 7 and 80, with
+    // wipes per run up from 3.1 to 4.1. The weighted mean was fine - 21% against this 20% - and
+    // the mean was the wrong statistic. A body that comes round on a tenth is one the next node
+    // takes straight back down, and the wider scar roll on it can deal CRACKED RIBS or SLOW TO
+    // RISE and make the cycle after that worse. It compounds; the scar roll does not, because a
+    // scar is carried rather than fed back into the fight that dealt it.
+    //
+    // So this is pinned as a deliberate flat, with the measurement, rather than left as an
+    // absence for a later phase to helpfully "finish".
     const ends = await page.evaluate(() => {
       const { squad } = __fight(2);
       const [quick, slow] = squad;
@@ -133,11 +141,15 @@ module.exports = {
       recoverDowned('once the field is held');
       combatActive = false;
       return { spent, quick: quick.hp, slow: slow.hp, max: quick.maxHp,
-               qDown: quick.downTurns, sDown: slow.downTurns };
+               qDown: quick.downTurns, sDown: slow.downTurns, share: DRAGGED_CLEAR };
     });
-    ok(`the one who fell at the death of the fight comes round on ${ends.quick} of ${ends.max}`,
-      ends.quick > ends.slow);
-    ok(`the one left through two of their own turns on ${ends.slow}`, ends.slow > 0);
+    ok(`the two of them lay there for ${ends.spent.quick} and ${ends.spent.slow} of their own turns`,
+      ends.spent.quick === 0 && ends.spent.slow === 2);
+    ok(`and both come round on the same ${Math.round(ends.share * 100)}% ` +
+       `(${ends.quick} and ${ends.slow} of ${ends.max})`,
+      ends.quick === ends.slow && ends.quick === Math.floor(ends.max * ends.share));
+    ok('because grading this compounds into a spiral where grading the scar roll does not',
+      ends.quick > 0 && ends.slow > 0);
     ok('and both are up, because only the clock kills', ends.qDown === 0 && ends.sDown === 0);
 
     // ── The scar roll lands on the one who lay there ────────────────────────────────────
