@@ -274,6 +274,12 @@ const WITHDRAW_POLICY = flag('withdraw', 'on') !== 'off';
 // what a player with a free multiplier on the table actually does. It is not the default: the
 // default is left alone so runs measured before doctrines existed stay comparable.
 const DRAFT = flag('draft', 'line');
+// The bench holds a job for the expedition and this file never gave one out, so a lever a real
+// player can take for free at the muster - QUARTERMASTER for one more material a salvage, FIELD
+// MEDIC for a camp that heals for more, SCOUT so the route does not close behind you - has
+// never been measured. `off` is the old behaviour, for comparison; SCOUT is the one D10 cares
+// about, since availableNodeIds() already special-cases it and needs nothing else wired in.
+const BENCH = flag('bench', 'off');
 // Momentum has three tactics and this simulator only ever bought one of them: spendTactic was
 // called exactly once in the whole file, always with STIM, and the strings FOCUS and PRESS did
 // not appear at all. So "a third of every action was STIM" was this policy reporting itself
@@ -378,7 +384,7 @@ const FACES = flag('faces', 'warm');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy }) => {
   const stat = { order: null, fulfilled: false, won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
                  sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
@@ -499,6 +505,14 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     draft.push(pickFrom(legal));
   }
   draft.forEach((p, i) => { p.gridPos = slots[i]; });
+  // Whoever is left is on the bench and eligible for the job the flag asks for. Any of the
+  // roster still at gridPos 0 will do - the job holds only while its holder stays benched,
+  // which this policy never deploys them out of on purpose.
+  if (benchPolicy !== 'off') {
+    const jobId = { scout: 'SCOUT', quartermaster: 'QUARTERMASTER', medic: 'MEDIC' }[benchPolicy];
+    const holder = playerRoster.find(p => p.gridPos === 0);
+    if (jobId && holder) takeBenchJob(holder.id, jobId);
+  }
   // Banked here rather than during the draft, because a doctrine can ask about the SHAPE of the
   // line and not only its membership - THE WALL wants to know who is holding rank 1, and nobody
   // is standing anywhere until the line above. Asking earlier answered no for every such rule.
@@ -1013,13 +1027,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       continue;
     }
     // Walk the generated route graph the way a player does: only what the last node connects
-    // to is on offer, elites preferred when the squad is healthy, camps preferred when it hurts.
+    // to is on offer, camps preferred when it hurts, then a recruit if one is still out there -
+    // D10: this used to fall through to the same random pick as any plain fight, so "how often
+    // does a run walk past a survivor" measured a policy that never looked for one rather than
+    // the game. Three exist in a whole run against a dozen-odd elites, so it is weighed above
+    // the elite pick and below urgent triage, not above it.
     const availIds = availableNodeIds();
     if (!availIds.length) { stat.endedBy = 'stranded'; break; }
     const avail = availIds.map(id => sectorMap.nodes.find(n => n.id === id)).filter(Boolean);
     const healthy = playerRoster.filter(p => p.gridPos > 0 && p.hp > p.maxHp * 0.6).length >= 2;
     const hurting = playerRoster.filter(p => p.gridPos > 0 && p.hp < p.maxHp * 0.5).length >= 2;
     const node = (hurting && avail.find(n => n.type === 'CAMP'))
+              || (recruitables().length && avail.find(n => n.type === 'RECRUIT'))
               || (healthy && avail.find(n => n.elite))
               || avail[Math.floor(Math.random() * avail.length)];
     enterNode(node.id);
@@ -1305,7 +1324,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -1406,9 +1425,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   SCAR_IDS.forEach(id => line(`  ${id.toLowerCase().replace(/_/g, ' ')}`, byScar[id] || 'never dealt'));
 
   console.log('\n── RECRUITS ' + '─'.repeat(48));
+  // D10: this section's own headline used to read "runs that walked past one" over a count of
+  // runs that REACHED a recruit node at all - recruitOffers is pushed whether or not the sign
+  // goes through, so a run that signed on the spot was counted as having walked past it. The
+  // label was wrong under the old policy too; it just went unnoticed because so few runs ever
+  // reached one that the two numbers were close by coincidence.
   const offers = results.flatMap(r => r.recruitOffers);
-  const sawOne = results.filter(r => r.recruitOffers.length).length;
-  line('runs that walked past one', `${sawOne} of ${n}`);
+  const reachedOne = results.filter(r => r.recruitOffers.length).length;
+  const totalSigned = results.reduce((a, r) => a + r.recruited.length, 0);
+  line('runs that never reached one', `${n - reachedOne} of ${n}`);
+  line('runs that reached at least one', `${reachedOne} of ${n}`);
   line('offers seen in total', offers.length);
   if (offers.length) {
     const afford = offers.filter(o => o.purse >= o.cost).length;
@@ -1417,6 +1443,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     line('  median price asked', med(offers.map(o => o.cost)));
     line('  median purse on hand', med(offers.map(o => o.purse)));
   }
+  line('  signed on the spot', `${totalSigned} of ${offers.length}`);
+  line('  reached and still walked past', `${offers.length - totalSigned} of ${offers.length}`);
   line('runs that signed anyone', `${withRecruits} of ${n}`);
   Object.entries(signed).sort((a, b) => b[1] - a[1]).forEach(([k, v]) => line('  ' + k, `${v} runs`));
   if (!Object.keys(signed).length) line('  none', 'nobody was ever signed on');

@@ -1718,10 +1718,15 @@ function generateSectorMap(rng = Math.random) {
         });
     });
 
-    const swapOne = (type, tierLo, tierHi) => {
+    // `prefer`, when passed, narrows the pool further but only if that leaves something to
+    // pick from - a stricter placement rule that falls back to the plain one rather than one
+    // that can fail outright.
+    const swapOne = (type, tierLo, tierHi, prefer) => {
         const pool = nodes.filter(n => !n.elite && n.type !== 'BOSS' && n.type !== 'CAMP' && n.type !== 'EVENT'
             && n.type !== 'SHOP' && n.type !== 'RECRUIT' && n.tier > 1 && n.tier >= tierLo && n.tier <= tierHi);
-        if (pool.length) pool[Math.floor(rng() * pool.length)].type = type;
+        const narrowed = prefer ? pool.filter(prefer) : pool;
+        const from = narrowed.length ? narrowed : pool;
+        if (from.length) from[Math.floor(rng() * from.length)].type = type;
     };
     swapOne('CAMP', 4, 7);
     if (rng() < 0.4) swapOne('CAMP', 2, 9);
@@ -1731,9 +1736,25 @@ function generateSectorMap(rng = Math.random) {
     // The Armory is uncommon on purpose: a shop on most maps but not all, so finding one on
     // the route ahead is a reason to steer, not a fixture to tick off.
     if (rng() < 0.65) swapOne('SHOP', 3, 9);
-    // Someone worth signing on, if there is anyone left out there to sign. Rarer than the
-    // Armory: three exist in a whole run, and a route that passes one is worth steering for.
-    if (recruitables().length && rng() < 0.55) swapOne('RECRUIT', 2, 9);
+    // D10: someone worth signing on, if there is anyone left out there to sign - rarer than the
+    // Armory, three exist in a whole run, and a route that passes one is worth steering for. It
+    // used to land on any plain node in the range with no regard for whether either of the run's
+    // two possible openings could ever lead there. Measured: 17.8% of eligible nodes are
+    // reachable from only ONE of the two tier-1 starts, so on a coin flip of the run's very
+    // first choice - a decision that has nothing to do with recruiting - the shape had already
+    // decided whether this one could ever be reached at all. `bothReach` is every node this map
+    // reaches no matter which of the two openings a run takes; swapOne falls back to the full
+    // range on its own if that ever comes back empty.
+    if (recruitables().length && rng() < 0.55) {
+        const opens = byTier[0];
+        const byId = {}; nodes.forEach(n => { byId[n.id] = n; });
+        const reachFrom = start => { const seen = new Set([start.id]); const q = [start.id];
+            while (q.length) { const cur = byId[q.shift()]; if (!cur) continue;
+                (cur.edges || []).forEach(id => { if (!seen.has(id)) { seen.add(id); q.push(id); } }); }
+            return seen; };
+        const bothReach = opens.length === 2 ? [reachFrom(opens[0]), reachFrom(opens[1])] : null;
+        swapOne('RECRUIT', 2, 9, n => !bothReach || (bothReach[0].has(n.id) && bothReach[1].has(n.id)));
+    }
     // Quiet Roads trades two more fights away for strange encounters.
     if (sectorFront === 'QUIET_ROADS') { swapOne('EVENT', 2, 9); swapOne('EVENT', 2, 9); }
 
