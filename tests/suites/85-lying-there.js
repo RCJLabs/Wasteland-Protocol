@@ -21,8 +21,10 @@
 // 9.8% where the flat roll averaged 8-10%: the same total scarring, moved onto the falls that
 // actually cost something.
 //
-// The health they come round on was graded too, on the same reasoning, and it is not any more:
-// it cost two sectors of depth and is pinned flat below with the measurement that killed it.
+// The health they come round on was graded too, on the same reasoning, and is not any more. It
+// was removed on a depth reading that removing it then failed to reverse, so what actually
+// keeps it flat is a judgement about compounding rather than a measurement - stated as one,
+// with the samples, at DRAGGED_CLEAR in game.js.
 // What is NOT changed is C02's rule that ending the fight stops the clock - it is the reason a
 // fall is a question about THIS fight rather than a flat tax, and the rescue counts say the
 // system it drives is working.
@@ -122,16 +124,16 @@ module.exports = {
       weighted > 0.06 && weighted < 0.13);
 
     // ── The health they come round on is FLAT, and that is the finding ──────────────────
-    // This was graded too, on the same reasoning, and it cost the game two sectors of depth
-    // against a paired arm in the same container: 3 sectors and 60 nodes against 7 and 80, with
-    // wipes per run up from 3.1 to 4.1. The weighted mean was fine - 21% against this 20% - and
-    // the mean was the wrong statistic. A body that comes round on a tenth is one the next node
-    // takes straight back down, and the wider scar roll on it can deal CRACKED RIBS or SLOW TO
-    // RISE and make the cycle after that worse. It compounds; the scar roll does not, because a
-    // scar is carried rather than fed back into the fight that dealt it.
+    // This was graded too, on the same reasoning, and was taken out again. The full account is
+    // on DRAGGED_CLEAR in game.js; the short version is that five samples appeared to split on
+    // depth, removing the health gradient did not bring it back, and the arm that remains deals
+    // fewer scars per run than the baseline - so nothing in the diff explains the split and
+    // fourteen expeditions cannot resolve it either way.
     //
-    // So this is pinned as a deliberate flat, with the measurement, rather than left as an
-    // absence for a later phase to helpfully "finish".
+    // What keeps it flat is a judgement, stated as one: a tenth of max health is fed straight
+    // back into the next fight, where a scar is only carried, so a gradient here can compound
+    // and the scar ladder cannot. Pinned as a deliberate flat rather than left as an absence
+    // for a later phase to helpfully "finish".
     const ends = await page.evaluate(() => {
       const { squad } = __fight(2);
       const [quick, slow] = squad;
@@ -148,7 +150,7 @@ module.exports = {
     ok(`and both come round on the same ${Math.round(ends.share * 100)}% ` +
        `(${ends.quick} and ${ends.slow} of ${ends.max})`,
       ends.quick === ends.slow && ends.quick === Math.floor(ends.max * ends.share));
-    ok('because grading this compounds into a spiral where grading the scar roll does not',
+    ok('because a share of health is fed back into the next fight where a scar is only carried',
       ends.quick > 0 && ends.slow > 0);
     ok('and both are up, because only the clock kills', ends.qDown === 0 && ends.sDown === 0);
 

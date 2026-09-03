@@ -3670,22 +3670,31 @@ function noteFightWon() {
 // not "somebody fell", it is "somebody fell and this fight is still going", which is a thing
 // the player can see coming and spend a turn on.
 const BLEED_OUT = 3;          // their own turns, from falling to gone
-// Flat, and deliberately so. D09 graded this the way it grades the scar roll - 25% for a body
-// picked up on a full clock down to 10% for one left through two of its own turns - and it
-// cost the game two sectors of depth. Measured against a paired arm in the same container:
+// Flat, and deliberately so, but not for the reason first published here. D09 graded this the
+// way it grades the scar roll - 25% for a body picked up on a full clock down to 10% for one
+// left through two of its own turns - and it was removed after five 14-expedition samples read
+// like this:
 //
-//                        graded    flat
-//   deepest sector          3       7
-//   nodes cleared          60      80
-//   wipes per run         4.1     3.1
+//   arm                grades        sector  nodes  wipes  scars/run
+//   pre-D09 (old box)  none               5     89   4.64       1.43
+//   pre-D09 (paired)   none               7     80   3.07       1.00
+//   D09                scar + health      3     60   4.21       1.64
+//   D09 again          scar + health      3     59   4.00       1.21
+//   D09, this build    scar only          3     50   3.93       0.93
 //
-// The mean was fine - weighted by the clocks actually measured it came to 21% against this
-// 20% - and the mean was the wrong statistic. The operators who come round on a tenth are
-// exactly the ones who lay there through the hardest fights, so they walk into the next node
-// on six health, go straight back down, and come round on a tenth again; and the wider scar
-// roll on that same body can deal CRACKED RIBS or SLOW TO RISE and make the next cycle worse.
-// A gradient here compounds into a spiral. The scar roll is where the price of lying there
-// belongs, because a scar is carried rather than fed back into the fight that dealt it.
+// Removing the health gradient did NOT bring the depth back, and the arm that remains deals
+// FEWER scars per run than the baseline it is compared against - so nothing in the diff
+// explains the split, and it is not attributable to this phase. Fourteen expeditions is an
+// order of magnitude short of the hundred and fifty tests/simulate.js says is needed before
+// believing anything about depth, and the wipe figures do not separate either: the pre-D09
+// arms hold both the highest and the lowest.
+//
+// It stays flat on a judgement rather than a measurement, and the judgement is this: a tenth
+// of max health is fed straight back into the next fight, where a scar is only carried. A body
+// that comes round on six health goes down again immediately, and the wider roll on it can
+// deal CRACKED RIBS or SLOW TO RISE and make the cycle after that worse. That is a compounding
+// risk nobody has shown to be worth taking, and the scar ladder - which is measured, at 8-11%
+// against the 8-10% it replaced - already prices lying there without it.
 const DRAGGED_CLEAR = 0.2;    // the share of health they come round on when the fight ends
 // How many of their own turns a body has lain there, which is what the scar roll is charged
 // against. Read off the clock rather than counted, so SLOW TO RISE and MASS GRAVE - both of
