@@ -1310,7 +1310,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   page.on('pageerror', e => errors.push(e.message));
   await page.goto(`http://127.0.0.1:${port}/index.html`);
   await page.waitForTimeout(800);
-  await page.evaluate(() => { globalSettings.sfx = false; });
+  // E01: nobody is watching this one. Profiled through the CDP sampler, 73% of an expedition was
+  // going into forced synchronous layout that no reported number reads - getBoundingClientRect
+  // alone 45%, fitField 13.7%, log's scroll pin 13.4%, the hit flash's offsetWidth 5.5%. The
+  // engine still runs every rule; it just stops measuring a screen no one is looking at.
+  await page.evaluate(() => { globalSettings.sfx = false; paintOff = true; });
   ALL_FORMATION_IDS = await page.evaluate(() => ALL_FORMATIONS.map(f => f.id));
   SCAR_IDS = await page.evaluate(() => SCAR_POOL.map(sc => sc.id));
   FINAL_SECTOR_N = await page.evaluate(() => FINAL_SECTOR);

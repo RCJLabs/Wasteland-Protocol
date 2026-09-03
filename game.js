@@ -3493,6 +3493,18 @@ function triggerGlitch() {
     el.classList.add('fx-glitch');
 }
 
+// E01: the engine paints because somebody is watching it. The balance simulator is not watching,
+// and profiling one expedition through the CDP sampler found 73% of it going into work no balance
+// number reads: getBoundingClientRect alone was 45%, fitField 13.7%, log 13.4%, triggerHitFlash
+// 5.5%. Almost all of it is FORCED SYNCHRONOUS LAYOUT - a fit pass that bisects while measuring,
+// a log line that reads scrollHeight to stay pinned to the bottom, a hit flash that reads
+// offsetWidth to restart its own animation. None of it changes a single number the sim reports.
+//
+// So a headless caller can turn the painting off. This is deliberately NOT motionOff: that is a
+// player's accessibility preference and it governs animation, while this governs measurement and
+// belongs to nobody but the harness. It defaults to off, and only the simulator sets it - the
+// Playwright suites measure real geometry and would be measuring a lie if it were on.
+let paintOff = false;
 // ── Combat that moves ───────────────────────────────────────────────────────────────────
 // All transform-based, no new art, and every effect sits behind prefers-reduced-motion:
 // melee lunges to contact, ranged flashes and draws a tracer, the struck recoil, the dead
@@ -3520,7 +3532,9 @@ function pulseIntent(ent) {
     if (icon) icon.classList.add('intent-pulse');
 }
 function playAttackAnim(attacker, target, move) {
-    if (motionOff()) return 'still';
+    // Same contract as motionOff's early return, for the same reason one line down: the tracer
+    // branch measures the attacker, the target and the field to draw a line between them.
+    if (paintOff || motionOff()) return 'still';
     const a = document.getElementById(attacker.id);
     if (!a) return 'none';
     const melee = move ? moveReachFor(move, attacker) === 'melee' : attacker.range !== 'ranged';
@@ -3545,6 +3559,7 @@ function playAttackAnim(attacker, target, move) {
 }
 
 function triggerHitFlash(id) {
+    if (paintOff) return;      // `void img.offsetWidth` below is a forced reflow, per hit
     let el = document.getElementById(id);
     if(el) {
         let img = el.querySelector('.portrait');
@@ -7606,7 +7621,9 @@ function log(msg, styleClass = "log-dmg", hitId = null) {
     const el = document.createElement('div'); el.className = styleClass; el.innerText = msg;
     // A logged blow keeps a handle on its own arithmetic: tap the line to read it back.
     if (hitId !== null) { el.classList.add('log-explainable'); el.dataset.action = 'explain'; el.dataset.hit = String(hitId); }
-    logEl.appendChild(el); logEl.scrollTop = logEl.scrollHeight;
+    // The line still goes in - suites read the log's text - but pinning it to the bottom reads
+    // scrollHeight, and that is a forced layout on every logged blow.
+    logEl.appendChild(el); if (!paintOff) logEl.scrollTop = logEl.scrollHeight;
 }
 
 function renderQueue() {
@@ -8037,6 +8054,7 @@ function fieldSpan(field) {
     return r > l ? { l, r, w: r - l } : null;
 }
 function fitField() {
+    if (paintOff) return 1;    // a bisection that measures the layout at every step
     const field = document.querySelector('.battlefield');
     if (!field) return 1;
     const glass = field.clientWidth;
@@ -8103,6 +8121,7 @@ function slotInk(el) {
 // letter-spacing on the chips and tags, which is 1px per character of pure tracking - five of
 // them on FRONT alone, which is twice the overflow it had.
 function fitSlotText() {
+    if (paintOff) return;      // measures a Range's box for every readout on the field
     document.querySelectorAll('.battlefield .team').forEach(team => {
         // Measured at full width first, so a row that has come out of a crowd gets its max back.
         team.classList.remove('slot-tight');
@@ -8161,6 +8180,7 @@ function recentreField(field, glass) {
 }
 
 function fitEnemyRow(team, scales) {
+    if (paintOff) return;
     // 2.0 is the line between the heaviest ordinary stock (a Juggernaut at 1.8, which has
     // always overlapped its neighbours and reads fine doing it) and a commander.
     const retinue = scales.length > 1 && scales.some(s => s >= 2);
@@ -9814,6 +9834,7 @@ globalThis.WP = {
     get bonds() { return bonds; }, set bonds(v) { bonds = v; },
     get bondSavesUsed() { return bondSavesUsed; }, set bondSavesUsed(v) { bondSavesUsed = v; },
     get sectorFront() { return sectorFront; }, set sectorFront(v) { sectorFront = v; },
+    get paintOff() { return paintOff; }, set paintOff(v) { paintOff = v; },
     get runSeed() { return runSeed; }, set runSeed(v) { runSeed = v; },
     get mastery() { return mastery; }, set mastery(v) { mastery = v; },
     get bestiary() { return bestiary; }, set bestiary(v) { bestiary = v; },
