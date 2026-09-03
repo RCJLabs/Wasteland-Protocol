@@ -1,35 +1,31 @@
-// D09 was filed on a figure that turned out to be an artefact: "567 operators went down and 95
-// turns were spent saving any of them - one rescue turn per six falls". The counter behind it
-// added up the item rescues and the move rescues and left out the STIM tactic, which is the one
-// answer a squad with no medic in the line has. Counted properly, across 28 expeditions and two
-// tactic policies, it is 279 rescues against 241 falls and 278 against 290 - roughly one rescue
-// per fall. The squad does not ignore its own people.
+// D09 was filed on "567 operators went down and 95 turns were spent saving any of them - one
+// rescue turn per six falls", and the ratio did not survive being counted properly. The counter
+// behind it added the item rescues to the move rescues and left out the STIM tactic - which is
+// the one answer a squad with no medic in the line has, because stimTarget takes the worst off
+// first and the worst off is always the body on the floor. Counted properly, across 28
+// expeditions and two tactic policies, it is 279 rescues against 241 falls and 278 against 290.
+// Roughly one rescue per fall. The squad does not watch its own people bleed out.
 //
-// What the same measurement did show is this, of the operators still down when the fight ended:
+// So the phase changed nothing about the price of a fall in the end, and this suite holds the
+// two things that came out of it. The first is why the premise was wrong, which is a property
+// worth keeping: every route to a body on the floor, including the one off the momentum bar
+// that no medic is needed for.
 //
-//   clock left when picked up      --tactics stim   --tactics smart
-//     3 of 3 - never started              60%             54%
-//     2 of 3 - one of their turns         32%             38%
-//     1 of 3 - one turn from gone          8%              8%
+// The second is that the price is FLAT, deliberately, having been graded once and put back.
+// D09 charged both halves - the scar roll and the health they come round on - against how long
+// an operator lay there. Seven 14-expedition samples, grouped by whether the scar ladder was
+// present, separated perfectly on depth: 3, 3, 3 with it against 5, 5, 6, 7 without, the fourth
+// of those being a bisect arm carrying everything else the phase added. Scars dealt per run
+// overlapped completely (0.93 to 1.64), so the count was never what moved - the PLACEMENT was.
+// An operator lies there longest in the hardest fights, which are the deep ones, so charging
+// for the time relocates the same scarring out of the sectors that absorb it and into the ones
+// that end a run. Both halves went the same way for the same reason: a mean that holds while
+// the distribution shifts is the wrong statistic.
 //
-// Every one of those paid exactly the same price: an 8% scar roll and 20% of their health back.
-// Falling as a fight is already finishing cost what lying on the floor through two of your own
-// turns cost, so the clock C02 built - which is a real clock, it takes 1.6 to 1.9 operators a
-// run - had no gradient under it at all.
-//
-// So the SCAR roll is graded rather than raised. Against the spread above the new ladder averages
-// 9.8% where the flat roll averaged 8-10%: the same total scarring, moved onto the falls that
-// actually cost something.
-//
-// The health they come round on was graded too, on the same reasoning, and is not any more. It
-// was removed on a depth reading that removing it then failed to reverse, so what actually
-// keeps it flat is a judgement about compounding rather than a measurement - stated as one,
-// with the samples, at DRAGGED_CLEAR in game.js.
-// What is NOT changed is C02's rule that ending the fight stops the clock - it is the reason a
-// fall is a question about THIS fight rather than a flat tax, and the rescue counts say the
-// system it drives is working.
+// The full account is on SCAR_CHANCE in game.js. What is pinned here is the flatness itself,
+// so it is a decision with a reason attached rather than an absence a later phase finishes.
 module.exports = {
-  name: 'What lying there costs',
+  name: 'What a fall costs',
   run: async ({ page, ok, base }) => {
     await page.goto(`${base}/index.html`);
     await page.waitForTimeout(600);
@@ -49,169 +45,119 @@ module.exports = {
         return { squad, foe };
       };
       window.__drop = ent => { ent.hp = 0; goDown(ent); };
-      // Put somebody on the floor and leave them there for exactly n of their own turns.
       window.__lie = (ent, n) => { __drop(ent); for (let i = 0; i < n; i++) tickBleedOut(ent); };
     });
 
-    // ── The clock remembers where it started ────────────────────────────────────────────
-    // turnsDown is read off the clock rather than counted, which is what lets SLOW TO RISE and
-    // MASS GRAVE - both of which start a SHORTER clock - be handled without being mentioned.
-    const clock = await page.evaluate(() => {
+    // ── The bar always has an answer ────────────────────────────────────────────────────
+    // The premise of the phase was that a fall goes unanswered. It does not, and this is why:
+    // the tactic that costs momentum rather than a turn takes the floor before anything else,
+    // so a line with no medic in it is not out of options.
+    const bar = await page.evaluate(() => {
       const { squad } = __fight(2);
       const [a, b] = squad;
+      b.hp = 40;                       // hurt, but standing - the tactic's other kind of target
+      const hurtOnly = stimTarget();
       __drop(a);
-      const fresh = { from: a.downFrom, left: a.downTurns, spent: turnsDown(a) };
-      tickBleedOut(a);
-      const one = { left: a.downTurns, spent: turnsDown(a) };
-      tickBleedOut(a);
-      const two = { left: a.downTurns, spent: turnsDown(a) };
-      // A shorter clock still counts its own turns, not BLEED_OUT's.
-      b.scars = ['SLOW_TO_RISE']; __drop(b);
-      const short = { from: b.downFrom, left: b.downTurns, spent: turnsDown(b) };
-      tickBleedOut(b);
-      const shortOne = { left: b.downTurns, spent: turnsDown(b) };
-      combatActive = false;
-      return { fresh, one, two, short, shortOne, base: BLEED_OUT };
-    });
-    ok(`a fresh fall has spent none of its clock (${clock.fresh.left} of ${clock.fresh.from})`,
-      clock.fresh.from === clock.base && clock.fresh.left === clock.base && clock.fresh.spent === 0);
-    ok(`one of their own turns down reads as one (${clock.one.left} left)`, clock.one.spent === 1);
-    ok(`two reads as two (${clock.two.left} left)`, clock.two.spent === 2);
-    ok(`a shorter clock starts shorter (SLOW TO RISE: ${clock.short.from} of ${clock.base})`,
-      clock.short.from === clock.base - 1 && clock.short.spent === 0);
-    ok(`and still counts from its own start (${clock.shortOne.spent} spent of ${clock.short.from})`,
-      clock.shortOne.spent === 1);
-
-    // ── Both halves of the price are graded ─────────────────────────────────────────────
-    const ladder = await page.evaluate(() => {
-      const { squad } = __fight(1);
-      const [a] = squad;
-      const at = n => { a.laidThere = n; a.downFrom = BLEED_OUT; a.downTurns = BLEED_OUT - n;
-                        return { scar: scarChanceFor(a) }; };
-      const rows = [0, 1, 2].map(at);
-      const deep = (() => { a.laidThere = 9; a.downFrom = 12; a.downTurns = 3;
-                            return { scar: scarChanceFor(a) }; })();
-      a.laidThere = 0; combatActive = false;
-      return { rows, deep, base: SCAR_CHANCE, step: SCAR_PER_TURN, clear: DRAGGED_CLEAR };
-    });
-    const pct = x => `${(x * 100).toFixed(0)}%`;
-    ok(`a fall the fight outlives is the cheapest roll there is (${pct(ladder.rows[0].scar)})`,
-      Math.abs(ladder.rows[0].scar - ladder.base) < 1e-9);
-    ok(`each of their own turns down costs more ` +
-       `(${ladder.rows.map(r => pct(r.scar)).join(' / ')})`,
-      ladder.rows[1].scar > ladder.rows[0].scar && ladder.rows[2].scar > ladder.rows[1].scar);
-    ok(`the worst a live fall can roll is still a chance (${pct(ladder.rows[2].scar)})`,
-      ladder.rows[2].scar > 0 && ladder.rows[2].scar < 0.5);
-    ok(`and no clock however long makes it a certainty (${pct(ladder.deep.scar)})`,
-      ladder.deep.scar < 1);
-
-
-    // ── The same total, moved onto the falls that cost something ────────────────────────
-    // The claim the phase is published on, encoded so it cannot quietly become a tax. Weighted
-    // against the measured spread of clocks, the graded ladder has to land near the flat 8%
-    // it replaces rather than above it.
-    const weighted = await page.evaluate(() => {
-      const { squad } = __fight(1);
-      const [a] = squad;
-      const spread = [[0, 0.57], [1, 0.35], [2, 0.08]];   // the two arms, averaged
-      let mean = 0;
-      spread.forEach(([n, w]) => { a.laidThere = n; mean += scarChanceFor(a) * w; });
-      a.laidThere = 0; combatActive = false;
-      return mean;
-    });
-    ok(`weighted against the clocks actually measured it averages ${pct(weighted)}, ` +
-       `where the flat roll it replaces averaged 8-10%`,
-      weighted > 0.06 && weighted < 0.13);
-
-    // ── The health they come round on is FLAT, and that is the finding ──────────────────
-    // This was graded too, on the same reasoning, and was taken out again. The full account is
-    // on DRAGGED_CLEAR in game.js; the short version is that five samples appeared to split on
-    // depth, removing the health gradient did not bring it back, and the arm that remains deals
-    // fewer scars per run than the baseline - so nothing in the diff explains the split and
-    // fourteen expeditions cannot resolve it either way.
-    //
-    // What keeps it flat is a judgement, stated as one: a tenth of max health is fed straight
-    // back into the next fight, where a scar is only carried, so a gradient here can compound
-    // and the scar ladder cannot. Pinned as a deliberate flat rather than left as an absence
-    // for a later phase to helpfully "finish".
-    const ends = await page.evaluate(() => {
-      const { squad } = __fight(2);
-      const [quick, slow] = squad;
-      __lie(quick, 0);
-      __lie(slow, 2);
-      const spent = { quick: turnsDown(quick), slow: turnsDown(slow) };
-      recoverDowned('once the field is held');
-      combatActive = false;
-      return { spent, quick: quick.hp, slow: slow.hp, max: quick.maxHp,
-               qDown: quick.downTurns, sDown: slow.downTurns, share: DRAGGED_CLEAR };
-    });
-    ok(`the two of them lay there for ${ends.spent.quick} and ${ends.spent.slow} of their own turns`,
-      ends.spent.quick === 0 && ends.spent.slow === 2);
-    ok(`and both come round on the same ${Math.round(ends.share * 100)}% ` +
-       `(${ends.quick} and ${ends.slow} of ${ends.max})`,
-      ends.quick === ends.slow && ends.quick === Math.floor(ends.max * ends.share));
-    ok('because a share of health is fed back into the next fight where a scar is only carried',
-      ends.quick > 0 && ends.slow > 0);
-    ok('and both are up, because only the clock kills', ends.qDown === 0 && ends.sDown === 0);
-
-    // ── The scar roll lands on the one who lay there ────────────────────────────────────
-    // Rigged between the two chances: a roll that the graded ladder catches on the operator who
-    // was left and misses on the one who was not. Under the flat roll it did both or neither.
-    const marked = await page.evaluate(() => {
-      const { squad } = __fight(2);
-      const [quick, slow] = squad;
-      __lie(quick, 0); __lie(slow, 2);
-      // The chances the two of them SHOULD be rolling, worked out without touching laidThere -
-      // recoverDowned has to set that for itself. Driving markScars directly instead let a
-      // version of recoverDowned that never recorded it pass every assertion here.
-      const chanceAt = n => SCAR_CHANCE + SCAR_PER_TURN * n;
-      const between = (chanceAt(0) + chanceAt(2)) / 2;
-      const real = Math.random;
-      Math.random = () => between;
-      recoverDowned('once the field is held');
-      Math.random = real;
-      const out = { quick: (quick.scars || []).length, slow: (slow.scars || []).length,
-                    qc: chanceAt(0), sc: chanceAt(2), roll: between };
+      const withDown = stimTarget();
+      const out = { hurtOnly: hurtOnly && hurtOnly.id, withDown: withDown && withDown.id,
+                    aId: a.id, bId: b.id, cost: (MOMENTUM_TACTICS.find(t => t.id === 'STIM') || {}).cost };
       combatActive = false;
       return out;
     });
-    ok(`a roll between the two chances (${(marked.qc * 100).toFixed(0)}% and ${(marked.sc * 100).toFixed(0)}%) ` +
-       `marks the one who was left`, marked.slow === 1);
-    ok('and not the one who was picked straight up', marked.quick === 0);
-    ok('through the real ending, which is what has to know how long they lay there',
-      marked.roll > marked.qc && marked.roll < marked.sc);
+    ok(`with nobody down the tactic patches whoever is worst off (${bar.hurtOnly === bar.bId ? 'the hurt one' : '?'})`,
+      bar.hurtOnly === bar.bId);
+    ok('the moment somebody falls it takes them instead', bar.withDown === bar.aId);
+    ok(`and it is bought off the momentum bar, not out of a turn (${bar.cost} momentum)`, bar.cost > 0);
 
-    // ── The ascension protocol still doubles it ─────────────────────────────────────────
-    const grave = await page.evaluate(() => {
-      const { squad } = __fight(1);
-      const [a] = squad;
-      a.laidThere = 1;
-      const off = scarChanceFor(a);
-      ascension = 7;
-      const on = hasProtocol('MASSGRAVE') ? scarChanceFor(a) : null;
-      ascension = 0; a.laidThere = 0; combatActive = false;
-      return { off, on };
+    // ── Every route to the floor, including the one no medic is needed for ──────────────
+    const routes = await page.evaluate(() => {
+      const medic = ABILITIES.MEDIC.map(a => a.move).concat(FOURTH_ABILITIES.MEDIC.move);
+      const onlyMedic = REACHES_THE_DOWN.filter(m => !/^ITEM_/.test(m));
+      return { reach: REACHES_THE_DOWN,
+               // Which of them are a Medic's and nobody else's: the reason the bar matters.
+               medicOnly: onlyMedic.every(m => medic.includes(m)),
+               items: REACHES_THE_DOWN.filter(m => /^ITEM_/.test(m)),
+               classes: Object.keys(ABILITIES).filter(c =>
+                 ABILITIES[c].concat(FOURTH_ABILITIES[c] || [])
+                   .some(a => REACHES_THE_DOWN.includes(a.move))) };
     });
-    ok(`MASS GRAVE still doubles whatever the roll would have been ` +
-       `(${pct(grave.off)} to ${pct(grave.on)})`,
-      grave.on !== null && Math.abs(grave.on - grave.off * 2) < 1e-9);
+    ok(`the moves that reach the floor belong to the Medic alone (${routes.classes.join(', ')})`,
+      routes.medicOnly && routes.classes.length === 1 && routes.classes[0] === 'MEDIC');
+    ok(`so the rest of the line answers with the bag (${routes.items.join(', ')}) or the bar`,
+      routes.items.length === 2);
 
-    // ── And the manual says all of it ───────────────────────────────────────────────────
-    // A price the player is meant to weigh mid-fight has to be readable somewhere other than
-    // this file, and the numbers in it have to be the ones the code actually charges.
+    // ── Picked up before the end, and the roll never happens ────────────────────────────
+    const lifted = await page.evaluate(() => {
+      const { squad } = __fight(2);
+      const [a] = squad;
+      __drop(a);
+      const down = { down: (a.downTurns || 0) > 0, hp: a.hp };
+      a.hp = 25;                        // any heal above zero, however it arrived
+      const up = { onClock: bleedingOut().some(e => e.id === a.id), hp: a.hp };
+      const ids = recoverDowned('once the field is held');
+      combatActive = false;
+      return { down, up, inRoll: ids.includes(a.id) };
+    });
+    ok('a fall starts a clock', lifted.down.down && lifted.down.hp === 0);
+    ok('anything that lifts them above zero takes them off it', !lifted.up.onClock);
+    ok('and off the scar roll with it, which is what a turn spent on them buys',
+      !lifted.inRoll);
+
+    // ── The price is flat, and that is the finding ──────────────────────────────────────
+    const flat = await page.evaluate(() => {
+      const { squad } = __fight(2);
+      const [quick, slow] = squad;
+      __lie(quick, 0);                 // fell as the fight was finishing
+      __lie(slow, 2);                  // left through two of their own turns
+      const clocks = { quick: quick.downTurns, slow: slow.downTurns };
+      // Rolled through the real ending, on a value that sits above the flat chance: neither of
+      // them should be marked, however long they lay there.
+      const real = Math.random;
+      Math.random = () => SCAR_CHANCE + 0.01;
+      recoverDowned('once the field is held');
+      Math.random = real;
+      const out = { clocks, hp: { quick: quick.hp, slow: slow.hp }, max: quick.maxHp,
+                    scars: { quick: (quick.scars || []).length, slow: (slow.scars || []).length },
+                    chance: SCAR_CHANCE, share: DRAGGED_CLEAR };
+      combatActive = false;
+      return out;
+    });
+    ok(`the two of them lay there on different clocks (${flat.clocks.quick} and ${flat.clocks.slow} left)`,
+      flat.clocks.quick > flat.clocks.slow);
+    ok(`and come round on the same ${Math.round(flat.share * 100)}% ` +
+       `(${flat.hp.quick} and ${flat.hp.slow} of ${flat.max})`,
+      flat.hp.quick === flat.hp.slow && flat.hp.quick === Math.floor(flat.max * flat.share));
+    ok(`on the same ${Math.round(flat.chance * 100)}% roll, which a shade above the chance ` +
+       `misses for both of them`,
+      flat.scars.quick === 0 && flat.scars.slow === 0);
+
+    const graded = await page.evaluate(() => {
+      const { squad } = __fight(2);
+      const [quick, slow] = squad;
+      __lie(quick, 0); __lie(slow, 2);
+      const real = Math.random;
+      Math.random = () => SCAR_CHANCE - 0.01;   // a shade under: it has to catch BOTH
+      recoverDowned('once the field is held');
+      Math.random = real;
+      const out = { quick: (quick.scars || []).length, slow: (slow.scars || []).length };
+      combatActive = false;
+      return out;
+    });
+    ok('and a shade under the chance catches both of them, not just the one who was left',
+      graded.quick === 1 && graded.slow === 1);
+
+    // ── The manual says the flat numbers, and says the time does not count ──────────────
     const manual = await page.evaluate(() => {
       const body = CODEX.find(e => e.id === 'SCARS').body().join(' ');
-      const prompt = PROMPTS.find(p => p.id === 'BLEEDOUT').body;
-      return { body, prompt,
-               clear: body.includes(`${Math.round(DRAGGED_CLEAR * 100)}%`),
-               scar: body.includes(`${Math.round(SCAR_CHANCE * 100)}%`),
-               worst: body.includes(`${Math.round((SCAR_CHANCE + 2 * SCAR_PER_TURN) * 100)}%`),
+      return { share: body.includes(`${Math.round(DRAGGED_CLEAR * 100)}%`),
+               chance: body.includes(`${Math.round(SCAR_CHANCE * 100)}%`),
+               flat: /how long they lay there changes neither/i.test(body),
                bar: /STIM tactic/i.test(body),
-               warned: /every turn they spend down/i.test(prompt) };
+               prevention: /pick(ing)? them up|any heal/i.test(body) };
     });
-    ok('the field manual states what a fall the fight outlives costs', manual.clear && manual.scar);
-    ok('and what two turns on the floor costs instead', manual.worst);
+    ok('the field manual states both flat numbers', manual.share && manual.chance);
+    ok('and says outright that the time on the floor changes neither', manual.flat);
     ok('it names the bar as an answer, not just the medic', manual.bar);
-    ok('and the mid-fight prompt says getting to them early is worth more', manual.warned);
+    ok('and still says what skips the roll', manual.prevention);
   }
 };

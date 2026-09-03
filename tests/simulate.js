@@ -40,6 +40,30 @@
 // N11 was reported as +49% median score. Re-measured at 150 against its own predecessor it
 // is 14,460 -> 11,455, which is not an increase at all.
 //
+// ── And RUNS WON is not the safe alternative ────────────────────────────────────────────
+// A median is heavy-tailed, so the temptation is to reach for a proportion instead - runs won
+// out of runs, which feels like it ought to behave. It does not, at the sample sizes anyone
+// actually runs. Seven 14-expedition samples taken during D09, three of them on IDENTICAL
+// code:
+//
+//   identical build, three samples    runs won  2, 3, 6      deepest sector  5, 6, 7
+//
+// Two wins and six wins out of the same fourteen, from the same build. A Fisher exact test on
+// the pooled arms of that phase read p = 0.005 for a difference that a bisect then showed was
+// not there, because six correlated small samples had been treated as independent evidence.
+// Runs won is a proportion of a number that is itself tiny: fourteen runs at a ~20% win rate
+// is three wins, and three is inside its own noise.
+//
+// So: the win count is for describing a sample, never for comparing two. What DID separate in
+// that phase was the depth median, and only once seven samples were grouped by a single
+// bisected variable and read as a perfect separation - which is a permutation test on four
+// numbers against three, p = 0.03, and about as much as this instrument can honestly deliver
+// without going to the hundreds.
+//
+// A rule of thumb for the next phase that wants to move a difficulty dial: a change worth
+// shipping should show up in the same direction in three separate samples, and if it only
+// shows up in one statistic, bisect it before believing it.
+//
 // ── On the depth figures printed before C02 ─────────────────────────────────────────────
 // Every one of them is void, and by a wide margin. This file never called recoverDowned on a
 // won or a lost fight - only withdraw() reached it, because withdraw() does it for itself - so
