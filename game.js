@@ -7703,7 +7703,7 @@ function renderField() {
                     ${rank ? `<div class="rank-chip rank-${ent.gridPos}">${rank}</div>` : ''}
                     ${downTag}${threatTag}${soakTag}${sigTag}
                     ${eff ? `<div class="status-badge">${eff}</div>` : ''}
-                    <div class="hp-text">${ent.hp}/${ent.maxHp}</div>
+                    <div class="hp-text"><span class="hp-read">${ent.hp}<span class="hp-max">/${ent.maxHp}</span></span></div>
                     <div class="hp-container"><div class="hp-fill ${ent.isPlayer ? 'player-hp' : 'enemy-hp'}" style="width: ${(ent.hp / ent.maxHp) * 100}%"></div></div>
                     ${isDead ? '' : resistBadges(ent)}
                 </div><img class="portrait ${hoverCls}" src="${portraitFor(ent)}"${ent.stand ? ` data-stand="${ent.stand}"` : ''} style="${eliteGlow}">
@@ -7716,6 +7716,10 @@ function renderField() {
     fitEnemyRow(eTeam, eLoad);
     // After the commander's row has taken its own share, whatever is left over is the field's.
     fitField();
+    // Last, because a slot's width is what decides whether its readout fits, and fitField is
+    // what decides a slot's width. Nothing here feeds back into it: the slots are sized by CSS
+    // from --field-fit and the span is measured off the portraits, so neither notices the text.
+    fitSlotText();
     // An open file closes itself if its subject dies or the squad starts aiming.
     if (inspecting) {
         const subj = activeEntities.find(e => e.id === inspecting);
@@ -7983,6 +7987,58 @@ function fitField() {
     field.style.setProperty('--field-fit', String(f));
     recentreField(field, glass);
     return f;
+}
+
+// The second number in "100/120" is the bar directly underneath it, drawn again in digits. On a
+// row with room that redundancy earns its place - it says how far from whole something is
+// without having to read a 6px bar. On a row without room it is what makes the readouts run
+// together into one unbroken string: measured at 320px, "100/120" inks 37.9px into a slot that
+// is 48.1px at three hostiles, 34.9 at four and 27 at seven, so the digits of one readout abut
+// the next one's from three hostiles up. The current value alone inks about 16px and fits every
+// count at every width, so that is what a tight row prints.
+//
+// The test is the requirement itself, the same way fitField's is: the gap between one readout's
+// INK and the next one's. Not between their boxes - the box IS the slot and the text is nowrap,
+// so a box has never been able to see this, which is why the assertion written to catch it in
+// C11 passed against a field where the numbers were plainly on top of each other.
+const READOUT_GAP = 6;   // a character's width of clear air; below it the digits read as one number
+// Everything that is printed inside a slot rather than beside it. Swept at 320px with seven
+// hostiles, the readout was 10px over and it was not alone: FRONT ran 2.7px past its chip and
+// the incoming-damage tag was within a pixel of its own edge.
+const SLOT_TEXT = '.hp-text, .rank-chip, .threat-tag, .soak-tag, .status-badge, .down-tag';
+function slotInk(el) {
+    const r = document.createRange(); r.selectNodeContents(el);
+    const b = r.getBoundingClientRect();
+    return { l: b.left, r: b.right, w: b.width };
+}
+// A tight row stops paying for its decoration. Two things go, in this order of regret: the
+// second number in "100/120", which is the bar underneath it drawn again in digits, and the
+// letter-spacing on the chips and tags, which is 1px per character of pure tracking - five of
+// them on FRONT alone, which is twice the overflow it had.
+function fitSlotText() {
+    document.querySelectorAll('.battlefield .team').forEach(team => {
+        // Measured at full width first, so a row that has come out of a crowd gets its max back.
+        team.classList.remove('slot-tight');
+        const cells = [...team.querySelectorAll('.entity')];
+        const reads = [];
+        let tight = false;
+        cells.forEach(cell => {
+            const slot = cell.getBoundingClientRect().width;
+            cell.querySelectorAll(SLOT_TEXT).forEach(el => {
+                const ink = slotInk(el);
+                if (!ink.w) return;
+                if (ink.w > slot) tight = true;
+                if (el.classList.contains('hp-text')) reads.push(ink);
+            });
+        });
+        // And the readouts have to clear each OTHER, not just their own slots: on an uncrowded
+        // row the slots overlap by design, so a readout can sit well inside its box and still
+        // finish half a pixel from where its neighbour starts.
+        reads.sort((a, b) => a.l - b.l);
+        for (let i = 1; i < reads.length; i++)
+            if (reads[i].l - reads[i - 1].r < READOUT_GAP) { tight = true; break; }
+        team.classList.toggle('slot-tight', tight);
+    });
 }
 
 // justify-content centres the two team boxes; it does not centre the sprites, because each row
@@ -9599,7 +9655,7 @@ globalThis.WP = {
     RECRUIT_POOL, RECRUIT_COST, RECRUIT_HEALTH, recruitCost, recruitables, recruitById, recruitReach,
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
-    FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField,
+    FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,

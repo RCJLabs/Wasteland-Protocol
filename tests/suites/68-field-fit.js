@@ -50,6 +50,9 @@ module.exports = {
         // by a few pixels between runs - which measures the race, not the layout. Whether the
         // render fits on its own is asserted separately, and synchronously, further down.
         fitField();
+        // Slot widths are final now, so the text inside them can be fitted - the same order
+        // renderField uses.
+        fitSlotText();
         const s = fieldSpan(field);
         const glass = field.clientWidth;
         combatActive = false;
@@ -170,13 +173,17 @@ module.exports = {
     // The squad's row used to keep its overlap however crowded it got, on the grounds that four
     // operators read fine. They stopped reading fine once the field started fitting itself: at
     // four on a 320px screen the health numbers printed straight over each other.
+    // Re-encoded in D15. This measured the BOXES and so held on a field where five readouts
+    // printed as one unbroken run of digits: a readout's box is its slot by construction and
+    // the text is nowrap, so the ink leaves the box without the box ever changing size. The
+    // requirement was always about the ink. See suite 84, which holds the difference.
     const readouts = await page.evaluate(async () => {
       await __field(4, 5);
-      const boxes = t => [...document.querySelectorAll(`#${t} .hp-text`)]
-        .map(e => e.getBoundingClientRect()).sort((a, b) => a.left - b.left);
+      const ink = t => [...document.querySelectorAll(`#${t} .hp-text`)]
+        .map(slotInk).filter(b => b.w).sort((a, b) => a.l - b.l);
       const worst = list => list.reduce((w, b, i) =>
-        i === 0 ? w : Math.max(w, Math.round(list[i - 1].right - b.left)), 0);
-      return { player: worst(boxes('player-team')), enemy: worst(boxes('enemy-team')) };
+        i === 0 ? w : Math.max(w, Math.round(list[i - 1].r - b.l)), -99);
+      return { player: worst(ink('player-team')), enemy: worst(ink('enemy-team')) };
     });
     ok(`the squad's health readouts do not print over each other (${readouts.player}px of overlap)`,
       readouts.player <= 1);

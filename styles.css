@@ -256,6 +256,12 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .entity.targetable-ally .portrait { filter: drop-shadow(0 0 12px #6B8E23); cursor: pointer; }
 .entity.targetable-enemy:active .portrait { filter: drop-shadow(0 0 20px #ff0000) brightness(1.5); }
 .hp-text { font-size: clamp(9px, 2.5vw, 12px); font-weight: bold; margin-bottom: 2px; color: #fff; text-shadow: 1px 1px 3px #000; text-align: center; white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 3px; }
+/* What a slot too narrow for its own text stops paying for - see fitSlotText, which measures
+   the ink rather than the box. The max is the bar underneath drawn again in digits; the
+   letter-spacing on the chips and tags is tracking and nothing else. */
+.team.slot-tight .hp-max { display: none; }
+.team.slot-tight .rank-chip, .team.slot-tight .threat-tag, .team.slot-tight .sig-tag,
+.team.slot-tight .soak-tag, .team.slot-tight .down-tag { letter-spacing: 0; }
 .hp-container { background: #111; height: 6px; width: 85%; border: 1px solid #000; box-shadow: 0 0 4px #000; margin: 0 auto; }
 .hp-fill { height: 100%; transition: width 0.3s ease; }
 .player-hp { background-color: #8B0000; } .enemy-hp { background-color: #8B0000; }
@@ -733,7 +739,13 @@ button.reach-short { border-color: #7a5a20; }
    badge wraps rather than truncating: an ellipsis ate exactly the part worth reading. */
 .sig-tag { font-size: 7.5px; line-height: 1.25; letter-spacing: .5px; text-transform: uppercase;
   text-align: center; color: #d98a5a; border: 1px solid #6b3a22; background: rgba(20,8,4,0.78);
-  padding: 1px 2px; margin-bottom: 2px; overflow-wrap: anywhere; }
+/* No overflow-wrap at all, which is the default and is the point: it wraps at the spaces and
+   nowhere else. It used to say "anywhere", which breaks INSIDE a word as soon as the line is
+   short, so RANGING SHOT came out as RANG / ING / SHOT in a slot with room for RANGING on a
+   line of its own. A name that will not fit on any line now overhangs its slot by a few pixels
+   instead of being cut in half - the badge is still a name, which is the whole reason C11
+   chose wrapping over an ellipsis. */
+  padding: 1px 2px; margin-bottom: 2px; }
 /* A repeat of a tag already printed in this line. Held in the layout so every card in the row
    is the same height, but not painted twice. */
 .sig-tag.sig-echo { visibility: hidden; }
