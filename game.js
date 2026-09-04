@@ -5738,7 +5738,13 @@ function operatorCardHtml(char) {
         let posText = char.gridPos === 1 ? '[1] FRONTLINE' : char.gridPos === 2 ? '[2] MIDLINE' : char.gridPos === 3 ? '[3] BACKLINE' : '[X] BENCHED'; let posClass = `pos-btn-${char.gridPos}`; let btnGroupHtml = '';
 
         if (activePosSelector === char.id) { btnGroupHtml = `<button class="upg-btn sub-menu-btn pos-btn-1" data-action="assign-slot" data-id="${char.id}" data-slot="1">[1] FRONT</button> <button class="upg-btn sub-menu-btn pos-btn-2" data-action="assign-slot" data-id="${char.id}" data-slot="2">[2] MID</button> <button class="upg-btn sub-menu-btn pos-btn-3" data-action="assign-slot" data-id="${char.id}" data-slot="3">[3] BACK</button> <button class="upg-btn sub-menu-btn pos-btn-0" data-action="assign-slot" data-id="${char.id}" data-slot="0">[X] BENCH</button> <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
-        else if (activePerkSelector === char.id) { btnGroupHtml = PERK_POOL.map(p => `<button class="upg-btn sub-menu-btn perk-btn" data-action="assign-perk" data-id="${char.id}" data-perk="${p.id}">${p.label}</button>`).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
+        else if (activePerkSelector === char.id) { btnGroupHtml = buyableFor(char).map(p => {
+            const twin = p.sig ? SIG_PERKS.find(s => s.fork === SIG_PERKS.find(x => x.id === p.id).fork && s.id !== p.id) : null;
+            const short = scrap < p.cost;
+            return `<button class="upg-btn sub-menu-btn perk-btn${p.sig ? ' perk-sig' : ''}" ${short ? 'disabled' : ''} data-action="assign-perk" data-id="${char.id}" data-perk="${p.id}"`
+                + (twin ? ` title="Closes ${twin.name}"` : '')
+                + `>${p.label}${p.sig ? ` (${p.cost} SCRAP)` : ''}</button>`;
+        }).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
         else if (activeScarSelector === char.id) { btnGroupHtml = scarList.map(sc => `<button class="upg-btn sub-menu-btn scar-btn" ${scrap < scarPrice ? 'disabled' : ''} data-action="treat-scar" data-id="${char.id}" data-scar="${sc.id}" title="${sc.desc}">TREAT ${sc.name}</button>`).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
         else { btnGroupHtml = `<button class="upg-btn ${posClass}" data-action="pos-menu" data-id="${char.id}">${posText}</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="HP" data-cost="${cost}">+10 HP</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="DMG" data-cost="${cost}">+3 DMG</button> ${medHtml}${scarBtn}`; }
 
@@ -5984,9 +5990,38 @@ function bankPerkOffer() {
     if (pendingPerkOffers.length) renderPerkOffer(); else renderMap();
 }
 
+// A level point is what an operator's identity is bought with, and until now the Outpost's
+// spend path did not know signatures existed: assignPerk resolved against PERK_POOL only, so a
+// signature id handed to it fell out of `if (!perk) return` without spending the point or
+// granting anything. Three separate sources bank points that could only ever become +5 DMG -
+// the BANK button, the Barracks head start (four levels at its cap, four points, and a pitch
+// that says "grants early Perk point"), and the Oracle event.
+//
+// It resolves both now. Two things keep the promotion screen the better place to be standing:
+// the offer is free where this costs scrap, and the offer is where a fork is presented as the
+// either/or it is. Buying a half here closes the other half exactly as taking it there does.
+const SIG_BUY_BASE = 60;
+function sigBuyCost() { return Math.round(SIG_BUY_BASE * sectorRewardMult()); }
+// What this operator could still be sold: the open forks' halves, and every stat perk.
+function buyableFor(char) {
+    return [...unheldSigsFor(char).map(p => ({ id: p.id, label: p.name, sig: true, cost: sigBuyCost() })),
+            ...PERK_POOL.map(p => ({ id: p.id, label: p.label, sig: false, cost: 0 }))];
+}
 function assignPerk(charId, perkId) {
     let char = playerRoster.find(c => c.id === charId);
     if (!char || char.perkPoints <= 0) return;
+    const sig = unheldSigsFor(char).find(p => p.id === perkId);
+    if (sig) {
+        const cost = sigBuyCost();
+        if (scrap < cost) return;
+        scrap -= cost;
+        if (sig.apply) sig.apply(char);
+        if (!char.traits) char.traits = [];
+        char.traits.push(sig.id);
+        char.perkPoints--;
+        activePerkSelector = null; playSFX('heal'); saveGameState(); renderOutpost();
+        return;
+    }
     const perk = PERK_POOL.find(p => p.id === perkId);
     if (!perk) return;
     perk.apply(char);
@@ -6340,7 +6375,11 @@ function signOnRecruit() {
     ch.quirk = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
     if (ch.quirk) { ch.maxHp += ch.quirk.hp; ch.dmgBase += ch.quirk.dmg; ch.speed += ch.quirk.spd; ch.hp = Math.min(ch.hp, ch.maxHp); }
     const par = Math.max(1, Math.round(playerRoster.reduce((a, c) => a + c.level, 0) / Math.max(1, playerRoster.length)));
-    while (ch.level < par) { ch.level++; ch.perkPoints++; ch.xpToNext = Math.floor(ch.xpToNext * 1.5); }
+    // The 1.5 that used to be here is the curve XP_CURVE replaced, and its own comment says why:
+    // "levels kept stalling, starving the perk economy". Levelling a recruit up to par on it left
+    // them needing 1702 XP for level 9 where the squad they joined needs 810 - 2.1x, and 3.2x by
+    // level 12 - so a signed recruit was quietly put on the curve the rest of the game abandoned.
+    while (ch.level < par) { ch.level++; ch.perkPoints++; ch.xpToNext = Math.floor(ch.xpToNext * XP_CURVE); }
     playerRoster.push(ch);
     pendingRecruit.taken = true;
     if (runStats) runStats.recruited = (runStats.recruited || 0) + 1;
@@ -10099,7 +10138,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, unheldSigsFor, forksFor, openForksFor, validatePerkForks, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,

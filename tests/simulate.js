@@ -391,7 +391,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, field: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  affixes: {}, champions: 0, eliteUnits: 0, affixedUnits: 0,
-                 promotions: 0, sigsTaken: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
+                 promotions: 0, sigsTaken: 0, sigsBought: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
                  extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false,
@@ -624,7 +624,22 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     playerRoster.forEach(c => {
       const cost = 30 + (c.upgradeCount * 25);
       if (c.gridPos > 0 && scrap >= cost * 2) { scrap -= cost; c.upgradeCount++; c.maxHp += 10; c.hp += 10; c.dmgBase += 3; }
-      while (c.perkPoints > 0) { assignPerk(c.id, PERK_POOL[Math.floor(Math.random() * PERK_POOL.length)].id); }
+      // E08: a banked point can buy a signature at the Outpost now, for scrap on top of the
+      // point. This loop spent every point on a random stat card, which is not what a player
+      // does when the class verb is on the same menu - and left the harness unable to measure
+      // the change at all. Identity first while the purse covers it, stats with the rest.
+      let guard = 0;
+      while (c.perkPoints > 0 && guard++ < 40) {
+        const had = c.perkPoints;
+        const canBuy = typeof unheldSigsFor === 'function' && typeof sigBuyCost === 'function';
+        const open = canBuy ? unheldSigsFor(c) : [];
+        if (open.length && scrap >= sigBuyCost()) {
+          assignPerk(c.id, open[Math.floor(Math.random() * open.length)].id);
+          if (c.perkPoints < had) { stat.sigsBought = (stat.sigsBought || 0) + 1; continue; }
+        }
+        assignPerk(c.id, PERK_POOL[Math.floor(Math.random() * PERK_POOL.length)].id);
+        if (c.perkPoints === had) break;
+      }
     });
   };
 
@@ -1664,6 +1679,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   results.forEach(r => Object.entries(r.items).forEach(([k, v]) => { items[k] = (items[k] || 0) + v; }));
   line('items used per run', Object.entries(items).map(([k, v]) => `${k} ${(v / n).toFixed(1)}`).join(', ') || 'none');
   line('promotions per run', `${mean(nums('promotions')).toFixed(1)} (${mean(nums('sigsTaken')).toFixed(1)} signatures)`);
+  line('signatures bought at the Outpost', `${mean(nums('sigsBought')).toFixed(1)} per run`);
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   line('armories visited per run', `${mean(nums('shops')).toFixed(1)} (${Math.round(mean(nums('shopScrap')))} scrap spent)`);
   const sigs = {};
