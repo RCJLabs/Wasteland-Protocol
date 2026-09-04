@@ -530,7 +530,8 @@ const PERK_POOL = [
 // A passive may carry `state`, which reports live the way a signature's does: a ward that is
 // down has to stop claiming to be up, or the tag is worse than no tag.
 const BOSS_PASSIVES = {
-    PLATING: { name: 'Re-Plating', desc: 'Welds 6 points of armour back on every turn, up to 30 over its base.' },
+    PLATING: { name: 'Re-Plating', desc: 'Welds 6 points of armour back on every turn, up to 30 over its base.',
+               descOf: () => `Welds ${plate(6)} points of armour back on every turn, up to ${plate(30)} over its base.` },
     FEAST:   { name: 'Feast',      desc: 'Heals itself off a share of every wound it opens.' },
     VENOM:   { name: 'Venom Pump', desc: 'Doses itself every 2 turns: +14% damage and +2 speed each time, but the pressure sloughs 4 armour and opens it to +15% damage taken. Five doses at most.' },
     // The one that was genuinely missing. The others are declarations of what was already there.
@@ -1872,6 +1873,26 @@ const FACTION_ALLIES = Object.fromEntries(Object.entries(FACTIONS).map(([k, v]) 
 // Difficulty still climbs hard, but through lethality rather than bullet sponges: health
 // tracks player damage growth so a fight stays ~10 rounds at any depth, while damage
 // outpaces player health so a run reliably ends somewhere around sector 10.
+// E04: armour is a flat subtraction in a fight where everything else multiplies. mitigate ends
+// `Math.max(1, cd - rv - ac)` with every multiplier already folded into cd, so a plate is worth
+// exactly its face value against a hit that grew by the curve below. Measured on the mean
+// hostile: a defensive turn worth +8 absorbs 67% of an incoming hit at sector 1 tier 1 and 5.3%
+// at sector 7 tier 10 - the same turn, devalued twelvefold, with nothing about it changed.
+//
+// So a grant is priced in the currency of the hit it subtracts from. This is dmgMult without
+// difficultyMult: difficulty is a knob that is meant to make the game harder, and folding it in
+// here would hand the plate back exactly what the difficulty took. It is 1.0 at sector 1 tier 1,
+// so every sector-one number is byte-identical to what it was.
+// One grant already did this and had done for a long time - the elite buff at the ELITE_TIERS
+// site reads `Math.floor(15 * dmgMult)` - which is the whole argument for the rest of them.
+function armourScale() {
+    return (1 + ((currentTier - 1) * TIER_DMG_GROWTH)) * Math.pow(SECTOR_DMG_SCALE, currentSector - 1);
+}
+function plate(n) { return Math.round(n * armourScale()); }
+// A description that quotes a scaled grant has to quote it live, or the button lies about the
+// turn it is selling. Both fall back to the written line for anything that does not scale.
+function tacticDesc(t) { return t && t.descOf ? t.descOf() : (t ? t.desc : ''); }
+function passiveDesc(bp) { return bp ? (bp.descOf ? bp.descOf() : bp.desc) : ''; }
 const SECTOR_HP_SCALE = 1.25;
 const SECTOR_DMG_SCALE = 1.28;   // eased from 1.32: measured, lethality still wins the long game
 const XP_CURVE = 1.35;         // was 1.5 - levels kept stalling, starving the perk economy
@@ -2153,7 +2174,7 @@ const CODEX = [
     ] },
     { id: 'MOMENTUM', title: 'MOMENTUM AND OVERDRIVE', body: () => [
         'Momentum builds as the squad takes and deals damage, and it is a market, not a fuse.',
-        ...MOMENTUM_TACTICS.map(t => `${t.label} (${t.cost}%) — ${t.desc} Costs no action.`),
+        ...MOMENTUM_TACTICS.map(t => `${t.label} (${t.cost}%) — ${tacticDesc(t)} Costs no action.`),
         `At ${OVERDRIVE_AT}% any operator can spend the lot on an Overdrive instead. Overcharged Cell lowers that to ${OVERDRIVE_AT_CHARGED}%.`,
         'Each class carries two Overdrives. The first full bar offers both; using one locks the class to it for the run.'
     ] },
@@ -2190,7 +2211,7 @@ const CODEX = [
     { id: 'ENDING', title: 'THE END OF THE ROAD', body: () => [
         `The road runs ${FINAL_SECTOR} sectors. It used to run forever - the map kept generating, the commanders kept cycling, and an expedition could be long or short but never finished.`,
         `Sector ${FINAL_SECTOR} is the last one. ${FINAL_BOSS ? FINAL_BOSS.name : 'The last warlord'} is at the top of it, it is not one of the ${BOSS_ROTATION.length} that hold the road, and it is never dealt at any other depth.`,
-        FINAL_BOSS ? `${FINAL_BOSS.blurb} ${(BOSS_PASSIVES[FINAL_BOSS.passive] || {}).desc || ''}` : '',
+        FINAL_BOSS ? `${FINAL_BOSS.blurb} ${passiveDesc(BOSS_PASSIVES[FINAL_BOSS.passive])}` : '',
         'Halfway down it opens the ossuary and the commanders this expedition already put in the ground get up again, at a fraction of what they were - and while any of them stands, nothing you land on the warlord lands properly. What you killed on the way here is what stands between you and it.',
         `Felling it wins the expedition. The win banks the moment it goes down - ${VICTORY.skulls} Skulls and a x${VICTORY.scoreMult} score - so nothing you do afterwards can take it back.`,
         'And afterwards is still there. Winning puts a question rather than a full stop: walk out with it, which pays the extraction bonus on top, or press on past the gate, where the rotation resumes, the scaling keeps climbing, and the run ends the old ways.'
@@ -2913,7 +2934,7 @@ const ROSTER_TEMPLATE = [
     { id: 'p2', name: "Medic", classType: "MEDIC", maxHp: 50, hp: 50, speed: 12, armor: 0, isPlayer: true, dmgBase: 10, img: "hero_medic.webp", scale: 1.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 2, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { cauterize: 0 } },
     { id: 'p3', name: "Scavenger", classType: "SCAVENGER", maxHp: 45, hp: 45, speed: 15, armor: 0, isPlayer: true, dmgBase: 15, img: "hero_scavenger.webp", scale: 1.25, hpDrop: -25, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 5 }, upgradeCount: 0, gridPos: 3, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { flashbang: 0, acid_flask: 0 } },
     { id: 'p4', name: "Pyro", classType: "PYROMANIAC", maxHp: 55, hp: 55, speed: 11, armor: 0, isPlayer: true, dmgBase: 12, img: "hero_pyro.webp", scale: 1.1, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 10 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { molotov: 0, thermite: 0 } },
-    { id: 'p5', name: "Breacher", classType: "SHOTGUNNER", maxHp: 65, hp: 65, speed: 9, armor: 5, isPlayer: true, dmgBase: 22, img: "hero_shotgunner.webp", scale: 1.15, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { buckshot: 0, execute_shot: 0 } },
+    { id: 'p5', name: "Breacher", classType: "SHOTGUNNER", maxHp: 65, hp: 65, speed: 9, isPlayer: true, dmgBase: 22, img: "hero_shotgunner.webp", scale: 1.15, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { buckshot: 0, execute_shot: 0 } },
     { id: 'p6', name: "Ghost", classType: "SNIPER", maxHp: 40, hp: 40, speed: 16, armor: 0, isPlayer: true, dmgBase: 28, img: "hero_sniper.webp", scale: 0.9, hpDrop: -10, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { deadeye: 0, spotters_mark: 0 } },
     { id: 'p7', name: "War Hound", classType: "HOUND", maxHp: 35, hp: 35, speed: 19, armor: 0, isPlayer: true, dmgBase: 16, img: "hero_hound.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 10, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100, perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { feral_bite: 0, rip_and_tear: 0 } }
 ];
@@ -2927,7 +2948,7 @@ const ROSTER_TEMPLATE = [
 const RECRUIT_POOL = [
     { id: 'p8', name: "Trench Fiend", classType: "TRENCH_FIEND", rank: 1,
       pitch: "Dug in at the bottom of somebody else's trench, still holding the saw.",
-      maxHp: 72, hp: 72, speed: 7, armor: 3, isPlayer: true, dmgBase: 21, img: "hero_fiend.webp", scale: 1.15, hpDrop: 0,
+      maxHp: 72, hp: 72, speed: 7, isPlayer: true, dmgBase: 21, img: "hero_fiend.webp", scale: 1.15, hpDrop: 0,
       stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, chargeTurns: 0,
       resistances: { phys: 5, bio: 5, energy: 0 }, upgradeCount: 0, gridPos: 0, level: 1, xp: 0, xpToNext: 100,
       perkPoints: 0, traits: [], augments: [], quirk: null, cooldowns: { ripsaw: 0, over_the_top: 0 } },
@@ -3890,10 +3911,10 @@ function nextTurn() {
 function executeSelfAction(type) {
     let actEnt = turnQueue[activeIndex];
     if (type === 'IRON_GUARD') {
-        actEnt.armor += 15; actEnt.armorTurns = 2; actEnt.guardTurns = 2; actEnt.cooldowns.iron_guard = 3;
+        actEnt.armor += plate(15); actEnt.armorTurns = 2; actEnt.guardTurns = 2; actEnt.cooldowns.iron_guard = 3;
         // Armour alone only ever protected the Bruiser. Bracing now covers the ranks behind it,
         // which is what gives the front rank a job beyond absorbing whatever walks into it.
-        log(`> ${actEnt.name} braces and covers the line behind (+15 ARMOR).`, "log-status");
+        log(`> ${actEnt.name} braces and covers the line behind (+${plate(15)} ARMOR).`, "log-status");
         spawnFCT(actEnt.id, "+ARMOR", "fct-heal"); playSFX('heal');
     }
     // The Fiend's opposite of bracing: he climbs out of the hole and pays for it in blood.
@@ -6185,7 +6206,7 @@ function recruitCardHtml(tpl) {
             <div class="recruit-name">${tpl.name}</div>
             <div class="recruit-class">${RANK_LABELS[tpl.rank]} RANK · ${recruitReach(tpl)}</div>
             <div class="recruit-pitch">${tpl.pitch}</div>
-            <div class="recruit-stats">HP ${tpl.maxHp} · DMG ${tpl.dmgBase} · SPD ${tpl.speed}${tpl.armor ? ` · ARM ${tpl.armor}` : ''}</div>
+            <div class="recruit-stats">HP ${tpl.maxHp} · DMG ${tpl.dmgBase} · SPD ${tpl.speed}</div>
             ${res ? `<div class="recruit-res">${res}</div>` : ''}
             <ul class="recruit-verbs">${verbs}</ul>
         </div>
@@ -7377,7 +7398,10 @@ const STIM_FLOOR = 0.01;   // of max health, on someone barely scratched
 const STIM_NEED = 0.24;    // added in proportion to what they are missing
 const MOMENTUM_TACTICS = [
     { id: 'FOCUS',   cost: 25, label: 'FOCUS',  desc: "The squad's next attack deals +30% damage." },
-    { id: 'HOLD',    cost: 25, label: 'HOLD',   desc: 'The whole line digs in: +12 armour for two turns.' },
+    // E04: the plate is priced to the depth now, so the button has to quote what it will grant
+    // rather than the number written at the call site. descOf is read through tacticDesc.
+    { id: 'HOLD',    cost: 25, label: 'HOLD',   desc: 'The whole line digs in: +12 armour for two turns.',
+      descOf: () => `The whole line digs in: +${plate(12)} armour for two turns.` },
     { id: 'STIM',    cost: 30, label: 'STIM',   desc: 'Cleanse the worst-off operator and patch them - more the worse they are.' },
     { id: 'BREAK',   cost: 35, label: 'BREAK',  desc: 'Whichever hostile is winding up the worst blow loses its next turn.' },
     { id: 'PRESS',   cost: 40, label: 'PRESS',  desc: 'The current operator acts twice this turn.' }
@@ -7559,6 +7583,12 @@ function initiateCombat(nodeType, isEliteNode) {
 
     // Enemies are built fresh each fight; the squad persists, so anything left on a unit has to
     // be cleared here or it rides into the next node.
+    // E04: the squad's armour is granted in the fight and nowhere else. Two templates used to
+    // declare a base value and the recruit card advertised it, and this line zeroed it before the
+    // first blow of every fight that has ever been fought - so it was a number on a card and
+    // nothing else. Deleted rather than honoured: honouring it is a buff to two operators and
+    // wants its own measurement, and a stat the engine has never applied is not a balance change
+    // to remove.
     playerRoster.forEach(ent => { ent.stunnedTurns = 0; ent.bleedingTurns = 0; ent.armorTurns = 0; ent.armor = 0;
         ent.oiledTurns = 0; ent.corrodedTurns = 0; ent.markedTurns = 0; ent.guardTurns = 0; });
     // THE WALL: whoever is holding the front opens already braced. Set after the clear above
@@ -7566,7 +7596,7 @@ function initiateCombat(nodeType, isEliteNode) {
     // a turn on - including the part where hits aimed past them are taken by them instead.
     if (hasDoctrine('THE_WALL')) {
         const front = deployedRoster.find(p => p.gridPos === 1 && p.hp > 0);
-        if (front) { front.armor += 15; front.armorTurns = 2; front.guardTurns = 2;
+        if (front) { front.armor += plate(15); front.armorTurns = 2; front.guardTurns = 2;
             log(`> ${front.name} is already set. THE WALL holds.`, 'log-status'); }
     }
     // SHELL SHOCK: the fight starts without them. Set after the clear above, so it survives it.
@@ -7807,7 +7837,7 @@ function renderField() {
             const dose = ent.venom ? ` ${ent.venomStacks || 0}/${ent.venom.max}` : '';
             let live = '';
             try { live = bossPas.state ? (bossPas.state(ent) || '') : ''; } catch (e) { live = ''; }
-            tagText = `${bossPas.name.toUpperCase()}${dose}${live}`; tagTitle = bossPas.desc;
+            tagText = `${bossPas.name.toUpperCase()}${dose}${live}`; tagTitle = passiveDesc(bossPas);
         }
         if (!ent.isPlayer && !isDead && sigOf(ent)) {
             const s = sigOf(ent);
@@ -7958,7 +7988,7 @@ function renderCommandDeck() {
     if (!pendingAction && MOMENTUM_TACTICS.some(t => momentum >= tacticCost(t))) {
         firePrompt('MOMENTUM');
         deckHtml += `<div class="tactic-row">` + MOMENTUM_TACTICS.map(t =>
-            `<button class="tactic-btn" ${momentum < tacticCost(t) ? 'disabled' : ''} ${(t.id === 'STIM' && !stimTarget()) || (t.id === 'BREAK' && !breakTarget()) ? 'disabled' : ''} data-action="tactic" data-kind="${t.id}" title="${t.desc}"><span class="tactic-name">${t.label}</span><span class="tactic-cost">⚡${tacticCost(t)}</span></button>`
+            `<button class="tactic-btn" ${momentum < tacticCost(t) ? 'disabled' : ''} ${(t.id === 'STIM' && !stimTarget()) || (t.id === 'BREAK' && !breakTarget()) ? 'disabled' : ''} data-action="tactic" data-kind="${t.id}" title="${tacticDesc(t)}"><span class="tactic-name">${t.label}</span><span class="tactic-cost">⚡${tacticCost(t)}</span></button>`
         ).join('') + `</div>`;
     }
 
@@ -8058,8 +8088,8 @@ function applyTurnStartEffects(ent) {
     // enemy that braced permanently lost the armour it started with.
     if (ent.armorTurns > 0) { ent.armorTurns--; if (ent.armorTurns === 0) { ent.armor = ent.baseArmor || 0; } chg = true; }
     if (ent.bossPassive === 'PLATING' && ent.hp > 0) {
-        const cap = (ent.baseArmor || 0) + 30;
-        if (ent.armor < cap) { ent.armor = Math.min(cap, ent.armor + 6); spawnFCT(ent.id, "+PLATE", "fct-heal"); chg = true; }
+        const cap = (ent.baseArmor || 0) + plate(30);
+        if (ent.armor < cap) { ent.armor = Math.min(cap, ent.armor + plate(6)); spawnFCT(ent.id, "+PLATE", "fct-heal"); chg = true; }
     }
     if (ent.guardTurns > 0) { ent.guardTurns--; chg = true; }
     if (ent.oiledTurns > 0) { ent.oiledTurns--; chg = true; }
@@ -8412,8 +8442,8 @@ function spendTactic(kind) {
         spawnFCT(t.id, `+${heal}`, 'fct-heal'); playSFX('heal');
     } else if (kind === 'HOLD') {
         const line = activeEntities.filter(e => e.isPlayer && e.hp > 0);
-        line.forEach(e => { e.armor += 12; e.armorTurns = Math.max(e.armorTurns || 0, 2); spawnFCT(e.id, 'BRACED', 'fct-combo'); });
-        log(`> HOLD: the line digs in. +12 armour across ${line.length}.`, 'log-heal');
+        line.forEach(e => { e.armor += plate(12); e.armorTurns = Math.max(e.armorTurns || 0, 2); spawnFCT(e.id, 'BRACED', 'fct-combo'); });
+        log(`> HOLD: the line digs in. +${plate(12)} armour across ${line.length}.`, 'log-heal');
         playSFX('click');
     } else if (kind === 'BREAK') {
         const t = breakTarget();
@@ -8768,7 +8798,7 @@ function resolveAction(targetId) {
             applyDamageHit(actEnt, target, Math.floor(baseDmg * dmgMult), atkType, null);
         }
         if (pendingAction === 'SHIELD_SLAM') {
-            actEnt.armor += 8; actEnt.armorTurns = Math.max(actEnt.armorTurns || 0, 2);
+            actEnt.armor += plate(8); actEnt.armorTurns = Math.max(actEnt.armorTurns || 0, 2);
             spawnFCT(actEnt.id, "+ARMOR", "fct-heal");
         }
 
@@ -9439,7 +9469,7 @@ function executeEnemyAi(enemy) {
 
         else if (enemy.sig === 'AEGIS') {
             const covered = activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.id !== enemy.id);
-            covered.forEach(e => { e.armor = (e.armor || 0) + 8; e.armorTurns = Math.max(e.armorTurns || 0, 2); spawnFCT(e.id, '+ARMOR', 'fct-heal'); });
+            covered.forEach(e => { e.armor = (e.armor || 0) + plate(8); e.armorTurns = Math.max(e.armorTurns || 0, 2); spawnFCT(e.id, '+ARMOR', 'fct-heal'); });
             log(covered.length ? `> ${enemy.name} throws plating over ${covered.length === 1 ? 'its escort' : 'its escorts'}.`
                                : `> ${enemy.name} projects a field over nobody.`, 'log-status');
             playSFX('heal');
@@ -9467,7 +9497,7 @@ function executeEnemyAi(enemy) {
         else if (enemy.sig === 'REFIT') {
             // You stripped the plating last time. It brought a welder.
             const back = Math.max(0, (enemy.baseArmor || 0) - (enemy.armor || 0));
-            enemy.armor = (enemy.armor || 0) + Math.max(6, back);
+            enemy.armor = (enemy.armor || 0) + plate(Math.max(6, back));
             enemy.corrodedTurns = 0;
             log(`> ${enemy.name} welds its plating back on.`, 'log-status');
             spawnFCT(enemy.id, '+PLATE', 'fct-heal'); playSFX('heal');
@@ -9508,7 +9538,7 @@ function executeEnemyAi(enemy) {
                 log(`> ${enemy.name} whistles, and ${hound.name} gets back up.`, 'log-dmg');
                 spawnFCT(hound.id, 'UP AGAIN', 'fct-heal'); playSFX('enrage'); triggerShake();
             } else if (hound) {
-                hound.armor = (hound.armor || 0) + 10; hound.armorTurns = Math.max(hound.armorTurns || 0, 2);
+                hound.armor = (hound.armor || 0) + plate(10); hound.armorTurns = Math.max(hound.armorTurns || 0, 2);
                 log(`> ${enemy.name} whistles ${hound.name} back into the plate.`, 'log-status');
                 spawnFCT(hound.id, '+ARMOR', 'fct-heal'); playSFX('heal');
             } else {
@@ -9537,7 +9567,7 @@ function executeEnemyAi(enemy) {
                 log(`> ${enemy.name} patches the ward generator back up.`, 'log-status');
                 spawnFCT(gen.id, `+${mend}`, 'fct-heal'); playSFX('heal');
             } else if (gen && gen.hp > 0) {
-                gen.armor = (gen.armor || 0) + 10; gen.armorTurns = Math.max(gen.armorTurns || 0, 2);
+                gen.armor = (gen.armor || 0) + plate(10); gen.armorTurns = Math.max(gen.armorTurns || 0, 2);
                 log(`> ${enemy.name} plates the generator before you can get to it.`, 'log-status');
                 spawnFCT(gen.id, '+ARMOR', 'fct-heal'); playSFX('heal');
             } else {
@@ -9564,7 +9594,7 @@ function executeEnemyAi(enemy) {
     }
 
     if (intent.type === 'DEFEND') {
-        enemy.armor += 15; enemy.armorTurns = 2; spawnFCT(enemy.id, "+ARMOR", "fct-heal"); log(`> ${enemy.name} took a defensive stance!`, "log-status"); playSFX('heal');
+        enemy.armor += plate(15); enemy.armorTurns = 2; spawnFCT(enemy.id, "+ARMOR", "fct-heal"); log(`> ${enemy.name} took a defensive stance!`, "log-status"); playSFX('heal');
         enemy.intent = rollIntent(enemy); checkWinState(); return;
     }
 
@@ -9861,7 +9891,7 @@ globalThis.WP = {
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, armourScale, plate, tacticDesc, passiveDesc, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },

@@ -141,10 +141,12 @@ module.exports = {
       boss.armor = 10;
       applyTurnStartEffects(boss); const one = boss.armor;
       for (let i = 0; i < 25; i++) applyTurnStartEffects(boss);
-      return { one, capped: boss.armor, cap: (boss.baseArmor || 0) + 30 };
+      // E04: the regrowth and its ceiling are both priced in the fight's own money now, so the
+      // 30 written at the call site is 30 at sector one and more than that wherever this boss is.
+      return { one, capped: boss.armor, cap: (boss.baseArmor || 0) + plate(30), written: plate(30) };
     });
     ok('plating regrows each turn', plating.one > 10);
-    ok('but not without limit', plating.capped === plating.cap);
+    ok(`but not without limit (+${plating.written} over its own plate)`, plating.capped === plating.cap);
 
     const feast = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
