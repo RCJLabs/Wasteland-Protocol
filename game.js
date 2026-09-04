@@ -3692,6 +3692,11 @@ function advanceBounties(type) {
 // What the board reads off a fight that has just been won. Every one of these is a way the
 // fight was won rather than a thing that happened during it, which is the whole point of them.
 function noteFightWon() {
+    // E01: the harness walks the turn queue itself and reaches checkWinState for about seven
+    // kills in eight, so it cannot tell whether the engine already banked this fight without
+    // being told. This is the same record runStats.bosses and runStats.elites already keep, and
+    // for the same reason: reconcile rather than add.
+    if (runStats) runStats.fightsWon = (runStats.fightsWon || 0) + 1;
     const f = fightLog || newFightLog();
     if (!f.hurt) checkBountyProgress('FLAWLESS');
     if (f.turns > 0 && f.turns < BLITZ_TURNS) checkBountyProgress('BLITZ');
@@ -9834,6 +9839,7 @@ globalThis.WP = {
     get bonds() { return bonds; }, set bonds(v) { bonds = v; },
     get bondSavesUsed() { return bondSavesUsed; }, set bondSavesUsed(v) { bondSavesUsed = v; },
     get sectorFront() { return sectorFront; }, set sectorFront(v) { sectorFront = v; },
+    medBay,
     get paintOff() { return paintOff; }, set paintOff(v) { paintOff = v; },
     get runSeed() { return runSeed; }, set runSeed(v) { runSeed = v; },
     get mastery() { return mastery; }, set mastery(v) { mastery = v; },

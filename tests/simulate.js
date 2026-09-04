@@ -561,9 +561,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       takePerkOffer(sigIdx >= 0 ? sigIdx : 0);
       stat.promotions++;
     }
+    // E01: this used to heal a flat +30 once per operator per node. The Outpost's own button is
+    // medBay, which charges 10 for floor(maxHp*0.4) and is repeatable while the scrap lasts -
+    // they cross over at maxHp 75, so the copy was under-healing every operator above that and
+    // over-charging every one below, and the once-per-node cap was a limit the game does not
+    // have. The copy existed because medBay was not on the export surface; it is now.
+    // The revive branch that stood here is gone: recoverDowned fires at every fight exit, so no
+    // roster member is ever at hp <= 0 by the time this runs.
     playerRoster.forEach(c => {
-      if (c.hp <= 0 && scrap >= 50) { scrap -= 50; c.hp = Math.floor(c.maxHp * 0.5); }
-      else if (c.hp < c.maxHp && scrap >= 10) { scrap -= 10; c.hp = Math.min(c.maxHp, c.hp + 30); }
+      let guard = 0;
+      while (c.hp > 0 && c.hp < c.maxHp && scrap >= 10 && guard++ < 40) medBay(c.id, 'HEAL');
     });
     // Gear helps nobody in the stash: each piece goes to the first deployed operator it fits.
     gearStash.slice().forEach(id => {
@@ -938,6 +945,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     });
     const enemyStartHp = activeEntities.filter(e => !e.isPlayer).reduce((a, e) => a + e.hp, 0);
     let rounds = 0, fled = false;
+    const wonBefore = runStats.fightsWon || 0;   // E01: what the engine had banked before this fight
     while (combatActive && rounds < 400) {
       rounds++;
       const actor = turnQueue[activeIndex];
@@ -983,8 +991,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     stat.kills += activeEntities.filter(e => !e.isPlayer && e.hp <= 0).length;
     const won = survived && foesLeft === 0;
     // checkWinState does this in the real loop, and without it the board's fight-end contracts
-    // would read as content nobody ever settles.
-    if (won) noteFightWon();
+    // would read as content nobody ever settles. E01: counted, the engine reaches it for 354 of
+    // 396 fight ends - so calling it unconditionally banked FLAWLESS, BLITZ, FRUGAL, CHASED and
+    // GROUND twice on seven fights in eight. Reconciled, exactly as the skull and the elite
+    // above are: top up only what the engine missed.
+    if (won && (runStats.fightsWon || 0) === wonBefore) noteFightWon();
     // Nothing here called recoverDowned. The engine calls it on every ending - the victory
     // block, handleSquadWipe, withdraw, fallBackToNode - and this loop reached it only through
     // withdraw(), so a won fight left its casualties lying at zero health with a live bleed-out
@@ -1015,8 +1026,20 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         orderHome();
         break;
       }
-      currentSector++; currentTier = 1; noteDepth();
-      pursuit = null;                    // as advanceSector does: nothing follows across a sector
+      // E01: the crossing is hand-rolled here rather than routed through advanceSector, and it
+      // was dropping two things on the floor. checkBountyProgress('SECTOR') is called in exactly
+      // one place in the engine (game.js:5569, inside advanceSector), so the S_SECTOR contract
+      // was unsettleable in every simulated career - it could only ever read as content nobody
+      // finishes. And currentTier = 1 discards openingTier(), which is what the Road Crew meta
+      // upgrade buys, so a career that had paid for a head start never got one.
+      //
+      // Still NOT routed through advanceSector itself: it ends in resolveConsequence, which
+      // switches to the event screen and falls through to afterNode when nothing is due, and
+      // that would drive the node flow out from under this loop. Same extraction the payout
+      // needs; deferred with the payout rather than half-done here.
+      checkBountyProgress('SECTOR');
+      currentSector++; currentTier = openingTier(); noteDepth();
+      pursuit = null; retreatNode = null; // as advanceSector does: nothing follows across a sector
       sectorFront = rollFront(); frontBannerPending = false;
       stat.frontsSeen.push(sectorFront);
       sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = [];
@@ -1245,10 +1268,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         if (drop) activeRelics.push(drop);
       }
     }
-    checkBountyProgress('KILL');
+    // E01: the engine ticks KILL inside applyDamageHit, once for every hostile that drops
+    // (game.js:8907), and this loop reaches applyDamageHit through both resolveAction and
+    // applyTurnStartEffects. A tick per cleared node on top of that was a second count of a
+    // contract the engine had already settled.
     runStats.kills = stat.kills;
-    scrap += Math.floor((20 + currentTier * 20) * (node.elite ? 2 : 1) * sectorRewardMult());
-    runStats.scrapEarned += 40;
+    const paid = Math.floor((20 + currentTier * 20) * (node.elite ? 2 : 1) * sectorRewardMult());
+    scrap += paid;
+    // E01: this recorded a flat 40 whatever the node actually paid. At tier 5 in sector 3 the
+    // node pays about 235, so every scrap-earned figure this file has printed was reading a
+    // constant instead of the economy it was measuring.
+    runStats.scrapEarned += paid;
     currentTier++; noteDepth();
 
     // The end of the road. The engine puts this question on a screen with two buttons; here it
