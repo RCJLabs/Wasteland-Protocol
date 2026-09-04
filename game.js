@@ -3571,10 +3571,39 @@ function triggerHitFlash(id) {
     }
 }
 
+// E02: floating text used to be appended INTO the entity it belonged to, and renderField
+// replaces both team containers wholesale (`pTeam.innerHTML = pCells.join('')`). Every action
+// path ends in checkWinState, whose first statement is renderField, and all of it runs in one
+// synchronous task - so the number was created and destroyed before the browser could paint,
+// and its 1000ms lifetime never meant anything. Measured: applyDamageHit alone leaves the
+// element connected; the same hit followed by checkWinState leaves 0 of 1 connected, and so
+// does a real SCRAP_BLADE through resolveAction.
+//
+// The tracer was the one survivor because it mounts on .battlefield rather than inside a team.
+// This is that trick, generalised: one layer inside .battlefield, which renderField never
+// rebuilds, positioned from the entity's box at spawn time. The signature is unchanged, so the
+// 117 call sites are untouched.
+// The classes an FX helper adds to an entity and removes on a timer, which a container rebuild
+// would otherwise drop on the floor.
+const FX_TRANSIENT = ['anim-lunge-right', 'anim-lunge-left', 'anim-recoil-left', 'anim-recoil-right'];
+function fxLayer() {
+    const field = document.querySelector('.battlefield');
+    if (!field) return null;
+    let layer = field.querySelector('.fx-layer');
+    if (!layer) { layer = document.createElement('div'); layer.className = 'fx-layer'; field.appendChild(layer); }
+    return layer;
+}
 function spawnFCT(id, text, cls) {
+    if (paintOff) return;
     const host = document.getElementById(id); if (!host) return;
+    const layer = fxLayer(); if (!layer) return;
+    const h = host.getBoundingClientRect(), f = layer.getBoundingClientRect();
+    if (!h.width && !h.height) return;
     const el = document.createElement('div'); el.className = `fct ${cls}`; el.innerText = text;
-    host.appendChild(el); setTimeout(() => el.remove(), 1000);
+    // Where it would have sat inside the entity: half its width across, a fifth of the way down.
+    el.style.left = `${Math.round(h.left - f.left + h.width / 2)}px`;
+    el.style.top = `${Math.round(h.top - f.top + h.height * 0.2)}px`;
+    layer.appendChild(el); setTimeout(() => el.remove(), 1000);
 }
 
 function addMomentum(amt) {
@@ -7697,7 +7726,15 @@ function resistBadges(ent) {
 
 function renderField() {
     renderQueue();
-    window.__threatCache = (combatActive && !pendingAction) ? threatBoard() : {}; const pTeam = document.getElementById('player-team'); const eTeam = document.getElementById('enemy-team'); pTeam.innerHTML = ''; eTeam.innerHTML = ''; const pCells = [], eCells = [], eLoad = []; const sigsShown = new Set();
+    window.__threatCache = (combatActive && !pendingAction) ? threatBoard() : {}; const pTeam = document.getElementById('player-team'); const eTeam = document.getElementById('enemy-team');
+    const carried = [];
+    if (!paintOff) [pTeam, eTeam].forEach(t => t.querySelectorAll('.entity').forEach(el => {
+        const cls = FX_TRANSIENT.filter(c => el.classList.contains(c));
+        const flash = !!el.querySelector('.portrait.fx-flash');
+        const pulse = !!el.querySelector('.intent-icon.intent-pulse');
+        if (cls.length || flash || pulse) carried.push({ id: el.id, cls, flash, pulse });
+    }));
+    pTeam.innerHTML = ''; eTeam.innerHTML = ''; const pCells = [], eCells = [], eLoad = []; const sigsShown = new Set();
     activeEntities.forEach(ent => {
         let isDead = ent.hp <= 0; const isAct = (!isDead && turnQueue.length > 0 && turnQueue[activeIndex]?.id === ent.id) ? 'active' : '';
         // The first render after death plays the fall; every render after shows the settled corpse.
@@ -7819,7 +7856,20 @@ function renderField() {
             </div>`;
         if (ent.isPlayer) pCells.push(html); else { eCells.push(html); eLoad.push(Math.max(1, ent.scale || 1)); }
     });
+    // E02: the FX helpers add a class to an entity and take it off again on a timer - a 430ms
+    // lunge, a 320ms recoil, a hit flash. The swap below replaces both containers, so without
+    // carrying them across, the render that follows a blow throws away the animation of that
+    // blow. The removal timers look their target up by id (flashClass says so in its own note),
+    // so they still land on the element that replaced it. A class re-added to a new element
+    // restarts its animation rather than resuming it; that is the honest cost of a rebuild, and
+    // it beats never seeing the swing at all.
     pTeam.innerHTML = pCells.join(''); eTeam.innerHTML = eCells.join('');
+    carried.forEach(c => {
+        const el = document.getElementById(c.id); if (!el) return;
+        c.cls.forEach(x => el.classList.add(x));
+        if (c.flash) { const img = el.querySelector('.portrait'); if (img) img.classList.add('fx-flash'); }
+        if (c.pulse) { const ic = el.querySelector('.intent-icon'); if (ic) ic.classList.add('intent-pulse'); }
+    });
     pTeam.classList.toggle('crowded', pTeam.children.length >= 4);
     eTeam.classList.toggle('crowded', eTeam.children.length >= 4);
     fitEnemyRow(eTeam, eLoad);
@@ -9781,7 +9831,7 @@ globalThis.WP = {
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, unheldSigsFor, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
-    AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants

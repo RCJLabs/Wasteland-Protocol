@@ -296,6 +296,10 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .hovering { animation: hoverSprite 3s ease-in-out infinite; margin-bottom: 40px; }
 
 @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-50px) scale(1.3); } }
+/* E02: the layer renderField never rebuilds. Entities live in two containers that are replaced
+   wholesale on every render; this sits beside them, so floating text survives long enough to be
+   painted. Above the sprites, and never in the way of a tap. */
+.fx-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 30; }
 .fct { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); font-weight: bold; font-size: clamp(14px, 4vw, 20px); text-shadow: 2px 2px 4px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; animation: floatUp 1s ease-out forwards; pointer-events: none; z-index: 20; white-space: nowrap; }
 .fct-dmg { color: #ff4444; } .fct-heal { color: #6B8E23; } .fct-status { color: #B8860B; } .fct-weak { color: #ffaa00; font-size: clamp(18px, 5vw, 24px); } .fct-combo { color: #ff44ff; font-size: clamp(20px, 6vw, 28px); }
 
