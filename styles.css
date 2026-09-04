@@ -647,6 +647,11 @@ button.reach-short { border-color: #7a5a20; }
 
 /* E14: the roll of the dead. Permadeath had no memory outside the run that caused it - the
    record was built, narrowed on the way to disk, and never read back. */
+/* E08b: the capstone card on a promotion screen - the one card above the fork. */
+.perk-cap { border-color: #c08ad0 !important; }
+.perk-cap .relic-card-tier { color: #c08ad0; }
+.perk-cap .relic-card-name { color: #e0b8ee; }
+
 .chronicle-roll { flex-shrink: 0; border: 1px solid #5a3030; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
 .chronicle-roll:empty { display: none; }
 .roll-head { font-size: 10px; letter-spacing: 1px; color: #c86a5a; margin-bottom: 3px; }

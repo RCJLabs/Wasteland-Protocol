@@ -123,12 +123,18 @@ module.exports = {
       const c = playerRoster.find(p => p.classType === 'HOUND');
       c.traits = SIG_PERKS.filter(p => p.cls === 'HOUND').map(p => p.id);
       c.perkPoints = 0; c.level = 1; c.xp = 0; c.xpToNext = 100;
+      pendingPerkOffers = [];      // this block owns the queue; earlier ones leave theirs behind
       sfxLog = [];
       const before = document.getElementById('log') ? document.getElementById('log').innerText : '';
       awardXp(c, 100);
       const after = document.getElementById('log') ? document.getElementById('log').innerText : '';
-      return { grew: after.length > before.length, mentions: after.includes('already taken') };
+      return { grew: after.length > before.length, mentions: after.includes('the point is banked'),
+               level: c.level, pending: pendingPerkOffers.length };
     });
-    ok('a silently-banked promotion is still written to the log', logged.grew && logged.mentions);
+    // E08b put a capstone above the forks, so "nothing left to offer" now means the forks are
+    // shut AND the capstone is taken or out of reach. One level from a standing start is well
+    // under the capstone's gate, so this operator still has nothing to be shown and still banks.
+    ok(`a silently-banked promotion is still written to the log (level ${logged.level})`,
+      logged.grew && logged.mentions && logged.pending === 0);
   }
 };

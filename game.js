@@ -3938,6 +3938,16 @@ function noteFelled(ent, killer) {
 
 function goDown(ent) {
     if (!ent || !ent.isPlayer || ent.fallen || (ent.downTurns || 0) > 0) return;
+    // The Hazmat's capstone: the suit is not a personal asset and neither is what is in it.
+    if (hasCap(ent, 'CAP_DEAD_MANS_SWITCH')) {
+        const caught = activeEntities.filter(e => !e.isPlayer && e.hp > 0);
+        caught.forEach(e => {
+            const vent = Math.max(1, Math.floor(e.maxHp * 0.15));
+            e.hp = Math.max(0, e.hp - vent);
+            spawnFCT(e.id, `-${vent}`, 'fct-status'); triggerHitFlash(e.id);
+        });
+        if (caught.length) { log(`> ${ent.name} goes down and the tanks let go.`, 'log-dmg'); triggerShake(); }
+    }
     // SLOW TO RISE: they have done this before and the body is slower about it each time.
     // MASS GRAVE takes another turn off everyone, and the two stack down to a floor of one -
     // a clock of zero would kill on the fall, which is not a shorter clock, it is no clock.
@@ -6231,7 +6241,10 @@ function rollPerkOffer(char) {
     const open = openForksFor(char);
     const fork = open.length ? open[Math.floor(Math.random() * open.length)] : [];
     const stats = PERK_POOL.map(p => ({ id: p.id, name: p.label, desc: p.label, stat: true }));
-    const pool = [...[...fork].sort(() => Math.random() - 0.5), ...stats.sort(() => Math.random() - 0.5)];
+    // Above the fork there is one card that is not a stat card, and it goes first so the screen
+    // never buries it behind a shuffle.
+    const cap = (!open.length && capstoneOpen(char)) ? [capstoneFor(char)] : [];
+    const pool = [...cap, ...[...fork].sort(() => Math.random() - 0.5), ...stats.sort(() => Math.random() - 0.5)];
     const seen = new Set(); const out = [];
     for (const p of pool) { if (seen.has(p.id)) continue; seen.add(p.id); out.push(p.id); if (out.length === 3) break; }
     return out;
@@ -6257,6 +6270,76 @@ function validatePerkForks() {
     return bad;
 }
 
+// ── Capstones ───────────────────────────────────────────────────────────────────────────
+// E07 capped an operator at two signatures, one from each fork, which is what made the two
+// promotions that pick them real decisions. It also meant an operator ran out of anything
+// verb-shaped to buy very early. Measured over 60 expeditions on the build before this:
+//
+//   37.5 level-ups a run, of which 9.7 reach a promotion screen and 27.9 bank silently
+//   74.2% of all levelling has nothing but a flat stat card behind it
+//   both forks close at mean level 6.55, and operators finish a run at level 12-14
+//
+// So an operator spends six to eight levels - most of their career - levelling into nothing.
+// D11 already stopped interrupting the run for those, and E08 gave the banked point somewhere
+// to go, but neither put anything new above the fork. FOURTH_ABILITIES does not fill it: that
+// is gated on lifetime class mastery, not on this operator's level, so it arrives on a career
+// schedule rather than a run one and an operator can hit 14 without it ever being in reach.
+//
+// One capstone per class, offered once both forks are shut and the operator is deep enough to
+// have earned it. Every one of them is the same shape - a move this class already has does a
+// second thing - so each is one branch at a site that already carries branches, and each can be
+// driven and read in a test rather than declared. None of them is a multiplier.
+const CAPSTONE_LEVEL = 8;
+const CAPSTONE_BUY_BASE = 120;   // twice a signature: it is the last thing an operator buys
+const CAPSTONES = {
+    BRUISER:     { id: 'CAP_BREAKER',    name: 'Breaker',
+                   desc: 'Heavy Wrench strips 8 armour from whatever it hits.' },
+    MEDIC:       { id: 'CAP_WHOLE_LINE', name: 'Whole Line',
+                   desc: 'Cauterize also patches every other standing operator for a third as much.' },
+    SCAVENGER:   { id: 'CAP_NAIL_BOMB',  name: 'Nail Bomb',
+                   desc: 'Flashbang opens a 2-turn bleed on what it blinds.' },
+    PYROMANIAC:  { id: 'CAP_FLASHOVER',  name: 'Flashover',
+                   desc: "Molotov's second hit coats what it catches in oil." },
+    SHOTGUNNER:  { id: 'CAP_PUNCH_THROUGH', name: 'Punch Through',
+                   desc: 'Slug Shot carries through to the enemy behind for half.' },
+    SNIPER:      { id: 'CAP_RANGE_CARD', name: 'Range Card',
+                   desc: "Spotter's Mark marks the enemy behind the target as well." },
+    HOUND:       { id: 'CAP_BLOOD_SCENT',name: 'Blood Scent',
+                   desc: "Feral Bite's bleed takes the enemy behind the target too." },
+    TRENCH_FIEND:{ id: 'CAP_ENTRENCHED', name: 'Entrenched',
+                   desc: 'Bayonet Thrust strikes twice while the Fiend holds the front rank.' },
+    HAZMAT:      { id: 'CAP_DEAD_MANS_SWITCH', name: "Dead Man's Switch",
+                   desc: 'If this Hazmat goes down, the tanks vent: every standing enemy takes 15% of its health as bio.' },
+    HARPOONER:   { id: 'CAP_SET_THE_HOOK', name: 'Set The Hook',
+                   desc: 'Harpoon hauls whatever it hits to the front of the line.' }
+};
+function capstoneFor(char) { return char ? (CAPSTONES[char.classType] || null) : null; }
+// Read at the call sites, in the same idiom as every signature: one predicate, one branch.
+function hasCap(ent, id) { return hasTrait(ent, id); }
+// Open when the forks are shut, the level is earned, and it has not already been taken. The
+// fork condition is the point - this is above the fork, not another card in it.
+function capstoneOpen(char) {
+    const c = capstoneFor(char);
+    return !!c && (char.level || 1) >= CAPSTONE_LEVEL
+        && openForksFor(char).length === 0 && !hasTrait(char, c.id);
+}
+function capstoneCost() { return Math.round(CAPSTONE_BUY_BASE * sectorRewardMult()); }
+// Same shape as validateIntents, validateFormations and validatePerkForks: problems out.
+function validateCapstones() {
+    const bad = [];
+    const classes = Object.keys(ABILITIES);
+    classes.forEach(c => { if (!CAPSTONES[c]) bad.push(`${c}: no capstone`); });
+    Object.entries(CAPSTONES).forEach(([c, cap]) => {
+        if (!classes.includes(c)) bad.push(`${cap.id}: class ${c} does not exist`);
+        if (!cap.id || !cap.name || !cap.desc) bad.push(`${c}: incomplete`);
+        if (SIG_PERKS.some(p => p.id === cap.id) || PERK_POOL.some(p => p.id === cap.id))
+            bad.push(`${cap.id}: id collides with a perk`);
+    });
+    const ids = Object.values(CAPSTONES).map(c => c.id);
+    if (new Set(ids).size !== ids.length) bad.push('duplicate capstone ids');
+    return bad;
+}
+
 function renderPerkOffer() {
     firePrompt('PROMOTION');
     const offer = pendingPerkOffers[0];
@@ -6268,16 +6351,19 @@ function renderPerkOffer() {
     // The two signatures on an offer are the two halves of one fork, so say so: taking either
     // closes the other for this operator, and that is the whole decision the screen is for.
     const paired = offer.options.filter(id => SIG_PERKS.some(p => p.id === id)).length === 2;
+    const capped = capstoneFor(char) && offer.options.includes(capstoneFor(char).id);
     document.getElementById('perk-sub').innerText =
-        `${char.classType} · LEVEL ${char.level}${paired ? ' · one of these two, and the other closes' : ''}`;
+        `${char.classType} · LEVEL ${char.level}${paired ? ' · one of these two, and the other closes'
+            : capped ? ' · both forks shut, and this is what is above them' : ''}`;
     document.getElementById('perk-choices').innerHTML = offer.options.map((id, i) => {
         const sig = SIG_PERKS.find(p => p.id === id);
         const stat = PERK_POOL.find(p => p.id === id);
-        const name = sig ? sig.name : (stat ? stat.label.split(' (')[0] : id);
-        const desc = sig ? sig.desc : (stat ? stat.label : '');
+        const cap = capstoneFor(char) && capstoneFor(char).id === id ? capstoneFor(char) : null;
+        const name = cap ? cap.name : sig ? sig.name : (stat ? stat.label.split(' (')[0] : id);
+        const desc = cap ? cap.desc : sig ? sig.desc : (stat ? stat.label : '');
         const twin = sig && paired ? SIG_PERKS.find(p => p.fork === sig.fork && p.id !== sig.id) : null;
-        return `<button class="relic-card ${sig ? 'perk-sig' : 'perk-stat'}" data-action="take-perk" data-index="${i}"${twin ? ` title="Taking this closes ${twin.name}"` : ''}>
-            <span class="relic-card-tier">${sig ? (twin ? 'SIGNATURE · CLOSES ' + twin.name.toUpperCase() : 'SIGNATURE') : 'TRAINING'}</span>
+        return `<button class="relic-card ${cap ? 'perk-cap' : sig ? 'perk-sig' : 'perk-stat'}" data-action="take-perk" data-index="${i}"${twin ? ` title="Taking this closes ${twin.name}"` : ''}>
+            <span class="relic-card-tier">${cap ? 'CAPSTONE · ' + char.classType.replace(/_/g, ' ') : sig ? (twin ? 'SIGNATURE · CLOSES ' + twin.name.toUpperCase() : 'SIGNATURE') : 'TRAINING'}</span>
             <span class="relic-card-name">${name}</span>
             <span class="relic-card-desc">${desc}</span></button>`;
     }).join('') + `<button class="event-btn perk-bank" data-action="bank-perk">BANK THE POINT (spend it at the Outpost)</button>`;
@@ -6291,7 +6377,12 @@ function takePerkOffer(index) {
     if (char && id) {
         const sig = SIG_PERKS.find(p => p.id === id);
         const stat = PERK_POOL.find(p => p.id === id);
-        if (sig) {
+        const cap = capstoneOpen(char) && capstoneFor(char).id === id ? capstoneFor(char) : null;
+        if (cap) {
+            if (!char.traits) char.traits = [];
+            char.traits.push(cap.id);
+            char.perkPoints = Math.max(0, char.perkPoints - 1);
+        } else if (sig) {
             if (sig.apply) sig.apply(char);
             if (!char.traits) char.traits = [];
             char.traits.push(sig.id);
@@ -6329,11 +6420,22 @@ function sigBuyCost() { return Math.round(SIG_BUY_BASE * sectorRewardMult()); }
 // What this operator could still be sold: the open forks' halves, and every stat perk.
 function buyableFor(char) {
     return [...unheldSigsFor(char).map(p => ({ id: p.id, label: p.name, sig: true, cost: sigBuyCost() })),
+            ...(capstoneOpen(char) ? [{ id: capstoneFor(char).id, label: capstoneFor(char).name, sig: true, cap: true, cost: capstoneCost() }] : []),
             ...PERK_POOL.map(p => ({ id: p.id, label: p.label, sig: false, cost: 0 }))];
 }
 function assignPerk(charId, perkId) {
     let char = playerRoster.find(c => c.id === charId);
     if (!char || char.perkPoints <= 0) return;
+    if (capstoneOpen(char) && capstoneFor(char).id === perkId) {
+        const cost = capstoneCost();
+        if (scrap < cost) return;
+        scrap -= cost;
+        if (!char.traits) char.traits = [];
+        char.traits.push(perkId);
+        char.perkPoints--;
+        activePerkSelector = null; playSFX('heal'); saveGameState(); renderOutpost();
+        return;
+    }
     const sig = unheldSigsFor(char).find(p => p.id === perkId);
     if (sig) {
         const cost = sigBuyCost();
@@ -6389,7 +6491,10 @@ function traitSummary(char) {
     const shut = forksFor(char)
         .map(g => g.find(p => !hasTrait(char, p.id) && g.some(o => hasTrait(char, o.id))))
         .filter(Boolean).map(p => p.id);
-    return shut.length ? `${held} · closed: ${shut.join(', ')}` : held;
+    const cap = capstoneFor(char);
+    const capLine = cap && hasTrait(char, cap.id) ? ` · capstone: ${cap.name}`
+                  : capstoneOpen(char) ? ` · capstone open: ${cap.name}` : '';
+    return (shut.length ? `${held} · closed: ${shut.join(', ')}` : held) + capLine;
 }
 // ── The till ────────────────────────────────────────────────────────────────────────
 // Income compounds x1.4 a sector through sectorRewardMult, while the wall compounds x1.25 in
@@ -7969,7 +8074,8 @@ function classCodexLines(cls) {
         ...deck.map(moveLine),
         ...(fourth ? [`${moveLine(fourth)} (rank III)`] : []),
         'Signatures come two at a time, one from each fork - taking either half closes the other for that operator.',
-        ...Object.values(forks).map(g => g.map(p => `${p.name}: ${p.desc}`).join('   OR   '))
+        ...Object.values(forks).map(g => g.map(p => `${p.name}: ${p.desc}`).join('   OR   ')),
+        ...(CAPSTONES[cls] ? [`Above the forks, at level ${CAPSTONE_LEVEL} with both of them shut \u2014 ${CAPSTONES[cls].name}: ${CAPSTONES[cls].desc}`] : [])
     ];
 }
 
@@ -9257,6 +9363,14 @@ function resolveAction(targetId) {
         let heal = 20 + Math.floor(Math.random() * 10) + (hasMod(actEnt, 'FIELD_KIT') ? 15 : 0);
         target.hp = Math.min(target.maxHp, target.hp + heal); actEnt.cooldowns.cauterize = cdFor(actEnt, 'cauterize', 3);
         if (hasTrait(actEnt, 'FIELD_SURGEON')) { target.bleedingTurns = 0; target.stunnedTurns = 0; target.oiledTurns = 0; spawnFCT(target.id, "CLEANSED", "fct-status"); }
+        if (hasCap(actEnt, 'CAP_WHOLE_LINE')) {
+            const share = Math.max(1, Math.floor(heal / 3));
+            activeEntities.filter(e => e.isPlayer && e.hp > 0 && e.id !== target.id).forEach(a => {
+                if (a.hp >= a.maxHp) return;
+                a.hp = Math.min(a.maxHp, a.hp + share); spawnFCT(a.id, `+${share}`, 'fct-heal');
+            });
+            log(`> The rest of the line gets ${share} each.`, 'log-heal');
+        }
         log(`> ${actEnt.name} heals ${target.name} for ${heal}.`, "log-heal"); spawnFCT(target.id, `+${heal}`, "fct-heal"); playSFX('heal');
     } else if (pendingAction === 'STIM_DART') {
         // The mastered medic's fourth verb: a patch fired across the field, and the jolt
@@ -9422,20 +9536,41 @@ function resolveAction(targetId) {
                 if (splash) { splash.oiledTurns = Math.max(splash.oiledTurns, 2); setTimeout(() => spawnFCT(splash.id, "OILED", "fct-weak"), 500); }
             }
         }
+        if (pendingAction === 'SLUG_SHOT' && hasCap(actEnt, 'CAP_PUNCH_THROUGH')) {
+            const behind = livingEnemies[dist + 1];
+            if (behind && behind.hp > 0) applyDamageHit(actEnt, behind, Math.floor(baseDmg * 0.5), atkType, null);
+        }
         if (pendingAction === 'SLUG_SHOT' && hasMod(actEnt, 'INCENDIARY_SLUGS') && target.hp > 0) { target.oiledTurns = Math.max(target.oiledTurns, 2); setTimeout(() => spawnFCT(target.id, "OILED", "fct-weak"), 400); }
         if (pendingAction === 'SCRAP_BLADE' && hasMod(actEnt, 'JAGGED_EDGE') && target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns, 2); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400); }
         if (pendingAction === 'ACID_FLASK') { target.corrodedTurns = 3; log(`> ${target.name}'s plating is corroding!`, "log-dmg"); setTimeout(() => spawnFCT(target.id, "CORRODED", "fct-weak"), 400); }
-        if (pendingAction === 'SPOTTERS_MARK') { target.markedTurns = hasMod(actEnt, 'SPOTTING_SCOPE') ? 4 : 3; log(`> ${target.name} is marked.`, "log-status"); setTimeout(() => spawnFCT(target.id, "MARKED", "fct-status"), 400); }
+        if (pendingAction === 'SPOTTERS_MARK') { target.markedTurns = hasMod(actEnt, 'SPOTTING_SCOPE') ? 4 : 3; log(`> ${target.name} is marked.`, "log-status"); setTimeout(() => spawnFCT(target.id, "MARKED", "fct-status"), 400);
+            if (hasCap(actEnt, 'CAP_RANGE_CARD')) {
+                const behind = livingEnemies[dist + 1];
+                if (behind && behind.hp > 0) { behind.markedTurns = Math.max(behind.markedTurns || 0, target.markedTurns);
+                    log(`> ${behind.name} is on the card too.`, 'log-status'); setTimeout(() => spawnFCT(behind.id, 'MARKED', 'fct-status'), 500); }
+            } }
         if (pendingAction === 'RIP_AND_TEAR' && target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns, 3); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400); }
         if (pendingAction === 'MOLOTOV') {
             actEnt.cooldowns.molotov = 3; triggerShake();
             if (hasMod(actEnt, 'NAPALM_MIX') && target.hp > 0) { target.oiledTurns = Math.max(target.oiledTurns, 3); setTimeout(() => spawnFCT(target.id, "OILED", "fct-weak"), 450); }
             let secondaries = livingEnemies.filter(e => e.id !== targetId);
-            if (secondaries.length > 0) { let sTarg = secondaries[Math.floor(Math.random() * secondaries.length)]; applyDamageHit(actEnt, sTarg, Math.floor(baseDmg * (hasTrait(actEnt, 'BACKDRAFT') ? 1.0 : 0.7)), atkType, null); }
+            if (secondaries.length > 0) { let sTarg = secondaries[Math.floor(Math.random() * secondaries.length)]; applyDamageHit(actEnt, sTarg, Math.floor(baseDmg * (hasTrait(actEnt, 'BACKDRAFT') ? 1.0 : 0.7)), atkType, null);
+                if (hasCap(actEnt, 'CAP_FLASHOVER') && sTarg.hp > 0) { sTarg.oiledTurns = Math.max(sTarg.oiledTurns || 0, 3); setTimeout(() => spawnFCT(sTarg.id, 'OILED', 'fct-weak'), 500); } }
+        }
+        // ── The capstones. Each is the class's own move doing a second thing, at the branch
+        // that move already has. Nothing here is a multiplier.
+        if (pendingAction === 'HEAVY_WRENCH' && hasCap(actEnt, 'CAP_BREAKER') && target.hp > 0) {
+            const off = Math.min(target.armor || 0, 8);
+            if (off > 0) { target.armor -= off; log(`> ${actEnt.name} caves in ${target.name}'s plate. -${off} ARMOR.`, 'log-status');
+                           setTimeout(() => spawnFCT(target.id, `-${off} ARMOR`, 'fct-weak'), 400); }
         }
         if (pendingAction === 'HEAVY_WRENCH' && hasTrait(actEnt, 'AFTERSHOCK')) {
             const behind = livingEnemies[dist + 1];
             if (behind && behind.hp > 0) applyDamageHit(actEnt, behind, Math.floor(baseDmg * 0.4), atkType, null);
+        }
+        if (pendingAction === 'FLASHBANG' && hasCap(actEnt, 'CAP_NAIL_BOMB') && target.hp > 0) {
+            target.bleedingTurns = Math.max(target.bleedingTurns || 0, 2);
+            setTimeout(() => spawnFCT(target.id, 'BLEED', 'fct-status'), 450);
         }
         if (pendingAction === 'ACID_FLASK' && hasTrait(actEnt, 'ACID_RAIN')) {
             const next = livingEnemies[dist + 1] || livingEnemies[dist - 1];
@@ -9444,6 +9579,11 @@ function resolveAction(targetId) {
         // The refund perks: a kill hands the trigger back.
         if (pendingAction === 'EXECUTE_SHOT' && hasTrait(actEnt, 'DOUBLE_TAP') && target.hp <= 0) actEnt.cooldowns.execute_shot = 0;
         if (pendingAction === 'FERAL_BITE' && hasTrait(actEnt, 'RELENTLESS') && target.hp <= 0) actEnt.cooldowns.feral_bite = 0;
+        if (pendingAction === 'FERAL_BITE' && hasCap(actEnt, 'CAP_BLOOD_SCENT')) {
+            const behind = livingEnemies[dist + 1];
+            if (behind && behind.hp > 0) { behind.bleedingTurns = Math.max(behind.bleedingTurns || 0, 3);
+                setTimeout(() => spawnFCT(behind.id, 'BLEED', 'fct-status'), 450); }
+        }
         if (hasTrait(actEnt, 'LEAD_THE_PACK') && DAMAGING_MOVES.includes(pendingAction)) addMomentum(5);
         if (pendingAction === 'PISTOL' && hasTrait(actEnt, 'COMBAT_MEDIC')) {
             const worst = activeEntities.filter(e => e.isPlayer && e.hp > 0 && e.id !== actEnt.id && e.hp < e.maxHp)
@@ -9473,6 +9613,9 @@ function resolveAction(targetId) {
             target.bleedingTurns = Math.max(target.bleedingTurns, hasTrait(actEnt, 'SAWBONES') ? 5 : 3);
             setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400);
         }
+        if (pendingAction === 'BAYONET_THRUST' && hasCap(actEnt, 'CAP_ENTRENCHED') && actEnt.gridPos === 1 && target.hp > 0) {
+            applyDamageHit(actEnt, target, Math.floor(baseDmg * dmgMult), atkType, null);
+        }
         if (pendingAction === 'BAYONET_THRUST' && hasMod(actEnt, 'SERRATED_EDGE') && target.hp > 0) {
             target.bleedingTurns = Math.max(target.bleedingTurns, 2);
             setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400);
@@ -9497,6 +9640,10 @@ function resolveAction(targetId) {
             actEnt.hp = Math.max(1, actEnt.hp - vent);
             log(`> The tank vents through ${actEnt.name}. -${vent} HP.`, "log-dmg");
             spawnFCT(actEnt.id, `-${vent}`, "fct-dmg");
+        }
+        if (pendingAction === 'HARPOON' && hasCap(actEnt, 'CAP_SET_THE_HOOK') && target.hp > 0) {
+            if (haulForward(target)) { log(`> ${actEnt.name} sets the hook and walks ${target.name} in.`, 'log-status');
+                                       spawnFCT(target.id, 'HAULED', 'fct-status'); }
         }
         if (pendingAction === 'DRAG_LINE') {
             const behind = hasTrait(actEnt, 'WINCH_ARM') ? livingEnemies[dist + 1] : null;
@@ -10394,11 +10541,14 @@ function awardXp(char, amount) {
         // offer. Once a class is out of signatures the point banks itself instead - the same
         // place BANK THE POINT already sends a declined offer, so nothing about spending it
         // changes, only when the game stops to ask.
-        if (unheldSigsFor(char).length) {
+        // E08b: and for the capstone above them. Before it existed this branch was false for
+        // three quarters of a run's level-ups - both forks shut by level 6 or 7, and six to
+        // eight levels after that with nothing but a flat stat card behind the screen.
+        if (unheldSigsFor(char).length || capstoneOpen(char)) {
             pendingPerkOffers.push({ charId: char.id, options: rollPerkOffer(char) });
             log(`> ${char.name} reached Level ${char.level}! Promotion pending.`, "log-heal");
         } else {
-            log(`> ${char.name} reached Level ${char.level}. Every signature already taken - the point is banked for the Outpost.`, "log-heal");
+            log(`> ${char.name} reached Level ${char.level}. Nothing left to learn - the point is banked for the Outpost.`, "log-heal");
         }
     }
 }
@@ -10558,6 +10708,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
+    CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,

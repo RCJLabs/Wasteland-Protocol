@@ -422,7 +422,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, field: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  affixes: {}, champions: 0, eliteUnits: 0, affixedUnits: 0,
-                 promotions: 0, sigsTaken: 0, sigsBought: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
+                 promotions: 0, sigsTaken: 0, sigsBought: 0, capsTaken: 0, capsBought: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
                  extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false,
@@ -587,9 +587,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // otherwise the first card. Leaving them queued would sim a squad weaker than any real one.
     while (pendingPerkOffers.length) {
       const offer = pendingPerkOffers[0];
+      const who = playerRoster.find(c => c.id === offer.charId);
+      // E08b: a capstone is the card a player came to this screen for, so it is taken first.
+      // Named explicitly rather than left to fall through to index 0 - it happens to be dealt
+      // first, and a policy that relies on that measures the deal rather than the decision.
+      const capId = (typeof capstoneFor === 'function' && who && capstoneFor(who)) ? capstoneFor(who).id : null;
+      const capIdx = capId ? offer.options.indexOf(capId) : -1;
       const sigIdx = offer.options.findIndex(id => SIG_PERKS.some(p => p.id === id));
-      if (sigIdx >= 0) stat.sigsTaken++;
-      takePerkOffer(sigIdx >= 0 ? sigIdx : 0);
+      if (capIdx >= 0) stat.capsTaken = (stat.capsTaken || 0) + 1;
+      else if (sigIdx >= 0) stat.sigsTaken++;
+      takePerkOffer(capIdx >= 0 ? capIdx : sigIdx >= 0 ? sigIdx : 0);
       stat.promotions++;
     }
     // E01: this used to heal a flat +30 once per operator per node. The Outpost's own button is
@@ -675,6 +682,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         if (open.length && scrap >= sigBuyCost()) {
           assignPerk(c.id, open[Math.floor(Math.random() * open.length)].id);
           if (c.perkPoints < had) { stat.sigsBought = (stat.sigsBought || 0) + 1; continue; }
+        }
+        // E08b: and the capstone above them, which is the other thing a banked point can now
+        // become. Without this the Outpost arm of the change is never exercised and the
+        // measurement reads a feature nobody bought.
+        if (typeof capstoneOpen === 'function' && capstoneOpen(c) && scrap >= capstoneCost()) {
+          assignPerk(c.id, capstoneFor(c).id);
+          if (c.perkPoints < had) { stat.capsBought = (stat.capsBought || 0) + 1; continue; }
         }
         assignPerk(c.id, PERK_POOL[Math.floor(Math.random() * PERK_POOL.length)].id);
         if (c.perkPoints === had) break;
@@ -1718,6 +1732,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('items used per run', Object.entries(items).map(([k, v]) => `${k} ${(v / n).toFixed(1)}`).join(', ') || 'none');
   line('promotions per run', `${mean(nums('promotions')).toFixed(1)} (${mean(nums('sigsTaken')).toFixed(1)} signatures)`);
   line('signatures bought at the Outpost', `${mean(nums('sigsBought')).toFixed(1)} per run`);
+  line('capstones reached', `${mean(nums('capsTaken')).toFixed(2)} taken on promotion, ${mean(nums('capsBought')).toFixed(2)} bought at the Outpost, per run`);
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   line('armories visited per run', `${mean(nums('shops')).toFixed(1)} (${Math.round(mean(nums('shopScrap')))} scrap spent)`);
   const sigs = {};
