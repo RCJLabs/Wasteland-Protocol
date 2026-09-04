@@ -1049,23 +1049,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         orderHome();
         break;
       }
-      // E01: the crossing is hand-rolled here rather than routed through advanceSector, and it
-      // was dropping two things on the floor. checkBountyProgress('SECTOR') is called in exactly
-      // one place in the engine (game.js:5569, inside advanceSector), so the S_SECTOR contract
-      // was unsettleable in every simulated career - it could only ever read as content nobody
-      // finishes. And currentTier = 1 discards openingTier(), which is what the Road Crew meta
-      // upgrade buys, so a career that had paid for a head start never got one.
-      //
-      // Still NOT routed through advanceSector itself: it ends in resolveConsequence, which
-      // switches to the event screen and falls through to afterNode when nothing is due, and
-      // that would drive the node flow out from under this loop. Same extraction the payout
-      // needs; deferred with the payout rather than half-done here.
-      checkBountyProgress('SECTOR');
-      currentSector++; currentTier = openingTier(); noteDepth();
-      pursuit = null; retreatNode = null; // as advanceSector does: nothing follows across a sector
-      sectorFront = rollFront(); frontBannerPending = false;
+      // E01b: the engine's own crossing, no longer a hand copy of one. E01 had already found two
+      // things the copy dropped - checkBountyProgress('SECTOR'), which made the S_SECTOR contract
+      // unsettleable in every simulated career, and openingTier(), so a career that had paid for
+      // Road Crew never got its head start - and patched those two by hand while noting that a
+      // hand copy of a crossing is a list of whatever somebody remembered. crossSector is
+      // advanceSector with the consequence chain lifted off it, so this can take the crossing
+      // without also taking resolveConsequence's switchScreen and its fall-through to afterNode.
+      // What the copy was still dropping on top of E01's two: the front rolled unseeded, so a
+      // daily protocol did not fix the fronts it fixes for a player; the sector map likewise; the
+      // forecast carried across a sector boundary; and no save was written at the crossing.
+      crossSector();
       stat.frontsSeen.push(sectorFront);
-      sectorMap = generateSectorMap(); currentNodeId = null; clearedNodeIds = [];
       // consequences that came due
       const due = consequencesDue().length;
       if (due) { stat.consequences += due; while (consequencesDue().length) { const c = consequencesDue()[0]; pendingConsequences = pendingConsequences.filter(o => o !== c); (CONSEQUENCE_POOL[c.kind] || { resolve: () => '' }).resolve(c); } }
@@ -1199,9 +1194,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     stat.nodes++;
 
     // Leaving already advanced the tier and left the node behind - and the engine deliberately
-    // does not count it as one cleared, so neither does this.
+    // does not count it as one cleared, so neither does this. A node lost and then regrouped
+    // through is not one cleared either: the engine never reaches collectLoot on a wipe, so
+    // runStats.nodes is counted by bankNode below rather than here, where it used to fire for
+    // won and lost alike.
     if (outcome === 'fled') { spend(); continue; }
-    runStats.nodes++;
 
     if (outcome === 'lost') {
       stat.wipes++;
@@ -1296,13 +1293,15 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // applyTurnStartEffects. A tick per cleared node on top of that was a second count of a
     // contract the engine had already settled.
     runStats.kills = stat.kills;
-    const paid = Math.floor((20 + currentTier * 20) * (node.elite ? 2 : 1) * sectorRewardMult());
-    scrap += paid;
-    // E01: this recorded a flat 40 whatever the node actually paid. At tier 5 in sector 3 the
-    // node pays about 235, so every scrap-earned figure this file has printed was reading a
-    // constant instead of the economy it was measuring.
-    runStats.scrapEarned += paid;
-    currentTier++; noteDepth();
+    // E01b: the engine's own payout and the engine's own banking of it. This used to pay a flat
+    // 20 base where checkWinState rolls 0-29, and knew nothing about the front's ledger (a
+    // warband's raiders and a quiet sector's boss both carry double), the Vulture's 25% cut, the
+    // Scrap Magnet's stipend or the Collector's 40 - and then, because it never reached
+    // collectLoot, RATIONING's cut and closeRanks had never once run on a won fight in
+    // simulation. A career under RATIONING was measured being paid in full, and a squad that
+    // lost somebody fought the rest of the sector short-handed with a bench standing behind it.
+    // E01 had already found this recording a flat 40 whatever the node paid.
+    bankNode(fightPayout());
 
     // The end of the road. The engine puts this question on a screen with two buttons; here it
     // is a policy, so both answers can be measured. Either way the win is already banked - what
