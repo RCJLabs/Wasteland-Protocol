@@ -5133,9 +5133,7 @@ function continueGame() {
 // Rebuilds a fight from its snapshot. Player entries are looked up in playerRoster by id so
 // damage keeps landing on the live roster objects rather than on detached copies.
 function resumeCombat(c) {
-    currentNodeType = c.nodeType; isCurrentNodeElite = c.isElite; currentWeather = c.weather || 'CLEAR';
-    currentTerrain = c.terrain || 'OPEN_ROAD';
-    currentFormation = c.formation || null;
+    COMBAT_STATE.forEach(f => { f.set(f.load(c[f.key])); });
     let players = (c.playerIds || []).map(id => playerRoster.find(p => p.id === id)).filter(Boolean);
     activeEntities = [...players, ...(c.enemies || [])];
     turnQueue = (c.queueIds || []).map(id => activeEntities.find(e => e.id === id)).filter(Boolean);
@@ -5145,23 +5143,67 @@ function resumeCombat(c) {
     activeIndex = Math.min(c.activeIndex || 0, turnQueue.length - 1);
     combatActive = true;
     switchScreen('screen-combat'); document.getElementById('log').innerHTML = '';
-    applyCombatScenery(c.bgFile || 'bg_combat.webp', currentNodeType === 'BOSS' ? bossForSector().banner : null);
+    applyCombatScenery(combatBgFile, currentNodeType === 'BOSS' ? bossForSector().banner : null);
     log("> COMBAT RESUMED.", "log-turn");
     processTurn();
 }
+// Everything a fight is, apart from the entities themselves. buildCombatSnapshot and
+// resumeCombat used to be two literals kept in step by hand, and they were not: fightLog,
+// vacatedRanks and momentumFocus were live in the engine and in neither of them. So reloading
+// mid-fight handed back FLAWLESS, BLITZ and FRUGAL on a fight that had already lost all three,
+// left a fallen operator's rank permanently empty because closeRanks had nothing to close, and
+// threw away a FOCUS the player had paid momentum for.
+//
+// One table, read by both sides, so a field cannot be added to one half and forgotten by the
+// other. `load` is the migrateRelics idiom: anything that no longer resolves is replaced with
+// what a fresh fight would have rather than trusted, because every save already on disk lacks
+// all of these and a load-time throw is worse than the bug.
+const COMBAT_STATE = [
+    { key: 'nodeType',  get: () => currentNodeType,     set: v => { currentNodeType = v; },
+      load: v => typeof v === 'string' ? v : '' },
+    { key: 'isElite',   get: () => isCurrentNodeElite,  set: v => { isCurrentNodeElite = v; },
+      load: v => !!v },
+    { key: 'weather',   get: () => currentWeather,      set: v => { currentWeather = v; },
+      load: v => (typeof v === 'string' && (v === 'CLEAR' || WEATHER[v])) ? v : 'CLEAR' },
+    { key: 'terrain',   get: () => currentTerrain,      set: v => { currentTerrain = v; },
+      load: v => TERRAIN[v] ? v : 'OPEN_ROAD' },
+    { key: 'formation', get: () => currentFormation,    set: v => { currentFormation = v; },
+      load: v => (v && formationById(v)) ? v : null },
+    // Assigned rather than only read: resumeCombat used to pass the saved background straight
+    // to applyCombatScenery without putting it back, so anything that re-scenes a resumed fight
+    // later - the Stormcaller turning the sky - painted the module's opening default instead.
+    { key: 'bgFile',    get: () => combatBgFile,        set: v => { combatBgFile = v; },
+      load: v => (typeof v === 'string' && v) ? v.replace(/\.png$/, '.webp') : 'bg_combat.webp' },
+    { key: 'bondSaves', get: () => [...bondSavesUsed],  set: v => { bondSavesUsed = new Set(v); },
+      load: v => Array.isArray(v) ? v.filter(x => typeof x === 'string') : [] },
+    { key: 'fightLog',  get: () => fightLog,            set: v => { fightLog = v; },
+      load: v => {
+          const f = newFightLog();
+          if (!v || typeof v !== 'object') return f;
+          return { turns: Number.isFinite(v.turns) ? Math.max(0, Math.floor(v.turns)) : 0,
+                   hurt: !!v.hurt, spent: !!v.spent, chased: !!v.chased };
+      } },
+    { key: 'vacated',   get: () => [...vacatedRanks],   set: v => { vacatedRanks = v; },
+      load: v => Array.isArray(v) ? v.filter(n => Number.isInteger(n) && n > 0 && n <= 3) : [] },
+    { key: 'focus',     get: () => momentumFocus,       set: v => { momentumFocus = v; },
+      load: v => Number.isFinite(v) ? Math.max(0, Math.min(1, Math.floor(v))) : 0 },
+    { key: 'press',     get: () => pressExtra,          set: v => { pressExtra = v; },
+      load: v => !!v }
+];
+
 function buildCombatSnapshot() {
     if (!combatActive || turnQueue.length === 0) return null;
-    return {
-        nodeType: currentNodeType, isElite: isCurrentNodeElite, weather: currentWeather, terrain: currentTerrain, formation: currentFormation, bgFile: combatBgFile,
+    const out = {
         activeIndex,
         playerIds: activeEntities.filter(e => e.isPlayer).map(e => e.id),
         enemies: activeEntities.filter(e => !e.isPlayer),
-        queueIds: turnQueue.map(e => e.id),
-        bondSaves: [...bondSavesUsed]
+        queueIds: turnQueue.map(e => e.id)
     };
+    COMBAT_STATE.forEach(f => { out[f.key] = f.get(); });
+    return out;
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, pendingRecruit, regroupInsured, bonds, sectorFront, runSeed, ascension, activeOrder, bossSalt, doctrineOffer, activeDoctrine, doctrineBroken, doctrineFavourites, pendingConsequences, recentEvents, castState, firedEvents, choirWord, benchJob, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, retreatNode, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, pendingRecruit, regroupInsured, bonds, sectorFront, runSeed, ascension, activeOrder, bossSalt, doctrineOffer, activeDoctrine, doctrineBroken, doctrineFavourites, pendingConsequences, recentEvents, castState, firedEvents, choirWord, benchJob, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, retreatNode, activeContracts, combat: buildCombatSnapshot() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -5175,6 +5217,12 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         // A shop mid-haggle survives the reload; stock lines whose ids no longer exist are culled.
         activeShop = (d.activeShop && Array.isArray(d.activeShop.stock)) ? d.activeShop : null;
         pendingRecruit = (d.pendingRecruit && d.pendingRecruit.nodeId) ? d.pendingRecruit : null;
+        // E10: signed for and then lost on a reload. Every reader lifted - totalRegroups went
+        // from 0 back to 2 under NO FALLBACK, canCarry from false back to true under DRY RUN -
+        // while runStats had already snapshotted contractMult at run start, so the score kept
+        // charging 1.7x for handicaps that were no longer being carried. An F5 was a cheat code.
+        activeContracts = (Array.isArray(d.activeContracts) ? d.activeContracts : [])
+            .filter(id => CONTRACT_POOL.some(c => c.id === id));
         if (activeShop) activeShop.stock = activeShop.stock.filter(it =>
             (it.kind !== 'GEAR' || gearById(it.id)) && (it.kind !== 'RELIC' || RELIC_POOL.some(r => r.id === it.id)));
         regroupInsured = !!d.regroupInsured; shopRerollPick = false;
@@ -10188,7 +10236,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
