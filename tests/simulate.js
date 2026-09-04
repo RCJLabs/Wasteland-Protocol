@@ -83,6 +83,37 @@
 // So: the wall this file has been measuring against was an artefact of the instrument, and no
 // difficulty conclusion drawn from a pre-C02 run of it should be carried forward. Re-measure.
 
+// ── What E01b's extraction moved ────────────────────────────────────────────────────────
+// This file kept private copies of two engine rules, both because the real one was welded to a
+// screen: the won-fight payout (computed inline in checkWinState on the way to a LOOT button)
+// and the sector crossing (advanceSector ends in resolveConsequence, which paints). E01b split
+// the state change out of each - fightPayout, bankNode, crossSector - and pointed this file at
+// them. Measured 3 x 150 expeditions an arm, difficulty 1, the standing policies:
+//
+//                              before                    after
+//   score, median         42,118 / 43,040 / 42,574   40,757 / 40,940 / 46,209
+//   nodes cleared, median      99 / 99 / 97               99 / 99 / 99
+//   deepest sector, median      5 / 5 / 5                  5 / 5 / 5
+//   relics held, mean        12.4 / 12.9 / 12.6         12.6 / 12.7 / 12.8
+//   median purse              292 / 300 / 286            295 / 296 / 330
+//   wipes per run, mean      7.16 / 6.92 / 6.81         7.29 / 7.23 / 7.15
+//   line deployments/150     1055 / 1006 / 1017         1060 / 1091 / 1056
+//
+// One thing separates cleanly and one thing explains it. Wipes per run are up in all three
+// after-samples against all three before-samples, 6.96 to 7.22, and so are line deployments,
+// 1,026 to 1,069 - and the second is the mechanism for the first. Routing the payout through
+// bankNode means closeRanks runs on a won fight, which it had never once done here: an operator
+// lost in simulation used to leave a permanently empty rank while the bench stood behind it
+// doing nothing. Ranks close now, more operators reach the line over a run, and more of them
+// are there to be lost. The reported game is slightly harsher, and it is the game that exists.
+//
+// Everything else moved inside its own before-arm spread and is NOT established. Score
+// especially: the before arm sits in a 922-point band and the after arm in a 5,452-point one,
+// two samples below all three of the before and one above all three. That is the heavy tail
+// this file warns about at the top, not a result. RATIONING's cut, which the payout also
+// restores, cannot show here at all - the standing policy runs at rung 0, where no protocol is
+// active, so it needs an --ascension arm of its own before anything is claimed for it.
+
 // ── The long career, re-measured after C04 ──────────────────────────────────────────────
 // Four Citadel spots had no ceiling, and `--meta carry` at 40 runs used to stop terminating on
 // them: unlimited fallback bunkers meant a squad that could not be made to stop. Capped, the
