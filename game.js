@@ -7781,9 +7781,20 @@ function renderField() {
         // While an ability is armed, every target shows what it will actually absorb.
         let soakTag = '';
         if (!ent.isPlayer && !isDead && pendingAction && tCls === 'targetable-enemy') {
-            const probe = mitigate(turnQueue[activeIndex] || ent, ent, 100, 'phys', pendingAction);
+            // E03: this probed a literal 'phys' while the ability it is describing rode through
+            // beside it as the 5th argument, so the tag answered a question the player had not
+            // asked. Against a Turret (phys 10, bio 100, energy -10) it read 82% for every move
+            // on the deck: right for BASIC, and wrong for SPRAY_GUN and CAUSTIC_BURST, which
+            // land 0 into the immunity, and for MOLOTOV, which lands 102. damageTypeOf is what
+            // the resolver asks (8556); the readout asks it too now.
+            const probeType = damageTypeOf(pendingAction);
+            const probe = mitigate(turnQueue[activeIndex] || ent, ent, 100, probeType, pendingAction);
             const pct = Math.round(probe.n);
-            if (pct < 95) soakTag = `<div class="soak-tag" title="A 100-damage physical blow lands for this">${pct}%</div>`;
+            // Shown in both directions. Soak was the only thing worth saying while the number
+            // was always physical; correctly typed, a target that takes MORE than the swing is
+            // the more useful half, and hiding it was hiding a weakness the badge already hints.
+            if (pct < 95 || pct > 105)
+                soakTag = `<div class="soak-tag" title="A 100-damage ${probeType} blow lands for this">${pct}%</div>`;
         }
         // A signature is only fair if it is visible: the name rides the card, and plate,
         // overwatch and a pending ranged shot each show their live state. A commander's
@@ -7834,7 +7845,9 @@ function renderField() {
         // Whether this particular target is further back than the swing wants to reach.
         let farTag = false;
         if (pendingAction && !isDead && tCls === 'targetable-enemy') {
-            const foes = activeEntities.filter(e => !e.isPlayer && e.hp > 0);
+            // E03: the resolver's livingEnemies excludes anything burrowed, so counting them
+            // here put the FAR tag on a different rank than the swing would reach.
+            const foes = activeEntities.filter(e => !e.isPlayer && e.hp > 0 && !e.burrowed);
             farTag = isOutOfDepth(pendingAction, foes.findIndex(e => e.id === ent.id));
         }
         let eliteGlow = ent.eliteType && !isDead ? 'filter: drop-shadow(0 0 15px #8B0000);' : '';
@@ -7968,8 +7981,12 @@ function renderCommandDeck() {
         const ready = cd === 0 ? liveCombo(a.move) : null;
         // A melee ability swung from the second or third rank lands soft wherever it is aimed,
         // and that is worth knowing before the ability is even selected.
-        const short = (cd === 0 && isMelee(a.move) && (REACH_PENALTY[aE.gridPos] || 1) < 1)
-            ? `-${Math.round((1 - REACH_PENALTY[aE.gridPos]) * 100)}%` : null;
+        // E03: this kept its own copy of the rank arithmetic and read REACH_PENALTY raw, so
+        // ground applied to the swing and not to the button describing it - the exact thing the
+        // resolver's own note two thousand lines down says must not happen. reachNote is that
+        // arithmetic, and it is what the forecast already reads. No target is chosen yet, so it
+        // is asked at the front rank; depth is the target's half of the sum and rides the FAR tag.
+        const short = cd === 0 ? reachNote(a.move, aE, 0) : null;
         if (ready) firePrompt('COMBO');
         if (short) firePrompt('REACH');
         const cls = [ready ? 'combo-ready' : '', short ? 'reach-short' : ''].filter(Boolean).join(' ');
