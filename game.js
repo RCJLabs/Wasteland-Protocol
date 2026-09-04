@@ -7723,6 +7723,42 @@ function deckFor(char) {
     return all.filter(a => a.move !== benched);
 }
 
+// ── The manual's one blind spot ──────────────────────────────────────────────────────
+// The codex documents enemies, grounds, skies, formations, curses, doctrines, factions and
+// contracts across thirty-one entries, and the player's own ten classes in none of them. The
+// single fact that decides whether a move lands at all - its damage type, against three
+// resistance axes and hard immunities - was printed on no surface in the game. Twelve of the
+// forty player moves are bio or energy; three of the eighteen hostile types are outright immune
+// to bio and thirteen of eighteen are weak to energy, so the Pyromaniac's entire deck is the
+// best answer on the road to most of what walks it and nothing said so.
+//
+// Computed, not written. Forty hand-authored sentences would be expensive, drift-prone and
+// unearned; every line below is read off the same tables the resolver reads, so a move that
+// changes reach or type or cooldown changes its own entry.
+function moveLine(a) {
+    const bits = [];
+    if (dealsDamage(a.move)) bits.push(`${typeGlyph(damageTypeOf(a.move))} ${damageTypeOf(a.move)}`);
+    bits.push(a.reach === 'self' ? 'self' : a.reach);
+    if (isAoe(a.move)) bits.push('hits two');
+    if (a.cd) bits.push('cooldown');
+    const combo = COMBOS.find(c => c.move === a.move);
+    const note = combo ? ` \u2014 ${combo.name} x${combo.mult} into ${combo.needs.replace('Turns', '')}` : '';
+    return `${a.label} \u00B7 ${bits.join(', ')}${note}`;
+}
+function classCodexLines(cls) {
+    const deck = ABILITIES[cls] || [];
+    const fourth = FOURTH_ABILITIES[cls];
+    const forks = {};
+    SIG_PERKS.filter(p => p.cls === cls).forEach(p => { (forks[p.fork] = forks[p.fork] || []).push(p); });
+    return [
+        `Three abilities from the start, and a fourth at dossier rank III - the muster benches one of the four when that opens. ${MASTERY_TITLES[cls] ? `Mastery title: ${MASTERY_TITLES[cls]}.` : ''}`,
+        ...deck.map(moveLine),
+        ...(fourth ? [`${moveLine(fourth)} (rank III)`] : []),
+        'Signatures come two at a time, one from each fork - taking either half closes the other for that operator.',
+        ...Object.values(forks).map(g => g.map(p => `${p.name}: ${p.desc}`).join('   OR   '))
+    ];
+}
+
 const MOVE_REACH = Object.fromEntries(
     [...Object.values(ABILITIES).flat(), ...Object.values(FOURTH_ABILITIES)].map(a => [a.move, a.reach]));
 // Which abilities land on more than one body, read off the same declarations - so the ground
@@ -7732,6 +7768,14 @@ const MOVE_AOE = Object.fromEntries(
 function isAoe(move) { return !!MOVE_AOE[move]; }
 
 // Every ability an entity can be standing behind, in one place, so nothing needs a second list.
+// Appended rather than written into CODEX's literal, which is declared two thousand lines above
+// the tables these read: the entries cannot exist until ABILITIES does.
+CODEX.push(...Object.keys(ABILITIES).map(cls => ({
+    id: `DECK_${cls}`,
+    title: `${cls.replace(/_/g, ' ')}${MASTERY_TITLES[cls] ? ` \u2014 ${MASTERY_TITLES[cls].toUpperCase()}` : ''}`,
+    body: () => classCodexLines(cls)
+})));
+
 function isMelee(move) { return MOVE_REACH[move] === 'melee'; }
 function isRanged(move) { return MOVE_REACH[move] === 'ranged'; }
 
@@ -7872,6 +7916,14 @@ const ENERGY_MOVES = ['FLASHBANG', 'MOLOTOV', 'FLARE_GUN', 'ACID_FLASK', 'THERMI
 function damageTypeOf(move) {
     return BIO_MOVES.includes(move) ? 'bio' : ENERGY_MOVES.includes(move) ? 'energy' : 'phys';
 }
+// The moves aimed at your own line. renderField kept this as a literal inside its targeting
+// branch, which is fine until something else needs to ask the same question - and the deck's
+// damage-type chip does, because printing "P" on a heal is worse than printing nothing.
+const ALLY_MOVES = ['CAUTERIZE', 'REPOSITION', 'STIM_DART'];
+// Whether damageTypeOf means anything for a move: a self-action and an ally move never reach
+// mitigate, so neither has a type to show. Read off MOVE_REACH rather than a fourth list.
+function dealsDamage(move) { return MOVE_REACH[move] !== 'self' && !ALLY_MOVES.includes(move); }
+function typeGlyph(type) { const e = DMG_TYPES.find(([t]) => t === type); return e ? e[1] : ''; }
 
 // The enemy line is the order they sit in activeEntities: index 0 of the living ones is the
 // front. Hauling moves the target there, which is the whole of the Harpooner's verb - every
@@ -8166,7 +8218,7 @@ function renderField() {
             if (pendingAction === 'OVERDRIVE' && turnQueue[activeIndex].classType === 'MEDIC' && ent.isPlayer) {
                 tCls = 'targetable-ally'; clk = targetable(`data-action="target" data-id="${ent.id}"`);
             } else if ((!isDead || (isDown(ent) && REACHES_THE_DOWN.includes(pendingAction))) && !ent.burrowed) {
-                if ((pendingAction === 'CAUTERIZE' || pendingAction === 'REPOSITION' || pendingAction === 'STIM_DART') && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="target" data-id="${ent.id}"`); }
+                if (ALLY_MOVES.includes(pendingAction) && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="target" data-id="${ent.id}"`); }
                 else if (['ITEM_MED', 'ITEM_BOMB', 'ITEM_ADRENALINE', 'ITEM_EMP'].includes(pendingAction)) {
                     if (pendingAction === 'ITEM_MED' && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="use-item" data-id="${ent.id}"`); }
                     else if (pendingAction === 'ITEM_ADRENALINE' && ent.isPlayer) { tCls = 'targetable-ally'; clk = targetable(`data-action="use-item" data-id="${ent.id}"`); }
@@ -8412,8 +8464,16 @@ function renderCommandDeck() {
         if (ready) firePrompt('COMBO');
         if (short) firePrompt('REACH');
         const cls = [ready ? 'combo-ready' : '', short ? 'reach-short' : ''].filter(Boolean).join(' ');
+        // The one fact that decides whether a swing lands at all, and it was printed on no
+        // surface in the game: twelve of the forty player moves are bio or energy, three hostile
+        // types are outright immune to bio and thirteen of eighteen are weak to energy - so a
+        // Pyromaniac's whole deck is the best answer on the road to most of it, and the player
+        // had no way to know. One letter, in the P/B/E the resist badges already use, on the
+        // smallest control in the game: the same vocabulary read from the same table.
+        const dt = dealsDamage(a.move) ? damageTypeOf(a.move) : null;
+        const typeTag = dt ? ` <span class="dmg-tag dmg-${dt}" title="${dt} damage">${typeGlyph(dt)}</span>` : '';
         deckHtml += `<button ${cd > 0 ? 'disabled' : ''} ${cls ? `class="${cls}"` : ''} data-action="${a.act || 'queue'}" data-move="${a.move}">`
-                  + `${a.label}${cd > 0 ? ` [${cd}]` : ''}${ready ? ` <span class="combo-tag">${ready}</span>` : ''}`
+                  + `${a.label}${typeTag}${cd > 0 ? ` [${cd}]` : ''}${ready ? ` <span class="combo-tag">${ready}</span>` : ''}`
                   + `${short ? ` <span class="reach-tag">REACH ${short}</span>` : ''}</button>`;
     }
 
@@ -10290,7 +10350,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,

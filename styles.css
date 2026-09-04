@@ -433,6 +433,15 @@ button.combo-ready { border-color: #ff44ff; color: #ff9cff; box-shadow: 0 0 10px
 
 button.reach-short { border-color: #7a5a20; }
 .reach-tag { font-size: 9px; letter-spacing: 1px; color: #ffb347; }
+/* E12: what a move is made of, on the button that fires it. Deliberately quieter than the
+   combo and reach tags - those are situational and worth interrupting for, where this is on
+   every damaging button all the time and only has to be readable when looked for. The colour
+   is the type, not the target's relationship to it: the resist badges on a card carry that. */
+.dmg-tag { font-size: 9px; font-weight: bold; letter-spacing: 0; padding: 0 2px; border-radius: 2px;
+           background: rgba(0,0,0,0.35); vertical-align: 1px; }
+.dmg-phys   { color: #9aa3ad; }
+.dmg-bio    { color: #7fbf5a; }
+.dmg-energy { color: #5ab5d6; }
 
 /* The commander's cache: three relics, one decision. */
 #screen-relic { display: none; flex-direction: column; padding: 18px 14px; gap: 12px; overflow-y: auto; }
