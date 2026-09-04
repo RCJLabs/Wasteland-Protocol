@@ -6491,6 +6491,21 @@ function carrionStanding() {
     return activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.classType === 'VERMIN').length;
 }
 
+// A rider is a status that comes free with a unit's ordinary swing, whatever the intent was.
+// Three units carry one and always have, but the way they were picked out was a literal list of
+// names checked against enemy.name at the hit site - `["Mutant", "Attack Dog", "War Hound",
+// "Chem Fiend"].includes(enemy.name)`. Two things were wrong with that. An elite is renamed by
+// definition (`*FRENZIED* Attack Dog`), so the rider silently stopped applying to exactly the
+// versions of those units that are meant to be worse. And "War Hound" is the player's own class:
+// that entry sat in a branch that only ever runs on hostiles and could never match anything.
+// Declared on the template now, which an elite rename does not touch, and said out loud in the
+// dossier and in the field tag's own tooltip rather than being a thing you had to notice.
+const ENEMY_RIDERS = {
+    RAW: { name: 'Leaves a mark',
+           desc: 'Every hit it lands wounds on top of the damage: the cut bleeds, or the shock costs the operator their next turn.' }
+};
+function riderOf(ent) { return (ent && !ent.isPlayer && ent.rider) ? (ENEMY_RIDERS[ent.rider] || null) : null; }
+
 function sigOf(ent) { return (ent && !ent.isPlayer && ent.sig) ? (ENEMY_SIGS[ent.sig] || null) : null; }
 function hasSig(ent, id) { return !!(ent && !ent.isPlayer && ent.sig === id); }
 
@@ -6517,6 +6532,23 @@ function intentFor(type, enemy) {
     return { type, icon };
 }
 
+// Two intents are conditional rather than free, and the conditions used to live inside the
+// fallback's own branching - so an authored table could not have expressed FLANK at all without
+// quietly dropping the relic that answers it. They are a gate now, applied wherever an intent
+// comes from.
+//
+// FLANK is going round the front rank: a slow unit cannot, and SIGNAL_JAMMER is the relic bought
+// to stop it. AOE against a line of one is strictly a wasted turn and always was - enemyStrike
+// prices it at 0.7x base with no roll bonus, the best ground multiplies it by 1.35, and
+// 0.7 x 1.35 is still under a plain swing - so a unit that rolls it with a single operator
+// standing swings instead. Neither gate invents a behaviour; both stop one being handed out
+// where it cannot do the thing it is for.
+function gateIntent(type, enemy) {
+    if (type === 'FLANK' && (enemy.speed < 14 || hasRelic('SIGNAL_JAMMER'))) return 'ATTACK';
+    if (type === 'AOE' && activeEntities.filter(e => e.isPlayer && e.hp > 0).length < 2) return 'ATTACK';
+    return type;
+}
+
 function rollIntent(enemy) {
     let rand = Math.random();
     // A signature action outranks the generic table when it is off cooldown and its roll comes
@@ -6530,25 +6562,23 @@ function rollIntent(enemy) {
     if (enemy.forceAoe) return intentFor('AOE', enemy);
     if (enemy.intents) {
         let roll = Math.random();
-        for (const [type, weight] of enemy.intents) { roll -= weight; if (roll <= 0) return intentFor(type, enemy); }
-        return intentFor(enemy.intents[enemy.intents.length - 1][0], enemy);
+        for (const [type, weight] of enemy.intents) { roll -= weight; if (roll <= 0) return intentFor(gateIntent(type, enemy), enemy); }
+        return intentFor(gateIntent(enemy.intents[enemy.intents.length - 1][0], enemy), enemy);
     }
-    if (enemy.classType === 'MECH') {
-        if (rand < 0.2) return { type: 'DEFEND', icon: '🛡️' };
-        if (rand < 0.4) return { type: 'AOE', icon: '🧨' };
-        return { type: 'ATTACK', icon: '🔫' };
-    } else if (enemy.range === 'ranged') {
-        if (rand < 0.2) return { type: 'STATUS', icon: '🎯' };
-        if (rand < 0.3) return { type: 'AOE', icon: '🧨' };
-        return { type: 'ATTACK', icon: '🔫' };
-    } else {
-        if (rand < 0.2) return { type: 'HEAVY', icon: '💥' };
-        if (rand < 0.3) return { type: 'DEFEND', icon: '🛡️' };
+    // Nothing in ENEMY_POOL reaches this any more - every one of the eighteen carries its own
+    // table. What is left for it is a unit built field-by-field rather than copied from a
+    // template: a warlord's lieutenant, a ward generator, anything raised from a bare spec.
+    // The icons are intentFor's now rather than minted here; the one that used to be hand-set
+    // was STATUS, which read as the mark pin and so said "this one is marked" on a turn where
+    // nothing was.
+    const branch = enemy.classType === 'MECH'
+        ? (rand < 0.2 ? 'DEFEND' : rand < 0.4 ? 'AOE' : 'ATTACK')
+        : enemy.range === 'ranged'
+        ? (rand < 0.2 ? 'STATUS' : rand < 0.3 ? 'AOE' : 'ATTACK')
         // A fast unit will go round the front rank rather than through it. Telegraphed a turn
         // ahead like every other intent, so the squad gets to answer it.
-        if (rand < 0.45 && enemy.speed >= 14 && !hasRelic('SIGNAL_JAMMER')) return intentFor('FLANK', enemy);
-        return { type: 'ATTACK', icon: '⚔️' };
-    }
+        : (rand < 0.2 ? 'HEAVY' : rand < 0.3 ? 'DEFEND' : rand < 0.45 ? 'FLANK' : 'ATTACK');
+    return intentFor(gateIntent(branch, enemy), enemy);
 }
 
 // Enemy stats climb 1.5x per sector; rewards climb alongside so player power can compound
@@ -6609,9 +6639,23 @@ function forecastFor(enemy) {
     const intent = enemy.intent || { type: 'ATTACK' };
     const live = activeEntities.filter(e => e.isPlayer && e.hp > 0);
     if (!live.length) return null;
-    if (enemy.burrowed > 0) return { kind: 'BURROW', enemy };
-    if (intent.type === 'DEFEND' || intent.type === 'SIG') return { kind: intent.type, enemy };
     const atk = enemy.dmgType || 'phys';
+    // Two enemy turns resolve without a choice in them, and both used to return without hits -
+    // so threatBoard skipped them and an operator could be shown surviving a round that killed
+    // them. A unit under the ground comes up on the frontmost operator for 1.6x its base
+    // (executeEnemyAi's burrowed branch), and DRAG_DOWN hauls the furthest-back operator to the
+    // front and mauls them for base + 4. Both targets and both numbers are settled before the
+    // turn is taken, which is exactly what a forecast is for.
+    const pin = (mark, raw) => ({ hits: [{ target: mark, dmg: mitigate(enemy, mark, Math.floor(raw), atk, 'BASIC').n, via: null }], exact: true });
+    if (enemy.burrowed > 0) {
+        const front = [...live].sort((a, b) => a.gridPos - b.gridPos)[0];
+        return { kind: 'BURROW', enemy, ...pin(front, enemy.dmgBase * 1.6 * enemyDmgMult(enemy)) };
+    }
+    if (intent.type === 'SIG' && enemy.sig === 'DRAG_DOWN') {
+        const back = [...live].sort((a, b) => b.gridPos - a.gridPos)[0];
+        return { kind: 'SIG', enemy, ...pin(back, (enemy.dmgBase + 4) * enemyDmgMult(enemy)) };
+    }
+    if (intent.type === 'DEFEND' || intent.type === 'SIG') return { kind: intent.type, enemy };
     if (intent.type === 'AOE') {
         const raw = enemyStrike(enemy, intent);
         return { kind: 'AOE', enemy, hits: live.map(t => ({ target: t, dmg: mitigate(enemy, t, raw, atk, 'BASIC').n })) };
@@ -6783,7 +6827,7 @@ function hasMet(name) { return !!metaUpgrades.archive || bestiaryEntry(name).met
 function bestiaryRoster() {
     const out = [];
     Object.entries(ENEMY_POOL).forEach(([faction, list]) =>
-        list.forEach(e => out.push({ name: e.name, faction, sig: e.sig, minTier: e.minTier,
+        list.forEach(e => out.push({ name: e.name, faction, sig: e.sig, rider: e.rider || null, minTier: e.minTier,
                                      range: e.range, isHeavy: e.isHeavy, resistances: e.resistances, boss: false })));
     BOSS_POOL.forEach(b => out.push({ name: b.name, faction: 'COMMAND',
                                       // What it picked up off you, once it has picked it up.
@@ -6818,6 +6862,9 @@ function dossierHtml(name) {
     if (!rec) return `<div class="dossier-body"><div class="dossier-none">No file on this one.</div></div>`;
     const sig = rec.sig ? ENEMY_SIGS[rec.sig] : null;
     const bp = rec.passive ? BOSS_PASSIVES[rec.passive] : null;
+    // The file is looked up by the stripped name, so an elite's card carries the rider its
+    // species carries - which is the whole point of moving it off enemy.name.
+    const rider = rec.rider ? ENEMY_RIDERS[rec.rider] : null;
     const res = ['phys', 'bio', 'energy'].map(t => {
         const v = (rec.resistances || {})[t] || 0;
         const word = v >= 100 ? 'IMMUNE' : v > 5 ? `RESISTS ${v}` : v < 0 ? `WEAK ${v}` : '\u2014';
@@ -6833,6 +6880,9 @@ function dossierHtml(name) {
         ${bp ? `<div class="dossier-sig"><span class="dossier-sig-name">${bp.name}</span>
             <span class="dossier-sig-kind">PASSIVE</span>
             <span class="dossier-sig-desc">${bp.desc}</span></div>` : ''}
+        ${rider ? `<div class="dossier-sig"><span class="dossier-sig-name">${rider.name}</span>
+            <span class="dossier-sig-kind">RIDER</span>
+            <span class="dossier-sig-desc">${rider.desc}</span></div>` : ''}
         <div class="dos-res-row">${res}</div>
         <div class="dossier-tally">
             <span>MET <b>${tally.met}</b></span>
@@ -6870,33 +6920,33 @@ function closeDossier() { inspecting = null; renderDossier(); }
 // enumerate every type that exists, met or not.
 const ENEMY_POOL = {
     'BEASTS': [
-    { name: "Attack Dog", sig: 'PACK_HUNT', minTier: 1, isHeavy: false, classType: "BEAST", range: 'melee', maxHp: 30, speed: 18, armor: 0, dmgBase: 10, img: "enemy_dog.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } }, 
-    { name: "Mutant", sig: 'DRAG_DOWN', minTier: 9, isHeavy: true, classType: "MUTANT", range: 'melee', maxHp: 70, speed: 7, armor: 0, dmgBase: 25, img: "enemy_mutant.webp", scale: 1.5, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 20, energy: -5 } }, 
-    { name: "Chem Fiend", sig: 'GAS_BLOOM', minTier: 11, isHeavy: true, classType: "MUTANT", range: 'ranged', maxHp: 60, speed: 11, armor: 0, dmgBase: 15, img: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 50, energy: -5 } }
+    { name: "Attack Dog", sig: 'PACK_HUNT', intents: [['ATTACK', 0.50], ['FLANK', 0.35], ['HEAVY', 0.15]], rider: 'RAW', minTier: 1, isHeavy: false, classType: "BEAST", range: 'melee', maxHp: 30, speed: 18, armor: 0, dmgBase: 10, img: "enemy_dog.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } }, 
+    { name: "Mutant", sig: 'DRAG_DOWN', intents: [['ATTACK', 0.45], ['HEAVY', 0.35], ['DEFEND', 0.10], ['STATUS', 0.10]], rider: 'RAW', minTier: 9, isHeavy: true, classType: "MUTANT", range: 'melee', maxHp: 70, speed: 7, armor: 0, dmgBase: 25, img: "enemy_mutant.webp", scale: 1.5, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 20, energy: -5 } }, 
+    { name: "Chem Fiend", sig: 'GAS_BLOOM', intents: [['ATTACK', 0.45], ['STATUS', 0.25], ['AOE', 0.25], ['DEFEND', 0.05]], rider: 'RAW', minTier: 11, isHeavy: true, classType: "MUTANT", range: 'ranged', maxHp: 60, speed: 11, armor: 0, dmgBase: 15, img: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 50, energy: -5 } }
     ],
     'RAIDERS': [
-    { name: "Raider", sig: 'CALL_IT_IN', minTier: 1, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 40, speed: 10, armor: 0, dmgBase: 12, img: "enemy_raider.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 2, energy: 0 } }, 
-    { name: "Psycho", sig: 'FRENZY', minTier: 4, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 45, speed: 14, armor: 0, dmgBase: 18, img: "enemy_psycho.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
-    { name: "Sniper", sig: 'RANGING', minTier: 5, isHeavy: false, classType: "RAIDER", range: 'ranged', maxHp: 35, speed: 16, armor: 0, dmgBase: 25, img: "enemy_sniper.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
-    { name: "Juggernaut", sig: 'RIOT_PLATE', minTier: 12, isHeavy: true, classType: "RAIDER", range: 'melee', maxHp: 90, speed: 6, armor: 5, dmgBase: 18, img: "enemy_juggernaut.webp", scale: 1.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 0, energy: -5 } }
+    { name: "Raider", sig: 'CALL_IT_IN', intents: [['ATTACK', 0.60], ['HEAVY', 0.25], ['DEFEND', 0.10], ['STATUS', 0.05]], minTier: 1, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 40, speed: 10, armor: 0, dmgBase: 12, img: "enemy_raider.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 2, energy: 0 } }, 
+    { name: "Psycho", sig: 'FRENZY', intents: [['ATTACK', 0.62], ['HEAVY', 0.18], ['FLANK', 0.20]], minTier: 4, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 45, speed: 14, armor: 0, dmgBase: 18, img: "enemy_psycho.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
+    { name: "Sniper", sig: 'RANGING', intents: [['ATTACK', 0.60], ['HEAVY', 0.25], ['STATUS', 0.15]], minTier: 5, isHeavy: false, classType: "RAIDER", range: 'ranged', maxHp: 35, speed: 16, armor: 0, dmgBase: 25, img: "enemy_sniper.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 0, energy: 0 } }, 
+    { name: "Juggernaut", sig: 'RIOT_PLATE', intents: [['ATTACK', 0.35], ['HEAVY', 0.40], ['DEFEND', 0.25]], minTier: 12, isHeavy: true, classType: "RAIDER", range: 'melee', maxHp: 90, speed: 6, armor: 5, dmgBase: 18, img: "enemy_juggernaut.webp", scale: 1.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 0, energy: -5 } }
     ],
     'MECH': [
-    { name: "Drone", sig: 'ROTOR_LIFT', minTier: 4, isHeavy: false, classType: "DRONE", range: 'ranged', isHovering: true, maxHp: 25, speed: 18, armor: 5, dmgBase: 8, img: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 100, energy: -10 } }, 
-    { name: "Turret", sig: 'OVERWATCH', minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
-    { name: "War Rig", sig: 'AEGIS', minTier: 14, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
+    { name: "Drone", sig: 'ROTOR_LIFT', intents: [['ATTACK', 0.75], ['HEAVY', 0.15], ['STATUS', 0.10]], minTier: 4, isHeavy: false, classType: "DRONE", range: 'ranged', isHovering: true, maxHp: 25, speed: 18, armor: 5, dmgBase: 8, img: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 100, energy: -10 } }, 
+    { name: "Turret", sig: 'OVERWATCH', intents: [['ATTACK', 0.45], ['HEAVY', 0.32], ['DEFEND', 0.18], ['STATUS', 0.05]], minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
+    { name: "War Rig", sig: 'AEGIS', intents: [['ATTACK', 0.35], ['AOE', 0.20], ['HEAVY', 0.20], ['DEFEND', 0.25]], minTier: 14, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
     ],
     // Two factions built to be answered rather than out-damaged.
     'CHOIR': [
-    { name: "Acolyte", sig: 'LITANY', minTier: 4, isHeavy: false, classType: "CULTIST", range: 'melee', maxHp: 45, speed: 12, armor: 0, dmgBase: 12, img: "enemy_choir_acolyte.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 40, energy: -10 } },
-    { name: "Censer Bearer", sig: 'RAD_WASH', minTier: 6, isHeavy: false, classType: "CULTIST", range: 'ranged', maxHp: 55, speed: 10, armor: 4, dmgBase: 14, img: "enemy_choir_censer.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 55, energy: -10 } },
-    { name: "Reliquary", sig: 'MARTYR', minTier: 10, isHeavy: true, classType: "CULTIST", range: 'melee', maxHp: 85, speed: 7, armor: 6, dmgBase: 16, img: "enemy_choir_reliquary.webp", scale: 1.4, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 60, energy: -15 } },
-    { name: "Hierophant", unique: true, sig: 'RESURGENCE', minTier: 13, isHeavy: true, classType: "CULTIST", range: 'ranged', maxHp: 75, speed: 13, armor: 4, dmgBase: 20, img: "enemy_choir_hierophant.webp", scale: 1.3, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 70, energy: -5 } }
+    { name: "Acolyte", sig: 'LITANY', intents: [['ATTACK', 0.60], ['HEAVY', 0.25], ['DEFEND', 0.15]], minTier: 4, isHeavy: false, classType: "CULTIST", range: 'melee', maxHp: 45, speed: 12, armor: 0, dmgBase: 12, img: "enemy_choir_acolyte.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 40, energy: -10 } },
+    { name: "Censer Bearer", sig: 'RAD_WASH', intents: [['ATTACK', 0.55], ['HEAVY', 0.15], ['STATUS', 0.20], ['AOE', 0.10]], minTier: 6, isHeavy: false, classType: "CULTIST", range: 'ranged', maxHp: 55, speed: 10, armor: 4, dmgBase: 14, img: "enemy_choir_censer.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 55, energy: -10 } },
+    { name: "Reliquary", sig: 'MARTYR', intents: [['ATTACK', 0.40], ['HEAVY', 0.35], ['DEFEND', 0.25]], minTier: 10, isHeavy: true, classType: "CULTIST", range: 'melee', maxHp: 85, speed: 7, armor: 6, dmgBase: 16, img: "enemy_choir_reliquary.webp", scale: 1.4, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 60, energy: -15 } },
+    { name: "Hierophant", unique: true, sig: 'RESURGENCE', intents: [['ATTACK', 0.50], ['STATUS', 0.20], ['AOE', 0.20], ['DEFEND', 0.10]], minTier: 13, isHeavy: true, classType: "CULTIST", range: 'ranged', maxHp: 75, speed: 13, armor: 4, dmgBase: 20, img: "enemy_choir_hierophant.webp", scale: 1.3, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 70, energy: -5 } }
     ],
     'CARRION': [
-    { name: "Carrion Rat", sig: 'TEEMING', minTier: 3, isHeavy: false, classType: "VERMIN", range: 'melee', maxHp: 22, speed: 20, armor: 0, dmgBase: 9, img: "enemy_carrion_rat.webp", scale: 0.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -5, bio: 25, energy: 0 } },
-    { name: "Blight Moth", sig: 'TEEMING', minTier: 5, isHeavy: false, classType: "VERMIN", range: 'ranged', isHovering: true, maxHp: 26, speed: 22, armor: 0, dmgBase: 11, img: "enemy_carrion_moth.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -5, bio: 30, energy: -10 } },
-    { name: "Gorge Worm", sig: 'BURROW', minTier: 9, isHeavy: true, classType: "VERMIN", range: 'melee', maxHp: 70, speed: 9, armor: 2, dmgBase: 22, img: "enemy_carrion_worm.webp", scale: 1.4, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 35, energy: -10 } },
-    { name: "Brood Mother", unique: true, sig: 'BROOD', minTier: 12, isHeavy: true, classType: "VERMIN", range: 'ranged', maxHp: 95, speed: 8, armor: 4, dmgBase: 15, img: "enemy_carrion_brood.webp", scale: 1.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 45, energy: -15 } }
+    { name: "Carrion Rat", sig: 'TEEMING', intents: [['ATTACK', 0.55], ['FLANK', 0.30], ['HEAVY', 0.15]], minTier: 3, isHeavy: false, classType: "VERMIN", range: 'melee', maxHp: 22, speed: 20, armor: 0, dmgBase: 9, img: "enemy_carrion_rat.webp", scale: 0.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -5, bio: 25, energy: 0 } },
+    { name: "Blight Moth", sig: 'TEEMING', intents: [['ATTACK', 0.55], ['STATUS', 0.30], ['AOE', 0.15]], minTier: 5, isHeavy: false, classType: "VERMIN", range: 'ranged', isHovering: true, maxHp: 26, speed: 22, armor: 0, dmgBase: 11, img: "enemy_carrion_moth.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -5, bio: 30, energy: -10 } },
+    { name: "Gorge Worm", sig: 'BURROW', intents: [['ATTACK', 0.45], ['HEAVY', 0.35], ['DEFEND', 0.20]], minTier: 9, isHeavy: true, classType: "VERMIN", range: 'melee', maxHp: 70, speed: 9, armor: 2, dmgBase: 22, img: "enemy_carrion_worm.webp", scale: 1.4, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 35, energy: -10 } },
+    { name: "Brood Mother", unique: true, sig: 'BROOD', intents: [['ATTACK', 0.45], ['HEAVY', 0.20], ['DEFEND', 0.20], ['AOE', 0.15]], minTier: 12, isHeavy: true, classType: "VERMIN", range: 'ranged', maxHp: 95, speed: 8, armor: 4, dmgBase: 15, img: "enemy_carrion_brood.webp", scale: 1.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 45, energy: -15 } }
     ]
 };
 
@@ -7030,6 +7080,63 @@ function validateFormations() {
                .forEach((n, _, all) => { if (all.filter(x => x === n).length > 1 && !bad.some(b => b.includes(`${f.id}: two `))) bad.push(`${faction}/${f.id}: two ${n}, which is unique`); });
     }));
     if (ALL_FORMATIONS.length !== new Set(ALL_FORMATIONS.map(f => f.id)).size) bad.push('duplicate formation id');
+    return bad;
+}
+
+// What a turn of each intent is worth, as a multiple of the unit's own dmgBase. Every figure
+// but one is read straight off enemyStrike: AOE is 0.7, HEAVY 1.5, STATUS 0.3, a plain swing 1,
+// a FLANK a plain swing into the back rank, and DEFEND deals nothing. The one design number is
+// DEPLOYED - AOE lands on the whole line, so what it is worth depends on how many are standing,
+// and three is the squad the game deploys.
+const DEPLOYED = 3;
+const INTENT_THREAT = { ATTACK: 1, FLANK: 1, HEAVY: 1.5, STATUS: 0.3, AOE: 0.7 * DEPLOYED, DEFEND: 0 };
+function intentThreat(list) {
+    return (list || []).reduce((a, [type, w]) => a + w * (INTENT_THREAT[type] || 0), 0);
+}
+// The fallback each authored table replaced, so the two can be compared rather than asserted
+// against a number typed into a test. Its three branches all come out within a few points of
+// 1.00, which is what makes a band worth stating: the tables were written to change what a unit
+// does on its turn without changing how much the turn is worth.
+const INTENT_FALLBACK = {
+    MECH:        [['DEFEND', 0.20], ['AOE', 0.20], ['ATTACK', 0.60]],
+    ranged:      [['STATUS', 0.20], ['AOE', 0.10], ['ATTACK', 0.70]],
+    'melee-fast':[['HEAVY', 0.20], ['DEFEND', 0.10], ['FLANK', 0.15], ['ATTACK', 0.55]],
+    'melee-slow':[['HEAVY', 0.20], ['DEFEND', 0.10], ['ATTACK', 0.70]]
+};
+function fallbackFor(u) {
+    return u.classType === 'MECH' ? 'MECH' : u.range === 'ranged' ? 'ranged'
+         : u.speed >= 14 ? 'melee-fast' : 'melee-slow';
+}
+const INTENT_BAND = 0.10;
+
+// Every type in the pool carries its own table, and a table is only worth authoring if it is
+// checked: a weight list that does not sum to 1 silently truncates in rollIntent's loop, and a
+// table whose expected damage drifts from the fallback it replaced is a balance change wearing
+// a data hat. Same shape as validateFormations - problems out, asserted by the suite.
+function validateIntents() {
+    const bad = [];
+    const seen = new Set();
+    Object.entries(ENEMY_POOL).forEach(([faction, list]) => list.forEach(u => {
+        seen.add(u.name);
+        if (!Array.isArray(u.intents) || !u.intents.length) { bad.push(`${faction}/${u.name}: no intent table`); return; }
+        const sum = u.intents.reduce((a, [, w]) => a + w, 0);
+        if (Math.abs(sum - 1) > 1e-9) bad.push(`${faction}/${u.name}: weights sum to ${sum.toFixed(3)}`);
+        u.intents.forEach(([t]) => { if (!(t in INTENT_THREAT)) bad.push(`${faction}/${u.name}: unknown intent ${t}`); });
+        if (u.intents.length !== new Set(u.intents.map(x => x[0])).size) bad.push(`${faction}/${u.name}: an intent listed twice`);
+        // A FLANK on a unit too slow to take it is a weight that silently becomes ATTACK.
+        if (u.intents.some(([t]) => t === 'FLANK') && u.speed < 14) bad.push(`${faction}/${u.name}: flanks at speed ${u.speed}`);
+        const mine = intentThreat(u.intents), was = intentThreat(INTENT_FALLBACK[fallbackFor(u)]);
+        if (Math.abs(mine - was) > INTENT_BAND * was)
+            bad.push(`${faction}/${u.name}: ${mine.toFixed(3)} against the fallback's ${was.toFixed(3)}, outside +-${INTENT_BAND * 100}%`);
+        if (u.rider && !ENEMY_RIDERS[u.rider]) bad.push(`${faction}/${u.name}: undeclared rider ${u.rider}`);
+    }));
+    BOSS_POOL.forEach(b => {
+        if (!Array.isArray(b.intents) || !b.intents.length) { bad.push(`boss/${b.id}: no intent table`); return; }
+        const sum = b.intents.reduce((a, [, w]) => a + w, 0);
+        if (Math.abs(sum - 1) > 1e-9) bad.push(`boss/${b.id}: weights sum to ${sum.toFixed(3)}`);
+        b.intents.forEach(([t]) => { if (!(t in INTENT_THREAT)) bad.push(`boss/${b.id}: unknown intent ${t}`); });
+    });
+    if (seen.size !== Object.values(ENEMY_POOL).flat().length) bad.push('two pool units share a name');
     return bad;
 }
 
@@ -7850,6 +7957,11 @@ function renderField() {
             tagText = `${s.name.toUpperCase()}${state}`; tagTitle = s.desc;
             tagSpent = ent.sig === 'RIOT_PLATE' && !(ent.plate > 0);
         }
+        // A rider is not a second tag - the slot is one line wide and C11 was a whole phase
+        // about that - but it is not nothing either, so it rides in the tooltip and the file.
+        const rider = riderOf(ent);
+        if (rider && tagTitle) tagTitle = `${tagTitle} ${rider.desc}`;
+        else if (rider) { tagText = rider.name.toUpperCase(); tagTitle = rider.desc; }
         // A swarm of six that all read TEEMING . THICK says the same thing six times, in six
         // slots too narrow to hold it. An identical tag is printed once; anything carrying its
         // own state - a plate count, a live overwatch - differs in its text and so still shows.
@@ -9639,7 +9751,7 @@ function executeEnemyAi(enemy) {
         if (hasAffix(enemy, 'VAMPIRIC')) { let heal = Math.max(1, Math.floor(rawDmg * 0.5)); enemy.hp = Math.min(enemy.maxHp, enemy.hp + heal); setTimeout(() => spawnFCT(enemy.id, `+${heal}`, "fct-heal"), 300); }
         if (hasAffix(enemy, 'SEPTIC') && target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns || 0, 2); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
 
-        if (intent.type === 'STATUS' || ["Mutant", "Attack Dog", "War Hound", "Chem Fiend"].includes(enemy.name)) { 
+        if (intent.type === 'STATUS' || riderOf(enemy)) { 
             if (Math.random() < 0.5 || hasTrait(target, 'UNSHAKEABLE')) { target.bleedingTurns = 2; setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
             else { target.stunnedTurns = 1; setTimeout(() => spawnFCT(target.id, "STUNNED", "fct-status"), 300 * globalSettings.combatSpeed); }
         }
@@ -9876,7 +9988,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, unheldSigsFor, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, unheldSigsFor, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,

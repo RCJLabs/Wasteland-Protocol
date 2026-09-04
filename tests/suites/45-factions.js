@@ -215,7 +215,12 @@ module.exports = {
       const aimable = !!document.querySelector(`#${w.id}.targetable-enemy`);
       const ratAimable = !!document.querySelector(`#${rat.id}.targetable-enemy`);
       pendingAction = null;
-      const threatens = (forecastFor(w) || {}).hits;
+      // E05: this used to assert that a buried worm threatens nobody, which the next three
+      // lines of this same test disprove - one more call to its AI and the front operator is
+      // down health. Its turn IS the surfacing hit, so the board has to price it.
+      const fc = forecastFor(w) || {};
+      const threatens = (fc.hits || []).reduce((a, h) => a + h.dmg, 0);
+      const aimedAt = (fc.hits || [])[0] ? fc.hits[0].target.gridPos : null;
 
       const front = [...heroes].sort((a, b) => a.gridPos - b.gridPos)[0];
       const hpBefore = front.hp;
@@ -227,11 +232,14 @@ module.exports = {
       executeEnemyAi(w);
       const stayedUp = !w.burrowed;
       combatActive = false;
-      return { under, aimable, ratAimable, threatens: !!threatens, surfaced, stayedUp };
+      return { under, aimable, ratAimable, threatens, aimedAt, surfaced, stayedUp,
+               frontRank: [...heroes].sort((a, b) => a.gridPos - b.gridPos)[0].gridPos };
     });
     ok('the Gorge Worm goes under', worm.under);
     ok('and nothing can be aimed at it while it is down', !worm.aimable && worm.ratAimable);
-    ok('nor does it threaten anyone from under there', !worm.threatens);
+    ok(`but the board still prices what it is about to do (${worm.threatens})`, worm.threatens > 0);
+    ok('and aims it at whoever is holding the front, which is where it comes up',
+      worm.aimedAt === worm.frontRank);
     ok('it comes up under the front rank and hits on arrival', worm.surfaced);
     ok('and it will not go under if that leaves nothing to shoot at', worm.stayedUp);
 
