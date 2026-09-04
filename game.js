@@ -2793,6 +2793,9 @@ const EVENT_POOL = [
 // N08 hook: three of these are the natural place for a recruit to arrive out of a well-resolved
 // event. When the recruit generator and the roster slots exist, the offer attaches here - to
 // KESS ON THE ROAD first, which is already the survivor turning up whole.
+// How often the dealer's proxy picks off the cursed shelf when he has been burned, against the
+// CURSE_CHANCE a table he is not angry at rolls.
+const MAGPIE_SPITE = 0.6;
 const FOLLOWUPS = [
     { title: "ORRIN'S WORKSHOP", cast: 'ORRIN',
       when: () => castStanding('ORRIN') >= 2,
@@ -2807,6 +2810,29 @@ const FOLLOWUPS = [
             return "He works through the squad's dead weight and hands back what is worth carrying."; } },
         { label: "Leave him to it", canAfford: () => true,
           execute: () => { return "'Next fire, then.' The light stays on behind you for a long while."; } }
+      ] },
+
+    // ORRIN and the MAGPIE were the only two faces with nothing on the cold side. Rob either of
+    // them and their event became a two-button null screen for the rest of the run - and
+    // eventWeight makes a met face MORE likely to come up, not less, because it weights on
+    // having met them and not on how that went. So the punishment for burning a trader was
+    // being shown the same closed door more often than the road shows anything else.
+    //
+    // These do not reopen the trade. B03's position is that a trader who is robbed stops
+    // trading, and that is a design decision rather than a gap: neither thread calls noteCast,
+    // so nothing here climbs back out. What they do is give the cold side a scene, and make it
+    // cost something - which is what the other six faces already had.
+    { title: "WHAT ORRIN WELDED", cast: 'ORRIN',
+      when: () => castStanding('ORRIN') <= -2,
+      desc: () => "A raider rig at the roadside, burned to the frame and stripped of everything worth taking - except the axle housing. The repair plate on it is neat, recent, and welded by a hand you have seen work before.",
+      choices: () => [
+        { label: "Cut his plate out of it (+2 Parts, +1 Tech)", canAfford: () => true,
+          execute: () => { materials.parts += 2; materials.tech += 1;
+            bookConsequence('AMBUSH', CONSEQUENCE_FUSE.AMBUSH); playSFX('click');
+            return "It comes away clean, which is the problem: whoever paid him to put it on will know it by sight, and will want to know who is carrying it now."; } },
+        { label: "Take the rest and leave the weld (+45 Scrap)", canAfford: () => true,
+          execute: () => { scrap += 45; playSFX('click');
+            return "You go through the rig and step around his work. It is not respect. It is not wanting to be found."; } }
       ] },
 
     { title: "VELA SENDS MEN", cast: 'VELA',
@@ -2956,6 +2982,34 @@ const FOLLOWUPS = [
               return `${given.name} for ${on.name}, straight across, and no cloth over either of them.`; } },
           { label: "Walk on", canAfford: () => true,
             execute: () => "The thing goes back under the tailgate before you have finished turning." }
+        ];
+      } },
+
+    { title: "THE WORD ON THE CLOTH", cast: 'MAGPIE',
+      when: () => castStanding('MAGPIE') <= -2 && unownedRelics().length > 0,
+      desc: () => "Somebody else's tailgate, somebody else's velvet cloth, and a dealer you have never met who knows your squad by description. 'He said you'd come past. He said to sell you whatever you want.'",
+      choices: () => {
+        // He will still sell to you. He simply chooses what, and he chooses off the cursed
+        // shelf most of the time - MAGPIE_SPITE against the CURSE_CHANCE an honest table rolls.
+        // Most of the time and not always: the scene is a bad bargain worth considering, not a
+        // guaranteed punishment dressed as one. Buying anyway is the whole point of it - the
+        // door is not shut, it is priced.
+        const cursed = unownedRelics('CURSED');
+        const clean = unownedRelics().filter(r => r.tier !== 'CURSED');
+        const pool = (cursed.length && (!clean.length || Math.random() < MAGPIE_SPITE)) ? cursed : clean;
+        const on = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+        return [
+          { label: on ? `Buy what he picked for you (-180 Scrap)` : 'The cloth is bare', canAfford: () => !!on && scrap >= 180,
+            execute: () => { if (!on) return "The cloth is bare.";
+              scrap -= 180; activeRelics.push(on); announceSets(); playSFX('overdrive');
+              return `${on.name}, face up, at his price. 'He picked it out himself. He was very particular.'`; } },
+          { label: "Take the cloth and everything on it", canAfford: () => !!on,
+            execute: () => { if (!on) return "There is nothing under the cloth worth the trouble.";
+              activeRelics.push(on); announceSets();
+              bookConsequence('PURSUIT', CONSEQUENCE_FUSE.PURSUIT); playSFX('click');
+              return `You take ${on.name} and the cloth with it. The dealer does not move, and does not need to - there is a second set of tracks behind you before the ridge.`; } },
+          { label: "Keep walking", canAfford: () => true,
+            execute: () => "The dealer calls the offer after you twice, and then stops, as if it had been agreed they would." }
         ];
       } }
 ];
@@ -10236,7 +10290,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
