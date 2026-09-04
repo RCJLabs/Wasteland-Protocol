@@ -114,6 +114,38 @@
 // restores, cannot show here at all - the standing policy runs at rung 0, where no protocol is
 // active, so it needs an --ascension arm of its own before anything is claimed for it.
 
+// ── What E08b's capstones moved, and it is a lot ────────────────────────────────────────
+// E08b put one capstone per class above the two signature forks, gated at level 8 with both
+// forks shut. The item was filed with a warning attached - a straight power addition on a slate
+// that had already moved the wall - and the warning was right. 3 x 60 expeditions an arm, the
+// before arm run from a frozen copy of the pre-change tree:
+//
+//                              before                    after
+//   runs that ended the road  13 / 11 / 12 of 60       18 / 16 / 17 of 60
+//   wipes per run, mean       6.82 / 6.82 / 6.95       6.32 / 6.28 / 6.38
+//   nodes cleared, median      100 / 99 / 99            90 / 90 / 90
+//   promotions per run         9.8 / 10.1 / 9.7        16.1 / 16.0 / 16.3
+//   capstones taken               -                    6.33 / 6.37 / 6.32
+//   score, median            43,585 / 42,153 / 43,928  44,944 / 36,671 / 43,335
+//   deepest sector, median      5 / 5 / 5                5 / 5 / 5
+//   lost for good, per run    3.70 / 3.88 / 4.05       3.92 / 3.95 / 3.55
+//
+// Three rows separate completely, all three in the same direction, and they are the same story
+// told three ways. The win rate goes 18.3% to 28.3% - ten points, against the roughly eight E06
+// deliberately took off. Wipes fall 6.86 to 6.33. And nodes cleared falls 99 to 90, which is not
+// a squad doing less: it is a squad reaching the end of a finite road instead of grinding along
+// it, which is also why score does not move - fewer nodes paid for, cancelling the extra wins.
+//
+// Score is NOT established either way: the after arm spans 36.7k to 44.9k against a before arm
+// inside 1.8k, which is the heavy tail this file warns about at the top and not a result.
+//
+// The other thing worth recording: 6.33 capstones are taken a run and 0.13 are bought at the
+// Outpost. The purchase door E08 opened is real and almost never the one used, because the
+// promotion screen is free and reaches the player first. Promotions per run rise 9.9 to 16.1,
+// which is exactly the 6.3 capstones - so the re-offer-until-taken rule costs no extra screens
+// against a policy that takes it the first time it is shown. A player who banks it would see it
+// again each level, and that is untested here because no policy in this file banks.
+
 // ── The long career, re-measured after C04 ──────────────────────────────────────────────
 // Four Citadel spots had no ceiling, and `--meta carry` at 40 runs used to stop terminating on
 // them: unlimited fallback bunkers meant a squad that could not be made to stop. Capped, the
