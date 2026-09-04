@@ -70,21 +70,30 @@ module.exports = {
        `(perkPoints now ${spend.spent}, +5 DMG applied: ${spend.before} -> ${spend.dmgBase})`,
       spend.spent === 0 && spend.dmgBase === spend.before + 5 && spend.held);
 
-    // ── Partial exhaustion: three held, one left, still worth a screen ──────────────────
+    // ── Partial exhaustion: one fork spent, one still open, still worth a screen ────────
+    // E07 gave each class two forks of two, so "unheld" is fork-shaped now: taking either half
+    // closes the other. One fork spent is half an operator's signatures gone and the other half
+    // still on the table, which is exactly the case this was written to cover.
     const partial = await page.evaluate(() => {
       const c = playerRoster.find(p => p.classType === 'SCAVENGER');
-      const all = SIG_PERKS.filter(p => p.cls === 'SCAVENGER');
-      c.traits = all.slice(0, 3).map(p => p.id);
+      const forks = forksFor(c);
+      c.traits = [forks[0][0].id];                   // one half taken, so that whole fork closes
       c.perkPoints = 0; c.level = 4; c.xp = 0; c.xpToNext = 182;
       pendingPerkOffers = [];
       awardXp(c, 182);
       const offer = pendingPerkOffers[0];
-      const sigInOffer = offer && offer.options.find(id => all.some(s => s.id === id));
-      return { pending: pendingPerkOffers.length, sigInOffer, lastSig: all[3].id };
+      const sigs = offer ? offer.options.filter(id => SIG_PERKS.some(s => s.id === id)) : [];
+      return { pending: pendingPerkOffers.length, sigs,
+               open: openForksFor(c).map(g => g.map(p => p.id)),
+               closedHalf: forks[0][1].id };
     });
-    ok(`the last unheld signature still gets offered on its own, not skipped early ` +
-       `(${partial.pending} pending, offering ${partial.sigInOffer})`,
-      partial.pending === 1 && partial.sigInOffer === partial.lastSig);
+    ok(`one fork spent still leaves a screen worth stopping for (${partial.pending} pending)`,
+      partial.pending === 1);
+    ok(`and it offers the open fork's two halves together (${partial.sigs.join(' / ')})`,
+      partial.sigs.length === 2 && partial.open.length === 1
+      && partial.open[0].every(id => partial.sigs.includes(id)));
+    ok(`never the half closed by the one already taken (${partial.closedHalf})`,
+      !partial.sigs.includes(partial.closedHalf));
 
     // ── Level and XP bookkeeping is identical either way - only the interrupt changes ───
     const parity = await page.evaluate(() => {

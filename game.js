@@ -5820,46 +5820,46 @@ function assignSlot(charId, newSlot) {
 // offered on the spot, mixing the stat perks with class signatures that change what an
 // ability does. Signatures are one-time; the stat perks stay repeatable.
 const SIG_PERKS = [
-    { id: 'BULWARK',        cls: 'BRUISER',    name: 'Bulwark',          desc: 'Iron Guard intercepts at 45% damage instead of 60%.' },
-    { id: 'AFTERSHOCK',     cls: 'BRUISER',    name: 'Aftershock',       desc: 'Heavy Wrench also hits the enemy behind at 40%.' },
-    { id: 'GRUDGE',         cls: 'BRUISER',    name: 'Grudge',           desc: '+15% damage while below half health.' },
-    { id: 'UNSHAKEABLE',    cls: 'BRUISER',    name: 'Unshakeable',      desc: 'Cannot be stunned.' },
-    { id: 'FIELD_SURGEON',  cls: 'MEDIC',      name: 'Field Surgeon',    desc: 'Cauterize also cleanses bleed, stun and oil.' },
-    { id: 'COMBAT_MEDIC',   cls: 'MEDIC',      name: 'Combat Medic',     desc: 'Pistol hits patch the most-wounded ally for 5.' },
-    { id: 'RAD_SPECIALIST', cls: 'MEDIC',      name: 'Rad Specialist',   desc: 'Rad Shot always opens a bleed.' },
-    { id: 'STIMS_ON_ME',    cls: 'MEDIC',      name: 'Stims On Me',      desc: 'The STIM tactic costs 20 while this medic stands.' },
-    { id: 'ACID_RAIN',      cls: 'SCAVENGER',  name: 'Acid Rain',        desc: 'Acid Flask splashes 2 turns of corrosion onto the next enemy.' },
-    { id: 'SHRAPNEL_LOAD',  cls: 'SCAVENGER',  name: 'Shrapnel Load',    desc: 'Pipe Rifle deals +20% to armoured targets.' },
-    { id: 'PACKRAT',        cls: 'SCAVENGER',  name: 'Packrat',          desc: '+10 scrap after fights they survive.' },
-    { id: 'QUICK_HANDS',    cls: 'SCAVENGER',  name: 'Quick Hands',      desc: 'Flashbang cools down in 3 turns, not 4.' },
-    { id: 'BACKDRAFT',      cls: 'PYROMANIAC', name: 'Backdraft',        desc: "Molotov's second hit lands at full damage." },
-    { id: 'LINGERING_BURN', cls: 'PYROMANIAC', name: 'Lingering Burn',   desc: 'Oil this pyro applies lasts a turn longer.' },
-    { id: 'PYROPHILIA',     cls: 'PYROMANIAC', name: 'Pyrophilia',       desc: '+10% damage per oiled enemy on the field, up to +30%.' },
-    { id: 'CONTROLLED_BURN',cls: 'PYROMANIAC', name: 'Controlled Burn',  desc: 'Thermite cools down in 3 turns, not 4.' },
-    { id: 'POINT_BLANK',    cls: 'SHOTGUNNER', name: 'Point Blank',      desc: "Buckshot's front-target bonus rises to 1.8x." },
-    { id: 'BREACHING_ROUNDS',cls: 'SHOTGUNNER',name: 'Breaching Rounds', desc: 'Slug Shot ignores armour.' },
-    { id: 'DOUBLE_TAP',     cls: 'SHOTGUNNER', name: 'Double Tap',       desc: 'Execute refunds its cooldown on a kill.' },
-    { id: 'IRONSIGHTS',     cls: 'SHOTGUNNER', name: 'Ironsights',       desc: 'Slug Shot deals +20%.' },
-    { id: 'CALLED_SHOT',    cls: 'SNIPER',     name: 'Called Shot',      desc: 'This sniper deals +25% to marked targets.' },
-    { id: 'PIERCING_ROUNDS',cls: 'SNIPER',     name: 'Piercing Rounds',  desc: 'Quick Shot ignores armour.' },
-    { id: 'SPOTTER_NETWORK',cls: 'SNIPER',     name: 'Spotter Network',  desc: '+5 momentum whenever a mark is cashed in.' },
-    { id: 'PATIENT_HUNTER', cls: 'SNIPER',     name: 'Patient Hunter',   desc: "Deadeye's long-range bonus rises to 2.1x." },
-    { id: 'GO_FOR_THE_THROAT', cls: 'HOUND',   name: 'Go For The Throat',desc: 'Feral Bite deals +30% to bleeding targets.' },
-    { id: 'RELENTLESS',     cls: 'HOUND',      name: 'Relentless',       desc: 'A Feral Bite kill refunds its cooldown.' },
-    { id: 'LEAD_THE_PACK',  cls: 'HOUND',      name: 'Lead The Pack',    desc: "The hound's attacks build +5 momentum." },
-    { id: 'THICK_FUR',      cls: 'HOUND',      name: 'Thick Fur',        desc: '+8 physical resist.', apply: c => { c.resistances.phys += 8; } },
-    { id: 'SECOND_LUNG',    cls: 'TRENCH_FIEND',name: 'Second Lung',     desc: 'Over The Top costs him nothing.' },
-    { id: 'SAWBONES',       cls: 'TRENCH_FIEND',name: 'Sawbones',        desc: "Ripsaw's bleed runs 5 turns instead of 3." },
-    { id: 'TRENCH_FOOT',    cls: 'TRENCH_FIEND',name: 'Trench Foot',     desc: '+20% damage while standing in the front rank.' },
-    { id: 'NO_MANS_LAND',   cls: 'TRENCH_FIEND',name: "No Man's Land",   desc: 'Cannot be made to bleed.' },
-    { id: 'CLOSED_CIRCUIT', cls: 'HAZMAT',     name: 'Closed Circuit',   desc: '+40 bio resist.', apply: c => { c.resistances.bio += 40; } },
-    { id: 'WIDE_NOZZLE',    cls: 'HAZMAT',     name: 'Wide Nozzle',      desc: 'Caustic Burst reaches a third enemy.' },
-    { id: 'CATALYST',       cls: 'HAZMAT',     name: 'Catalyst',         desc: '+25% damage against anything corroded.' },
-    { id: 'SPARE_FILTERS',  cls: 'HAZMAT',     name: 'Spare Filters',    desc: 'Purge Valve cools down in 2 turns, not 3.' },
-    { id: 'WINCH_ARM',      cls: 'HARPOONER',  name: 'Winch Arm',        desc: 'Drag Line hauls the enemy behind the target forward too.' },
-    { id: 'DEEP_HOOK',      cls: 'HARPOONER',  name: 'Deep Hook',        desc: "Barbed Shot's bleed runs 5 turns instead of 3." },
-    { id: 'SLACK_LINE',     cls: 'HARPOONER',  name: 'Slack Line',       desc: '+25% damage against whatever stands at the enemy front.' },
-    { id: 'HAND_OVER_HAND', cls: 'HARPOONER',  name: 'Hand Over Hand',   desc: 'A Drag Line kill hands the cooldown straight back.' }
+    { id: 'BULWARK', fork: 'BRUISER_LINE',        cls: 'BRUISER',    name: 'Bulwark',          desc: 'Iron Guard intercepts at 45% damage instead of 60%.' },
+    { id: 'AFTERSHOCK', fork: 'BRUISER_SWING',     cls: 'BRUISER',    name: 'Aftershock',       desc: 'Heavy Wrench also hits the enemy behind at 40%.' },
+    { id: 'GRUDGE', fork: 'BRUISER_SWING',         cls: 'BRUISER',    name: 'Grudge',           desc: '+15% damage while below half health.' },
+    { id: 'UNSHAKEABLE', fork: 'BRUISER_LINE',    cls: 'BRUISER',    name: 'Unshakeable',      desc: 'Cannot be stunned.' },
+    { id: 'FIELD_SURGEON', fork: 'MEDIC_HANDS',  cls: 'MEDIC',      name: 'Field Surgeon',    desc: 'Cauterize also cleanses bleed, stun and oil.' },
+    { id: 'COMBAT_MEDIC', fork: 'MEDIC_HANDS',   cls: 'MEDIC',      name: 'Combat Medic',     desc: 'Pistol hits patch the most-wounded ally for 5.' },
+    { id: 'RAD_SPECIALIST', fork: 'MEDIC_KIT', cls: 'MEDIC',      name: 'Rad Specialist',   desc: 'Rad Shot always opens a bleed.' },
+    { id: 'STIMS_ON_ME', fork: 'MEDIC_KIT',    cls: 'MEDIC',      name: 'Stims On Me',      desc: 'The STIM tactic costs 20 while this medic stands.' },
+    { id: 'ACID_RAIN', fork: 'SCAVENGER_OPENER',      cls: 'SCAVENGER',  name: 'Acid Rain',        desc: 'Acid Flask splashes 2 turns of corrosion onto the next enemy.' },
+    { id: 'SHRAPNEL_LOAD', fork: 'SCAVENGER_OPENER',  cls: 'SCAVENGER',  name: 'Shrapnel Load',    desc: 'Pipe Rifle deals +20% to armoured targets.' },
+    { id: 'PACKRAT', fork: 'SCAVENGER_HAUL',        cls: 'SCAVENGER',  name: 'Packrat',          desc: '+10 scrap after fights they survive.' },
+    { id: 'QUICK_HANDS', fork: 'SCAVENGER_HAUL',    cls: 'SCAVENGER',  name: 'Quick Hands',      desc: 'Flashbang cools down in 3 turns, not 4.' },
+    { id: 'BACKDRAFT', fork: 'PYRO_BURN',      cls: 'PYROMANIAC', name: 'Backdraft',        desc: "Molotov's second hit lands at full damage." },
+    { id: 'LINGERING_BURN', fork: 'PYRO_OIL', cls: 'PYROMANIAC', name: 'Lingering Burn',   desc: 'Oil this pyro applies lasts a turn longer.' },
+    { id: 'PYROPHILIA', fork: 'PYRO_OIL',     cls: 'PYROMANIAC', name: 'Pyrophilia',       desc: '+10% damage per oiled enemy on the field, up to +30%.' },
+    { id: 'CONTROLLED_BURN', fork: 'PYRO_BURN',cls: 'PYROMANIAC', name: 'Controlled Burn',  desc: 'Thermite cools down in 3 turns, not 4.' },
+    { id: 'POINT_BLANK', fork: 'SHOTGUN_CLOSE',    cls: 'SHOTGUNNER', name: 'Point Blank',      desc: "Buckshot's front-target bonus rises to 1.8x." },
+    { id: 'BREACHING_ROUNDS', fork: 'SHOTGUN_SLUG',cls: 'SHOTGUNNER',name: 'Breaching Rounds', desc: 'Slug Shot ignores armour.' },
+    { id: 'DOUBLE_TAP', fork: 'SHOTGUN_CLOSE',     cls: 'SHOTGUNNER', name: 'Double Tap',       desc: 'Execute refunds its cooldown on a kill.' },
+    { id: 'IRONSIGHTS', fork: 'SHOTGUN_SLUG',     cls: 'SHOTGUNNER', name: 'Ironsights',       desc: 'Slug Shot deals +20%.' },
+    { id: 'CALLED_SHOT', fork: 'SNIPER_MARK',    cls: 'SNIPER',     name: 'Called Shot',      desc: 'This sniper deals +25% to marked targets.' },
+    { id: 'PIERCING_ROUNDS', fork: 'SNIPER_SHOT',cls: 'SNIPER',     name: 'Piercing Rounds',  desc: 'Quick Shot ignores armour.' },
+    { id: 'SPOTTER_NETWORK', fork: 'SNIPER_MARK',cls: 'SNIPER',     name: 'Spotter Network',  desc: '+5 momentum whenever a mark is cashed in.' },
+    { id: 'PATIENT_HUNTER', fork: 'SNIPER_SHOT', cls: 'SNIPER',     name: 'Patient Hunter',   desc: "Deadeye's long-range bonus rises to 2.1x." },
+    { id: 'GO_FOR_THE_THROAT', fork: 'HOUND_BITE', cls: 'HOUND',   name: 'Go For The Throat',desc: 'Feral Bite deals +30% to bleeding targets.' },
+    { id: 'RELENTLESS', fork: 'HOUND_BITE',     cls: 'HOUND',      name: 'Relentless',       desc: 'A Feral Bite kill refunds its cooldown.' },
+    { id: 'LEAD_THE_PACK', fork: 'HOUND_HIDE',  cls: 'HOUND',      name: 'Lead The Pack',    desc: "The hound's attacks build +5 momentum." },
+    { id: 'THICK_FUR', fork: 'HOUND_HIDE',      cls: 'HOUND',      name: 'Thick Fur',        desc: '+8 physical resist.', apply: c => { c.resistances.phys += 8; } },
+    { id: 'SECOND_LUNG', fork: 'FIEND_GROUND',    cls: 'TRENCH_FIEND',name: 'Second Lung',     desc: 'Over The Top costs him nothing.' },
+    { id: 'SAWBONES', fork: 'FIEND_BLOOD',       cls: 'TRENCH_FIEND',name: 'Sawbones',        desc: "Ripsaw's bleed runs 5 turns instead of 3." },
+    { id: 'TRENCH_FOOT', fork: 'FIEND_GROUND',    cls: 'TRENCH_FIEND',name: 'Trench Foot',     desc: '+20% damage while standing in the front rank.' },
+    { id: 'NO_MANS_LAND', fork: 'FIEND_BLOOD',   cls: 'TRENCH_FIEND',name: "No Man's Land",   desc: 'Cannot be made to bleed.' },
+    { id: 'CLOSED_CIRCUIT', fork: 'HAZMAT_SUIT', cls: 'HAZMAT',     name: 'Closed Circuit',   desc: '+40 bio resist.', apply: c => { c.resistances.bio += 40; } },
+    { id: 'WIDE_NOZZLE', fork: 'HAZMAT_BURST',    cls: 'HAZMAT',     name: 'Wide Nozzle',      desc: 'Caustic Burst reaches a third enemy.' },
+    { id: 'CATALYST', fork: 'HAZMAT_BURST',       cls: 'HAZMAT',     name: 'Catalyst',         desc: '+25% damage against anything corroded.' },
+    { id: 'SPARE_FILTERS', fork: 'HAZMAT_SUIT',  cls: 'HAZMAT',     name: 'Spare Filters',    desc: 'Purge Valve cools down in 2 turns, not 3.' },
+    { id: 'WINCH_ARM', fork: 'HARPOON_LINE',      cls: 'HARPOONER',  name: 'Winch Arm',        desc: 'Drag Line hauls the enemy behind the target forward too.' },
+    { id: 'DEEP_HOOK', fork: 'HARPOON_HOOK',      cls: 'HARPOONER',  name: 'Deep Hook',        desc: "Barbed Shot's bleed runs 5 turns instead of 3." },
+    { id: 'SLACK_LINE', fork: 'HARPOON_HOOK',     cls: 'HARPOONER',  name: 'Slack Line',       desc: '+25% damage against whatever stands at the enemy front.' },
+    { id: 'HAND_OVER_HAND', fork: 'HARPOON_LINE', cls: 'HARPOONER',  name: 'Hand Over Hand',   desc: 'A Drag Line kill hands the cooldown straight back.' }
 ];
 
 function hasTrait(ent, id) { return !!(ent && ent.isPlayer && Array.isArray(ent.traits) && ent.traits.includes(id)); }
@@ -5867,17 +5867,64 @@ function traitOnField(id) { return activeEntities.some(e => e.isPlayer && e.hp >
 
 let pendingPerkOffers = [];
 
-// Everything of this class's four signatures this operator has not already taken.
-function unheldSigsFor(char) { return SIG_PERKS.filter(p => p.cls === char.classType && !hasTrait(char, p.id)); }
-// Three distinct options for this operator: unheld class signatures first, stat perks filling in.
+// Each class's four signatures are two forks of two, and the two halves of a fork are opposed:
+// take one and the other closes for that operator for the rest of the run.
+//
+// Before this they were simply four things you had not taken yet, and rollPerkOffer put every
+// unheld signature ahead of every stat card and then took the first three. With four unheld
+// signatures that is three signatures and no stat card, so the first two promotions of an
+// operator's life could not offer anything but signatures - the screen was an ordering, not a
+// choice. Measured over 400 Bruisers each taking a uniformly random offered card, the terminal
+// build was the same one every time: all four of AFTERSHOCK, BULWARK, GRUDGE and UNSHAKEABLE,
+// in whatever order the shuffle happened to deal them. Forty signature perks, ten builds.
+//
+// It is 2 of 4 now, one from each fork, so there are four terminal builds per class rather than
+// one, and the two promotions that pick them are real decisions rather than an ordering. What
+// the operator does not spend on signatures it banks, and banked points buy stat perks at the
+// Outpost - so the power is not simply removed, it moves onto the other axis.
+function forksFor(char) {
+    const mine = SIG_PERKS.filter(p => p.cls === char.classType);
+    const byFork = {};
+    mine.forEach(p => { (byFork[p.fork] = byFork[p.fork] || []).push(p); });
+    return Object.values(byFork);
+}
+// A fork is open while neither of its halves has been taken.
+function openForksFor(char) { return forksFor(char).filter(g => !g.some(p => hasTrait(char, p.id))); }
+// Everything this operator could still be offered. D11's auto-bank reads this to decide whether
+// a promotion is worth stopping the run for, and it is right for the same reason it was before:
+// with both forks closed there is no signature left to put on the screen.
+function unheldSigsFor(char) { return openForksFor(char).flat(); }
+// One open fork, both of its halves side by side, and a stat card to say no with. Offering the
+// pair together is the point - the decision is legible on the screen rather than being an
+// invisible consequence of which card the shuffle happened to show.
 function rollPerkOffer(char) {
-    const sigs = unheldSigsFor(char);
+    const open = openForksFor(char);
+    const fork = open.length ? open[Math.floor(Math.random() * open.length)] : [];
     const stats = PERK_POOL.map(p => ({ id: p.id, name: p.label, desc: p.label, stat: true }));
-    const shuffled = [...sigs].sort(() => Math.random() - 0.5);
-    const pool = [...shuffled, ...stats.sort(() => Math.random() - 0.5)];
+    const pool = [...[...fork].sort(() => Math.random() - 0.5), ...stats.sort(() => Math.random() - 0.5)];
     const seen = new Set(); const out = [];
     for (const p of pool) { if (seen.has(p.id)) continue; seen.add(p.id); out.push(p.id); if (out.length === 3) break; }
     return out;
+}
+// Same shape as validateIntents and validateFormations: problems out, asserted by the suite.
+// A fork of one is not a fork, a fork spanning two classes is a data error, and a signature
+// without one would quietly become un-offerable the moment openForksFor filtered on it.
+function validatePerkForks() {
+    const bad = [];
+    const byFork = {};
+    SIG_PERKS.forEach(p => {
+        if (!p.fork) { bad.push(`${p.id}: no fork`); return; }
+        (byFork[p.fork] = byFork[p.fork] || []).push(p);
+    });
+    Object.entries(byFork).forEach(([f, list]) => {
+        if (list.length !== 2) bad.push(`${f}: ${list.length} halves, not 2`);
+        if (new Set(list.map(p => p.cls)).size !== 1) bad.push(`${f}: spans ${[...new Set(list.map(p => p.cls))].join('/')}`);
+    });
+    [...new Set(SIG_PERKS.map(p => p.cls))].forEach(c => {
+        const forks = new Set(SIG_PERKS.filter(p => p.cls === c).map(p => p.fork));
+        if (forks.size !== 2) bad.push(`${c}: ${forks.size} forks, not 2`);
+    });
+    return bad;
 }
 
 function renderPerkOffer() {
@@ -5888,14 +5935,19 @@ function renderPerkOffer() {
     if (!char) { pendingPerkOffers.shift(); renderPerkOffer(); return; }
     switchScreen('screen-perk');
     document.getElementById('perk-title').innerText = `FIELD PROMOTION — ${char.name.toUpperCase()}`;
-    document.getElementById('perk-sub').innerText = `${char.classType} · LEVEL ${char.level}`;
+    // The two signatures on an offer are the two halves of one fork, so say so: taking either
+    // closes the other for this operator, and that is the whole decision the screen is for.
+    const paired = offer.options.filter(id => SIG_PERKS.some(p => p.id === id)).length === 2;
+    document.getElementById('perk-sub').innerText =
+        `${char.classType} · LEVEL ${char.level}${paired ? ' · one of these two, and the other closes' : ''}`;
     document.getElementById('perk-choices').innerHTML = offer.options.map((id, i) => {
         const sig = SIG_PERKS.find(p => p.id === id);
         const stat = PERK_POOL.find(p => p.id === id);
         const name = sig ? sig.name : (stat ? stat.label.split(' (')[0] : id);
         const desc = sig ? sig.desc : (stat ? stat.label : '');
-        return `<button class="relic-card ${sig ? 'perk-sig' : 'perk-stat'}" data-action="take-perk" data-index="${i}">
-            <span class="relic-card-tier">${sig ? 'SIGNATURE' : 'TRAINING'}</span>
+        const twin = sig && paired ? SIG_PERKS.find(p => p.fork === sig.fork && p.id !== sig.id) : null;
+        return `<button class="relic-card ${sig ? 'perk-sig' : 'perk-stat'}" data-action="take-perk" data-index="${i}"${twin ? ` title="Taking this closes ${twin.name}"` : ''}>
+            <span class="relic-card-tier">${sig ? (twin ? 'SIGNATURE · CLOSES ' + twin.name.toUpperCase() : 'SIGNATURE') : 'TRAINING'}</span>
             <span class="relic-card-name">${name}</span>
             <span class="relic-card-desc">${desc}</span></button>`;
     }).join('') + `<button class="event-btn perk-bank" data-action="bank-perk">BANK THE POINT (spend it at the Outpost)</button>`;
@@ -5967,12 +6019,18 @@ function migrateTraits(roster) {
     return roster;
 }
 
-// A compact tally like VETERAN x2, HONED x3 rather than a wall of repeats.
+// A compact tally like VETERAN x2, HONED x3 rather than a wall of repeats. E07: the sheet also
+// names what a signature choice shut, because otherwise the only place an operator's shape is
+// visible is the promotion screen it was decided on and then never again.
 function traitSummary(char) {
     if (!char.traits || char.traits.length === 0) return '';
     const counts = {};
     char.traits.forEach(t => { counts[t] = (counts[t] || 0) + 1; });
-    return Object.entries(counts).map(([t, n]) => n > 1 ? `${t} x${n}` : t).join(', ');
+    const held = Object.entries(counts).map(([t, n]) => n > 1 ? `${t} x${n}` : t).join(', ');
+    const shut = forksFor(char)
+        .map(g => g.find(p => !hasTrait(char, p.id) && g.some(o => hasTrait(char, o.id))))
+        .filter(Boolean).map(p => p.id);
+    return shut.length ? `${held} · closed: ${shut.join(', ')}` : held;
 }
 function useOutpostItem(index) { inventory.splice(index, 1); scrap += 20; saveGameState(); renderOutpost(); }
 function buyUpgrade(charId, type, cost) { if (scrap < cost) return; scrap -= cost; let c = playerRoster.find(c => c.id === charId); if (c.hp <= 0) return; if (type === 'HP') { c.maxHp += 10; c.hp += 10; } else if (type === 'DMG') { c.dmgBase += 3; } c.upgradeCount++; saveGameState(); renderOutpost(); }
@@ -10041,7 +10099,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, unheldSigsFor, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, unheldSigsFor, forksFor, openForksFor, validatePerkForks, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
