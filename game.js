@@ -5693,11 +5693,16 @@ function setOutpostTab(tab) { document.getElementById('tab-roster').className = 
 // One operator's full command card - the list view stacks seven of these, and the camp
 // scene serves the same card as a sheet when a sprite is tapped.
 function operatorCardHtml(char) {
-        let cost = 30 + (char.upgradeCount * 25); let canUpg = scrap >= cost; let isDead = char.hp <= 0; let isInj = char.hp < char.maxHp && char.hp > 0;
+        let cost = upgradeCost(char); let canUpg = scrap >= cost; let isDead = char.hp <= 0; let isInj = char.hp < char.maxHp && char.hp > 0;
         // The Outpost used to sell a resurrection for fifty Scrap, which is what made every
         // death in the game a bill rather than a loss. Nobody on this roster is at zero any more:
         // they are either dragged clear by the end of the fight or they are not on it.
-        let medHtml = `<button class="upg-btn med-btn" ${!isInj || scrap < 10 ? 'disabled' : ''} data-action="medbay" data-id="${char.id}" data-mode="HEAL">TRIAGE (10)</button>`;
+        const medStep = medBayCost(), patch = patchUpCost(char);
+        let medHtml = `<button class="upg-btn med-btn" ${!isInj || scrap < medStep ? 'disabled' : ''} data-action="medbay" data-id="${char.id}" data-mode="HEAL" title="Heals ${medBayStep(char)}.">TRIAGE (${medStep})</button>`;
+        // The same treatment, in one click instead of six. Hidden when a single TRIAGE would
+        // finish the job, so the two buttons never quote the same price for the same thing.
+        if (isInj && patchUpClicks(char) > 1)
+            medHtml += ` <button class="upg-btn med-btn" ${scrap < patch ? 'disabled' : ''} data-action="medbay" data-id="${char.id}" data-mode="PATCH" title="${patchUpClicks(char)} x TRIAGE, back to full.">PATCH UP (${patch})</button>`;
         
         // Unspent points always win the slot, however many perks the character already has.
         let traitDisplay = char.perkPoints > 0
@@ -5758,7 +5763,10 @@ function renderOutpost() {
     document.getElementById('mat-parts').innerText = formatStat(materials.parts);
     document.getElementById('mat-chems').innerText = formatStat(materials.chems);
     document.getElementById('mat-tech').innerText = formatStat(materials.tech);
-    document.getElementById('btn-breakdown').disabled = scrap < 25;
+    const bdCost = breakdownCost();
+    document.getElementById('btn-breakdown').disabled = scrap < bdCost;
+    const bdBtn = document.getElementById('btn-breakdown');
+    if (bdBtn) bdBtn.innerText = `BREAKDOWN SCRAP (${bdCost} SCRAP)`;
     let wbHtml = ''; let invFull = inventory.length >= metaUpgrades.invMax;
     // Rendered off ITEM_DATA so the bench, the bag and the deck all quote the same effect, and
     // a recipe cannot be added without saying what it makes.
@@ -5796,7 +5804,7 @@ function renderOutpost() {
     invC.innerHTML = invCells.join('');
 }
 
-function breakdownScrap() { if (scrap < 25) return; scrap -= 25; let m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)]; materials[m]++; saveGameState(); renderOutpost(); }
+function breakdownScrap() { const c = breakdownCost(); if (scrap < c) return; scrap -= c; let m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)]; materials[m]++; saveGameState(); renderOutpost(); }
 function craftItem(item) {
     if (!canCarry() || !canAfford(item)) return;
     Object.entries(ITEM_DATA[item].mats).forEach(([k, n]) => { materials[k] -= n; });
@@ -6067,13 +6075,51 @@ function traitSummary(char) {
         .filter(Boolean).map(p => p.id);
     return shut.length ? `${held} · closed: ${shut.join(', ')}` : held;
 }
-function useOutpostItem(index) { inventory.splice(index, 1); scrap += 20; saveGameState(); renderOutpost(); }
-function buyUpgrade(charId, type, cost) { if (scrap < cost) return; scrap -= cost; let c = playerRoster.find(c => c.id === charId); if (c.hp <= 0) return; if (type === 'HP') { c.maxHp += 10; c.hp += 10; } else if (type === 'DMG') { c.dmgBase += 3; } c.upgradeCount++; saveGameState(); renderOutpost(); }
-function medBay(charId, action) { 
-    let c = playerRoster.find(c => c.id === charId); 
-    if (action === 'HEAL' && scrap >= 10 && c.hp > 0 && c.hp < c.maxHp) { scrap -= 10; c.hp = Math.min(c.maxHp, c.hp + Math.floor(c.maxHp * 0.4)); playSFX('heal'); } 
+// ── The till ────────────────────────────────────────────────────────────────────────
+// Income compounds x1.4 a sector through sectorRewardMult, while the wall compounds x1.25 in
+// health and x1.28 in damage - so the purse outgrows the fight by about 10% a sector by design,
+// which is what lets player power compound. Four of the Outpost's lines were sector-one
+// constants and did not participate: bringing three operators from a quarter health back to
+// full cost 60 scrap at every depth, which is half of one cleared node's payout at sector 1 and
+// 6.6% of it at sector 7. Attrition had an off switch, and the switch got cheaper the longer
+// you played. Meanwhile a 30-scrap line in the Armory cost 225 at sector 7, because the Armory
+// has been on the curve since it was built and E08's signature price joined it.
+//
+// Same rule now, applied to the lines that were left behind. Every sector-one price is
+// unchanged; what changes is that they stay worth what they were worth.
+const MEDBAY_STEP = 10;          // scrap per click
+const MEDBAY_SHARE = 0.4;        // of maxHp, per click
+const UPGRADE_BASE = 30, UPGRADE_STEP = 25;
+const BREAKDOWN_BASE = 25;
+const SELL_BASE = 20;
+function outpostPrice(base) { return Math.max(1, Math.round(base * sectorRewardMult())); }
+function medBayCost() { return outpostPrice(MEDBAY_STEP); }
+function medBayStep(c) { return Math.max(1, Math.floor(c.maxHp * MEDBAY_SHARE)); }
+// What PATCH UP is: exactly the clicks TRIAGE would have taken, at the price TRIAGE charges.
+// It buys the player their thumb back, not a discount.
+function patchUpClicks(c) {
+    if (!c || c.hp <= 0 || c.hp >= c.maxHp) return 0;
+    return Math.ceil((c.maxHp - c.hp) / medBayStep(c));
+}
+function patchUpCost(c) { return patchUpClicks(c) * medBayCost(); }
+function upgradeCost(c) { return outpostPrice(UPGRADE_BASE + ((c && c.upgradeCount) || 0) * UPGRADE_STEP); }
+function breakdownCost() { return outpostPrice(BREAKDOWN_BASE); }
+function sellValue() { return outpostPrice(SELL_BASE); }
 
-    saveGameState(); renderOutpost(); 
+function useOutpostItem(index) { inventory.splice(index, 1); scrap += sellValue(); saveGameState(); renderOutpost(); }
+function buyUpgrade(charId, type, cost) { if (scrap < cost) return; scrap -= cost; let c = playerRoster.find(c => c.id === charId); if (c.hp <= 0) return; if (type === 'HP') { c.maxHp += 10; c.hp += 10; } else if (type === 'DMG') { c.dmgBase += 3; } c.upgradeCount++; saveGameState(); renderOutpost(); }
+function medBay(charId, action) {
+    let c = playerRoster.find(c => c.id === charId);
+    if (!c || c.hp <= 0 || c.hp >= c.maxHp) { saveGameState(); renderOutpost(); return; }
+    const step = medBayCost();
+    if (action === 'HEAL' && scrap >= step) { scrap -= step; c.hp = Math.min(c.maxHp, c.hp + medBayStep(c)); playSFX('heal'); }
+    // One click for the whole bar, charged click by click. It refuses outright rather than
+    // part-healing: a button that quotes a price has to charge that price or nothing.
+    if (action === 'PATCH') {
+        const cost = patchUpCost(c);
+        if (cost > 0 && scrap >= cost) { scrap -= cost; c.hp = c.maxHp; playSFX('heal'); }
+    }
+    saveGameState(); renderOutpost();
 }
 
 // Fourteen events repeat far less than four did, but a uniform roll still hands the same one
@@ -6709,8 +6755,12 @@ function rollIntent(enemy) {
     return intentFor(gateIntent(branch, enemy), enemy);
 }
 
-// Enemy stats climb 1.5x per sector; rewards climb alongside so player power can compound
-// too, and the run ends on a build/skill wall rather than an arithmetic one.
+// Rewards climb 1.4x a sector so player power can compound and the run ends on a build/skill
+// wall rather than an arithmetic one. The note here used to say enemy stats climb 1.5x per
+// sector; they have not for a long time - SECTOR_HP_SCALE is 1.25 and SECTOR_DMG_SCALE is 1.28,
+// eased there and measured. So the purse deliberately outgrows the fight, by 12% a sector
+// against health and 9.4% against damage, and anything priced off a sector-one constant stops
+// being a decision about halfway down the road. That is what outpostPrice is for.
 function sectorRewardMult() { return Math.pow(1.4, currentSector - 1); }
 
 // Scores run to six figures late in a run and the header is 400px wide on a phone, so keep
@@ -10140,7 +10190,7 @@ globalThis.WP = {
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
-    AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants

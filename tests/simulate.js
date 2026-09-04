@@ -570,7 +570,15 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // roster member is ever at hp <= 0 by the time this runs.
     playerRoster.forEach(c => {
       let guard = 0;
-      while (c.hp > 0 && c.hp < c.maxHp && scrap >= 10 && guard++ < 40) medBay(c.id, 'HEAL');
+      // E09: the 10 that stood here was the Outpost's old flat price, copied. It is on the
+      // income curve now, so the harness asks the engine what a click costs - and takes the
+      // one-click PATCH UP when it can, which charges exactly the same as the clicks it saves.
+      const step = typeof medBayCost === 'function' ? medBayCost() : 10;
+      if (typeof patchUpCost === 'function' && c.hp > 0 && c.hp < c.maxHp && scrap >= patchUpCost(c)) {
+        medBay(c.id, 'PATCH');
+      } else {
+        while (c.hp > 0 && c.hp < c.maxHp && scrap >= step && guard++ < 40) medBay(c.id, 'HEAL');
+      }
     });
     // Gear helps nobody in the stash: each piece goes to the first deployed operator it fits.
     gearStash.slice().forEach(id => {
