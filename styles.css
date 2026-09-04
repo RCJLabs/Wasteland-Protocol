@@ -616,6 +616,23 @@ button.reach-short { border-color: #7a5a20; }
 .career-rung span:last-child { color: #c08ad0; }
 /* The ladder: eight rows that have to stay readable at 320px, so the description wraps onto
    its own full-width line under the name rather than fighting the multiplier for room. */
+/* E13: the dossiers, for every class rather than only the seven currently standing in the
+   Outpost. Same column, same grid shape as the ladder above it - the Chronicle already stacks
+   several blocks in a narrow column and this must not be the one that widens it. */
+.chronicle-dossiers { flex-shrink: 0; border: 1px solid #4a4030; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
+.chronicle-dossiers:empty { display: none; }
+.dossier-head { font-size: 10px; letter-spacing: 1px; color: #c08ad0; margin-bottom: 3px; }
+.dossier-row { display: grid; grid-template-columns: 20px 1fr auto; gap: 1px 6px; font-size: 10px; letter-spacing: 1px; align-items: baseline; }
+.dossier-mark { color: #8a8578; }
+.dossier-cls { color: #b9b4a6; }
+.dossier-xp { color: #d9a93d; font-variant-numeric: tabular-nums; }
+.dossier-next { grid-column: 2 / 4; font-size: 9px; color: #7d786c; letter-spacing: 0; line-height: 1.35; text-transform: none; }
+.dossier-r1 .dossier-mark, .dossier-r1 .dossier-cls { color: #9a9488; }
+.dossier-r2 .dossier-mark, .dossier-r2 .dossier-cls { color: #d9a93d; }
+.dossier-r3 .dossier-mark, .dossier-r3 .dossier-cls { color: #c08ad0; }
+.dossier-r0 .dossier-cls, .dossier-r0 .dossier-xp { color: #5c584e; }
+.dossier-note { font-size: 9px; color: #7d786c; letter-spacing: 0; line-height: 1.4; text-transform: none; margin-top: 5px; border-top: 1px solid #3a3428; padding-top: 5px; }
+
 .chronicle-ladder { flex-shrink: 0; border: 1px solid #4a4030; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
 .chronicle-ladder:empty { display: none; }
 .ladder-head { font-size: 10px; letter-spacing: 1px; color: #c08ad0; margin-bottom: 3px; }
