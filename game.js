@@ -741,7 +741,11 @@ const BOSS_POOL = [
                   img: 'enemy_hound_bulldog.webp', scale: 1.5, armor: 5, sig: 'RIOT_PLATE',
                   resistances: { phys: 10, bio: 0, energy: -5 } },
         escortArmor: 22,
-        enrage: { cry: 'THE MARSHAL CALLS THE COLUMN IN!', dmgScale: 1.3, speedBonus: 3 },
+        // The cry said it called the column in and then did not: dmgScale and speedBonus, the
+        // generic pair, on a warlord whose whole passive is about whether its hound is standing.
+        // It calls the hound back now - once, and only if you have already put it down, which is
+        // exactly the position the cry is shouted from.
+        enrage: { cry: 'THE MARSHAL CALLS THE COLUMN IN!', dmgScale: 1.3, speedBonus: 3, reEscort: true },
         // You went through the hound to get to it. It brought a second hound.
         grudge: { cry: 'THE COLUMN ARRIVES - ANOTHER HOUND!', name: 'THE COLUMN',
                   tell: 'A fresh hound off the wagon, and the plate goes back up.',
@@ -759,7 +763,9 @@ const BOSS_POOL = [
         learned: { sig: 'READ_THE_LINE', replaces: 'STATUS' },
         // Every third turn the weather changes under everyone, squad and warlord alike.
         stormTurn: 3,
-        enrage: { cry: 'THE STORMCALLER OPENS THE SKY!', dmgScale: 1.2, speedBonus: 2 },
+        // Same problem: it opened the sky and nothing happened to the sky. It turns the weather
+        // on the spot now, and turns it every other turn from there rather than every third.
+        enrage: { cry: 'THE STORMCALLER OPENS THE SKY!', dmgScale: 1.2, speedBonus: 2, stormTurn: 2 },
         // It waited out your last squad. It is not waiting for this one.
         grudge: { cry: 'THE SKY BREAKS - IT WILL NOT HOLD!', name: 'THE SKY BREAKS',
                   tell: 'The weather turns every turn, and every turn of it hurts.',
@@ -1865,6 +1871,31 @@ const HEAVY_RAMP = { rare: 11, common: 14 };
 // Per-tier growth within a sector. Damage eased from 0.12 after the simulator showed every
 // expedition dying in sector 1, stacked on the heavy-unlock cliff at tier 6 - see the heavy
 // weight ramp in generateEnemies, which was the other half of that wall.
+// The curve a fight is built on, in one place. initiateCombat used to be the only site that
+// wrote it out, which is why five mid-fight spawn sites ended up hand-rolling their own.
+function fightMult() {
+    return difficultyMult * (1 + ((currentTier - 1) * TIER_HP_GROWTH)) * Math.pow(SECTOR_HP_SCALE, currentSector - 1);
+}
+function fightDmgMult() {
+    return difficultyMult * (1 + ((currentTier - 1) * TIER_DMG_GROWTH)) * Math.pow(SECTOR_DMG_SCALE, currentSector - 1);
+}
+// What a unit spawned mid-fight is built at. A commander stashes the factors its own fight was
+// built with - the fight outlives the scope they were computed in, which is what __mult is for
+// and what raiseFelled has always read. Anything else reads the live curve, which is the same
+// thing the fight opened with. Either way there is one answer.
+//
+// Five sites used to hand-roll `1 + (currentTier - 1) * 0.4` instead. Commanders are only ever
+// met at tier 10 - boss nodes generate at t === TOTAL_TIERS, measured over 40 generated maps -
+// so that expression was the constant 4.6 in every commander fight there has ever been, while
+// the fight around it ran from mult 2.80 at sector 1 to 10.68 at sector 7. A reinforcement
+// arrived at 1.64x the health and 2.42x the damage of its own fight's curve in sector 1, and at
+// 0.43x and 0.55x in sector 7 - so the Marshal's second hound was less than half the one you
+// had just killed. The three commander sites also dropped difficultyMult entirely, so the one
+// knob meant to make the fight harder did not reach the reinforcements at all.
+function spawnScale(host) {
+    return { mult: (host && host.__mult) || fightMult(), dmg: (host && host.__dmgMult) || fightDmgMult() };
+}
+
 const TIER_HP_GROWTH = 0.2;
 const TIER_DMG_GROWTH = 0.10;
 const BASE_REGROUPS = 2;       // second chances per run, before a defeat ends it
@@ -7722,8 +7753,8 @@ function initiateCombat(nodeType, isEliteNode) {
     // HP keeps the steep 1.5x-per-sector curve; damage climbs far more slowly so a deep fight
     // is dangerous rather than an unavoidable one-shot. Player power compounds through
     // repeatable percentage perks, which is what makes the curve climbable at all.
-    const mult = difficultyMult * (1 + ((currentTier - 1) * TIER_HP_GROWTH)) * Math.pow(SECTOR_HP_SCALE, currentSector - 1);
-    const dmgMult = difficultyMult * (1 + ((currentTier - 1) * TIER_DMG_GROWTH)) * Math.pow(SECTOR_DMG_SCALE, currentSector - 1);
+    const mult = fightMult();
+    const dmgMult = fightDmgMult();
     
     activeEntities = [...deployedRoster, ...generateEnemies(nodeType, mult, isEliteNode, dmgMult, currentFormation)];
     if (activeEntities.some(e => e.isFinal)) firePrompt('TALLY');
@@ -9214,27 +9245,53 @@ function openGrudgePhase(enemy) {
     if (gm.skyToll) enemy.skyToll = gm.skyToll;
     // The Marshal's second hound, and the Bastion's second generator: both are the retinue
     // the fight opened with, put back on the field.
-    if (gm.reEscort || gm.reWard) {
-        const src = BOSS_POOL.find(x => x.id === enemy.bossId) || {};
-        const spec = gm.reEscort ? src.escort : src.ward;
-        if (spec) {
-            const m = 1 + ((currentTier - 1) * 0.4);
-            const unit = {
-                id: `grudge_${Date.now()}`, name: spec.name, classType: spec.classType, range: spec.range,
-                maxHp: Math.floor(spec.hp * m), hp: Math.floor(spec.hp * m),
-                speed: spec.speed, armor: spec.armor || 0, baseArmor: spec.armor || 0, isPlayer: false,
-                dmgBase: Math.floor(spec.dmg * m), img: spec.img, scale: spec.scale, hpDrop: 0,
-                stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
-                resistances: { ...spec.resistances }
-            };
-            if (spec.sig) unit.sig = spec.sig;
-            if (gm.reWard) { enemy.wardId = unit.id; enemy.wardSoak = src.wardSoak || 0.15; }
-            if (gm.reEscort) { enemy.escortId = unit.id; enemy.escortArmor = src.escortArmor || 20; }
-            unit.intent = rollIntent(unit);
-            activeEntities.push(unit); turnQueue.push(unit);
-            log(`> ${spec.name} takes the field.`, 'log-dmg');
-        }
+    if (gm.reEscort || gm.reWard) reRaiseRetinue(enemy, gm.reEscort ? 'escort' : 'ward');
+}
+
+// Putting a commander's opening retinue back on the field. The grudge phase raises it because
+// you went through it last time; the Marshal's enrage raises it because its cry says so. One
+// function, built at the same scale the original was - which is what spawnScale is for.
+function reRaiseRetinue(enemy, which) {
+    const src = BOSS_POOL.find(x => x.id === enemy.bossId) || {};
+    const spec = which === 'ward' ? src.ward : src.escort;
+    if (!spec) return null;
+    const sc = spawnScale(enemy);
+    const unit = {
+        id: `retinue_${Date.now()}`, name: spec.name, classType: spec.classType, range: spec.range,
+        maxHp: Math.floor(spec.hp * sc.mult), hp: Math.floor(spec.hp * sc.mult),
+        speed: spec.speed, armor: spec.armor || 0, baseArmor: spec.armor || 0, isPlayer: false,
+        dmgBase: Math.floor(spec.dmg * sc.dmg), img: spec.img, scale: spec.scale, hpDrop: 0,
+        stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
+        resistances: { ...spec.resistances }
+    };
+    if (spec.sig) unit.sig = spec.sig;
+    if (unit.sig === 'RIOT_PLATE') unit.plate = Math.floor(unit.maxHp * 0.5);
+    if (which === 'ward') { enemy.wardId = unit.id; enemy.wardSoak = src.wardSoak || 0.15; }
+    else { enemy.escortId = unit.id; enemy.escortArmor = src.escortArmor || 20; }
+    unit.intent = rollIntent(unit);
+    activeEntities.push(unit); turnQueue.push(unit);
+    log(`> ${spec.name} takes the field.`, 'log-dmg');
+    return unit;
+}
+
+// The sky turning, which the Stormcaller does on its own clock and, from its enrage, on the spot.
+function turnTheSky(enemy) {
+    const skies = WEATHER_IDS.filter(w => w !== currentWeather);
+    currentWeather = skies[Math.floor(Math.random() * skies.length)];
+    log(`> ${enemy.name} turns the sky over: ${currentWeather.replace(/_/g, ' ')}.`, 'log-status');
+    spawnFCT(enemy.id, 'THE SKY TURNS', 'fct-status');
+    applyCombatScenery(combatBgFile, null);
+    // A grudge-phase Stormcaller does not just change the sky, it drops it on you.
+    if (enemy.skyToll) {
+        activeEntities.filter(t => t.isPlayer && t.hp > 0).forEach(t => {
+            const toll = Math.max(1, Math.floor(t.maxHp * enemy.skyToll));
+            t.hp = Math.max(0, t.hp - toll);
+            spawnFCT(t.id, `-${toll}`, 'fct-status'); triggerHitFlash(t.id);
+            if (t.hp <= 0) { goDown(t); if (runStats) runStats.lastKiller = { name: enemy.name, boss: true, sector: currentSector, tier: currentTier, cause: 'COMBAT' }; }
+        });
+        log(`> The sky comes down on the squad.`, 'log-dmg');
     }
+    playSFX('enrage'); triggerShake(); renderField();
 }
 
 function venomDose(enemy, quiet) {
@@ -9274,33 +9331,18 @@ function executeEnemyAi(enemy) {
     // Whatever the forecast promised, the Stormcaller will not let it stand.
     if (enemy.stormTurn && ++enemy.stormClock >= enemy.stormTurn) {
         enemy.stormClock = 0;
-        const skies = WEATHER_IDS.filter(w => w !== currentWeather);
-        currentWeather = skies[Math.floor(Math.random() * skies.length)];
-        log(`> ${enemy.name} turns the sky over: ${currentWeather.replace(/_/g, ' ')}.`, 'log-status');
-        spawnFCT(enemy.id, 'THE SKY TURNS', 'fct-status');
-        applyCombatScenery(combatBgFile, null);
-        // A grudge-phase Stormcaller does not just change the sky, it drops it on you.
-        if (enemy.skyToll) {
-            activeEntities.filter(t => t.isPlayer && t.hp > 0).forEach(t => {
-                const toll = Math.max(1, Math.floor(t.maxHp * enemy.skyToll));
-                t.hp = Math.max(0, t.hp - toll);
-                spawnFCT(t.id, `-${toll}`, 'fct-status'); triggerHitFlash(t.id);
-                if (t.hp <= 0) { goDown(t); if (runStats) runStats.lastKiller = { name: enemy.name, boss: true, sector: currentSector, tier: currentTier, cause: 'COMBAT' }; }
-            });
-            log(`> The sky comes down on the squad.`, 'log-dmg');
-        }
-        playSFX('enrage'); triggerShake(); renderField();
+        turnTheSky(enemy);
     }
 
     // ── the grudge phases that run on a clock ────────────────────────────────────────
     // The Matriarch lays while you are still trying to finish her.
     if (enemy.spawnSpec && enemy.hp > 0 && ++enemy.spawnClock >= enemy.spawnSpec.every) {
         enemy.spawnClock = 0;
-        const sp = enemy.spawnSpec, m = 1 + ((currentTier - 1) * 0.4);
+        const sp = enemy.spawnSpec, sc = spawnScale(enemy);
         const brood = {
             id: `brood_${Date.now()}`, name: sp.name, classType: sp.classType, range: sp.range,
-            maxHp: Math.floor(sp.hp * m), hp: Math.floor(sp.hp * m), speed: sp.speed,
-            armor: 0, baseArmor: 0, isPlayer: false, dmgBase: Math.floor(sp.dmg * m),
+            maxHp: Math.floor(sp.hp * sc.mult), hp: Math.floor(sp.hp * sc.mult), speed: sp.speed,
+            armor: 0, baseArmor: 0, isPlayer: false, dmgBase: Math.floor(sp.dmg * sc.dmg),
             img: sp.img, scale: sp.scale, hpDrop: 0,
             stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
             resistances: { ...sp.resistances }
@@ -9373,7 +9415,11 @@ function executeEnemyAi(enemy) {
         // renderField, not fitEnemyRow: the row-fitting takes the team element and the scales
         // it is fitting, and the units that just walked on do not exist in the DOM yet.
         if (e.raiseFelled) {
-            const up = raiseFelled(enemy, e.raiseFelled, enemy.__mult || 1, enemy.__dmgMult || 1);
+            // Through the same seam as everything else the fight spawns. This was the one site
+            // that already read the stash, and the `|| 1` it fell back to was a unit built at no
+            // scale at all - which cannot happen now, because the fallback is the live curve.
+            const sc = spawnScale(enemy);
+            const up = raiseFelled(enemy, e.raiseFelled, sc.mult, sc.dmg);
             if (up && e.revenantWard) {
                 enemy.revenantWard = e.revenantWard;
                 log(`> While they stand, nothing you land on it lands properly.`, 'log-status');
@@ -9382,6 +9428,12 @@ function executeEnemyAi(enemy) {
         }
         if (e.armorBonus) { enemy.armor += e.armorBonus; enemy.baseArmor = (enemy.baseArmor || 0) + e.armorBonus; }
         if (e.forceAoe) enemy.forceAoe = true;
+
+        // The Marshal calls the column in. Only if the column is actually down - it is one hound,
+        // put back, not a second one stacked on the first.
+        if (e.reEscort && !bossRetinueUp(enemy, 'escortId')) reRaiseRetinue(enemy, 'escort');
+        // The Stormcaller opens the sky: now, and faster from here.
+        if (e.stormTurn) { enemy.stormTurn = e.stormTurn; enemy.stormClock = 0; turnTheSky(enemy); }
 
         // Plague Wind: no reinforcements, it simply infects the whole line at once.
         if (e.plague) {
@@ -9413,12 +9465,12 @@ function executeEnemyAi(enemy) {
         }
 
         if (e.summon) {
-            const m = 1 + ((currentTier - 1) * 0.4);
+            const sc = spawnScale(enemy);
             const proto = {
                 name: e.summon.name, classType: e.summon.classType, range: e.summon.range,
-                maxHp: Math.floor(e.summon.hp * m), hp: Math.floor(e.summon.hp * m),
+                maxHp: Math.floor(e.summon.hp * sc.mult), hp: Math.floor(e.summon.hp * sc.mult),
                 speed: e.summon.speed, armor: 0, baseArmor: 0, isPlayer: false,
-                dmgBase: Math.floor(e.summon.dmg * m), img: e.summon.img, scale: e.summon.scale,
+                dmgBase: Math.floor(e.summon.dmg * sc.dmg), img: e.summon.img, scale: e.summon.scale,
                 hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
                 resistances: { ...e.summon.resistances }
             };
@@ -9472,11 +9524,12 @@ function executeEnemyAi(enemy) {
             // One whistle each, and never into an already-crowded field.
             const crowd = activeEntities.filter(e => !e.isPlayer && e.hp > 0).length;
             if (crowd < 5) {
-                const m = 1 + ((currentTier - 1) * 0.4);
+                // difficultyMult used to be multiplied in by hand here; it is inside the curve.
+                const sc = spawnScale(enemy);
                 const help = JSON.parse(JSON.stringify(enemy));
                 help.id = `called_${Date.now()}_${Math.floor(Math.random() * 999)}`;
-                help.hp = help.maxHp = Math.max(10, Math.floor(40 * m * difficultyMult));
-                help.dmgBase = Math.max(4, Math.floor(12 * m * difficultyMult));
+                help.hp = help.maxHp = Math.max(10, Math.floor(40 * sc.mult));
+                help.dmgBase = Math.max(4, Math.floor(12 * sc.dmg));
                 help.sig = null; help.sigCd = 0; help.plate = 0;
                 help.bleedingTurns = 0; help.stunnedTurns = 0; help.oiledTurns = 0;
                 help.corrodedTurns = 0; help.markedTurns = 0; help.armorTurns = 0;
@@ -9564,11 +9617,11 @@ function executeEnemyAi(enemy) {
             const crowd = activeEntities.filter(e => !e.isPlayer && e.hp > 0).length;
             const rat = ENEMY_POOL.CARRION.find(e => e.name === 'Carrion Rat');
             if (crowd < 6 && rat) {
-                const m = 1 + ((currentTier - 1) * 0.4);
+                const sc = spawnScale(enemy);
                 const born = JSON.parse(JSON.stringify(rat));
                 born.id = `brood_${Date.now()}_${Math.floor(Math.random() * 999)}`;
-                born.hp = born.maxHp = Math.max(6, Math.floor(rat.maxHp * m * difficultyMult));
-                born.dmgBase = Math.max(3, Math.floor(rat.dmgBase * m * difficultyMult));
+                born.hp = born.maxHp = Math.max(6, Math.floor(rat.maxHp * sc.mult));
+                born.dmgBase = Math.max(3, Math.floor(rat.dmgBase * sc.dmg));
                 born.baseArmor = born.armor || 0; born.sigCd = 0;
                 born.intent = rollIntent(born);
                 activeEntities.push(born); turnQueue.push(born);
@@ -10003,7 +10056,7 @@ globalThis.WP = {
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, armourScale, plate, tacticDesc, passiveDesc, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
