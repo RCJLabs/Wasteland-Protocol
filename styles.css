@@ -633,6 +633,22 @@ button.reach-short { border-color: #7a5a20; }
 .dossier-r0 .dossier-cls, .dossier-r0 .dossier-xp { color: #5c584e; }
 .dossier-note { font-size: 9px; color: #7d786c; letter-spacing: 0; line-height: 1.4; text-transform: none; margin-top: 5px; border-top: 1px solid #3a3428; padding-top: 5px; }
 
+/* E14: the roll of the dead. Permadeath had no memory outside the run that caused it - the
+   record was built, narrowed on the way to disk, and never read back. */
+.chronicle-roll { flex-shrink: 0; border: 1px solid #5a3030; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
+.chronicle-roll:empty { display: none; }
+.roll-head { font-size: 10px; letter-spacing: 1px; color: #c86a5a; margin-bottom: 3px; }
+.roll-row { display: grid; grid-template-columns: 14px auto 1fr auto; gap: 1px 6px; font-size: 10px; letter-spacing: 1px; align-items: baseline; }
+.roll-mark { color: #8b4a4a; }
+.roll-name { color: #d5cfc0; }
+.roll-cls { font-size: 9px; color: #8a8578; letter-spacing: 1px; }
+.roll-where { color: #d9a93d; font-variant-numeric: tabular-nums; font-size: 9px; }
+.roll-what { grid-column: 2 / 5; font-size: 9px; color: #7d786c; letter-spacing: 0; line-height: 1.35;
+             text-transform: none; font-style: italic; padding-bottom: 3px; }
+.roll-none, .roll-more { font-size: 9px; color: #7d786c; letter-spacing: 0; line-height: 1.4; text-transform: none; }
+.roll-more { margin-top: 4px; border-top: 1px solid #3a2828; padding-top: 4px; }
+.career-lost span:last-child { color: #c86a5a; }
+
 .chronicle-ladder { flex-shrink: 0; border: 1px solid #4a4030; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
 .chronicle-ladder:empty { display: none; }
 .ladder-head { font-size: 10px; letter-spacing: 1px; color: #c08ad0; margin-bottom: 3px; }

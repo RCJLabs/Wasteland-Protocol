@@ -3888,6 +3888,17 @@ function isDown(e) { return !!e && e.isPlayer && !e.fallen && e.hp <= 0; }
 const REACHES_THE_DOWN = ['CAUTERIZE', 'STIM_DART', 'ITEM_MED', 'ITEM_ADRENALINE'];
 function bleedingOut() { return activeEntities.filter(e => isDown(e) && (e.downTurns || 0) > 0); }
 
+// Whoever lands the blow that drops an operator goes on two records, because the two answer
+// different questions. runStats.lastKiller is the run's last word and belongs to the run: it
+// is whatever fell last, and the epitaph wants exactly that. felledBy belongs to the person,
+// and a memorial wants exactly that - who dropped THEM. The two are the same right up until a
+// second operator goes down while the first is still on the clock, and then the run-scoped one
+// is simply wrong about the first: it names the blow that dropped somebody else.
+function noteFelled(ent, killer) {
+    if (runStats) runStats.lastKiller = killer;
+    if (ent) ent.felledBy = killer;
+}
+
 function goDown(ent) {
     if (!ent || !ent.isPlayer || ent.fallen || (ent.downTurns || 0) > 0) return;
     // SLOW TO RISE: they have done this before and the body is slower about it each time.
@@ -3957,10 +3968,17 @@ function loseOperator(ent, cause) {
     playerRoster = playerRoster.filter(c => c.id !== ent.id);
     checkDoctrine();
     if (runStats) {
+        // What actually took them is on the operator, not on the run - see noteFelled. The
+        // run-scoped fallback is for a death nothing witnessed, and records no name rather
+        // than borrowing whoever fell last.
+        const by = ent.felledBy || null;
         runStats.fallen = runStats.fallen || [];
         runStats.fallen.push({ name: ent.name, classType: ent.classType, level: ent.level || 1,
-                               sector: currentSector, tier: currentTier, cause,
-                               killer: cause === 'BLED_OUT' && runStats.lastKiller ? runStats.lastKiller.name : null });
+                               sector: currentSector, tier: currentTier,
+                               cause: by && by.cause ? by.cause : cause,
+                               killer: by && by.name ? by.name : null,
+                               elite: by && by.elite ? by.elite : null,
+                               boss: !!(by && by.boss) });
     }
     log(`> ${ent.name} is gone.`, 'log-dmg');
     spawnFCT(ent.id, 'LOST', 'fct-dmg');
@@ -4249,9 +4267,13 @@ function readChronicle(slot = currentSlot) {
 function readCareer(slot = currentSlot) {
     const v = Store.getJSON(careerKey(slot));
     return (v && v !== CORRUPT && !Array.isArray(v) && typeof v === 'object')
-        ? { runs: v.runs || 0, kills: v.kills || 0, deepestSector: v.deepestSector || 0, fielded: v.fielded || {} }
-        : { runs: 0, kills: 0, deepestSector: 0, fielded: {} };
+        ? { runs: v.runs || 0, kills: v.kills || 0, deepestSector: v.deepestSector || 0,
+            lost: v.lost || 0, fielded: v.fielded || {} }
+        : { runs: 0, kills: 0, deepestSector: 0, lost: 0, fielded: {} };
 }
+// The log keeps fifty expeditions and each of them can have lost a squad, so the roll is
+// bounded on its own terms and says how many it did not print.
+const ROLL_SHOWN = 40;
 function writeChronicle(entry) {
     const log = readChronicle();
     log.unshift(entry);
@@ -4260,21 +4282,37 @@ function writeChronicle(entry) {
     const c = readCareer();
     c.runs++; c.kills += entry.kills || 0;
     c.deepestSector = Math.max(c.deepestSector, entry.sector || 0);
+    c.lost = (c.lost || 0) + (entry.fallen || []).length;
     (entry.deployed || []).forEach(cl => { c.fielded[cl] = (c.fielded[cl] || 0) + 1; });
     Store.set(careerKey(), JSON.stringify(c));
+}
+// How a killing blow is spoken of. One vocabulary, because two surfaces describe the same
+// blow now - the run's epitaph below, and the roll of the dead on the Chronicle - and they
+// must not word it differently. Returns null when there is nothing to name, which is the
+// caller's cue that it does not know.
+const FELLED_VERBS = ['Torn apart by', 'Gunned down by', 'Broken by', 'Dragged down by', 'Finished by'];
+function felledPhrase(k) {
+    if (!k) return null;
+    if (k.cause === 'SMOG') return 'Choked out by the smog';
+    if (k.cause === 'SHRAPNEL') return 'Cut down by shrapnel winds';
+    if (k.cause === 'BLEED' || k.cause === 'BLED_OUT') return 'Bled out on the road';
+    if (!k.name) return null;
+    const verb = FELLED_VERBS[seedFromString(k.name) % FELLED_VERBS.length];
+    const name = `${k.elite ? String(k.elite).toUpperCase() + ' ' : ''}${k.name}`;
+    return `${verb} ${k.boss ? 'the warlord ' : 'a '}${name}`;
+}
+// A fallen record names the operator and carries the killer under `killer`; felledPhrase reads
+// a killer whose own name is `name`. That remap is the entire difference between the two
+// shapes, so it lives here rather than at every call site that wants a line for the dead.
+function fallenPhrase(f) {
+    return f ? felledPhrase({ cause: f.cause, name: f.killer, elite: f.elite, boss: f.boss }) : null;
 }
 // The epitaph tells the truth: whoever landed the last blow, or whatever the weather was.
 function epitaphFor(st) {
     const k = st && st.lastKiller;
-    if (!k) return `Vanished into the wasteland, Sector ${st ? st.deepestSector : 1}.`;
-    const where = `Sector ${k.sector}, Tier ${k.tier}`;
-    if (k.cause === 'SMOG') return `Choked out by the smog, ${where}.`;
-    if (k.cause === 'SHRAPNEL') return `Cut down by shrapnel winds, ${where}.`;
-    if (k.cause === 'BLEED') return `Bled out on the road, ${where}.`;
-    const verbs = ['Torn apart by', 'Gunned down by', 'Broken by', 'Dragged down by', 'Finished by'];
-    const verb = verbs[seedFromString(k.name || '') % verbs.length];
-    const name = `${k.elite ? String(k.elite).toUpperCase() + ' ' : ''}${k.name}`;
-    return `${verb} ${k.boss ? 'the warlord ' : 'a '}${name}, ${where}.`;
+    const phrase = felledPhrase(k);
+    if (!phrase) return `Vanished into the wasteland, Sector ${st ? st.deepestSector : 1}.`;
+    return `${phrase}, Sector ${k.sector}, Tier ${k.tier}.`;
 }
 // The latest word across every slot, for the title screen.
 function latestEpitaph() {
@@ -4285,22 +4323,31 @@ function latestEpitaph() {
 
 function renderChronicle() {
     switchScreen('screen-chronicle');
-    const merged = { runs: 0, kills: 0, deepestSector: 0, fielded: {} };
+    const merged = { runs: 0, kills: 0, deepestSector: 0, lost: 0, fielded: {} };
     let entries = [];
     for (let s = 1; s <= 3; s++) {
         const c = readCareer(s);
-        merged.runs += c.runs; merged.kills += c.kills;
+        merged.runs += c.runs; merged.kills += c.kills; merged.lost += c.lost || 0;
         merged.deepestSector = Math.max(merged.deepestSector, c.deepestSector);
         Object.entries(c.fielded).forEach(([k, v]) => { merged.fielded[k] = (merged.fielded[k] || 0) + v; });
         entries = entries.concat(readChronicle(s));
     }
     entries.sort((a, b) => (b.when || 0) - (a.when || 0));
-    entries = entries.slice(0, 50);
+    // The roll reads every entry still on the log; the run list below shows fifty of them.
+    const shown = entries.slice(0, 50);
+    const roll = [];
+    entries.forEach(e => (e.fallen || []).forEach(f => { if (f && f.name) roll.push(f); }));
+    // A career file written before this phase has no lost counter, so the counter reads zero
+    // while the log below it is full of names. The tally can never be smaller than the dead it
+    // is printing, so it is not allowed to be: an old career shows what the log still knows and
+    // starts counting properly from its next expedition.
+    merged.lost = Math.max(merged.lost, roll.length);
     const most = Object.entries(merged.fielded).sort((a, b) => b[1] - a[1])[0];
     document.getElementById('chronicle-career').innerHTML = merged.runs === 0 ? '' :
         `<div class="career-line"><span>EXPEDITIONS</span><span>${merged.runs}</span></div>
          <div class="career-line"><span>HOSTILES KILLED</span><span>${merged.kills.toLocaleString()}</span></div>
          <div class="career-line"><span>DEEPEST EVER</span><span>SECTOR ${merged.deepestSector}</span></div>
+         <div class="career-line career-lost"><span>OPERATORS LOST</span><span>${merged.lost.toLocaleString()}</span></div>
          ${careerWins > 0 ? `<div class="career-line career-won"><span>ROAD WALKED</span><span>\u2620 ${careerWins}</span></div>` : ''}
          ${careerWins > 0 ? `<div class="career-line career-rung"><span>HIGHEST RUNG CLEARED</span><span>${bestRung > 0 ? `\u25B2${bestRung} ${PROTOCOLS[bestRung - 1].name.replace('PROTOCOL: ', '')}` : 'NONE — \u25B21 IS OPEN'}</span></div>` : ''}
          <div class="career-line"><span>MOST FIELDED</span><span>${most ? `${most[0]} (${most[1]})` : '—'}</span></div>`;
@@ -4335,6 +4382,36 @@ function renderChronicle() {
         }).join('') +
         `<div class="dossier-note">OLD GUARD wants every operator in the line at rank ${VETERAN_RANK} or better, and is not offered at all until ${OLD_GUARD_VETS} classes have reached it \u2014 ${vets.length} ${vets.length === 1 ? 'has' : 'have'}${vets.length ? ` (${vets.map(c => c.replace(/_/g, ' ')).join(', ')})` : ''}. CONSCRIPTS does not read these numbers, it feeds them: everyone deployed under it earns double dossier XP.</div>`;
 
+    // The roll of the dead. Permadeath is the sharpest thing the game does and it had no memory
+    // outside the run that caused it: loseOperator built a full record - class, level, where, and
+    // the blow that landed - endRun threw four of its seven fields away on the way to disk, and
+    // nothing ever read the three that survived. Every surface that named the dead was in-run and
+    // ephemeral. So a career could lose thirty operators and the Chronicle would not know one name.
+    //
+    // Entries already on disk carry the old narrow shape, and every field the roll wants may
+    // simply be absent from them. That is the whole migration story: render what is there, say
+    // plainly what is not, and never assume - a career that predates this must open, not crash.
+    document.getElementById('chronicle-roll').innerHTML = merged.runs === 0 ? '' :
+        `<div class="roll-head">THE ROLL OF THE DEAD \u00B7 ${merged.lost.toLocaleString()}</div>` +
+        (roll.length === 0
+            ? `<div class="roll-none">${merged.lost
+                ? 'Nobody on the expeditions still logged. The rest are off the end of it.'
+                : 'Nobody. Every expedition came home whole.'}</div>`
+            : roll.slice(0, ROLL_SHOWN).map(f => {
+                const phrase = fallenPhrase(f);
+                const who = [f.classType ? String(f.classType).replace(/_/g, ' ') : null,
+                             f.level ? `L${f.level}` : null].filter(Boolean).join(' \u00B7 ');
+                return `<div class="roll-row">
+                    <span class="roll-mark">\u2020</span>
+                    <span class="roll-name">${f.name}</span>
+                    <span class="roll-cls">${who || '\u2014'}</span>
+                    <span class="roll-where">S${f.sector || 1}\u00B7T${f.tier || 1}</span>
+                    <span class="roll-what">${phrase ? phrase + '.' : 'No record of what took them.'}</span>
+                </div>`;
+            }).join('')
+              + (roll.length > ROLL_SHOWN
+                  ? `<div class="roll-more">and ${roll.length - ROLL_SHOWN} more still on the log.</div>` : ''));
+
     // The ladder, a line per rung. Before this the only place a rung was written down was the
     // contract board, which shows one at a time and only the ones already open - so a player
     // could not see what they were climbing towards, which is most of the reason to climb.
@@ -4353,7 +4430,7 @@ function renderChronicle() {
           }).join('');
     // Three kinds of ending are on this list now - the wasteland kept them, they walked out, or
     // they finished it - so it has to be possible to tell which at a glance.
-    document.getElementById('chronicle-list').innerHTML = entries.length ? entries.map(e =>
+    document.getElementById('chronicle-list').innerHTML = shown.length ? shown.map(e =>
         `<div class="chronicle-entry${e.won ? ' chronicle-won' : e.extracted ? ' chronicle-walked' : ''}">
             <div class="chronicle-epitaph">${e.won ? '<b>\u2620 THE ROAD ENDED</b> \u00B7 ' : e.extracted ? '<b>EXTRACTED</b> \u00B7 ' : ''}${e.epitaph || ''}</div>
             <div class="chronicle-facts">
@@ -4391,7 +4468,12 @@ function endRun() {
             : runStats.extracted
             ? `Walked out at Sector ${runStats.deepestSector}, Tier ${runStats.deepestTier}.`
             : epitaphFor(runStats),
-        fallen: (runStats.fallen || []).map(f => ({ name: f.name, sector: f.sector, tier: f.tier })),
+        // The whole record, not a name and a coordinate. Written as an explicit shape rather
+        // than a spread so nothing live can follow an operator into localStorage.
+        fallen: (runStats.fallen || []).map(f => ({
+            name: f.name, classType: f.classType || null, level: f.level || 0,
+            sector: f.sector, tier: f.tier, cause: f.cause || null,
+            killer: f.killer || null, elite: f.elite || null, boss: !!f.boss })),
         deployed: playerRoster.filter(p => p.gridPos > 0).map(p => p.classType)
     });
     // Walking out carries the relic; the Vault is what keeps one when you do not. One call site,
@@ -8550,8 +8632,8 @@ function applyTurnStartEffects(ent) {
     }
     
     const noteWeatherDeath = cause => {
-        if (ent.hp <= 0 && ent.isPlayer && runStats)
-            runStats.lastKiller = { cause, sector: currentSector, tier: currentTier };
+        if (ent.hp <= 0 && ent.isPlayer)
+            noteFelled(ent, { cause, sector: currentSector, tier: currentTier });
     };
     const wx = sky();
     if (wx.chip) { let sDmg = Math.floor(wx.chip * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - sDmg); log(`> ${ent.name} choked by Smog for ${sDmg} DMG.`, "log-dmg"); spawnFCT(ent.id, `-${sDmg}`, "fct-status"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SMOG'); }
@@ -9467,9 +9549,9 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     if (target.hp <= 0 && !target.isPlayer) noteTally(target);
     if (target.hp <= 0 && target.isPlayer && !attacker.isPlayer) noteBestiary(typeNameOf(attacker), 'felled');
     // The chronicle's witness: whoever lands the blow that drops an operator is on record.
-    if (target.hp <= 0 && target.isPlayer && runStats)
-        runStats.lastKiller = { name: attacker.name, elite: attacker.eliteType || null,
-                               boss: attacker.classType === 'BOSS', sector: currentSector, tier: currentTier, cause: 'COMBAT' };
+    if (target.hp <= 0 && target.isPlayer)
+        noteFelled(target, { name: attacker.name, elite: attacker.eliteType || null,
+                             boss: attacker.classType === 'BOSS', sector: currentSector, tier: currentTier, cause: 'COMBAT' });
     if (target.hp <= 0 && target.isPlayer) goDown(target);
     let logStyle = "log-dmg"; let logMsg = `> ${attacker.name} hits ${target.name} for ${netDmg}`;
     
@@ -9628,7 +9710,7 @@ function turnTheSky(enemy) {
             const toll = Math.max(1, Math.floor(t.maxHp * enemy.skyToll));
             t.hp = Math.max(0, t.hp - toll);
             spawnFCT(t.id, `-${toll}`, 'fct-status'); triggerHitFlash(t.id);
-            if (t.hp <= 0) { goDown(t); if (runStats) runStats.lastKiller = { name: enemy.name, boss: true, sector: currentSector, tier: currentTier, cause: 'COMBAT' }; }
+            if (t.hp <= 0) { noteFelled(t, { name: enemy.name, boss: true, sector: currentSector, tier: currentTier, cause: 'COMBAT' }); goDown(t); }
         });
         log(`> The sky comes down on the squad.`, 'log-dmg');
     }
@@ -9701,7 +9783,7 @@ function executeEnemyAi(enemy) {
             const burn = Math.max(1, Math.floor(t.maxHp * enemy.aura.share));
             t.hp = Math.max(0, t.hp - burn);
             spawnFCT(t.id, `-${burn}`, 'fct-status'); triggerHitFlash(t.id);
-            if (t.hp <= 0) { goDown(t); if (runStats) runStats.lastKiller = { name: enemy.name, boss: true, sector: currentSector, tier: currentTier, cause: 'COMBAT' }; }
+            if (t.hp <= 0) { noteFelled(t, { name: enemy.name, boss: true, sector: currentSector, tier: currentTier, cause: 'COMBAT' }); goDown(t); }
         });
         if (caught.length) log(`> The vents open over the front rank.`, 'log-dmg');
     }
