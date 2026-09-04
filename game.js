@@ -1024,6 +1024,29 @@ function salvageBonus() { return relicSetActive('Quartermaster') ? 2 : 1; }
 function coatDrag() { return relicSetActive('Deadweight') ? 1 : 3; }
 function meshRanks() { return relicSetActive('Hard Cover') ? 2 : 1; }
 function cooldownStep() { return hasRelic('AMMO_HOIST') ? (relicSetActive('Deep Magazine') ? 3 : 2) : 1; }
+// Live set state, computed rather than remembered: which pairs are up, and which are standing
+// one relic short with the missing half named. A set the squad holds neither half of is not a
+// state, it is the whole table, and the codex is where a table belongs.
+//
+// This is the state that decided whether a set was ever a thing you could play toward. The
+// engine read it in seven places and the manual described all nine pairs, but nothing anywhere
+// said which of them YOU had, or which one you were one relic away from. Measured over 150
+// expeditions: 1,655 of 1,676 relics taken - 98.7% - left at least one pair standing at exactly
+// one half, and 759 pairs completed, every one of them by accident.
+
+// A deep run stands one relic short of four pairs at once, and the panel that shows this sits in
+// a narrow column above the route graph. Live pairs are effects and are all shown; the one-short
+// list is an invitation rather than a state, so it is capped.
+const SETS_NEAR_SHOWN = 3;
+function relicName(id) { const r = RELIC_POOL.find(x => x.id === id); return r ? r.name : id; }
+function setState() {
+    return RELIC_SETS.map(s => {
+        const a = hasRelic(s.a), b = hasRelic(s.b);
+        return (a && b) ? { set: s, live: true, need: null }
+             : (a || b) ? { set: s, live: false, need: a ? s.b : s.a }
+             : null;
+    }).filter(Boolean);
+}
 function setIsCursed(s) {
     const tier = id => (RELIC_POOL.find(r => r.id === id) || {}).tier;
     return tier(s.a) === 'CURSED' || tier(s.b) === 'CURSED';
@@ -2347,6 +2370,20 @@ const CODEX = [
         'Rank I: a title on the card. Rank II: a class quirk joins that class\'s draw pool. Rank III: a fourth ability, with the muster picking which three of the four deploy.',
         ...Object.keys(MASTERY_TITLES).map(cls =>
             `${cls} — "${MASTERY_TITLES[cls]}" · quirk: ${CLASS_QUIRKS[cls].name} · fourth: ${FOURTH_ABILITIES[cls].label}`)
+    ] },
+    // Every relic in the pool, with what it does on its own. The manual described all six curses
+    // with their effects and all nine pairs with theirs, and not one clean relic: eleven of the
+    // fourteen were named only as the half of a pair, the three in no pair at all appeared nowhere
+    // in the codex, and no clean relic's effect was written anywhere outside the card you are
+    // offered. A curse in no pair still had its line; it is the clean fourteen that had nothing.
+    { id: 'RELICS', title: 'RELICS', body: () => [
+        `${RELIC_POOL.length} relics: ${RELIC_POOL.filter(r => r.tier === 'COMMON').length} common, ${RELIC_POOL.filter(r => r.tier === 'RARE').length} rare, ${RELIC_POOL.filter(r => r.tier === 'CURSED').length} cursed. They are the run's, not the career's - the Vault keeps one through a wipe and walking out carries one, and everything else is left on the road.`,
+        `${new Set(RELIC_SETS.flatMap(s => [s.a, s.b])).size} of them are half of a pair. What a pair does when both halves ride together is on the CURSES AND SETS page; the map names the pairs you have up and the one you are a relic short of. This is what each does on its own.`,
+        ...RELIC_POOL.map(r => {
+            const inSets = RELIC_SETS.filter(s => s.a === r.id || s.b === r.id).map(s => s.name);
+            return `${r.name}${r.tier === 'COMMON' ? '' : ` (${r.tier})`} \u2014 ${r.desc}`
+                 + (inSets.length ? ` Half of ${inSets.join(' and ')}.` : '');
+        })
     ] },
     { id: 'CURSES', title: 'CURSES AND SETS', body: () => [
         'Cursed relics carry real upsides and real teeth, marked unmistakably in the cache. They are never dealt at random: every curse aboard was chosen - from a cache card, from the collector\'s cache at a camp, or at the collector\'s table, where a held relic buys two blind draws.',
@@ -5794,6 +5831,36 @@ function renderMap() {
     if (activeRelics.length === 0) { rHtml = `<div class="bounty-item"><span>No Relics Acquired</span></div>`; }
     else { activeRelics.forEach(r => { rHtml += `<div class="relic-item" title="${r.desc}">♦ ${r.name}</div>`; }); }
     document.getElementById('relic-list').innerHTML = rHtml;
+
+    // What those relics add up to. Nine pairs upgrade each other, the engine reads that state in
+    // seven places, and the manual describes all nine - but nothing on any screen ever said which
+    // pairs YOU had up, and nothing at all said which one you were a single relic away from. That
+    // second state is the one that makes a set something you can play toward rather than something
+    // that happens to you: measured over 150 expeditions, 1,655 of 1,676 relics taken left at least
+    // one pair standing at exactly one half, and 759 pairs completed, every one of them blind.
+    //
+    // Live pairs are all shown - each is an effect currently running. The one-short list is capped,
+    // because it is an invitation rather than a state and a deep run stands one relic from four of
+    // them at once: measured across random hands, a squad holding thirteen relics touches eight
+    // pairs, and this panel sits above the route graph in a narrow column.
+    const sets = setState();
+    const liveSets = sets.filter(x => x.live), nearSets = sets.filter(x => !x.live);
+    let sHtml = '';
+    if (activeRelics.length) {
+        sHtml = `<div class="set-head">RELIC SETS · ${liveSets.length} OF ${RELIC_SETS.length} UP</div>`
+            // The live ones share a line: at depth a squad has seven of them up, and seven rows
+            // each ending in the word UP is height spent saying the same thing the head says.
+            // Each name keeps its own tooltip, so what a pair actually does is still one hover away.
+            + (liveSets.length ? `<div class="set-up">◆◆ ${liveSets
+                .map(x => `<span class="set-up-name" title="${x.set.desc}">${x.set.name}</span>`)
+                .join(' · ')}</div>` : '')
+            + nearSets.slice(0, SETS_NEAR_SHOWN).map(x => `<div class="set-item set-near" title="${x.set.desc}">`
+                + `<span>◆◇ ${x.set.name}</span><span class="set-tag">NEEDS ${relicName(x.need)}</span></div>`).join('')
+            + (nearSets.length > SETS_NEAR_SHOWN
+                ? `<div class="set-note">and ${nearSets.length - SETS_NEAR_SHOWN} more one relic short</div>` : '')
+            + (sets.length ? '' : `<div class="set-note">Nothing you are carrying is half of a pair.</div>`);
+    }
+    document.getElementById('set-list').innerHTML = sHtml;
 
     const mapC = document.getElementById('map-nodes');
     if (currentTier > TOTAL_TIERS) {
@@ -10464,7 +10531,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, announceSets,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,

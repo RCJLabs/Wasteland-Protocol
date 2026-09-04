@@ -40,8 +40,11 @@ module.exports = {
       cover.missing.length === 0 && cover.entries.length === cover.classes.length);
     ok(`and no entry names a class that does not exist (${cover.orphan.join(', ') || 'none'})`,
       cover.orphan.length === 0);
-    ok(`the codex is ${cover.total} entries, where it was 31 with nothing about the player`,
-      cover.total === 31 + cover.classes.length);
+    // The base was 31 when this phase found the manual with nothing in it about the player, and
+    // is 32 since E15 gave the relics a page of their own. The guard is that the base does not
+    // quietly shrink and that every class still carries exactly one dossier on top of it.
+    ok(`the codex is ${cover.total} entries: a base of 32 plus one per class`,
+      cover.total === 32 + cover.classes.length);
     ok(`each is titled by class and mastery (${cover.titles[0]})`,
       cover.titles.every(t => /—/.test(t)));
 
