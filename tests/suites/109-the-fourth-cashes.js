@@ -172,6 +172,45 @@ module.exports = {
     ok(`an overdrive promises nothing, because it resolves before the mark is ever read (${deck.overdriveHint})`,
       deck.overdriveHint === null && !/MARKED/.test(deck.overdrivePainted));
 
+    // ── which three of four a rank III operator brings ───────────────────────────────
+    // E12c: the harness now makes this choice, so the engine contract it relies on is pinned
+    // here. buildNewRun benches the FOURTH by default and the muster is where that is changed;
+    // before E12c nothing in the harness ever changed it, and all ten mastered abilities sat
+    // out of every measurement this repo had taken.
+    const bench = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      const out = { byDefault: [], brought: [], stale: null, belowRank: null };
+      Object.keys(ABILITIES).forEach(cls => {
+        const c = { classType: cls, benchedMove: FOURTH_ABILITIES[cls].move };
+        noteMastery(cls, MASTERY_RANKS[3] + 100);
+        // the default the run starts with
+        out.byDefault.push({ cls, has: deckFor(c).some(a => a.move === FOURTH_ABILITIES[cls].move),
+                             n: deckFor(c).length });
+        // and the muster's other answer: bench the free basic instead
+        const basic = ABILITIES[cls].find(a => !a.cd && a.reach !== 'self');
+        const b = { classType: cls, benchedMove: basic ? basic.move : null };
+        const deck = deckFor(b);
+        out.brought.push({ cls, has: deck.some(a => a.move === FOURTH_ABILITIES[cls].move),
+                           dropped: basic ? !deck.some(a => a.move === basic.move) : null,
+                           n: deck.length });
+      });
+      // a bench naming a move this class does not have falls back to benching the fourth
+      const stale = { classType: 'BRUISER', benchedMove: 'WHALE_LINE' };
+      out.stale = deckFor(stale).some(a => a.move === 'SHIELD_SLAM');
+      // and below rank III there is no fourth to bench at all
+      mastery = {}; saveMeta();
+      out.belowRank = deckFor({ classType: 'BRUISER', benchedMove: 'SCRAP_BLADE' })
+        .map(a => a.move).join(',');
+      return out;
+    });
+    ok(`every class brings three verbs by default, and the fourth is the one benched (${bench.byDefault.filter(d => d.has).map(d => d.cls).join(', ') || 'none brought'})`,
+      bench.byDefault.every(d => !d.has && d.n === 3));
+    ok(`benching the free basic brings all ten instead (${bench.brought.filter(b => !b.has).map(b => b.cls).join(', ') || 'all ten'})`,
+      bench.brought.every(b => b.has && b.dropped && b.n === 3));
+    ok('a bench naming a move the class does not have falls back to benching the fourth', bench.stale === false);
+    ok(`below rank III the deck is the base three whatever the muster said (${bench.belowRank})`,
+      bench.belowRank.split(',').length === 3 && !/SHIELD_SLAM/.test(bench.belowRank));
+
     // ── driven: and the hound's momentum builds off it ───────────────────────────────
     const pack = await field().then(() => page.evaluate(() => {
       const c = playerRoster.find(p => p.gridPos > 0);

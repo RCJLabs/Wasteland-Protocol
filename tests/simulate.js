@@ -174,7 +174,13 @@
 // separated upward (45.1k-49.1k against a no-capstone 42.2k-43.9k), which is the deeper runs
 // finishing rather than a payout change - nodes cleared recovers from 90 to 94 at the same time.
 
-// ── The ten abilities this file has never fired ─────────────────────────────────────────
+// ── EVERY TABLE ABOVE THIS LINE PRE-DATES E12c ──────────────────────────────────────────
+// Until E12c this file measured a squad fighting with its base three abilities, whatever its
+// dossiers said - see below. Figures printed before it are not wrong, but they describe a rank
+// III squad that never brought what rank III unlocked, and are not comparable with anything
+// measured after it.
+
+// ── The ten abilities this file had never fired ─────────────────────────────────────────
 // Found while measuring E12b, and much larger than the item that found it. A class at dossier
 // rank III brings four verbs minus whichever the muster benched, and buildNewRun benches the
 // FOURTH by default - the muster screen is where a player un-benches it. This file calls
@@ -197,10 +203,14 @@
 //
 // A win rate of 28% falling to 11% is not a finding about the fourth abilities. It is a finding
 // about that policy: it benches Heavy Wrench to bring Shield Slam, and the picker then fires the
-// swap constantly. Which three of four an operator brings is a real decision with a right answer
-// per class, and choosing it needs its own measurement rather than the first rule that occurred
-// to somebody. So the policy is NOT shipped, this file still measures a rank-III squad fighting
-// with its base three, and the gap is filed rather than papered over.
+// swap constantly.
+//
+// E12c settled it by measuring the other rule. Benching the FREE BASIC instead overlaps the
+// base-three arm on every row, and that is the policy the muster block above now uses. The
+// engine's own default was left alone: the basic is what guarantees an operator an action, a
+// player sees the bench control every time they muster, and the difficulty measurement says the
+// choice does not move the wall either way. The gap was the harness never making the choice, not
+// the choice the game makes for you.
 
 // ── The long career, re-measured after C04 ──────────────────────────────────────────────
 // Four Citadel spots had no ceiling, and `--meta carry` at 40 runs used to stop terminating on
@@ -653,6 +663,35 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // The real deploy button is what applies a doctrine's edge and banks its multiplier, so the
   // sim goes through it rather than around it.
   musterDeploy();
+  // And the muster's other control, which this file did not touch until E12c: which three of the
+  // four a rank III operator brings. buildNewRun benches the FOURTH by default, so every figure
+  // this file printed before E12c was taken from a squad fighting with its base three, and the
+  // ten mastered abilities had never been fired here at all - 0.0 swings a run across 60
+  // expeditions with every class at rank 3 and 150,000 to 425,000 lifetime XP.
+  //
+  // The policy benches the FREE BASIC, which is measured rather than assumed. Two rules were run
+  // 3 x 60 against the same build fighting its base three:
+  //
+  //                            base three      bench the basic   bench the cd attack
+  //   runs that ended the road  12 / 20 / 18     14 / 20 / 20        5 / 10 / 9
+  //   wipes per run           6.80/6.55/6.55   6.38/6.63/6.35    7.05/6.73/7.05
+  //   score, median          38.1k/52.5k/40.6k 29.4k/53.3k/52.4k 35.8k/32.5k/36.4k
+  //
+  // Benching the cooldown attack separates downward on wins and is simply a bad rule: it takes
+  // Heavy Wrench off the Bruiser and leaves Shield Slam as the only cooldown move in the deck,
+  // which the ranking below then picks every turn - the swap fired at 13-15% of every move made.
+  // Benching the free basic overlaps the base-three arm on every row, so the fourth abilities
+  // come into play without moving what this file reports. Seven of the ten now fire, 1.1-3.2%
+  // each; the three that do not belong to the three least-deployed classes.
+  //
+  // It is not free: the basic is what guarantees an action, and without it 0.63% of player turns
+  // have no move at all and 1.83% have only a self-action. Measured, small, and stated here
+  // because it is the cost of the policy rather than a property of the game.
+  playerRoster.forEach(c => {
+    if (masteryRank(c.classType) < 3) return;
+    const basic = (ABILITIES[c.classType] || []).find(a => !a.cd && a.reach !== 'self');
+    if (basic) c.benchedMove = basic.move;
+  });
   // The opening draft, so a run that never reaches a fight still reports who it picked.
   // Everyone who actually stands in a line is added at the door of each fight below.
   stat.deployed = playerRoster.filter(p => p.gridPos > 0).map(p => p.classType);
