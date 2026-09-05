@@ -181,25 +181,31 @@ module.exports = {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const c = playerRoster.find(p => p.classType === 'SNIPER');
       c.traits = forksFor(c).map(g => g[0].id);        // one half of each: both forks closed
-      c.perkPoints = 0; c.level = 1; c.xp = 0; c.xpToNext = 100;
-      pendingPerkOffers = [];
-      awardXp(c, 5000);
-      // E08b: the capstone above the forks is the one thing a closed-fork operator can still be
-      // shown, and it is shown exactly once. Everything past it banks, which is the rule this
-      // block was written to guard - it just no longer means "everything".
+      c.perkPoints = 0; c.level = 6;
       const capId = capstoneFor(c).id;
-      const offers = pendingPerkOffers.length;
-      const capOffers = pendingPerkOffers.filter(o => o.options.includes(capId)).length;
-      return { pending: offers, capOffers, points: c.perkPoints, level: c.level,
-               unheld: unheldSigsFor(c).length };
+      const unheld = unheldSigsFor(c).length;
+      // E08b: the capstone above the forks is the one thing a closed-fork operator can still be
+      // shown, and it keeps being shown until taken - a decision still on the table, not a screen
+      // with nothing behind it. Everything below the gate banks, which is the rule this block was
+      // written to guard; it just no longer means "everything".
+      //
+      // Levelled one at a time and recording WHICH levels stopped, rather than counting screens
+      // over a lump of XP: a count depends on the gate and silently agrees with a moved one. This
+      // asserts the rule - nothing below ten, everything from ten up - and moving the gate is
+      // meant to land here.
+      const stopped = [], banked = [];
+      for (let i = 0; i < 8; i++) {                    // levels 7 through 14
+        c.xp = 0; c.xpToNext = 10; pendingPerkOffers = [];
+        awardXp(c, 10);
+        (pendingPerkOffers.some(o => o.options.includes(capId)) ? stopped : banked).push(c.level);
+      }
+      return { stopped, banked, points: c.perkPoints, unheld };
     });
     ok('with both forks closed there is no signature left to put on a screen', after.unheld === 0);
-    // An untaken capstone keeps being offered, level after level, exactly as an open fork does -
-    // it is a decision still on the table, not a screen with nothing behind it. Three of this
-    // operator's nine levels are at or above the gate, and all three offer it.
-    ok(`the levels at and above the gate stop for the capstone, and only for it (${after.capOffers} of ${after.pending} screens across ${after.level - 1} levels)`,
-      after.pending === 3 && after.capOffers === 3);
-    ok(`and every other promotion banks itself (${after.points} points)`,
-      after.points === after.level - 1 && after.points > 0);
+    ok(`nothing below level ten stops the run (banked at ${after.banked.join(', ')})`,
+      after.banked.join(',') === '7,8,9');
+    ok(`and every level from ten up offers the capstone (stopped at ${after.stopped.join(', ')})`,
+      after.stopped.join(',') === '10,11,12,13,14');
+    ok(`while the point is banked either way (${after.points} points)`, after.points === 8);
   }
 };

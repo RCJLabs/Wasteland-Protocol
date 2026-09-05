@@ -6278,6 +6278,7 @@ function validatePerkForks() {
 //   37.5 level-ups a run, of which 9.7 reach a promotion screen and 27.9 bank silently
 //   74.2% of all levelling has nothing but a flat stat card behind it
 //   both forks close at mean level 6.55, and operators finish a run at level 12-14
+//   the levels those silent promotions land on: 339 at 8, 298 at 9, 249 at 10, 185 at 11
 //
 // So an operator spends six to eight levels - most of their career - levelling into nothing.
 // D11 already stopped interrupting the run for those, and E08 gave the banked point somewhere
@@ -6289,7 +6290,12 @@ function validatePerkForks() {
 // have earned it. Every one of them is the same shape - a move this class already has does a
 // second thing - so each is one branch at a site that already carries branches, and each can be
 // driven and read in a test rather than declared. None of them is a multiplier.
-const CAPSTONE_LEVEL = 8;
+// Eight was the first guess and it overshot. Measured 3 x 60 an arm against the build without
+// capstones at all, gating at 8 landed 6.33 of them a run and took the win rate from 18.3% to
+// 28.3% - ten points, against the roughly eight E06 deliberately removed - with wipes down 6.86
+// to 6.33. That is a reward turning into a difficulty change. Ten delays every capstone by two
+// levels and thins the field that reaches one, since an operator finishes a run at 12-14.
+const CAPSTONE_LEVEL = 10;
 const CAPSTONE_BUY_BASE = 120;   // twice a signature: it is the last thing an operator buys
 const CAPSTONES = {
     BRUISER:     { id: 'CAP_BREAKER',    name: 'Breaker',

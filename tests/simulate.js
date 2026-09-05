@@ -146,6 +146,34 @@
 // against a policy that takes it the first time it is shown. A player who banks it would see it
 // again each level, and that is untested here because no policy in this file banks.
 
+// ── E08c: the tuning lever that fixed the wrong dial ────────────────────────────────────
+// E08b's measurement said the capstones overshot, and the lever proposed there was the gate:
+// raise CAPSTONE_LEVEL from 8 to 10, land fewer of them, get the wall back. Measured 3 x 60 an
+// arm against both earlier arms:
+//
+//                          no capstone            gate 8                 gate 10
+//   capstones taken             -             6.33 / 6.37 / 6.32    4.70 / 4.35 / 4.05
+//   wipes per run       6.82 / 6.82 / 6.95    6.32 / 6.28 / 6.38    6.55 / 6.95 / 6.72
+//   ended the road /60     13 / 11 / 12          18 / 16 / 17          20 / 15 / 17
+//   nodes cleared, med     100 / 99 / 99          90 / 90 / 90          90 / 99 / 94
+//   score, median       43,585/42,153/43,928  44,944/36,671/43,335  49,138/45,106/46,154
+//
+// The lever works on what it was aimed at and not on what it was for. Uptake falls a third, and
+// wipes come back inside the no-capstone range - 6.55-6.95 against 6.82-6.95, no separation, so
+// on that dial gate 10 is indistinguishable from having no capstones at all. The win rate does
+// not move: 17.3 of 60 against gate 8's 17.0, both still clear of the baseline's 12.0.
+//
+// Which says something worth keeping. The win-rate lift is not paid for by the NUMBER of
+// capstones landed - cutting that by a third changed it not at all - so it is not a dosage
+// problem. Every class having one real late-game power is the thing that converts runs into
+// finished roads, and delaying it two levels leaves it present for exactly the late sectors
+// where the road is won. Removing that lift means weakening the capstones themselves, which is
+// a design decision about what the win rate should be rather than a number this file can find.
+//
+// Gate 10 is kept: neutral on wipes, which is the dial the wall is usually read on. Score is now
+// separated upward (45.1k-49.1k against a no-capstone 42.2k-43.9k), which is the deeper runs
+// finishing rather than a payout change - nodes cleared recovers from 90 to 94 at the same time.
+
 // ── The long career, re-measured after C04 ──────────────────────────────────────────────
 // Four Citadel spots had no ceiling, and `--meta carry` at 40 runs used to stop terminating on
 // them: unlimited fallback bunkers meant a squad that could not be made to stop. Capped, the

@@ -48,16 +48,17 @@ module.exports = {
       const out = {};
       c.traits = []; c.level = 20; out.forksOpen = capstoneOpen(c);
       c.traits = [forksFor(c)[0][0].id]; out.oneFork = capstoneOpen(c);
-      shut(); c.level = 7; out.atSeven = capstoneOpen(c);
-      c.level = 8; out.atEight = capstoneOpen(c);
+      shut(); c.level = 9; out.below = capstoneOpen(c);
+      c.level = 10; out.at = capstoneOpen(c);
       c.traits.push(capstoneFor(c).id); out.taken = capstoneOpen(c);
       return out;
     });
     ok('a capstone is not open while either fork is', !gate.forksOpen && !gate.oneFork);
-    // Seven and eight written out rather than read off CAPSTONE_LEVEL: a test that builds its
-    // own boundary from the constant agrees with whatever the constant becomes.
-    ok(`nor at level seven with both shut (${gate.atSeven})`, gate.atSeven === false);
-    ok('it opens at eight with both shut', gate.atEight === true);
+    // Nine and ten written out rather than read off CAPSTONE_LEVEL: a test that builds its own
+    // boundary from the constant agrees with whatever the constant becomes. Moving the gate is
+    // a design decision and is meant to land here, which is how the move from eight was caught.
+    ok(`nor at level nine with both shut (${gate.below})`, gate.below === false);
+    ok('it opens at ten with both shut', gate.at === true);
     ok('and shuts again once taken', gate.taken === false);
 
     // ── the level-up that used to bank silently ──────────────────────────────────────
@@ -65,8 +66,8 @@ module.exports = {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const c = playerRoster.find(p => p.classType === 'BRUISER');
       c.traits = forksFor(c).map(g => g[0].id);
-      c.level = 7; c.xp = 0; c.xpToNext = 10; pendingPerkOffers = [];
-      awardXp(c, 10);                       // to 8: the capstone opens on the way
+      c.level = 9; c.xp = 0; c.xpToNext = 10; pendingPerkOffers = [];
+      awardXp(c, 10);                       // to 10: the capstone opens on the way
       const first = pendingPerkOffers.length;
       const opts = first ? pendingPerkOffers[0].options.slice() : [];
       const hasCapCard = opts.includes(capstoneFor(c).id);
@@ -93,7 +94,7 @@ module.exports = {
     const till = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const c = playerRoster.find(p => p.classType === 'MEDIC');
-      c.traits = forksFor(c).map(g => g[0].id); c.level = 9; c.perkPoints = 1;
+      c.traits = forksFor(c).map(g => g[0].id); c.level = 11; c.perkPoints = 1;
       const listed = buyableFor(c).find(b => b.id === capstoneFor(c).id);
       scrap = capstoneCost() - 1;
       assignPerk(c.id, capstoneFor(c).id);
@@ -240,7 +241,7 @@ module.exports = {
     const shown = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const c = playerRoster.find(p => p.classType === 'SNIPER');
-      c.traits = forksFor(c).map(g => g[0].id); c.level = 9;
+      c.traits = forksFor(c).map(g => g[0].id); c.level = 11;
       const open = traitSummary(c);
       c.traits.push(capstoneFor(c).id);
       const held = traitSummary(c);
