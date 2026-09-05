@@ -642,7 +642,7 @@ const FACES = flag('faces', 'warm');
 // regroups, or the safety cap is hit.
 const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy }) => {
   const stat = { order: null, fulfilled: false, won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
-                 upgrades: 0, odAimed: 0, bossTopUps: 0, eliteTopUps: 0,
+                 upgrades: 0, odAimed: 0, bossTopUps: 0, eliteTopUps: 0, reqBought: 0, reqGrudge: null,
                  sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, field: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
@@ -681,6 +681,30 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       const before = bossSkulls;
       buyMetaUpgrade(sp.kind);
       if (bossSkulls === before) break;
+    }
+    // F04: and the shelf above the cap, which is where a career's skulls go once the hillside
+    // is full. Measured before it existed: 1,136 / 1,160 / 1,117 left unspent at the end of
+    // three samples of 150, with every buyable spot bought.
+    //
+    // FRESH FACES first: cheap, strictly an improvement, and the thing a player buys without
+    // thinking. A GRUDGE CALLED IN only with skulls to burn, because it makes the first
+    // commander harder in exchange for what it pays - a purse that is not deep has better uses.
+    //
+    // A RUNG ON CREDIT is deliberately NOT bought here. The --rung flag opens the ladder
+    // directly, so buying the rung would be paying for something the flag already grants; and
+    // under the default --rung 0 it would be skulls thrown at a ladder this policy will not
+    // climb. Suite 112 drives that purchase instead.
+    if (typeof buyRequisition === 'function') {
+      let g = 0;
+      while (g++ < 6 && reqOpen('REROLL') && bossSkulls >= reqCost('REROLL')) {
+        if (!buyRequisition('REROLL')) break;
+        stat.reqBought++;
+      }
+      const owed = BOSS_ROTATION.filter(b => grudgeOn(b.id) > 0)
+                                .sort((a, b) => grudgeOn(b.id) - grudgeOn(a.id))[0];
+      if (owed && reqOpen('GRUDGE', owed.id) && bossSkulls >= reqCost('GRUDGE', owed.id) * 4) {
+        if (buyRequisition('GRUDGE', owed.id)) { stat.reqBought++; stat.reqGrudge = owed.id; }
+      }
     }
   };
 
@@ -2109,6 +2133,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // button. One stat per purchase at upgradeCost, rather than a hand copy paying the sector-1
   // price for both.
   line('stat upgrades bought per run', (results.reduce((a, r) => a + (r.upgrades || 0), 0) / n).toFixed(1));
+  // F04: what the shelf above the Citadel's cap absorbed.
+  line('requisitions bought per run', (results.reduce((a, r) => a + (r.reqBought || 0), 0) / n).toFixed(1));
+  const called = results.filter(r => r.reqGrudge).length;
+  line('grudges called in', `${called} of ${n} expeditions`);
   line('augments installed per run', (results.reduce((a, r) => a + (r.augments || 0), 0) / n).toFixed(1));
   const faces = {};
   results.forEach(r => Object.entries(r.facesMet || {}).forEach(([k, v]) => { faces[k] = (faces[k] || 0) + v; }));

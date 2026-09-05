@@ -963,6 +963,13 @@ const FINAL_SECTOR = 7;
 function isFinalSector(sector = currentSector) { return sector === FINAL_SECTOR; }
 function bossForSector(sector = currentSector) {
     if (FINAL_BOSS && isFinalSector(sector)) return FINAL_BOSS;
+    // F04: a grudge called in stands at the end of the sector the expedition deployed into,
+    // which is the one the shelf was bought for. The last warlord is still the last warlord -
+    // the end of the road is not on the shelf.
+    if (grudgeCall && sector === 1) {
+        const called = BOSS_ROTATION.find(b => b.id === grudgeCall);
+        if (called) return called;
+    }
     const i = Math.max(1, sector) - 1;
     const n = BOSS_ROTATION.length;
     return BOSS_ROTATION[bossOrder(Math.floor(i / n))[i % n]];
@@ -1486,7 +1493,89 @@ const PROTOCOL_CUT = 0.75;   // RATIONING's share of the salvage
 let ascension = 0;   // the chosen rung, 0..unlockedProtocols(), persisted with the run
 let bestRung = 0;    // the highest rung a won expedition was played at, meta-persisted
 // Nothing opens until the road is walked; after that, one rung above the highest one cleared.
-function unlockedProtocols() { return careerWins > 0 ? Math.min(bestRung + 1, PROTOCOLS.length) : 0; }
+// ── F04: requisitions ───────────────────────────────────────────────────────────────────
+// Ninety-five skulls buys every spot in the Citadel, and a career that has bought them out
+// keeps earning: a commander is a skull, a grudge is more, an extraction and a victory are
+// more again. Measured over three samples of 150 careers, 1,136 / 1,160 / 1,117 skulls end
+// the sample unspent with the hillside full - the currency has no sink above the cap and
+// stops being a decision the moment the last building goes up.
+//
+// So: a shelf above it, on the contract board rather than in the Citadel, because these are
+// bought for ONE expedition rather than built into the career. Priced off the ladder - the
+// rung you are reaching for is what the reach costs.
+//
+// The rung is the one worth explaining. unlockedProtocols opens nothing at all until a career
+// has a win in it, and on a corrected instrument almost no career has one, so the whole
+// ascension ladder is content nobody reaches. A rung on credit is one expedition at the next
+// rung without a clear behind it - paid for, spent whether or not it is used, and gone at the
+// end of the run. It is a way in, not a way up: clearing the road is still the only thing that
+// moves bestRung.
+const REQ_REROLL_COST = 2;      // one more face at the muster
+const REQ_REROLL_MAX = 3;       // and no more than three of them an expedition
+const REQ_GRUDGE_BASE = 3;      // plus what it is carrying: a heavier grudge costs more to call
+const REQ_RUNG_STEP = 10;       // x the rung being reached for
+const REQUISITIONS = [
+    { id: 'REROLL', name: 'FRESH FACES',
+      desc: 'One more reroll at the muster. Three an expedition.' },
+    { id: 'GRUDGE', name: 'A GRUDGE CALLED IN',
+      desc: 'Name a commander you have already put down. It is waiting at the end of this sector, at everything it has taken from you since.' },
+    { id: 'RUNG',   name: 'A RUNG ON CREDIT',
+      desc: 'One expedition at the next rung of the ladder, without clearing the road to open it. Spent whether or not you use it.' }
+];
+function reqById(id) { return REQUISITIONS.find(r => r.id === id) || null; }
+// What the shelf is holding for the expedition about to be deployed. It lives in the career
+// file rather than the run save because it is bought with career currency before a run exists -
+// which also means a reload on the contract board does not eat the purchase.
+let pendingReq = { rerolls: 0, grudge: null, rung: false };
+let grudgeCall = null;      // consumed onto the run at buildNewRun
+let rungCredit = false;
+function newPendingReq() { return { rerolls: 0, grudge: null, rung: false }; }
+function reqCost(id, bossId) {
+    if (id === 'REROLL') return REQ_REROLL_COST;
+    if (id === 'GRUDGE') return REQ_GRUDGE_BASE + grudgeOn(bossId);
+    if (id === 'RUNG') return REQ_RUNG_STEP * Math.min(bestRung + 1, PROTOCOLS.length);
+    return 0;
+}
+// What is on the shelf at all. A commander nobody has felled cannot be called in, and the
+// ladder's top rung cannot be bought twice.
+function reqOpen(id, bossId) {
+    if (id === 'REROLL') return pendingReq.rerolls < REQ_REROLL_MAX;
+    if (id === 'GRUDGE') return !pendingReq.grudge && !!bossId && grudgeOn(bossId) > 0;
+    // Only while the ladder is shut. A career with a clear in it already has the next rung
+    // open for nothing, and selling a way through a door that is standing open is a trap.
+    if (id === 'RUNG') return !pendingReq.rung && bestRung < PROTOCOLS.length && careerWins <= 0;
+    return false;
+}
+function buyRequisition(id, bossId) {
+    if (!reqById(id) || !reqOpen(id, bossId)) return false;
+    const cost = reqCost(id, bossId);
+    if (bossSkulls < cost) return false;
+    bossSkulls -= cost;
+    if (id === 'REROLL') pendingReq.rerolls++;
+    else if (id === 'GRUDGE') pendingReq.grudge = bossId;
+    else if (id === 'RUNG') pendingReq.rung = true;
+    playSFX('click');
+    saveMeta(); renderContracts();
+    return true;
+}
+// Bought and not yet deployed on: handed back rather than lost, because the shelf is a
+// decision about the expedition you are about to take and not one you are stuck with.
+function refundRequisitions() {
+    bossSkulls += pendingReq.rerolls * REQ_REROLL_COST;
+    if (pendingReq.grudge) bossSkulls += reqCost('GRUDGE', pendingReq.grudge);
+    if (pendingReq.rung) bossSkulls += reqCost('RUNG');
+    pendingReq = newPendingReq();
+    saveMeta(); renderContracts();
+}
+
+function unlockedProtocols() {
+    // F04: a rung bought on credit opens the next one with no clear behind it, for the one
+    // expedition it was bought for. Both the pending purchase and the consumed one count, so
+    // the contract board can offer the rung the moment it is paid for and the run keeps it
+    // after buildNewRun has taken the purchase off the shelf.
+    if (careerWins > 0 || rungCredit || pendingReq.rung) return Math.min(bestRung + 1, PROTOCOLS.length);
+    return 0;
+}
 // The rungs in force on the chosen one. Every rung stacks everything below it, so this is a
 // prefix of the table rather than a single entry.
 function activeProtocols() { return ascension > 0 ? PROTOCOLS.slice(0, Math.min(ascension, PROTOCOLS.length)) : []; }
@@ -3159,6 +3248,8 @@ const ACTIONS = {
     'take-perk':        el => takePerkOffer(Number(el.dataset.index)),
     'bank-perk':        () => bankPerkOffer(),
     'toggle-contract':  el => toggleContract(el.dataset.id),
+    'buy-req':          el => buyRequisition(el.dataset.id, el.dataset.boss || null),
+    'req-clear':        () => refundRequisitions(),
     'begin-expedition': () => beginExpedition(),
     'muster-rank':      el => musterRank(el.dataset.id),
     'muster-reroll':    el => musterReroll(el.dataset.id),
@@ -4756,7 +4847,7 @@ let careerWins = 0;   // expeditions that reached the end of the road, meta-pers
 // Everything a career is. One function, so what saveMeta writes and what a run slot mirrors
 // cannot drift apart - which is the whole reason the rebuild below could not rebuild anything.
 function metaBlob() {
-    return { bossSkulls, metaUpgrades, bestScore, bestSector, careerWins, bestRung, mastery, bestiary, seenPrompts, grudges };
+    return { bossSkulls, metaUpgrades, bestScore, bestSector, careerWins, bestRung, mastery, bestiary, seenPrompts, grudges, pendingReq };
 }
 function saveMeta() { Store.set(META_KEY, JSON.stringify(metaBlob())); }
 
@@ -4931,6 +5022,15 @@ function loadMeta() {
         grudges = (d.grudges && typeof d.grudges === 'object' && !Array.isArray(d.grudges)) ? d.grudges : {};
         bestiary = (d.bestiary && typeof d.bestiary === 'object' && !Array.isArray(d.bestiary)) ? d.bestiary : {};
         seenPrompts = Array.isArray(d.seenPrompts) ? d.seenPrompts.filter(id => typeof id === 'string') : [];
+        // F04. Rebuilt rather than trusted, and absent in every career file written before the
+        // shelf existed, which reads as an empty shelf.
+        const pr = d.pendingReq;
+        pendingReq = newPendingReq();
+        if (pr && typeof pr === 'object') {
+            pendingReq.rerolls = Math.max(0, Math.min(REQ_REROLL_MAX, Number(pr.rerolls) || 0));
+            pendingReq.grudge = BOSS_ROTATION.some(b => b.id === pr.grudge) ? pr.grudge : null;
+            pendingReq.rung = !!pr.rung;
+        }
         return;
     }
     // No readable meta yet - adopt the best progress any slot recorded. A corrupt meta blob
@@ -5171,6 +5271,7 @@ function renderContracts() {
             <span class="contract-desc">${c.desc}</span>
         </button>`;
     }).join('');
+    renderRequisitions();
     const m = contractMult();
     document.getElementById('contract-mult').innerText =
         `${currentOrder().name} · SCORE x${m.toFixed(2)}, x${(m * (1 + currentOrder().bonus)).toFixed(2)} IF KEPT`
@@ -5209,6 +5310,54 @@ function renderContracts() {
             ? on.map(p => `▲${PROTOCOLS.indexOf(p) + 1} ${p.desc}`).join(' ') + ' '
             : '') + climb;
     }
+}
+
+// The shelf above the Citadel's cap. Drawn from state so the purse, the prices and what is
+// already on order all read off the same numbers the buy path checks.
+function renderRequisitions() {
+    const el = document.getElementById('req-list');
+    if (!el) return;
+    const row = (id, label, cost, open, on, boss) => {
+        const afford = bossSkulls >= cost;
+        return `<button class="req-buy ${on ? 'req-on' : ''}" ${open && afford ? '' : 'disabled'}`
+            + ` data-action="buy-req" data-id="${id}"${boss ? ` data-boss="${boss}"` : ''}>`
+            + `${label} <span class="req-price">\uD83D\uDC80 ${cost}</span></button>`;
+    };
+    let html = `<div class="req-head"><span>REQUISITIONS</span><span class="req-purse">\uD83D\uDC80 ${bossSkulls}</span></div>`;
+    REQUISITIONS.forEach(r => {
+        html += `<div class="req-card"><div class="req-name">${r.name}</div><div class="req-desc">${r.desc}</div>`;
+        if (r.id === 'GRUDGE') {
+            // One chip per commander you have actually put down, because naming one you have
+            // never met is not a grudge, it is a request.
+            const held = BOSS_ROTATION.filter(b => grudgeOn(b.id) > 0);
+            if (!held.length) {
+                html += `<div class="req-none">Nobody owes you anything yet. Fell a commander and it will be on this shelf.</div>`;
+            } else {
+                html += `<div class="req-row">` + held.map(b =>
+                    row('GRUDGE', `${b.name} \u25B2${grudgeOn(b.id)}`, reqCost('GRUDGE', b.id),
+                        reqOpen('GRUDGE', b.id), pendingReq.grudge === b.id, b.id)).join('') + `</div>`;
+            }
+        } else if (r.id === 'REROLL') {
+            html += `<div class="req-row">`
+                + row('REROLL', `BUY ONE (${pendingReq.rerolls}/${REQ_REROLL_MAX} on order)`,
+                      reqCost('REROLL'), reqOpen('REROLL'), pendingReq.rerolls > 0)
+                + `</div>`;
+        } else {
+            const next = Math.min(bestRung + 1, PROTOCOLS.length);
+            if (careerWins > 0 && !pendingReq.rung) {
+                html += `<div class="req-none">The road has been walked. \u25B2${next} is already open to you \u2014 there is nothing here to buy.</div>`;
+            } else {
+                html += `<div class="req-row">`
+                    + row('RUNG', bestRung < PROTOCOLS.length ? `\u25B2${next} ${PROTOCOLS[next - 1].name}` : 'THE TOP OF THE LADDER',
+                          reqCost('RUNG'), reqOpen('RUNG'), pendingReq.rung)
+                    + `</div>`;
+            }
+        }
+        html += `</div>`;
+    });
+    const owed = pendingReq.rerolls || pendingReq.grudge || pendingReq.rung;
+    if (owed) html += `<button class="req-clear" data-action="req-clear">CLEAR THE ORDER \u2014 TAKE THE SKULLS BACK</button>`;
+    el.innerHTML = html;
 }
 
 function toggleContract(id) {
@@ -5407,6 +5556,11 @@ function confirmNewGame(diff) { buildNewRun(diff); renderMap(); }
 
 function buildNewRun(diff) {
     difficultyMult = diff; currentSector = 1; currentTier = openingTier(); tuneUpBattles = 0; momentum = 0;
+    // F04: the shelf is spent here, once, onto the expedition being built. Cleared at the same
+    // moment so a second deploy cannot ride the same purchase.
+    grudgeCall = pendingReq.grudge; rungCredit = pendingReq.rung;
+    const reqRerolls = pendingReq.rerolls;
+    pendingReq = newPendingReq(); saveMeta();
     scrap = metaUpgrades.startScrap || 0; inventory = hasContract('NO_CONSUMABLES') ? [] : ['MED_STIM']; materials = { parts: 0, chems: 0, tech: 0 }; 
     playerRoster = migrateTraits(JSON.parse(JSON.stringify(ROSTER_TEMPLATE)));
     activeBounties = generateBounties(seededRng('bounties')); standingBounty = rollStanding(seededRng('standing'));
@@ -5452,7 +5606,7 @@ function buildNewRun(diff) {
     // The back rank stays empty, and stays empty - the Outpost refuses to fill it below.
     if (hasContract('SHORT_HANDED')) playerRoster.forEach(p => { if (p.gridPos === 3) p.gridPos = 0; });
 
-    musterRerolls = MUSTER_REROLLS + (metaUpgrades.rerolls || 0);
+    musterRerolls = MUSTER_REROLLS + (metaUpgrades.rerolls || 0) + reqRerolls;
     // F02: a new run is standing on no screen at all. confirmNewGame goes straight to the map
     // and beginExpedition sets the muster flag itself, so nothing here can inherit the screen
     // the last run ended on.
@@ -5568,6 +5722,7 @@ function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify
     // are functions of the run, so what is worth keeping is which one is open, not the shape
     // it had when it opened. `meta` is the career mirror - see metaBlob.
     pendingLoot, squadBroken, musterPending, musterRerolls, atCamp, campOutcome, eventOutcome,
+    grudgeCall, rungCredit,
     event: activeEvent ? activeEvent.title : null, meta: metaBlob() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
@@ -5646,6 +5801,10 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         activeEvent = d.event ? eventByTitle(d.event) : null;
         eventOutcome = (activeEvent && typeof d.eventOutcome === 'string') ? d.eventOutcome : null;
         atCamp = !!d.atCamp;
+        // F04, and the same rebuild rule: a called commander that is no longer in the rotation
+        // is no call at all.
+        grudgeCall = BOSS_ROTATION.some(b => b.id === d.grudgeCall) ? d.grudgeCall : null;
+        rungCredit = !!d.rungCredit;
         campOutcome = (atCamp && d.campOutcome && CAMP_OUTCOMES[d.campOutcome.kind])
             ? { kind: d.campOutcome.kind, name: typeof d.campOutcome.name === 'string' ? d.campOutcome.name : null } : null;
         } }
@@ -11023,7 +11182,9 @@ globalThis.WP = {
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
-    AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder,
+    REQUISITIONS, reqById, reqCost, reqOpen, buyRequisition, refundRequisitions, renderRequisitions, newPendingReq,
+    REQ_REROLL_COST, REQ_REROLL_MAX, REQ_GRUDGE_BASE, REQ_RUNG_STEP, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
@@ -11087,6 +11248,9 @@ globalThis.WP = {
     get mastery() { return mastery; }, set mastery(v) { mastery = v; },
     get bestiary() { return bestiary; }, set bestiary(v) { bestiary = v; },
     get bossSalt() { return bossSalt; }, set bossSalt(v) { bossSalt = v; },
+    get pendingReq() { return pendingReq; }, set pendingReq(v) { pendingReq = v; },
+    get grudgeCall() { return grudgeCall; }, set grudgeCall(v) { grudgeCall = v; },
+    get rungCredit() { return rungCredit; }, set rungCredit(v) { rungCredit = v; },
     get seenPrompts() { return seenPrompts; }, set seenPrompts(v) { seenPrompts = v; },
     get promptQueue() { return promptQueue; }, set promptQueue(v) { promptQueue = v; },
     get hitLog() { return hitLog; }, set hitLog(v) { hitLog = v; },

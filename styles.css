@@ -977,3 +977,24 @@ button.reach-short { border-color: #7a5a20; }
 .tr-nest    { background: #241a22; color: #c98fb0; }
 /* Something an event promised, and how far off it is. Amber: not a threat yet, but coming. */
 .bounty-owed { color: #d9a93d; border-left: 2px solid #7a5c14; padding-left: 6px; }
+
+/* ── F04: the shelf above the Citadel's cap, on the contract board ─────────────────── */
+.req-list { display: flex; flex-direction: column; gap: 8px; margin: 14px 0 4px; }
+.req-head { display: flex; justify-content: space-between; align-items: baseline;
+            font-size: 0.78rem; letter-spacing: 0.12em; color: #8a7f5c; }
+.req-purse { color: #d8c98a; font-weight: bold; letter-spacing: 0; }
+.req-card { border: 1px solid #3a3427; background: rgba(20, 18, 12, 0.55); padding: 8px 10px; }
+.req-name { font-size: 0.82rem; letter-spacing: 0.08em; color: #c9b978; }
+.req-desc { font-size: 0.74rem; color: #8f8672; margin: 3px 0 6px; line-height: 1.35; }
+.req-none { font-size: 0.72rem; color: #6f6858; font-style: italic; }
+.req-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.req-buy { background: rgba(0, 0, 0, 0.35); border: 1px solid #4a4230; color: #b8ac86;
+           font: inherit; font-size: 0.74rem; letter-spacing: 0.04em; padding: 5px 9px;
+           cursor: pointer; }
+.req-buy:hover:not(:disabled) { border-color: #8a7a45; color: #e2d6a4; }
+.req-buy:disabled { opacity: 0.38; cursor: default; }
+.req-buy.req-on { border-color: #6B8E23; color: #b9d47a; }
+.req-price { color: #d8c98a; margin-left: 6px; }
+.req-clear { background: none; border: 1px solid #6b3a3a; color: #c98a8a; font: inherit;
+             font-size: 0.72rem; letter-spacing: 0.06em; padding: 6px; cursor: pointer; }
+.req-clear:hover { border-color: #8b4a4a; color: #e0a8a8; }
