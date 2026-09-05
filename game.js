@@ -4062,6 +4062,9 @@ function goDown(ent) {
             const vent = Math.max(1, Math.floor(e.maxHp * 0.15));
             e.hp = Math.max(0, e.hp - vent);
             spawnFCT(e.id, `-${vent}`, 'fct-status'); triggerHitFlash(e.id);
+            // F05: the fourth path to zero, and the newest - the capstone was written after
+            // the ledger it was skipping.
+            noteKill(e, { cause: 'DEAD_MANS_SWITCH' });
         });
         if (caught.length) { log(`> ${ent.name} goes down and the tanks let go.`, 'log-dmg'); triggerShake(); }
     }
@@ -9272,9 +9275,13 @@ function applyTurnStartEffects(ent) {
         for (let s in ent.cooldowns) { if (ent.cooldowns[s] > 0) { ent.cooldowns[s] = Math.max(0, ent.cooldowns[s] - step); chg = true; } }
     }
     
+    // Both sides of a body hitting the floor to a status tick. The player half is E14's
+    // chronicle witness; the hostile half is F05's ledger, which this path used to skip
+    // entirely - bleeding a Hound out counted for nothing at all.
     const noteWeatherDeath = cause => {
-        if (ent.hp <= 0 && ent.isPlayer)
-            noteFelled(ent, { cause, sector: currentSector, tier: currentTier });
+        if (ent.hp > 0) return;
+        if (ent.isPlayer) noteFelled(ent, { cause, sector: currentSector, tier: currentTier });
+        else noteKill(ent, { cause });
     };
     const wx = sky();
     if (wx.chip) { let sDmg = Math.floor(wx.chip * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - sDmg); log(`> ${ent.name} choked by Smog for ${sDmg} DMG.`, "log-dmg"); spawnFCT(ent.id, `-${sDmg}`, "fct-status"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SMOG'); }
@@ -10148,6 +10155,88 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     return { n, rv };
 }
 
+// ── F05: one ledger for a body ──────────────────────────────────────────────────────────
+// Everything a hostile's death was worth used to live inside applyDamageHit, and three other
+// paths reach zero without ever going through it: a status tick in applyTurnStartEffects, which
+// set hp to 0 and played a sound; RECKONING, which sets a packmate's hp to 0 outright to feed
+// on it; and the Hazmat's CAP_DEAD_MANS_SWITCH, which vents over the whole field on the way
+// down. A kill down any of those was worth nothing at all - no KILL, EXECUTE or HEAVY contract,
+// no bestiary line, no Tally, no Blood Debt, no Gas Bloom, no Martyr, no momentum - so a bleed
+// build, which E12b turned into a real build by giving nine more moves a mark to cash, was the
+// one whose kills vanished.
+//
+// The same shape as E14's noteFelled: one function, called from every place a body can hit the
+// floor, taking what the caller knows about how it happened. `tallied` is the one-shot guard -
+// it already meant "this body has been filed" for the bestiary and now means it for all of it,
+// so two causes landing in the same tick still file one death.
+//
+// It is called AFTER the hit line rather than before it, which is where the burst and the
+// martyr used to sit. That was backwards on the screen: the log read "the Fiend bursts" and
+// then "someone hits the Fiend for 30".
+function noteKill(victim, by = {}) {
+    if (!victim || victim.isPlayer || victim.hp > 0 || victim.tallied) return false;
+    victim.tallied = true;
+    // Gas Bloom: a chem fiend is as dangerous dead as alive.
+    if (hasSig(victim, 'GAS_BLOOM') && !victim.bloomed) {
+        victim.bloomed = true;
+        activeEntities.filter(p => p.isPlayer && p.hp > 0).forEach(p => {
+            p.corrodedTurns = Math.max(p.corrodedTurns || 0, 2);
+            spawnFCT(p.id, 'CORRODED', 'fct-status');
+        });
+        log(`> ${victim.name} bursts. The squad is choking on the cloud.`, 'log-dmg');
+        playSFX('blast');
+    }
+    if (hasSig(victim, 'MARTYR') && !victim.martyred) {
+        victim.martyred = true;
+        const flock = activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.classType === 'CULTIST');
+        flock.forEach(e => {
+            const back = Math.max(1, Math.floor(e.maxHp * 0.3));
+            e.hp = Math.min(e.maxHp, e.hp + back);
+            spawnFCT(e.id, `+${back}`, 'fct-heal');
+        });
+        log(flock.length ? `> ${victim.name} breaks open, and the Choir takes it up.`
+                         : `> ${victim.name} breaks open over an empty road.`, 'log-status');
+        playSFX('heal');
+    }
+    noteBestiary(typeNameOf(victim), 'killed');
+    // Blood Debt: a risen Warlord feeds on its own dead, so clearing the pack off it costs.
+    const owed = activeEntities.find(e => e.classType === 'BOSS' && e.hp > 0 && e.bloodDebt && e.id !== victim.id);
+    if (owed) {
+        const fed = Math.max(1, Math.floor(owed.maxHp * owed.bloodDebt));
+        owed.hp = Math.min(owed.maxHp, owed.hp + fed);
+        log(`> ${owed.name} feeds on ${victim.name}. +${fed} HP.`, 'log-dmg');
+        setTimeout(() => spawnFCT(owed.id, `+${fed}`, 'fct-heal'), 260);
+    }
+    // The Tally: it writes down every one of its own that falls. Read on the same moment as
+    // Blood Debt above and deliberately not the same thing - that one heals, this one is a
+    // debt the fight collects on later.
+    noteTally(victim);
+    addMomentum(15);
+    checkBountyProgress('KILL'); if (runStats) runStats.kills++;
+    // How it died, not just that it did: a combo finish and a heavy brought down are both
+    // things the board can ask for. Passed in rather than read off the module flags, so a
+    // bleed tick cannot cash an EXECUTE left over from the last swing.
+    if (by.combo) checkBountyProgress('EXECUTE');
+    if (victim.isHeavy) checkBountyProgress('HEAVY');
+    if (by.overdrive && odKills !== null) odKills++;
+    return true;
+}
+
+// Putting a body back on its feet. Two signatures do it - the Hierophant's RESURGENCE and the
+// Marshal's WHISTLE - and both were resetting the death animation and the Gas Bloom flag by
+// hand, one line each. F05 gave the ledger a one-shot guard of its own, and a raised unit that
+// falls again is a second kill: without clearing `tallied` here the second death counted for
+// nothing, which the harness's two-way kill count found within one sample. `martyred` goes with
+// it for the same reason `bloomed` already did - THE RITE's whole note is "it dies loudly, and
+// then something raises it", and the second loud death was the one that never came.
+function raiseBody(ent, share) {
+    if (!ent) return false;
+    ent.hp = Math.max(1, Math.floor(ent.maxHp * share));
+    ent.deathPlayed = false; ent.bloomed = false; ent.martyred = false; ent.tallied = false;
+    ent.stunnedTurns = 0; ent.bleedingTurns = 0;
+    return true;
+}
+
 function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     if (target.hp <= 0) return;
     // Mitigation is figured per victim, so a bond partner who steps in takes the blow through
@@ -10186,49 +10275,12 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     // The first time a fight is genuinely going badly is the only moment worth telling someone
     // they are allowed to leave one.
     if (target.isPlayer && target.hp > 0 && target.hp < target.maxHp * 0.35 && canWithdraw()) firePrompt('WITHDRAW');
-    // Gas Bloom: a chem fiend is as dangerous dead as alive.
-    if (target.hp <= 0 && hasSig(target, 'GAS_BLOOM') && !target.bloomed) {
-        target.bloomed = true;
-        activeEntities.filter(p => p.isPlayer && p.hp > 0).forEach(p => {
-            p.corrodedTurns = Math.max(p.corrodedTurns || 0, 2);
-            spawnFCT(p.id, 'CORRODED', 'fct-status');
-        });
-        log(`> ${target.name} bursts. The squad is choking on the cloud.`, 'log-dmg');
-        playSFX('blast');
-    }
-    if (target.hp <= 0 && hasSig(target, 'MARTYR') && !target.martyred) {
-        target.martyred = true;
-        const flock = activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.classType === 'CULTIST');
-        flock.forEach(e => {
-            const back = Math.max(1, Math.floor(e.maxHp * 0.3));
-            e.hp = Math.min(e.maxHp, e.hp + back);
-            spawnFCT(e.id, `+${back}`, 'fct-heal');
-        });
-        log(flock.length ? `> ${target.name} breaks open, and the Choir takes it up.`
-                         : `> ${target.name} breaks open over an empty road.`, 'log-status');
-        playSFX('heal');
-    }
     // Second Wind: once per fight, a killing blow leaves them standing at 1.
     if (target.hp <= 0 && hasQuirk(target, 'SECOND_WIND') && !target.secondWindUsed) {
         target.secondWindUsed = true; target.hp = 1;
         log(`> ${target.name} refuses to go down!`, 'log-heal');
         spawnFCT(target.id, 'SECOND WIND', 'fct-heal'); playSFX('heal', 1.2);
     }
-    if (target.hp <= 0 && !target.isPlayer && !target.tallied) { target.tallied = true; noteBestiary(typeNameOf(target), 'killed'); }
-    // Blood Debt: a risen Warlord feeds on its own dead, so clearing the pack off it costs.
-    if (target.hp <= 0 && !target.isPlayer) {
-        const owed = activeEntities.find(e => e.classType === 'BOSS' && e.hp > 0 && e.bloodDebt && e.id !== target.id);
-        if (owed) {
-            const fed = Math.max(1, Math.floor(owed.maxHp * owed.bloodDebt));
-            owed.hp = Math.min(owed.maxHp, owed.hp + fed);
-            log(`> ${owed.name} feeds on ${target.name}. +${fed} HP.`, 'log-dmg');
-            setTimeout(() => spawnFCT(owed.id, `+${fed}`, 'fct-heal'), 260);
-        }
-    }
-    // The Tally: it writes down every one of its own that falls. Read on the same moment as
-    // Blood Debt above and deliberately not the same thing - that one heals, this one is a
-    // debt the fight collects on later.
-    if (target.hp <= 0 && !target.isPlayer) noteTally(target);
     if (target.hp <= 0 && target.isPlayer && !attacker.isPlayer) noteBestiary(typeNameOf(attacker), 'felled');
     // The chronicle's witness: whoever lands the blow that drops an operator is on record.
     if (target.hp <= 0 && target.isPlayer)
@@ -10252,15 +10304,11 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
     log(logMsg, logStyle, hitId);
 
     if (target.hp <= 0) {
-        addMomentum(15);
-        if (!target.isPlayer) {
-            checkBountyProgress('KILL'); if (runStats) runStats.kills++;
-            // How it died, not just that it did: a combo finish and a heavy brought down are
-            // both things the board can ask for, and both are known right here.
-            if (comboKill) checkBountyProgress('EXECUTE');
-            if (target.isHeavy) checkBountyProgress('HEAVY');
-            if (odKills !== null) odKills++;
-        }
+        // F05: everything a body is worth, in one place, wherever it fell. A downed operator
+        // is not a kill and never was - noteKill refuses one - so the momentum for a fallen
+        // operator's own side is the only half left here.
+        if (target.isPlayer) addMomentum(15);
+        else noteKill(target, { combo: comboKill, overdrive: true, cause: 'COMBAT' });
     } else if (target.isPlayer) { addMomentum(5); }
 
     // Bloodletter: the chieftain's kit is all serrated, so every blow it lands keeps bleeding.
@@ -10721,9 +10769,7 @@ function executeEnemyAi(enemy) {
             // One raising each, and only ever its own - a fallen operator stays fallen.
             const fallen = activeEntities.find(e => !e.isPlayer && e.hp <= 0 && e.classType === 'CULTIST');
             if (fallen) {
-                fallen.hp = Math.max(1, Math.floor(fallen.maxHp * 0.5));
-                fallen.deathPlayed = false; fallen.bloomed = false;
-                fallen.stunnedTurns = 0; fallen.bleedingTurns = 0;
+                raiseBody(fallen, 0.5);
                 if (!turnQueue.some(e => e.id === fallen.id)) turnQueue.push(fallen);
                 fallen.intent = rollIntent(fallen);
                 log(`> ${enemy.name} calls ${fallen.name} back up.`, 'log-dmg');
@@ -10785,6 +10831,9 @@ function executeEnemyAi(enemy) {
             if (weakest && enemy.hp < enemy.maxHp) {
                 const fed = Math.min(enemy.maxHp - enemy.hp, Math.floor(enemy.maxHp * 0.12));
                 weakest.hp = 0;
+                // F05: eaten is still killed. This bypassed applyDamageHit entirely, so a
+                // player holding a kill-count contract watched a hostile die for nothing.
+                noteKill(weakest, { cause: 'RECKONING' });
                 enemy.hp += fed;
                 log(`> ${enemy.name} takes ${weakest.name} apart and closes its own wounds.`, 'log-dmg');
                 spawnFCT(enemy.id, `+${fed}`, 'fct-heal'); playSFX('enrage'); triggerShake();
@@ -10829,9 +10878,7 @@ function executeEnemyAi(enemy) {
             // You kill the dog first. It knows.
             const hound = activeEntities.find(e => e.id === enemy.escortId);
             if (hound && hound.hp <= 0) {
-                hound.hp = Math.max(1, Math.floor(hound.maxHp * 0.6));
-                hound.deathPlayed = false; hound.bloomed = false;
-                hound.stunnedTurns = 0; hound.bleedingTurns = 0;
+                raiseBody(hound, 0.6);
                 if (!turnQueue.some(e => e.id === hound.id)) turnQueue.push(hound);
                 hound.intent = rollIntent(hound);
                 log(`> ${enemy.name} whistles, and ${hound.name} gets back up.`, 'log-dmg');
@@ -11182,7 +11229,7 @@ globalThis.WP = {
     initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
-    AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder,
+    AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, noteKill, raiseBody, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder,
     REQUISITIONS, reqById, reqCost, reqOpen, buyRequisition, refundRequisitions, renderRequisitions, newPendingReq,
     REQ_REROLL_COST, REQ_REROLL_MAX, REQ_GRUDGE_BASE, REQ_RUNG_STEP, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
@@ -11248,6 +11295,10 @@ globalThis.WP = {
     get mastery() { return mastery; }, set mastery(v) { mastery = v; },
     get bestiary() { return bestiary; }, set bestiary(v) { bestiary = v; },
     get bossSalt() { return bossSalt; }, set bossSalt(v) { bossSalt = v; },
+    // F05: the two flags noteKill is TOLD about rather than reading, so a suite can prove a
+    // status tick does not cash what the last swing left behind.
+    get comboKill() { return comboKill; }, set comboKill(v) { comboKill = v; },
+    get odKills() { return odKills; }, set odKills(v) { odKills = v; },
     get pendingReq() { return pendingReq; }, set pendingReq(v) { pendingReq = v; },
     get grudgeCall() { return grudgeCall; }, set grudgeCall(v) { grudgeCall = v; },
     get rungCredit() { return rungCredit; }, set rungCredit(v) { rungCredit = v; },

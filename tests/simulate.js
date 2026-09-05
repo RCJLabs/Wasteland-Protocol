@@ -643,6 +643,7 @@ const FACES = flag('faces', 'warm');
 const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy }) => {
   const stat = { order: null, fulfilled: false, won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
                  upgrades: 0, odAimed: 0, bossTopUps: 0, eliteTopUps: 0, reqBought: 0, reqGrudge: null,
+                 engineKills: 0, killGap: 0,
                  sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, field: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
@@ -1346,7 +1347,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (!activeEntities.some(e => e.isPlayer && e.hp > 0)) break;
       if (!activeEntities.some(e => !e.isPlayer && e.hp > 0)) break;
       if (actor.isPlayer && withdrawPolicy && canWithdraw() && losing(enemyStartHp)) {
-        stat.kills += activeEntities.filter(e => !e.isPlayer && e.hp <= 0).length;
+        countBodies();
         // withdraw() reaches recoverDowned on its own, so the operators it picks up have to be
         // counted here or the scar rate is measured against a denominator missing every one of
         // the five withdrawals a run. That read 12% against a 0.08 chance and looked like a bug
@@ -1382,7 +1383,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     if (fled) { tallyScars(); stat.withdrawals++; return 'fled'; }
     const survived = activeEntities.some(e => e.isPlayer && e.hp > 0);
     const foesLeft = activeEntities.filter(e => !e.isPlayer && e.hp > 0).length;
-    stat.kills += activeEntities.filter(e => !e.isPlayer && e.hp <= 0).length;
+    countBodies();
     const won = survived && foesLeft === 0;
     // checkWinState does this in the real loop, and without it the board's fight-end contracts
     // would read as content nobody ever settles. E01: counted, the engine reaches it for 354 of
@@ -1407,6 +1408,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     tallyScars();
     combatActive = false;
     return won ? 'won' : 'lost';
+  };
+
+  // F05: bodies, counted once each. This was a re-scan of the field, once at a withdrawal and
+  // once at the end of a fight, and a scan that can run twice over the same corpses is not a
+  // cross-check on anything. Keyed by id - initiateCombat mints fresh ones per fight - so each
+  // body is counted exactly once however many times it is looked at.
+  const countedBodies = new Set();
+  const countBodies = () => {
+    activeEntities.filter(e => !e.isPlayer && e.hp <= 0).forEach(e => {
+      if (countedBodies.has(e.id)) return;
+      countedBodies.add(e.id); stat.kills++;
+    });
   };
 
   // F03: a fuse is counted in NODES - consequencesDue reads nodesCleared - and the engine
@@ -1708,7 +1721,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // (game.js:8907), and this loop reaches applyDamageHit through both resolveAction and
     // applyTurnStartEffects. A tick per cleared node on top of that was a second count of a
     // contract the engine had already settled.
-    runStats.kills = stat.kills;
+    // F05: the engine's own count stands, and this file's is the cross-check rather than the
+    // answer. It used to be the other way round - `runStats.kills = stat.kills` - because
+    // before F05 the engine's ledger was short by every kill a status tick, a RECKONING or the
+    // Hazmat's tanks landed, and overwriting it with a field scan was the cheapest repair.
+    //
+    // The scan is a LOWER bound and always was: it counts bodies left on the field at the end
+    // of a fight, so a unit raised by RESURGENCE or WHISTLE and put down again is two kills and
+    // one body. Measured over forty careers, the overwrite was losing four second deaths in
+    // 6,799. So the direction that means something is the other one - MORE bodies than the
+    // engine banked is a path reaching zero without the ledger, which is exactly what this
+    // phase was filed on.
+    stat.engineKills = runStats.kills || 0;
     // E01b: the engine's own payout and the engine's own banking of it. This used to pay a flat
     // 20 base where checkWinState rolls 0-29, and knew nothing about the front's ledger (a
     // warband's raiders and a quiet sector's boss both carry double), the Vulture's 25% cut, the
@@ -1740,6 +1764,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   // The instrument checks itself: these count the same events by different routes, and the
   // whole point of the block above is that they must not diverge.
+  // F05: one number per career, not one per fight - both counters are cumulative, so adding
+  // the difference after every fight re-counts a gap that opened once.
+  stat.engineKills = runStats.kills || 0;
+  stat.killGap = Math.max(0, stat.kills - stat.engineKills);
   stat.order = runStats.order;
   // F03: THE LONG ROAD can only be kept by clearing the last sector, and a run that clears it
   // has runStats.won set - so the recall branch above, the only place this file set the flag,
@@ -2137,6 +2165,23 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('requisitions bought per run', (results.reduce((a, r) => a + (r.reqBought || 0), 0) / n).toFixed(1));
   const called = results.filter(r => r.reqGrudge).length;
   line('grudges called in', `${called} of ${n} expeditions`);
+  // F05: bodies on the field against kills the engine banked itself. A positive number here
+  // means something is reaching zero down a path the death ledger does not cover.
+  const gap = results.reduce((a, r) => a + (r.killGap || 0), 0);
+  const bodies = results.reduce((a, r) => a + (r.kills || 0), 0);
+  const banked = results.reduce((a, r) => a + (r.engineKills || 0), 0);
+  // The engine's number is expected to sit ABOVE this one: a body raised by RESURGENCE or
+  // WHISTLE and put down again is two kills and one body. The direction that would mean
+  // something is the other one - more bodies than kills is a path reaching zero without
+  // noteKill, which is the whole of F05.
+  //
+  // Measured after the fix: 2 in 22,290 bodies over 150 careers, 0 in 9,255 over 60. What was
+  // ruled out, fight by fight: every body left on the field has been through noteKill, and the
+  // engine's tick count equals the number of times noteKill returned true. So the residual is
+  // in this file's scan rather than in the ledger, and it has not been attributed further. A
+  // figure in the tens rather than the ones is worth chasing.
+  line('kills, both ways', `${banked} banked by the engine, ${bodies} bodies counted here`
+    + (gap ? ` (${gap} more bodies than kills)` : ''));
   line('augments installed per run', (results.reduce((a, r) => a + (r.augments || 0), 0) / n).toFixed(1));
   const faces = {};
   results.forEach(r => Object.entries(r.facesMet || {}).forEach(([k, v]) => { faces[k] = (faces[k] || 0) + v; }));
