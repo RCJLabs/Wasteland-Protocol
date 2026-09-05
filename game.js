@@ -103,6 +103,23 @@ let armedExit = null;      // null | 'WITHDRAW' | 'RETREAT' - only one question 
 let retreatNode = null;    // the node a retreat put the squad back in front of
 let runStats = null;
 let activeEvent = null; let pendingConsequences = []; let recentEvents = []; let activeContracts = []; let pendingDifficulty = 1.0; let activeGearSelector = null; let activeScarSelector = null;
+// ── F02: what a reload is allowed to know ───────────────────────────────────────────────
+// One rule: every screen a player can be standing on is a screen a save can restore to.
+// E10 built COMBAT_STATE for exactly this shape of problem inside a fight; these are the
+// screens outside it. Each is a fact about where the player is, written when they arrive and
+// cleared when they leave, so a reload puts them back rather than somewhere cheaper.
+//
+// Before them, five of these screens had no representation at all and two were exploits: a
+// reload on the LOOT button replayed a won commander fight and paid its skull twice, and a
+// reload on SQUAD BROKEN was a free regroup - no scrap halved, no fallback spent, no sector
+// reset. The other three lost the player something instead: a rerolled event with its
+// follow-up thread un-fired, a camp offered again, a muster skipped outright.
+let pendingLoot = null;    // the spoils of a won fight, waiting on the LOOT button
+let squadBroken = false;   // standing on SQUAD BROKEN, with REGROUP and END RUN still unpressed
+let musterPending = false; // the run is built and the line has not been sent in yet
+let atCamp = false;        // standing in a camp
+let campOutcome = null;    // { kind, name } once a camp choice has been taken
+let eventOutcome = null;   // the result text once an event choice has been taken
 let activePosSelector = null; let activePerkSelector = null; let currentWeather = 'CLEAR'; let currentNodeType = '';
 let isCurrentNodeElite = false;
 
@@ -4263,6 +4280,7 @@ function totalRegroups() {
 // this should move the commander's difficulty or the rate income arrives, not the retry cost.
 function regroupSquad() {
     if (regroupsLeft() <= 0) { endRun(); return; }
+    squadBroken = false;
     runStats.regroups--;
     closeRanks();
     playerRoster.forEach(p => { p.hp = p.maxHp; p.stunnedTurns = 0; p.bleedingTurns = 0; p.armorTurns = 0; p.armor = 0; p.oiledTurns = 0; });
@@ -4287,6 +4305,12 @@ function regroupSquad() {
 
 function renderSquadBroken() {
     firePrompt('REGROUP');
+    // F02: REGROUP and END RUN are both still unpressed, and this screen saves before either
+    // of them. Without a flag saying so, a reload found no fight to resume and dropped to the
+    // map with the node already cleared, the downed already picked up and nothing paid: no
+    // scrap halved, no fallback spent, no sector reset. A tab eviction on a phone did it by
+    // accident.
+    squadBroken = true;
     combatActive = false; activeEntities = []; turnQueue = []; pendingCombat = null;
     momentum = 0; addMomentum(0);
     noteDepth();
@@ -4504,6 +4528,8 @@ function renderChronicle() {
 }
 
 function endRun() {
+    squadBroken = false; pendingLoot = null; atCamp = false; campOutcome = null;
+    activeEvent = null; eventOutcome = null; musterPending = false;
     combatActive = false; activeEntities = []; turnQueue = []; pendingCombat = null;
     momentum = 0; addMomentum(0);
     if (!runStats) runStats = newRunStats();
@@ -4682,6 +4708,7 @@ function bankNode(raw, abandoned) {
     return amount;
 }
 function collectLoot(raw, abandoned) {
+    pendingLoot = null;
     bankNode(raw, abandoned);
     // A commander's reward is a decision, so it interrupts the return to the map rather than
     // being resolved silently behind it.
@@ -4726,7 +4753,12 @@ function takeRelic(index) {
 let bestScore = 0; let bestSector = 0;
 let careerWins = 0;   // expeditions that reached the end of the road, meta-persisted
 
-function saveMeta() { Store.set(META_KEY, JSON.stringify({ bossSkulls, metaUpgrades, bestScore, bestSector, careerWins, bestRung, mastery, bestiary, seenPrompts, grudges })); }
+// Everything a career is. One function, so what saveMeta writes and what a run slot mirrors
+// cannot drift apart - which is the whole reason the rebuild below could not rebuild anything.
+function metaBlob() {
+    return { bossSkulls, metaUpgrades, bestScore, bestSector, careerWins, bestRung, mastery, bestiary, seenPrompts, grudges };
+}
+function saveMeta() { Store.set(META_KEY, JSON.stringify(metaBlob())); }
 
 function newRunStats() { return { extracted: false, won: false, fulfilled: false, order: activeOrder, warlords: [], doctrine: null, doctrineMult: 1, kills: 0, elites: 0, bosses: 0, scrapEarned: 0, nodes: 0, withdrawals: 0, retreats: 0, retreatsFailed: 0, recruited: 0, fallen: [], deepestSector: 1, deepestTier: 1, regroups: totalRegroups(), contractMult: contractMult(), contracts: contractNames(), protocolMult: protocolMult(), ascension }; }
 
@@ -4903,15 +4935,53 @@ function loadMeta() {
     }
     // No readable meta yet - adopt the best progress any slot recorded. A corrupt meta blob
     // falls through to the same rebuild rather than taking the boot down with it.
+    //
+    // F02: that rebuild could not rebuild a career. It read bossSkulls and five metaUpgrades
+    // fields off run slots, and saveGameState has not written either for a long time - so a
+    // corrupt career file was replaced, silently and immediately, with an empty one: every
+    // dossier, the whole bestiary, every grudge, careerWins and the ascension rung, gone with
+    // one console warning. A corrupt RUN slot gets a DAMAGED - ERASE button on the title
+    // screen; the far more valuable file got no notice at all.
+    //
+    // Two changes. Every run slot now mirrors the whole career blob (see metaBlob), so there
+    // is something to rebuild FROM; and the unreadable blob is kept rather than written over,
+    // so a player who knows where to look still has it.
+    if (d === CORRUPT) {
+        const raw = Store.get(META_KEY);
+        if (raw != null) Store.set(META_KEY + ':damaged', raw);
+        console.warn('Career file unreadable; kept a copy at ' + META_KEY + ':damaged and rebuilding from the run slots.');
+    }
+    // Merged rather than picked: "the best progress any slot recorded", field by field, so
+    // three slots at different depths cannot lose to whichever was written last.
+    const best = (a, b) => Math.max(Number(a) || 0, Number(b) || 0);
+    const mergeCounts = (into, from) => {
+        if (!from || typeof from !== 'object' || Array.isArray(from)) return into;
+        Object.keys(from).forEach(k => { into[k] = best(into[k], from[k]); });
+        return into;
+    };
     for (let i = 1; i <= 3; i++) {
         let d = Store.getJSON(BASE_SAVE_KEY + i); if (!d || d === CORRUPT) continue;
-        bossSkulls = Math.max(bossSkulls, d.bossSkulls || 0);
-        if (d.metaUpgrades) {
-            metaUpgrades.startScrap = Math.max(metaUpgrades.startScrap, d.metaUpgrades.startScrap || 0);
-            metaUpgrades.startLevel = Math.max(metaUpgrades.startLevel, d.metaUpgrades.startLevel || 1);
-            metaUpgrades.invMax = Math.max(metaUpgrades.invMax, d.metaUpgrades.invMax || 4);
-            metaUpgrades.vault = Math.max(metaUpgrades.vault || 0, d.metaUpgrades.vault || 0);
-            metaUpgrades.heirloom = d.metaUpgrades.heirloom || metaUpgrades.heirloom || null;
+        const m = (d.meta && typeof d.meta === 'object') ? d.meta : d;
+        bossSkulls = best(bossSkulls, m.bossSkulls);
+        bestScore = best(bestScore, m.bestScore); bestSector = best(bestSector, m.bestSector);
+        careerWins = best(careerWins, m.careerWins);
+        bestRung = Math.min(best(bestRung, m.bestRung), PROTOCOLS.length);
+        mergeCounts(mastery, m.mastery);
+        mergeCounts(grudges, m.grudges);
+        if (m.bestiary && typeof m.bestiary === 'object' && !Array.isArray(m.bestiary)) {
+            Object.keys(m.bestiary).forEach(name => {
+                const was = bestiaryEntry(name), now = m.bestiary[name] || {};
+                bestiary[name] = { met: best(was.met, now.met), killed: best(was.killed, now.killed),
+                                   felled: best(was.felled, now.felled) };
+            });
+        }
+        if (Array.isArray(m.seenPrompts)) seenPrompts = [...new Set([...seenPrompts, ...m.seenPrompts.filter(x => typeof x === 'string')])];
+        if (m.metaUpgrades) {
+            Object.keys(metaUpgrades).forEach(k => {
+                const v = m.metaUpgrades[k];
+                if (typeof metaUpgrades[k] === 'number') metaUpgrades[k] = best(metaUpgrades[k], v);
+                else if (v) metaUpgrades[k] = v;
+            });
         }
     }
     saveMeta();
@@ -5152,7 +5222,14 @@ function toggleContract(id) {
 function beginExpedition() {
     const typed = (document.getElementById('seed-input') ? document.getElementById('seed-input').value : '').trim().toUpperCase();
     runSeed = typed || null;
-    buildNewRun(pendingDifficulty); renderMuster();
+    buildNewRun(pendingDifficulty);
+    // F02: buildNewRun saves while the player is still standing on the muster - the line
+    // unarranged, the rerolls unspent, the doctrine untaken. continueGame had no branch for
+    // that, so a reload landed on the map with musterDeploy never run: no doctrine could be
+    // taken at all, and the one place applyDoctrineEdge and runStats.doctrineMult are set
+    // never executed.
+    musterPending = true; saveGameState();
+    renderMuster();
 }
 
 let musterRerolls = 0;
@@ -5273,6 +5350,10 @@ function musterRank(charId) {
     // A job is a bench job. Putting its holder on the line gives it up, and says so rather
     // than leaving a card claiming somebody in the front rank is out scouting.
     if (next !== 0 && benchJob && benchJob.charId === ch.id) benchJob = null;
+    // F02: the muster is a screen the player can be standing on for a while, and everything
+    // done on it - the line, a reroll, a bench job - was only in memory until DEPLOY. Written
+    // down as it is done, so a reload comes back to the muster the player had made.
+    saveGameState();
     renderMuster();
 }
 
@@ -5287,6 +5368,10 @@ function musterReroll(charId) {
     ch.quirk = q; ch.maxHp += q.hp; ch.dmgBase += q.dmg; ch.speed += q.spd;
     ch.hp = Math.min(ch.maxHp, Math.max(1, ch.hp + q.hp));
     musterRerolls--; playSFX('click');
+    // A reroll spends one of two and rewrites an operator's quirk, health, damage and speed.
+    // Unsaved, a reload handed the reroll back with the old quirk - which is a free re-roll of
+    // the draw, taken until it comes up the way you wanted.
+    saveGameState();
     renderMuster();
 }
 
@@ -5303,6 +5388,7 @@ function musterDeploy() {
         runStats.doctrine = activeDoctrine;
     }
     if (runStats) runStats.doctrineMult = doctrineMult();
+    musterPending = false;
     saveGameState(); renderMap();
 }
 
@@ -5367,17 +5453,41 @@ function buildNewRun(diff) {
     if (hasContract('SHORT_HANDED')) playerRoster.forEach(p => { if (p.gridPos === 3) p.gridPos = 0; });
 
     musterRerolls = MUSTER_REROLLS + (metaUpgrades.rerolls || 0);
+    // F02: a new run is standing on no screen at all. confirmNewGame goes straight to the map
+    // and beginExpedition sets the muster flag itself, so nothing here can inherit the screen
+    // the last run ended on.
+    pendingLoot = null; squadBroken = false; musterPending = false;
+    atCamp = false; campOutcome = null; activeEvent = null; eventOutcome = null;
     saveGameState(); 
 }
 
+// Where a save can put a player back, in the order the game would have reached them. One
+// table rather than an if-chain, for the reason COMBAT_STATE is one: a screen added to the
+// game and forgotten here is a screen that silently resolves to the map, which is how the
+// LOOT button paid a skull twice and the SQUAD BROKEN screen became a free regroup. Suite 111
+// walks this list and asserts every entry restores to itself.
+//
+// The order is the order a node resolves in: the fight, what the fight left standing, then
+// the decisions that come off the back of it, then the road. LOOT is the one entry that
+// restores an outcome rather than a screen, and deliberately: pressing the button is not a
+// decision, it is an acknowledgement, so the save resumes on the far side of it.
+const RESUME_POINTS = [
+    { id: 'COMBAT',  at: () => !!pendingCombat,                              go: () => resumeCombat(pendingCombat) },
+    { id: 'BROKEN',  at: () => squadBroken,                                  go: () => renderSquadBroken() },
+    { id: 'LOOT',    at: () => pendingLoot !== null,                         go: () => collectLoot(pendingLoot) },
+    { id: 'RELIC',   at: () => !!(pendingRelicOffer && pendingRelicOffer.length), go: () => renderRelicOffer() },
+    { id: 'PERK',    at: () => pendingPerkOffers.length > 0,                 go: () => renderPerkOffer() },
+    { id: 'EVENT',   at: () => !!activeEvent,                                go: () => renderEvent() },
+    { id: 'CAMP',    at: () => atCamp,                                       go: () => renderCampScreen() },
+    { id: 'SHOP',    at: () => !!activeShop,                                 go: () => renderShop() },
+    { id: 'RECRUIT', at: () => !!(pendingRecruit && !pendingRecruit.taken),  go: () => renderRecruit() },
+    { id: 'MUSTER',  at: () => musterPending,                                go: () => renderMuster() },
+];
+function resumePoint() { return RESUME_POINTS.find(p => p.at()) || null; }
 function continueGame() {
     loadGameState(); addMomentum(0);
-    if (pendingCombat) return resumeCombat(pendingCombat);
-    if (pendingRelicOffer && pendingRelicOffer.length) return renderRelicOffer();
-    if (pendingPerkOffers.length) return renderPerkOffer();
-    if (activeShop) return renderShop();
-    if (pendingRecruit && !pendingRecruit.taken) return renderRecruit();
-    renderMap();
+    const at = resumePoint();
+    return at ? at.go() : renderMap();
 }
 
 // Rebuilds a fight from its snapshot. Player entries are looked up in playerRoster by id so
@@ -5453,7 +5563,12 @@ function buildCombatSnapshot() {
     return out;
 }
 
-function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, pendingRecruit, regroupInsured, bonds, sectorFront, runSeed, ascension, activeOrder, bossSalt, doctrineOffer, activeDoctrine, doctrineBroken, doctrineFavourites, pendingConsequences, recentEvents, castState, firedEvents, choirWord, benchJob, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, retreatNode, activeContracts, combat: buildCombatSnapshot() })); }
+function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify({ scrap, tier: currentTier, currentSector, difficultyMult, roster: playerRoster, inventory, materials, tuneUpBattles, activeBounties, standingBounty, momentum, odChoices, gearStash, pendingPerkOffers, activeShop, pendingRecruit, regroupInsured, bonds, sectorFront, runSeed, ascension, activeOrder, bossSalt, doctrineOffer, activeDoctrine, doctrineBroken, doctrineFavourites, pendingConsequences, recentEvents, castState, firedEvents, choirWord, benchJob, sectorMap, currentNodeId, clearedNodeIds, activeRelics, relicOffer: pendingRelicOffer ? pendingRelicOffer.map(r => r.id) : null, runStats, pursuit, retreatNode, activeContracts, combat: buildCombatSnapshot(),
+    // F02. `event` is stored as a title rather than the object: an event's desc and choices
+    // are functions of the run, so what is worth keeping is which one is open, not the shape
+    // it had when it opened. `meta` is the career mirror - see metaBlob.
+    pendingLoot, squadBroken, musterPending, musterRerolls, atCamp, campOutcome, eventOutcome,
+    event: activeEvent ? activeEvent.title : null, meta: metaBlob() })); }
 
 // A relic written to a save before the pool was tiered carries the old wording and no tier, so
 // it is looked up again by id rather than trusted as stored. Anything whose id no longer exists
@@ -5518,7 +5633,22 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
             migrateAssetPaths(pendingCombat.enemies);
             if (typeof pendingCombat.bgFile === 'string') pendingCombat.bgFile = pendingCombat.bgFile.replace(/\.png$/, '.webp');
         } runStats = d.runStats || newRunStats();
-        if (typeof runStats.regroups !== 'number') runStats.regroups = totalRegroups(); } }
+        if (typeof runStats.regroups !== 'number') runStats.regroups = totalRegroups();
+        // F02. Every one of these defaults to "not there", which is what every save written
+        // before this phase says by omission - an old career opens on the map exactly as it
+        // did. Rebuilt rather than trusted, the benchJob idiom: a title that no longer names
+        // an event, or a camp outcome naming a kind that no longer exists, restores as no
+        // screen at all rather than as a screen the game cannot draw.
+        pendingLoot = (typeof d.pendingLoot === 'number' && d.pendingLoot >= 0) ? d.pendingLoot : null;
+        squadBroken = !!d.squadBroken;
+        musterPending = !!d.musterPending;
+        musterRerolls = Math.max(0, Number(d.musterRerolls) || 0);
+        activeEvent = d.event ? eventByTitle(d.event) : null;
+        eventOutcome = (activeEvent && typeof d.eventOutcome === 'string') ? d.eventOutcome : null;
+        atCamp = !!d.atCamp;
+        campOutcome = (atCamp && d.campOutcome && CAMP_OUTCOMES[d.campOutcome.kind])
+            ? { kind: d.campOutcome.kind, name: typeof d.campOutcome.name === 'string' ? d.campOutcome.name : null } : null;
+        } }
 
 // --- Dev tools -----------------------------------------------------------------------------
 // Reaching a boss meant playing ten nodes to get there. This jumps straight to any fight or
@@ -6614,13 +6744,44 @@ let activeChoices = [];
 // `forced` is for the suites and the dev tools: the draw is the thing under test in one place
 // and the thing in the way everywhere else, and a screen that can only be reached by rolling
 // for it cannot be checked at all. Play never passes it.
+// A saved event is stored as its title, because its desc and its choices are functions of the
+// run rather than fixed text. Follow-ups are not in EVENT_POOL, so both decks are searched.
+function eventByTitle(t) {
+    return EVENT_POOL.find(e => e.title === t) || FOLLOWUPS.find(e => e.title === t) || null;
+}
+
 function initiateEvent(forced) {
-    switchScreen('screen-event'); activeEvent = forced || pickEvent();
+    activeEvent = forced || pickEvent();
+    eventOutcome = null;
     if (activeEvent.cast) meetCast(activeEvent.cast);
-    activeChoices = choicesFor(activeEvent);
+    // F02: the draw has already spent things the run cannot get back - a follow-up thread is
+    // consumed, recentEvents has moved on, a face has been met - and none of it reached disk
+    // until the event was finished. So a reload dealt a different card and handed the thread
+    // back into the owed list. Written down here, before the screen is drawn.
+    saveGameState();
+    renderEvent();
+}
+
+// The event screen, drawn from state rather than from the draw that produced it, so a reload
+// can put the player back on it - choices unspent, or result unread.
+function renderEvent() {
+    if (!activeEvent) return renderMap();
+    switchScreen('screen-event');
     document.getElementById('event-title').innerText = activeEvent.title;
     document.getElementById('event-desc').innerText = eventDesc(activeEvent);
     renderCastTag(activeEvent.cast);
+    renderEventChoices();
+}
+// Either the choices or what taking one of them said. activeChoices is rebuilt here rather
+// than carried, so the list a button indexes into is always the list on screen.
+function renderEventChoices() {
+    activeChoices = choicesFor(activeEvent);
+    if (eventOutcome !== null) {
+        document.getElementById('event-choices').innerHTML =
+            `<div style="color:#6B8E23; font-weight:bold; margin-bottom:15px;">> ${eventOutcome}</div>`
+            + `<button class="event-btn" style="border-color:#4488ff; color:#4488ff;" data-action="event-finish">CONTINUE EXPEDITION</button>`;
+        return;
+    }
     let cHtml = ''; activeChoices.forEach((c, idx) => { let canAfford = c.canAfford(); cHtml += `<button class="event-btn" ${!canAfford ? 'disabled' : ''} data-action="event-choice" data-index="${idx}">${c.label}</button>`; });
     document.getElementById('event-choices').innerHTML = cHtml;
 }
@@ -6640,15 +6801,48 @@ function renderCastTag(id) {
 }
 
 function resolveEvent(idx) {
-    let resultText = activeChoices[idx].execute();
-    document.getElementById('event-choices').innerHTML = `<div style="color:#6B8E23; font-weight:bold; margin-bottom:15px;">> ${resultText}</div><button class="event-btn" style="border-color:#4488ff; color:#4488ff;" data-action="event-finish">CONTINUE EXPEDITION</button>`;
+    eventOutcome = activeChoices[idx].execute();
+    // The choice is spent the moment it executes - scrap moved, a debt booked, a standing
+    // changed - so the result is a screen of its own and is written down as one. Without it a
+    // reload came back to an unspent choice list with the first choice's effects already
+    // banked, which is a re-roll of anything a choice leaves to chance.
+    saveGameState();
+    renderEventChoices();
     renderCastTag(activeEvent.cast);
 }
-function finishEvent() { currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap(); }
+function finishEvent() {
+    activeEvent = null; eventOutcome = null;
+    currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap();
+}
 
 let extractArmed = false;
 
+// What a camp choice leaves behind, as a fact rather than as the markup that showed it. The
+// strings live here so a save carries a kind and at most a name - a save holds what happened,
+// and the screen is drawn from it.
+const CAMP_OUTCOMES = {
+    TRIAGE: { color: '#6B8E23', text: n => `Squad patched up and ready.${n ? ` ${n} worked the whole roster.` : ''}` },
+    TUNEUP: { color: '#B8860B', text: () => 'Weapons cleaned and calibrated. (+4 Base DMG active)' },
+    FORAGE: { color: '#4488ff', text: () => 'Salvaged valuable materials from the perimeter.' },
+    CACHE:  { color: '#a4508b', text: n => `The collector takes the camp and leaves ${n}.`,
+              sub: n => { const r = RELIC_POOL.find(x => x.name === n); return r ? r.desc : ''; } }
+};
+function campOutcomeHtml(o) {
+    const spec = o && CAMP_OUTCOMES[o.kind]; if (!spec) return '';
+    const sub = spec.sub ? spec.sub(o.name) : '';
+    return `<div style="color:${spec.color}; font-weight:bold; margin-bottom:15px;">> ${spec.text(o.name)}</div>`
+        + (sub ? `<div style="color:#888; margin-bottom:15px;">${sub}</div>` : '')
+        + `<button class="event-btn" data-action="camp-finish">CONTINUE EXPEDITION</button>`;
+}
+
 function initiateCamp() {
+    atCamp = true; campOutcome = null;
+    // F02: enterNode has already cleared the node and committed the route. None of it reached
+    // disk until the camp was finished, so a reload put the whole tier back on offer.
+    saveGameState();
+    renderCampScreen();
+}
+function renderCampScreen() {
     extractArmed = false;
     switchScreen('screen-camp');
     renderCamp();
@@ -6666,6 +6860,9 @@ function extractPitch() {
 
 function renderCamp() {
     let cHtml = '';
+    // A camp whose choice has been taken is a screen of its own, and the one a reload comes
+    // back to: the walk-out and the three offers are spent.
+    if (campOutcome) { document.getElementById('camp-choices').innerHTML = campOutcomeHtml(campOutcome); return; }
     if (extractArmed) {
         const p = extractPitch();
         cHtml += `<div class="camp-extract-panel">`
@@ -6713,32 +6910,38 @@ function armExtract() {
 }
 
 function resolveCamp(type) {
+    if (campOutcome) return;              // the camp is spent; a stale screen cannot spend it again
     if (type === 'TRIAGE') {
         // A medic keeping the camp puts back more of it, and works on the bench too - the
         // people who are not fighting are the ones nobody was treating.
         const kept = hasBenchJob('MEDIC');
         const share = kept ? CAMP_TRIAGE_JOB : CAMP_TRIAGE;
         playerRoster.forEach(p => { if ((kept || p.gridPos > 0) && p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp * share)); });
-        playSFX('heal'); document.getElementById('camp-choices').innerHTML = `<div style="color:#6B8E23; font-weight:bold; margin-bottom:15px;">> Squad patched up and ready.${kept ? ` ${benchJobHolder().name} worked the whole roster.` : ''}</div><button class="event-btn" data-action="camp-finish">CONTINUE EXPEDITION</button>`;
+        playSFX('heal');
+        campOutcome = { kind: 'TRIAGE', name: kept ? benchJobHolder().name : null };
     } else if (type === 'TUNEUP') {
         tuneUpBattles = 3; playSFX('click');
-        document.getElementById('camp-choices').innerHTML = `<div style="color:#B8860B; font-weight:bold; margin-bottom:15px;">> Weapons cleaned and calibrated. (+4 Base DMG active)</div><button class="event-btn" data-action="camp-finish">CONTINUE EXPEDITION</button>`;
+        campOutcome = { kind: 'TUNEUP', name: null };
     } else if (type === 'FORAGE') {
         materials.parts++; materials.chems++; materials.tech++; playSFX('click');
-        document.getElementById('camp-choices').innerHTML = `<div style="color:#4488ff; font-weight:bold; margin-bottom:15px;">> Salvaged valuable materials from the perimeter.</div><button class="event-btn" data-action="camp-finish">CONTINUE EXPEDITION</button>`;
+        campOutcome = { kind: 'FORAGE', name: null };
     } else if (type === 'CACHE') {
         // Re-asked rather than trusted from the render: a stale screen must not be able to
         // hand over a relic the squad no longer qualifies for.
         const pick = cacheOffer();
         if (!pick) { renderCamp(); return; }
         activeRelics.push(pick); announceSets(); firePrompt('CURSE'); playSFX('combo');
-        document.getElementById('camp-choices').innerHTML =
-            `<div style="color:#a4508b; font-weight:bold; margin-bottom:15px;">> The collector takes the camp and leaves ${pick.name}.</div>`
-            + `<div style="color:#888; margin-bottom:15px;">${pick.desc}</div>`
-            + `<button class="event-btn" data-action="camp-finish">CONTINUE EXPEDITION</button>`;
-    }
+        campOutcome = { kind: 'CACHE', name: pick.name };
+    } else return;
+    // Same rule as the event: the choice is spent the moment it executes, so the result is
+    // written down before it is drawn.
+    saveGameState();
+    renderCamp();
 }
-function finishCamp() { currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap(); }
+function finishCamp() {
+    atCamp = false; campOutcome = null;
+    currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap();
+}
 
 // ── The Armory ──────────────────────────────────────────────────────────────────────────
 // Scrap had three rote uses; a shop gives it competing ones, and gives the route graph a
@@ -10766,7 +10969,15 @@ function checkWinState() {
             log(`> Salvaged: ${paired ? 2 : 1} ${m.toUpperCase()}`, "log-heal");
         }
 
-        document.getElementById('command-deck').innerHTML = `<button data-action="loot" data-amount="${s}">LOOT ${s}</button>`; combatActive = false; stopAmbience(); 
+        // F02: the fight is over and the meta has already been written - the skull is banked,
+        // the grudge is noted, mastery is filed. Until now the RUN save still held the mid-fight
+        // snapshot from the start of the last turn, so a reload resumed a commander that was
+        // still alive and killing it a second time paid a second skull, its grudge skulls again
+        // and stacked the grudge again. The run is written down here, at the win, before the
+        // button exists.
+        pendingLoot = s;
+        document.getElementById('command-deck').innerHTML = `<button data-action="loot" data-amount="${s}">LOOT ${s}</button>`; combatActive = false; stopAmbience();
+        saveGameState(); 
     } 
     else if (pressExtra && turnQueue[activeIndex] && turnQueue[activeIndex].isPlayer && turnQueue[activeIndex].hp > 0) {
         // A pressed operator holds the floor: the queue stays put and the deck re-opens.
@@ -10809,7 +11020,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
@@ -10905,6 +11116,12 @@ globalThis.WP = {
     get activeGearSelector() { return activeGearSelector; }, set activeGearSelector(v) { activeGearSelector = v; },
     get activeScarSelector() { return activeScarSelector; }, set activeScarSelector(v) { activeScarSelector = v; },
     get activeEvent() { return activeEvent; }, set activeEvent(v) { activeEvent = v; },
+    get pendingLoot() { return pendingLoot; }, set pendingLoot(v) { pendingLoot = v; },
+    get squadBroken() { return squadBroken; }, set squadBroken(v) { squadBroken = v; },
+    get musterPending() { return musterPending; }, set musterPending(v) { musterPending = v; },
+    get atCamp() { return atCamp; }, set atCamp(v) { atCamp = v; },
+    get campOutcome() { return campOutcome; }, set campOutcome(v) { campOutcome = v; },
+    get eventOutcome() { return eventOutcome; }, set eventOutcome(v) { eventOutcome = v; },
     get pendingConsequences() { return pendingConsequences; }, set pendingConsequences(v) { pendingConsequences = v; },
     get recentEvents() { return recentEvents; }, set recentEvents(v) { recentEvents = v; },
     get currentTerrain() { return currentTerrain; }, set currentTerrain(v) { currentTerrain = v; },

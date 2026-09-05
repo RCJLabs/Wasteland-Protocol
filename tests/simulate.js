@@ -1311,6 +1311,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     }
     if (node.type === 'CAMP') {
       stat.camps++;
+      // F02: through the real door. A camp is now a screen the save can restore to, which means
+      // resolveCamp will not spend a camp twice and finishCamp is what closes one - so a loop
+      // that called resolveCamp with neither bracket around it took one cache per career and
+      // silently no-opped every later one. The same hand-copy class E01b removed for the payout
+      // and the crossing: the tier bump below used to be this file's own copy of finishCamp.
+      initiateCamp();
       // The camp is where the door is, so it is where the decision gets made. This player walks
       // once the run is deep enough to be worth banking AND the squad is in no shape to keep
       // going: two of the line badly hurt, the bench gone, or nothing left to regroup with.
@@ -1334,7 +1340,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       } else {
         playerRoster.forEach(p => { if (p.gridPos > 0 && p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp * 0.35)); });
       }
-      currentTier++; stat.nodes++; noteDepth(); runStats.nodes++;
+      // The heal above stays this file's own policy rather than resolveCamp('TRIAGE'): a bench
+      // medic makes the engine's triage worth more, and swapping to it would move a balance
+      // figure inside a phase that has no balance dimension. finishCamp is the tier, the node
+      // count and the depth note, which were hand-copied here.
+      stat.nodes++;
+      finishCamp();
       continue;
     }
     if (node.type === 'RECRUIT') {
