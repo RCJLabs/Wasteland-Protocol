@@ -174,6 +174,34 @@
 // separated upward (45.1k-49.1k against a no-capstone 42.2k-43.9k), which is the deeper runs
 // finishing rather than a payout change - nodes cleared recovers from 90 to 94 at the same time.
 
+// ── The ten abilities this file has never fired ─────────────────────────────────────────
+// Found while measuring E12b, and much larger than the item that found it. A class at dossier
+// rank III brings four verbs minus whichever the muster benched, and buildNewRun benches the
+// FOURTH by default - the muster screen is where a player un-benches it. This file calls
+// musterDeploy and has never touched that control, so deckFor has always returned the base
+// three. Measured over 60 expeditions with every class at rank 3 and 150,000 to 425,000 lifetime
+// XP: 0.0 fourth-ability swings a run. SHIELD_SLAM, STIM_DART, SHIV, HEAT_WAVE, RIOT_BUTT,
+// PIERCING_VOLLEY, HARRY, TRENCH_SWEEP, TANK_RUPTURE and WHALE_LINE have never been fired in any
+// measurement this file has ever taken, and no figure here has ever described a rank III squad.
+//
+// The obvious fix is not obvious. A one-line policy - keep the free basic and the self-action,
+// bench the first cooldown-bearing base verb for the mastered one - does bring them: SHIELD_SLAM
+// alone becomes 13-15% of every move made. It also moves the reported game further than any
+// phase ever has, 3 x 60 an arm against the same build without it:
+//
+//                            fourth benched         fourth brought
+//   runs that ended the road  20 / 15 / 17            5 / 8 / 6
+//   score, median         49,138/45,106/46,154   31,603/34,628/35,752
+//   deepest sector, median      6 / 5 / 5              4 / 5 / 4
+//   lost for good, per run  3.93 / 4.35 / 4.28    4.97 / 4.73 / 5.57
+//
+// A win rate of 28% falling to 11% is not a finding about the fourth abilities. It is a finding
+// about that policy: it benches Heavy Wrench to bring Shield Slam, and the picker then fires the
+// swap constantly. Which three of four an operator brings is a real decision with a right answer
+// per class, and choosing it needs its own measurement rather than the first rule that occurred
+// to somebody. So the policy is NOT shipped, this file still measures a rank-III squad fighting
+// with its base three, and the gap is filed rather than papered over.
+
 // ── The long career, re-measured after C04 ──────────────────────────────────────────────
 // Four Citadel spots had no ceiling, and `--meta carry` at 40 runs used to stop terminating on
 // them: unlimited fallback bunkers meant a squad that could not be made to stop. Capped, the

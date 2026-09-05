@@ -8226,11 +8226,8 @@ function overdriveFor(classType) {
 }
 
 // Anything else striking a marked target still gets the mark's smaller bonus and spends it.
+// DAMAGING_MOVES, which decides what "anything else" means, is derived below beside dealsDamage.
 const MARK_BONUS = 1.5;
-const DAMAGING_MOVES = ['SCRAP_BLADE','HEAVY_WRENCH','PISTOL','RAD_SHOT','PIPE_RIFLE','FLASHBANG','FLARE_GUN',
-    'MOLOTOV','SLUG_SHOT','BUCKSHOT','QUICK_SHOT','DEADEYE','SNAP','FERAL_BITE',
-    'ACID_FLASK','THERMITE','EXECUTE_SHOT','SPOTTERS_MARK','RIP_AND_TEAR',
-    'BAYONET_THRUST','RIPSAW','SPRAY_GUN','CAUSTIC_BURST','HARPOON','DRAG_LINE','BARBED_SHOT'];
 
 // What an operator's swing lands as. This lived as two inline .includes() checks inside
 // resolveAction, which meant nothing outside that function could ask the question - so the
@@ -8250,6 +8247,23 @@ const ALLY_MOVES = ['CAUTERIZE', 'REPOSITION', 'STIM_DART'];
 // mitigate, so neither has a type to show. Read off MOVE_REACH rather than a fourth list.
 function dealsDamage(move) { return MOVE_REACH[move] !== 'self' && !ALLY_MOVES.includes(move); }
 function typeGlyph(type) { const e = DMG_TYPES.find(([t]) => t === type); return e ? e[1] : ''; }
+
+// Which swings cash a mark, build a hound's momentum, and carry a MARKED tag on the deck. This
+// was a hand-kept list of 26 and the deck has 40 moves. Fourteen were absent: four correctly -
+// IRON_GUARD, CAUTERIZE, OVER_THE_TOP and PURGE_VALVE are self-actions and heals - and ten by
+// omission, because every FOURTH_ABILITIES entry was added to its class's deck and to nothing
+// else. Nine of those ten deal damage (STIM_DART is an ally move), so a rank-III operator who
+// spent a turn marking a target and then struck it with their mastered verb spent the mark for
+// nothing, saw no MARKED tag on the button that would have cashed it, and built no momentum
+// under LEAD_THE_PACK.
+//
+// Derived now, from the same two tables the deck is built from and the same dealsDamage the
+// codex lines read. Deliberately still a list rather than a predicate call at the three sites:
+// pendingAction also carries 'OVERDRIVE' and the consumable ids, which are not declared moves -
+// an open-world dealsDamage() answers true for those, and would quietly hand overdrives a mark
+// cash they have never had. A closed list built from the declarations cannot.
+const DAMAGING_MOVES = [...Object.values(ABILITIES).flat(), ...Object.values(FOURTH_ABILITIES)]
+    .map(a => a.move).filter(dealsDamage);
 
 // The enemy line is the order they sit in activeEntities: index 0 of the living ones is the
 // front. Hauling moves the target there, which is the whole of the Harpooner's verb - every
