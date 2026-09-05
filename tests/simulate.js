@@ -500,6 +500,46 @@
 // what it should be is a design decision - the same one the capstone lift at E08b has been
 // waiting on, now with a real number under it rather than a number off a broken instrument.
 // Nothing balance-shaped should be read against anything above the marker line again.
+//
+// ── F06: the promotion policy changed, and the road did not ─────────────────────────────
+// This file used to drain pendingPerkOffers straight into takePerkOffer without ever drawing
+// the screen. That mattered once F06 moved the roll to the draw: the sim was deciding from a
+// hand no player is ever dealt, and would have started throwing promotions away on cards a
+// real screen never shows. It calls renderPerkOffer first now - the E03 lesson, applied to
+// the last surface in this file that reached past a render into the thing behind it.
+//
+// A policy change needs a number under it, so: 3 x 150 an arm, matched pair, the two arms
+// differing ONLY in game.js - this file was identical on both sides, so the pre arm draws a
+// screen that (on that engine) does not re-roll, which is exactly the old behaviour.
+//
+//                              pre-F06                        post-F06
+//   runs that ended the road   3 / 1 / 1 of 150               2 / 4 / 1 of 150
+//   wipes per run           7.27 / 7.15 / 7.13             7.11 / 7.27 / 7.11
+//   wipes at tier ten         81% / 80% / 80%                85% / 80% / 84%
+//   score, median         20,636 / 19,769 / 20,293       19,930 / 22,423 / 18,880
+//   nodes cleared, median      81 / 78 / 76                   83 / 81 / 81
+//   deepest sector, by third  3.54/3.18/3.06 ...            3.00/3.30/3.12 ...
+//   lost for good, per run  3.67 / 3.84 / 3.76             3.73 / 4.11 / 3.67
+//   withdrawals, per run    7.99 / 8.06 / 8.07             7.99 / 8.47 / 8.49
+//   promotions per run      10.9 / 10.7 / 10.7             11.2 / 11.5 / 10.9
+//   signatures per run       9.1 / 9.3 / 9.1                 9.4 / 9.3 / 9.4
+//   capstones taken         1.81 / 1.43 / 1.57             1.78 / 2.12 / 1.48
+//   promotions that bought nothing   0.00 / 0.00 / 0.00    0.00 / 0.00 / 0.00
+//
+// NOTHING SEPARATES. Not one row clears the D17 bar - same direction across all three AND no
+// overlap of ranges. Three rows come closest and none of them get there: nodes cleared (76-81
+// against 81-83), promotions (10.7-10.9 against 10.9-11.5) and signatures (9.1-9.3 against
+// 9.3-9.4) all nudge up with their ranges TOUCHING at a single value rather than separating,
+// which is the shape of careers running a little longer and is not a result. Read it as: F06
+// costs nothing and buys nothing on the dials this file measures, and tables from before this
+// commit stay comparable to tables after it.
+//
+// The one row that had to come back zero did: with the screen re-rolled at the draw, the
+// takePerkOffer belt never fires in play. It is a belt, and it is reported so that it stays
+// one - a non-zero here means the screen and the decision have come apart again.
+//
+// The kill reconciliation is unchanged, still 1-2 bodies per arm against 22-26k (the F05
+// floor), and 0 page errors on all six.
 const path = require('path');
 const { serve } = require('./server');
 
