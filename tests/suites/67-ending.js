@@ -28,7 +28,11 @@ module.exports = {
         runStats.deepestSector = FINAL_SECTOR; runStats.deepestTier = TOTAL_TIERS;
         playerRoster.filter(p => p.gridPos > 0).forEach(p => { p.maxHp = hp; p.hp = hp; p.dmgBase = dmg; });
         initiateCombat('BOSS', false);
-        return activeEntities.find(e => e.isFinal);
+        const last = activeEntities.find(e => e.isFinal);
+        // F01: a commander opens on a read rather than a blow. Everything here is about the
+        // turns after that, so the read is spent at the door.
+        if (last) last.sizeUp = false;
+        return last;
       };
     });
 

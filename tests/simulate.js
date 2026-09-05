@@ -212,6 +212,33 @@
 // choice does not move the wall either way. The gap was the harness never making the choice, not
 // the choice the game makes for you.
 
+// ── F01: what the commander fight is worth once the screen stops lying ──────────────────
+// The wall at tier ten, measured 3 x 60 an arm against the same build without it. F01 fixed
+// three forecast defects (the Colossus's wind-up, invisible to the board and wearing an icon it
+// could not perform; DRAG_DOWN priced at the rank the mark is leaving; CALL_IT_IN's clone
+// arriving as a champion), gave every commander an opening turn it does not swing on, and put a
+// camp within two nodes of every commander in the generator.
+//
+//                             before                    after
+//   camps offered, per run    1.00 / 0.95 / 1.08        1.77 / 1.65 / 1.47
+//   bosses felled, mean       3.93 / 3.95 / 3.75        4.20 / 4.35 / 4.87
+//   withdrawals, per run      5.15 / 6.05 / 5.07        6.37 / 6.35 / 6.63
+//   score, median            37.0k / 35.9k / 35.1k     38.4k / 43.3k / 50.2k
+//   wipes per run             6.68 / 6.23 / 5.88        6.68 / 6.53 / 6.03
+//   wipes at tier 10         343/401 / 310/374 / 288/353   335/401 / 340/392 / 312/362
+//   runs that ended the road    14 / 17 / 17              19 / 17 / 23
+//
+// Four rows separate completely and all four say the same thing: the squad reaches the
+// commander with a choice made, and gets through more of them. The two rows the wall is
+// usually read on - wipes per run, and how many of them are at tier ten - do not separate at
+// all, and neither does the win rate. So this is not a difficulty cut: squads wipe as often as
+// they did and still wipe at the commander, they just get further per career before it happens.
+// That matters for what comes next, because the capstone lift measured at E08b is still
+// unresolved, and a phase that had moved the wall as well would have made both unreadable.
+//
+// The withdrawal row is the forecast fix showing up as behaviour: the harness's brace and
+// withdraw policy reads threatBoard, and until F01 a whole-line salvo was not on it.
+
 // ── The long career, re-measured after C04 ──────────────────────────────────────────────
 // Four Citadel spots had no ceiling, and `--meta carry` at 40 runs used to stop terminating on
 // them: unlimited fallback bunkers meant a squad that could not be made to stop. Capped, the

@@ -22,7 +22,11 @@ module.exports = {
         grudges = {}; if (g) grudges[id] = g;
         currentSector = window.__sectorOf(id); currentTier = 10;
         initiateCombat('BOSS', false);
-        return activeEntities.find(e => e.classType === 'BOSS');
+        const boss = activeEntities.find(e => e.classType === 'BOSS');
+        // F01: the opening turn is a read, and a grudge phase opens deep into a fight - long
+        // after it. Suite 110 is where the read itself is measured.
+        if (boss) boss.sizeUp = false;
+        return boss;
       };
     });
 

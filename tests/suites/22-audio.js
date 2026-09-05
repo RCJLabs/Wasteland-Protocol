@@ -192,6 +192,7 @@ module.exports = {
       currentSector = 1; currentTier = 10; initiateCombat('BOSS', false);
       const boss = activeEntities.find(e => e.id === 'b1');
       boss.hp = Math.floor(boss.maxHp * 0.4);
+      boss.sizeUp = false;    // F01: spend the opening read; the sting is on the turn after it
       sfxLog = []; combatActive = true; executeEnemyAi(boss);
       return { played: sfxLog.map(e => e.type) };
     });

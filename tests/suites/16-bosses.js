@@ -104,6 +104,9 @@ module.exports = {
         initiateCombat('BOSS', false);
         const boss = activeEntities.find(e => e.id === 'b1');
         boss.hp = Math.floor(boss.maxHp * 0.4);
+        // F01: a commander's opening turn is a read rather than a blow, and this drives the
+        // turn after it - what the enrage does, not whether the fight has started.
+        boss.sizeUp = false;
         window.__before = { dmg: boss.dmgBase, armor: boss.armor, speed: boss.speed,
                             foes: activeEntities.filter(e => !e.isPlayer).length };
       }, bossId);

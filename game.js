@@ -1348,8 +1348,9 @@ function rollNodeFaction(depth, rng) {
 
 // What the generator promises, and validateSectorMap checks: exactly two elite fights at
 // different depths, never forced (every parent of an elite has another child to offer);
-// at least one camp and one event; every node leads somewhere; every route reaches the
-// commander. The bounty board's 'defeat 2 elites' contract depends on the elite count.
+// at least one camp and one event, one of those camps within two nodes of the commander;
+// every node leads somewhere; every route reaches the commander. The bounty board's
+// 'defeat 2 elites' contract depends on the elite count.
 // ── The seeded generation channel ───────────────────────────────────────────────────────
 // A run can carry a seed. Everything the wasteland GENERATES - maps, fronts, quirk draws,
 // the bounty slate - draws from streams derived from that seed, one stream per purpose, so
@@ -1759,6 +1760,13 @@ function generateSectorMap(rng = Math.random) {
         const from = narrowed.length ? narrowed : pool;
         if (from.length) from[Math.floor(rng() * from.length)].type = type;
     };
+    // The approach to the commander. Tier 10 took 325 of the 383 wipes the harness recorded
+    // over sixty careers, and the squad walked into it in whatever state the last node left
+    // it: the guaranteed camp sat at tiers 4-7 and the only late one was a 40% roll. There is
+    // now always one within two nodes of the commander. Placed before every other swap so
+    // nothing can take the slot back, and never at a tier one node wide - tiers 2 through 9
+    // are always two or three across - so it is a choice against a fight, not a corridor.
+    swapOne('CAMP', TOTAL_TIERS - 2, TOTAL_TIERS - 1);
     swapOne('CAMP', 4, 7);
     if (rng() < 0.4) swapOne('CAMP', 2, 9);
     swapOne('EVENT', 2, 8);
@@ -1842,6 +1850,7 @@ function validateSectorMap(map) {
         if (nodes.filter(p => p.edges.includes(e.id)).some(p => p.edges.length < 2)) return false;
     }
     if (!nodes.some(n => n.type === 'CAMP')) return false;
+    if (!nodes.some(n => n.type === 'CAMP' && n.tier >= TOTAL_TIERS - 2)) return false;
     if (!nodes.some(n => n.type === 'EVENT')) return false;
     if (tierOf(1).some(n => n.elite || !FIGHT_NODES.includes(n.type))) return false;
     return true;
@@ -7126,12 +7135,25 @@ function enemyDmgMult(enemy) {
     return m;
 }
 
-const INTENT_ICONS = { AOE: '🧨', HEAVY: '💥', STATUS: '☣️', DEFEND: '🛡️', ATTACK: '⚔️', FLANK: '🌀' };
+// CHARGE and SALVO are not rolled from any table - they are the two turns of a wind-up, and
+// they are here because the board has to be able to draw them. See chargeIntent.
+const INTENT_ICONS = { AOE: '🧨', HEAVY: '💥', STATUS: '☣️', DEFEND: '🛡️', ATTACK: '⚔️', FLANK: '🌀', CHARGE: '⚡', SALVO: '☄️' };
 
 function intentFor(type, enemy) {
     const icon = (type === 'ATTACK' && enemy.range === 'ranged') ? '🔫' : INTENT_ICONS[type];
     return { type, icon };
 }
+
+// A wind-up is two behaviours - winding up, and letting go - and which one comes next is a
+// single fact read from the counter. It used to be read nowhere: executeEnemyAi returned before
+// the intent was ever executed but still rolled a fresh one every turn, so the icon over a
+// charging Colossus was a HEAVY or an AOE it could not perform, and the salvo it was actually
+// going to fire had no icon at all. One predicate, read by the AI, the forecast and the phase
+// that opens the wind-up, so all three say the same thing about the same turn.
+function chargeReady(enemy) {
+    return !!(enemy && enemy.chargeSpec) && (enemy.charging || 0) >= (enemy.chargeSpec.turns || 1);
+}
+function chargeIntent(enemy) { return intentFor(chargeReady(enemy) ? 'SALVO' : 'CHARGE', enemy); }
 
 // Two intents are conditional rather than free, and the conditions used to live inside the
 // fallback's own branching - so an authored table could not have expressed FLANK at all without
@@ -7256,9 +7278,33 @@ function forecastFor(enemy) {
         const front = [...live].sort((a, b) => a.gridPos - b.gridPos)[0];
         return { kind: 'BURROW', enemy, ...pin(front, enemy.dmgBase * 1.6 * enemyDmgMult(enemy)) };
     }
+    // A wind-up is a third turn that resolves without a choice in it, and it was the one the
+    // board could not see at all. The turn it lets go, every operator is under it; the turns
+    // it is still winding up, nothing lands - which is a fact worth showing, because it is the
+    // window the squad gets to answer the salvo in. Priced through the same 'SALVO' the salvo
+    // itself passes to applyDamageHit, so the number on the board is the number that lands.
+    if (enemy.chargeSpec) {
+        if (chargeReady(enemy)) {
+            const raw = Math.floor(enemy.dmgBase * (enemy.chargeSpec.mult || 1.1) * enemyDmgMult(enemy));
+            return { kind: 'SALVO', enemy, exact: true,
+                     hits: live.map(t => ({ target: t, dmg: mitigate(enemy, t, raw, atk, 'SALVO').n, via: null })) };
+        }
+        return { kind: 'CHARGE', enemy, hits: [] };
+    }
     if (intent.type === 'SIG' && enemy.sig === 'DRAG_DOWN') {
         const back = [...live].sort((a, b) => b.gridPos - a.gridPos)[0];
-        return { kind: 'SIG', enemy, ...pin(back, (enemy.dmgBase + 4) * enemyDmgMult(enemy)) };
+        const front = [...live].sort((a, b) => a.gridPos - b.gridPos)[0];
+        // The haul happens first and the blow lands second, so the mark is mitigated standing
+        // where the drag will have put them. mitigate reads gridPos for the ruins' front cover
+        // and for KINETIC_MESH, and both of those are exactly what changes when someone is
+        // pulled out of the back rank - so the board was pricing the blow at a rank the
+        // operator had already left. Borrowed and put back: a forecast reads, it does not move
+        // anybody.
+        const was = back.gridPos;
+        if (front && front.id !== back.id) back.gridPos = front.gridPos;
+        const f = { kind: 'SIG', enemy, ...pin(back, (enemy.dmgBase + 4) * enemyDmgMult(enemy)) };
+        back.gridPos = was;
+        return f;
     }
     if (intent.type === 'DEFEND' || intent.type === 'SIG') return { kind: intent.type, enemy };
     if (intent.type === 'AOE') {
@@ -7795,6 +7841,9 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
         if (b.stormTurn) { boss.stormTurn = b.stormTurn; boss.stormClock = 0; }
         if (b.venom) { boss.venom = { ...b.venom }; boss.venomStacks = 0; boss.venomClock = 0; }
         boss.intent = rollIntent(boss);
+        // ...and it stands through the commander's opening turn rather than being re-rolled
+        // over. See executeEnemyAi's sizeUp branch.
+        boss.sizeUp = true;
 
         // A warlord that does not arrive alone brings its own: a lieutenant it hides behind, or
         // a generator holding its ward up. Both are the fight's actual first problem.
@@ -8177,7 +8226,11 @@ function breakTarget() {
     const worth = e => {
         const f = forecastFor(e);
         if (!f) return 0;
-        if (f.kind === 'SIG') return 60;              // a signature going off is worth stopping
+        // A signature going off is worth stopping, and so is a salvo that has not been let go
+        // yet: a stunned unit never reaches executeEnemyAi, so the wind-up does not advance.
+        // The forecast reports no damage on a charging turn - correctly, nothing lands - so
+        // without this the one thing on the field worth breaking scored zero.
+        if (f.kind === 'SIG' || f.kind === 'CHARGE') return 60;
         return (f.hits || []).reduce((a, h) => a + h.dmg, 0);
     };
     return foes.map(e => ({ e, n: worth(e) })).sort((a, b) => b.n - a.n)[0].e;
@@ -9920,7 +9973,9 @@ function openGrudgePhase(enemy) {
     // The Warlord charges you for every one of its pack you put down.
     if (gm.bloodDebt) enemy.bloodDebt = gm.bloodDebt;
     // The Colossus stops spacing its salvoes and starts winding them up.
-    if (gm.charge) { enemy.charging = 0; enemy.chargeSpec = gm.charge; }
+    // Whatever it was going to do a moment ago, it is winding up now - and the icon it is
+    // wearing was rolled before this phase existed.
+    if (gm.charge) { enemy.charging = 0; enemy.chargeSpec = gm.charge; enemy.intent = chargeIntent(enemy); }
     // The Matriarch lays.
     if (gm.spawn) { enemy.spawnSpec = gm.spawn; enemy.spawnClock = 0; }
     // The Vatborn opens the tank all the way and vents over whoever is holding the front.
@@ -10002,6 +10057,20 @@ function venomDose(enemy, quiet) {
 
 function executeEnemyAi(enemy) {
     if (!combatActive) return;
+    // A commander's first turn is a look, not a blow. Every other fight on the road is a
+    // patrol the squad can withdraw from; the commander is the one node with no exit, and it
+    // used to open by swinging at whatever order the last fight happened to leave the line in.
+    // The intent it came onto the field wearing is deliberately NOT re-rolled here - it stands
+    // through this turn and lands on the next, so the icon over it when the fight opens is the
+    // first blow, promised a full round early. Nothing else ticks: no signature cooldown, no
+    // storm clock, no laying. The fight has not started yet.
+    if (enemy.sizeUp) {
+        enemy.sizeUp = false;
+        log(`> ${enemy.name} takes the ground and reads your line. Whatever it does, it does next turn.`, 'log-status');
+        spawnFCT(enemy.id, 'SIZING UP', 'fct-status');
+        renderField();
+        setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return;
+    }
     if (enemy.sigCd > 0) enemy.sigCd--;
 
     // Under the ground since its last turn. It comes up in the front rank and hits on arrival,
@@ -10057,7 +10126,7 @@ function executeEnemyAi(enemy) {
 
     // The Colossus winds a salvo up in front of you, then lets it go.
     if (enemy.chargeSpec && enemy.hp > 0) {
-        if (enemy.charging >= (enemy.chargeSpec.turns || 1)) {
+        if (chargeReady(enemy)) {
             enemy.charging = 0;
             const hit = activeEntities.filter(t => t.isPlayer && t.hp > 0);
             log(`> ${enemy.name} FIRES. The whole line is under it.`, 'log-dmg');
@@ -10065,12 +10134,12 @@ function executeEnemyAi(enemy) {
             hit.forEach(t => applyDamageHit(enemy, t,
                 Math.floor(enemy.dmgBase * (enemy.chargeSpec.mult || 1.1) * enemyDmgMult(enemy)),
                 enemy.dmgType || 'phys', 'SALVO'));
-            enemy.intent = rollIntent(enemy); checkWinState(); return;
+            enemy.intent = chargeIntent(enemy); checkWinState(); return;
         }
         enemy.charging++;
         log(`> ${enemy.name} is charging its batteries.`, 'log-status');
-        spawnFCT(enemy.id, 'CHARGING', 'fct-status'); renderField();
-        enemy.intent = rollIntent(enemy);
+        spawnFCT(enemy.id, 'CHARGING', 'fct-status');
+        enemy.intent = chargeIntent(enemy); renderField();
         setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return;
     }
     
@@ -10223,6 +10292,19 @@ function executeEnemyAi(enemy) {
                 help.sig = null; help.sigCd = 0; help.plate = 0;
                 help.bleedingTurns = 0; help.stunnedTurns = 0; help.oiledTurns = 0;
                 help.corrodedTurns = 0; help.markedTurns = 0; help.armorTurns = 0;
+                // The clone is for what kind of thing arrives - the portrait, the reach, the
+                // resistances - not for what rank it holds. Health and damage were already
+                // being put back to a patrol's, but the champion rode along in everything
+                // else: an elite Raider's reinforcement inherited both affixes, so it drank
+                // and it bled you at patrol stats, wore the '*VAMPIRIC SEPTIC*' name and the
+                // glow that goes with it, and stood behind the armour ARMORED had bought.
+                // Stripped back to the row it was drawn from, with the affix name unpicked
+                // and the armour and speed those affixes paid for handed back.
+                help.name = String(help.name || '').replace(/^\*[^*]*\*\s*/, '');
+                delete help.eliteTypes; delete help.eliteType; delete help.intentDone;
+                const stock = Object.keys(ENEMY_POOL).map(f => unitByName(f, help.name)).find(Boolean);
+                help.armor = help.baseArmor = stock ? (stock.armor || 0) : 0;
+                if (stock) help.speed = stock.speed;
                 help.intent = rollIntent(help);
                 activeEntities.push(help); turnQueue.push(help);
                 log(`> ${enemy.name} whistles. Another raider comes running.`, 'log-dmg');
@@ -10727,7 +10809,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
+    initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,

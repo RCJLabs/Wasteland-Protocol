@@ -159,6 +159,7 @@ module.exports = {
         initiateCombat('BOSS', false);
         const boss = activeEntities.find(e => e.id === 'b1');
         boss.hp = Math.floor(boss.maxHp * 0.4);
+        boss.sizeUp = false;    // F01: the opening read is not the turn under test here
         if (p === 'killEscort') { const es = activeEntities.find(e => e.id === 'boss_escort'); if (es) es.hp = 0; }
         window.__pre = { sky: currentWeather, clock: boss.stormTurn,
                          escortUp: !!activeEntities.find(e => e.id === boss.escortId && e.hp > 0),
