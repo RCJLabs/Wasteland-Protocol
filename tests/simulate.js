@@ -400,6 +400,106 @@
 // 30), and SCAVENGER goes 8 -> 17 - it was being fielded off the bench all along and the line
 // could not see it. Any reading about classes that never leave the Outpost has to start again
 // from the second number.
+
+// ══ EVERY TABLE ABOVE THIS LINE WAS TAKEN THROUGH A BROKEN INSTRUMENT ══════════════════
+// F03. Nine defects were found in this file by an audit of the whole repository, and together
+// they meant it had never once measured the game the engine plays. They are listed and fixed
+// below. The largest of them - the Outpost stat upgrade - was worth more than every balance
+// phase in this repository put together, and it had been in here since the file was written.
+//
+// Nothing above this line is wrong about the CHANGE it measured: those readings are paired
+// arms taken in the same session on the same instrument, and a difference measured that way
+// survives a broken instrument as long as the break is on both sides of it. What does not
+// survive is any absolute figure - a win rate, a median score, a depth, a "how hard is this
+// game" of any kind. Every one of those above is a figure about a squad the game does not
+// sell, playing a board it does not show, keeping fallbacks it has not earned.
+//
+// ── The nine ────────────────────────────────────────────────────────────────────────────
+//   the upgrade      A hand copy at the sector-1 price granting BOTH +10 HP and +3 DMG per
+//                    purchase. The Outpost sells one or the other, at upgradeCost, which has
+//                    ridden sectorRewardMult since E09. Through buyUpgrade now.
+//   the forecast     Every enemy's intent was re-rolled immediately before it acted, so the
+//                    board this file's player spent its whole turn reading was thrown away
+//                    before the blow. The engine rolls the NEXT intent at the END of
+//                    executeEnemyAi; this file now lets it.
+//   the bar          OVERDRIVE fired at foes[0] while every other move went through pickFoe -
+//                    and FIELD_REVIVE aims at an ALLY, so every Medic overdrive this file has
+//                    ever fired healed an enemy to half health.
+//   the camp         Triage was a hand copy of 0.35 on the deployed line. The engine's own
+//                    triage is 0.55 and reaches the bench when a MEDIC keeps the camp, so
+//                    `--bench medic` had nowhere it could show up and measured nothing.
+//   the fuse         Consequences were settled only at the sector crossing. consequencesDue
+//                    counts NODES, and the engine settles after every one of them - so a debt
+//                    that came due mid-sector waited for a boundary most careers never reach.
+//   the top-up       The path that banks a commander kill the engine missed (about one in
+//                    eight, the ones that end on a bleed tick) paid less than checkWinState:
+//                    no grudge skulls, no fallback refund, no gear roll, no BOSS bounty tick,
+//                    no Scavenger's Debt. The missing fallback is the one that moves depth.
+//   the count        The "counts agree" self-check wrote this file's number into the engine
+//                    before comparing, so it could fire on a double count and on nothing else.
+//                    It reports both halves now: what the engine banked, and what was topped
+//                    up here.
+//   the order        THE LONG ROAD is kept by clearing the last sector, which sets
+//                    runStats.won - so the recall branch, the only place this file set its own
+//                    flag, is a branch LONG can never reach. It reads the engine's flag now.
+//   the recruit      The E12c bench policy ran once at the muster, and a recruit signed three
+//                    sectors later never got it, so TRENCH SWEEP, TANK RUPTURE and WHALE LINE
+//                    were structurally unreachable. E12c called those three rare; they were
+//                    blocked. The "never used" line could not say so either - it was built
+//                    from ABILITIES, which does not contain the fourths.
+//
+// ── What the correction was worth, 3 x 60 an arm, same engine on every side ────────────
+// The game did not change: game.js is untouched by this phase. Only the instrument changed.
+//
+//                            as reported before   without the upgrade fix   fully corrected
+//   runs that ended the road   22 / 26 / 21 of 60      16 / 8 / 12            0 / 2 / 1
+//   score, median             54.1k / 60.7k / 47.8k  44.5k / 32.1k / 41.8k  17.9k / 20.2k / 18.2k
+//   nodes cleared, median         95 / 99 / 90          90 / 84 / 99          80 / 76 / 68
+//   commanders felled            276 / 291 / 254            -                119 / 130 / 117
+//   relics held, mean          12.4 / 13.3 / 12.0           -                 7.6 / 7.9 / 8.1
+//   upgrades bought per run           -              87.7 / 74.5 / 80.5    44.5 / 43.0 / 40.4
+//
+// All three arms separate completely on the win rate. The middle column is the point of the
+// middle column: the eight other corrections together take it from ~38% to ~20%, and the
+// upgrade alone takes it from ~20% to ~2%. Two things were wrong with that one line and both
+// mattered - the squad was getting two stats for one purchase, and paying a sector-1 price for
+// them at any depth, which is why it bought twice as many.
+//
+// ── The baseline, 3 x 150 on the corrected instrument ──────────────────────────────────
+// Default policy: difficulty 1.0, line draft, stim tactics, rare relics, meta carried, warm
+// faces, withdraws from fights it is losing, THE LONG ROAD. 0 page errors on all three, and
+// the reconciliation passes both ways on all three.
+//
+//   runs that ended the road      0 / 2 / 1 of 150        (0-1%)
+//   wipes per run, mean        7.16 / 7.14 / 7.14
+//   wipes at tier ten           909/1074 / 866/1071 / 872/1071   (81%)
+//   score, median             20,567 / 20,605 / 19,906  [90% intervals within +-11%]
+//   nodes cleared, median         87 / 76 / 80
+//   deepest sector, by third    3.08/3.08/3.10  3.10/3.30/2.94  2.92/3.38/2.90
+//   commanders felled, mean    2.09 / 2.13 / 2.07
+//   relics held, mean           8.1 / 9.2 / 9.0
+//   lost for good, per run     3.58 / 3.82 / 3.89
+//   withdrawals, per run       7.99 / 7.68 / 7.69
+//   regroups spent, mean       6.16 / 6.15 / 6.15
+//   consequences resolved      0.85 / 0.74 / 0.91
+//   upgrades bought, per run   45.4 / 44.7 / 44.1
+//   abilities never fired      none / SNAP / none
+//
+// Two of those rows are worth saying in words, because they are not what this file has ever
+// reported and they are not small.
+//
+// The road is not cleared. Three of 450 careers finished it. Every earlier figure for this -
+// 23%, 28%, 38% - was the over-upgraded squad.
+//
+// And a career does not get deeper. Depth by thirds is flat at about 3.1, where this file used
+// to print 4.00 / 5.00 / 7.13 and the note under it said the curve "is doing what it was built
+// to do". On a corrected instrument the Citadel's compounding does not out-run the sector
+// curve at all: the hundred-and-fiftieth career ends about where the first one did.
+//
+// Neither of those is a defect this phase can fix. They are what the game currently is, and
+// what it should be is a design decision - the same one the capstone lift at E08b has been
+// waiting on, now with a real number under it rather than a number off a broken instrument.
+// Nothing balance-shaped should be read against anything above the marker line again.
 const path = require('path');
 const { serve } = require('./server');
 
@@ -542,6 +642,7 @@ const FACES = flag('faces', 'warm');
 // regroups, or the safety cap is hit.
 const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy }) => {
   const stat = { order: null, fulfilled: false, won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
+                 upgrades: 0, odAimed: 0, bossTopUps: 0, eliteTopUps: 0,
                  sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, field: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
@@ -714,11 +815,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // It is not free: the basic is what guarantees an action, and without it 0.63% of player turns
   // have no move at all and 1.83% have only a self-action. Measured, small, and stated here
   // because it is the cost of the policy rather than a property of the game.
-  playerRoster.forEach(c => {
-    if (masteryRank(c.classType) < 3) return;
+  // F03: one policy, applied wherever an operator joins. It ran once, over the roster as it
+  // stood at the muster, and a recruit signed at a node three sectors later never got it - so
+  // deckFor fell back to the engine's default of benching the FOURTH for them, and TRENCH
+  // SWEEP, TANK RUPTURE and WHALE LINE were structurally unreachable in every measurement this
+  // file has taken. E12c called those three rare; they were blocked.
+  const applyBench = c => {
+    if (!c || masteryRank(c.classType) < 3) return;
     const basic = (ABILITIES[c.classType] || []).find(a => !a.cd && a.reach !== 'self');
     if (basic) c.benchedMove = basic.move;
-  });
+  };
+  playerRoster.forEach(applyBench);
   // The opening draft, so a run that never reaches a fight still reports who it picked.
   // Everyone who actually stands in a line is added at the door of each fight below.
   stat.deployed = playerRoster.filter(p => p.gridPos > 0).map(p => p.classType);
@@ -822,8 +929,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       stat.crafted++;
     }
     playerRoster.forEach(c => {
-      const cost = 30 + (c.upgradeCount * 25);
-      if (c.gridPos > 0 && scrap >= cost * 2) { scrap -= cost; c.upgradeCount++; c.maxHp += 10; c.hp += 10; c.dmgBase += 3; }
+      // F03: this was a hand copy at the sector-1 price that granted BOTH stats per purchase.
+      // The Outpost sells one or the other - buyUpgrade(id, 'HP'|'DMG') - at upgradeCost, which
+      // has ridden sectorRewardMult since E09. So from sector 2 on every simulated operator was
+      // over-upgraded and under-charged, and every economy table this file printed described a
+      // squad the game does not sell. Through the button now, alternating the two so a career
+      // buys the same mix a player buying "a bit of both" would.
+      const cost = typeof upgradeCost === 'function' ? upgradeCost(c) : 30 + (c.upgradeCount * 25);
+      if (c.gridPos > 0 && scrap >= cost * 2) {
+        const kind = (c.upgradeCount % 2 === 0) ? 'HP' : 'DMG';
+        buyUpgrade(c.id, kind, cost);
+        stat.upgrades = (stat.upgrades || 0) + 1;
+      }
       // E08: a banked point can buy a signature at the Outpost now, for scrap on top of the
       // point. This loop spent every point on a random stat card, which is not what a player
       // does when the class verb is on the same menu - and left the harness unable to measure
@@ -874,9 +991,47 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (byBar) stat.downByBar++;
       if (byMove || byItem || byBar) stat.downReach++;
     }
+    // What follows is a competent player, not an optimal one, and deliberately reads only what
+    // the game already puts on screen: the health bars, the intent icons, the reach penalty
+    // printed on the deck button, and the combo tag. No damage formula is duplicated here - a
+    // second copy of the arithmetic would drift from the engine and become the next bad
+    // instrument.
+    const dist = f => foes.indexOf(f);
+    // What the button says. A move of null - the overdrive - carries no printed reach penalty,
+    // so nothing is soft for it.
+    const soft = (mv, f) => !!mv && reachMult(mv, actor, dist(f)) < 1;
+    // What a foe is about to do to you, which is what the intent icon shows.
+    const threat = f => {
+      const fc = forecastFor(f);
+      return fc && fc.hits ? fc.hits.reduce((a, h) => a + h.dmg, 0) : (f.dmgBase || 0);
+    };
+    // A health bar in the red is the whole reason focus fire exists: a foe removed stops acting,
+    // a foe half-removed does not.
+    const finishable = f => f.hp <= f.maxHp * 0.25;
+    const pickFoe = mv => {
+      const reachable = foes.filter(f => !soft(mv, f));
+      const pool = reachable.length ? reachable : foes;
+      const kill = pool.filter(finishable).sort((a, b) => a.hp - b.hp)[0];
+      if (kill) return kill;
+      return pool.slice().sort((a, b) => threat(b) - threat(a))[0] || foes[0];
+    };
+
     if (momentum >= overdriveAt()) {
       stat.moves.OVERDRIVE = (stat.moves.OVERDRIVE || 0) + 1;
-      pendingAction = 'OVERDRIVE'; resolveAction(foes[0].id); return true;
+      // F03: this fired at foes[0] - whatever stood first in activeEntities - while every other
+      // move in the file goes through pickFoe, so the readout under-read what a full bar is
+      // worth. Worse, and found while fixing it: one overdrive in the table aims at an ALLY.
+      // FIELD_REVIVE does `target.hp = max(target.hp, floor(target.maxHp * 0.5))`, so every
+      // Medic overdrive this file has ever fired healed an enemy to half health. The engine
+      // makes operators the targetable row when a Medic's bar goes off; here the target is
+      // chosen the same way, worst off first.
+      const od = typeof overdriveFor === 'function' ? overdriveFor(actor.classType) : null;
+      const line = activeEntities.filter(e => e.isPlayer && e.hp > 0);
+      const mark = (od && od.id === 'FIELD_REVIVE')
+        ? (bleedingOut()[0] || line.slice().sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0] || actor)
+        : (pickFoe(null) || foes[0]);
+      stat.odAimed = (stat.odAimed || 0) + (mark === foes[0] ? 0 : 1);
+      pendingAction = 'OVERDRIVE'; resolveAction(mark.id); return true;
     }
     // Tactics. None of the three costs an action, so the only question is what the bar buys.
     const buy = id => {
@@ -1003,24 +1158,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // printed on the deck button, and the combo tag. No damage formula is duplicated here - a
     // second copy of the arithmetic would drift from the engine and become the next bad
     // instrument.
-    const dist = f => foes.indexOf(f);
-    const soft = (mv, f) => reachMult(mv, actor, dist(f)) < 1;   // what the button says
-    // What a foe is about to do to you, which is what the intent icon shows.
-    const threat = f => {
-      const fc = forecastFor(f);
-      return fc && fc.hits ? fc.hits.reduce((a, h) => a + h.dmg, 0) : (f.dmgBase || 0);
-    };
-    // A health bar in the red is the whole reason focus fire exists: a foe removed stops acting,
-    // a foe half-removed does not.
-    const finishable = f => f.hp <= f.maxHp * 0.25;
-    const pickFoe = mv => {
-      const reachable = foes.filter(f => !soft(mv, f));
-      const pool = reachable.length ? reachable : foes;
-      const kill = pool.filter(finishable).sort((a, b) => a.hp - b.hp)[0];
-      if (kill) return kill;
-      return pool.slice().sort((a, b) => threat(b) - threat(a))[0] || foes[0];
-    };
-
+    // The picker is declared at the top of the turn (F03) because the overdrive above aims
+    // through it too. It was declared here, below the bar, which is why the bar was the one
+    // move in the file fired at whoever happened to stand first.
     let chosen = null, target = null;
     // 1. A combo is the game's own signposted best move, and it is signposted on the button.
     for (const a of deck) {
@@ -1197,7 +1337,15 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       activeEntities.forEach(e => { if (isDown(e) && !e.__counted) { e.__counted = true; stat.downs++; } });
       if (actor.isPlayer && fightLog) fightLog.turns++;   // processTurn does this in the real loop
       if (actor.isPlayer) { if (!takeTurn()) { activeIndex = (activeIndex + 1) % turnQueue.length; continue; } }
-      else { actor.intent = rollIntent(actor); executeEnemyAi(actor); }
+      // F03: this used to be `actor.intent = rollIntent(actor); executeEnemyAi(actor)`, which
+      // threw away the intent the player's whole turn had just been spent reading. The engine
+      // rolls the NEXT intent at the END of executeEnemyAi (and at spawn, in initiateCombat),
+      // and executes the one already on the entity - that is the icon on screen during the
+      // player's turn. Re-rolling here meant threat(), breakTarget(), the EMP decision and
+      // IRON_GUARD were all aimed at a board that was replaced before the blow, and gateIntent
+      // was re-run at a different health state as well. The forecast is the contract; this file
+      // was reading a different one.
+      else executeEnemyAi(actor);
       // A pressed operator holds the floor - nextTurn does this in the real loop, and without
       // it PRESS is momentum spent on nothing and would measure as worthless.
       if (pressExtra && actor.isPlayer && actor.hp > 0) { pressExtra = false; continue; }
@@ -1237,6 +1385,19 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     return won ? 'won' : 'lost';
   };
 
+  // F03: a fuse is counted in NODES - consequencesDue reads nodesCleared - and the engine
+  // resolves whatever is due after every one of them, because collectLoot ends in afterNode and
+  // afterNode resolves first. This file only looked at the sector crossing, so a debt that came
+  // due mid-sector waited for the boundary and was lost outright on every career that wiped
+  // before reaching one - which was most of them. Through the engine's own resolver now, which
+  // also means the cast meeting a consequence carries (meetCast) lands, where the hand copy
+  // called the pool's resolve() and nothing else. Guarded on the due list so it never falls
+  // into resolveConsequence's empty branch, which is a call to afterNode.
+  const settleDue = () => {
+    let guard = 0;
+    while (consequencesDue().length && guard++ < 20) { stat.consequences++; resolveConsequence(); }
+  };
+
   while (stat.nodes < capNodes) {
     if (currentTier > TOTAL_TIERS) {
       // The order runs out. The engine puts this on the map as two buttons; here it is taken,
@@ -1260,9 +1421,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // forecast carried across a sector boundary; and no save was written at the crossing.
       crossSector();
       stat.frontsSeen.push(sectorFront);
-      // consequences that came due
-      const due = consequencesDue().length;
-      if (due) { stat.consequences += due; while (consequencesDue().length) { const c = consequencesDue()[0]; pendingConsequences = pendingConsequences.filter(o => o !== c); (CONSEQUENCE_POOL[c.kind] || { resolve: () => '' }).resolve(c); } }
+      settleDue();
       spend();
       continue;
     }
@@ -1307,6 +1466,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         pendingConsequences.slice(owedBefore).forEach(c => { stat.bookedKinds[c.kind] = (stat.bookedKinds[c.kind] || 0) + 1; });
       }
       currentTier++; stat.nodes++; noteDepth(); runStats.nodes++;
+      settleDue();
       continue;
     }
     if (node.type === 'CAMP') {
@@ -1338,14 +1498,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         stat.cacheTaken++; stat.cursedTaken++;
         resolveCamp('CACHE');           // takes the camp: no triage this stop
       } else {
-        playerRoster.forEach(p => { if (p.gridPos > 0 && p.hp > 0) p.hp = Math.min(p.maxHp, p.hp + Math.floor(p.maxHp * 0.35)); });
+        // F03: the engine's own triage, not a copy of it. The copy healed the deployed line by
+        // a flat 0.35 and knew nothing about the bench MEDIC job, which is worth CAMP_TRIAGE_JOB
+        // (0.55) and reaches the bench as well - so `--bench medic`, which this file offers as a
+        // measurable lever, had exactly one place it could show up and the loop never went
+        // there. It measured nothing at all.
+        resolveCamp('TRIAGE');
       }
-      // The heal above stays this file's own policy rather than resolveCamp('TRIAGE'): a bench
-      // medic makes the engine's triage worth more, and swapping to it would move a balance
-      // figure inside a phase that has no balance dimension. finishCamp is the tier, the node
-      // count and the depth note, which were hand-copied here.
       stat.nodes++;
       finishCamp();
+      settleDue();
       continue;
     }
     if (node.type === 'RECRUIT') {
@@ -1356,6 +1518,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (tpl) stat.recruitOffers.push({ cost: pendingRecruit.cost, purse: scrap });
       if (tpl && scrap >= pendingRecruit.cost + 80) {
         signOnRecruit();
+        applyBench(playerRoster.find(c => c.id === tpl.id));   // F03: same deck rule as the muster
         stat.recruited.push(tpl.classType);
         // Put them in the line if their rank is open, so their verbs get used rather than
         // sitting on the bench for the rest of the run.
@@ -1367,6 +1530,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       }
       pendingRecruit = null;
       currentTier++; stat.nodes++; noteDepth(); runStats.nodes++;
+      settleDue();
       continue;
     }
     if (node.type === 'SHOP') {
@@ -1383,6 +1547,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       buy('GEAR', 60); buy('STIM', 40); buy('STIM', 40); buy('INSURANCE', 150); buy('RELIC', 400);
       finishShop();
       stat.nodes++;
+      settleDue();
       continue;
     }
 
@@ -1450,6 +1615,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     if (node.type === 'BOSS') {
       stat.bosses++;
       if (runStats.bosses < stat.bosses) {
+        stat.bossTopUps++;
         runStats.bosses = stat.bosses; bossSkulls++;
         const felled = activeEntities.find(e => e.classType === 'BOSS');
         if (felled && felled.bossId) {
@@ -1460,7 +1626,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
           // there. Reconciled rather than added, exactly as the skull above is: without this,
           // one win in eight would have gone unrecorded and the rate read low.
           if (felled.isFinal) noteVictory();
+          // F03: and the rest of what checkWinState pays for a commander, which this top-up
+          // did not. The fallback refund is the one that moves depth - a kill that lands on a
+          // bleed tick left the harness entering the next sector one fallback short of what a
+          // player has - and the grudge skulls are the one that moves the Citadel.
+          const owed = felled.grudge || 0;
+          if (owed > 0) bossSkulls += owed;
         }
+        if (runStats.regroups < totalRegroups()) runStats.regroups++;
+        checkBountyProgress('BOSS');
+        if (hasRelic('SCAVENGERS_DEBT')) { const taken = Math.min(scrap, collectorPrice()); scrap -= taken; }
+        const gDrop = rollGear(); if (gDrop) gearStash.push(gDrop);
         // The engine did not count this kill, so it did not stage the offer either. Stage it.
         if (!pendingRelicOffer) { const o = rollRelicOffer(); if (o.length) pendingRelicOffer = o; }
       }
@@ -1493,7 +1669,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     if (node.elite) {
       stat.elites++;
       if (runStats.elites < stat.elites) {
+        stat.eliteTopUps++;
         runStats.elites = stat.elites; checkBountyProgress('ELITE');
+        // F03: the engine's elite block rolls gear on a Vulture or a 40% roll before it rolls
+        // the relic; the top-up rolled only the relic.
+        if (hasRelic('VULTURE_ROYALTY') || Math.random() < 0.4) {
+          const gDrop = rollGear(); if (gDrop) gearStash.push(gDrop);
+        }
         const drop = rollRelic();
         if (drop) activeRelics.push(drop);
       }
@@ -1512,6 +1694,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // lost somebody fought the rest of the sector short-handed with a bench standing behind it.
     // E01 had already found this recording a flat 40 whatever the node paid.
     bankNode(fightPayout());
+    // The engine's own order: collectLoot is bankNode then afterNode, and afterNode settles
+    // anything due before anything else. (F03)
+    settleDue();
 
     // The end of the road. The engine puts this question on a screen with two buttons; here it
     // is a policy, so both answers can be measured. Either way the win is already banked - what
@@ -1532,6 +1717,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // The instrument checks itself: these count the same events by different routes, and the
   // whole point of the block above is that they must not diverge.
   stat.order = runStats.order;
+  // F03: THE LONG ROAD can only be kept by clearing the last sector, and a run that clears it
+  // has runStats.won set - so the recall branch above, the only place this file set the flag,
+  // is a branch LONG can never reach. The engine sets runStats.fulfilled itself; read it. The
+  // readout printed "kept 0 of 60" while the engine had marked every won run as keeping it.
+  stat.fulfilled = stat.fulfilled || !!runStats.fulfilled;
   stat.engineBosses = runStats.bosses; stat.engineElites = runStats.elites;
   stat.standings = Object.fromEntries(facesMet().map(f => [f.id, f.standing]));
   stat.sector = runStats.deepestSector; stat.tier = runStats.deepestTier;
@@ -1883,7 +2073,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const moves = {};
   results.forEach(r => Object.entries(r.moves).forEach(([m, c]) => { moves[m] = (moves[m] || 0) + c; }));
   const totalMoves = Object.values(moves).reduce((a, b) => a + b, 0);
-  const declared = await page.evaluate(() => Object.values(ABILITIES).flat().map(a => a.move));
+  // F03: the fourth abilities are moves a rank III operator brings, so a line that claims to
+  // list what is never used has to know about them. Reading only ABILITIES meant the three
+  // recruit fourths could not appear here even while they were unreachable.
+  const declared = await page.evaluate(() => [...new Set([
+    ...Object.values(ABILITIES).flat().map(a => a.move),
+    ...Object.values(FOURTH_ABILITIES).map(a => a.move)
+  ])]);
   const ranked = Object.entries(moves).sort((a, b) => b[1] - a[1]);
   ranked.forEach(([m, c]) => line(m, `${String(c).padStart(6)}  ${(c / totalMoves * 100).toFixed(1)}%`));
   const never = declared.filter(m => !moves[m]);
@@ -1909,6 +2105,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   results.forEach(r => (r.frontsSeen || []).forEach(f => { if (f) fronts[f] = (fronts[f] || 0) + 1; }));
   line('fronts weathered', Object.entries(fronts).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ') || 'none');
   line('items crafted per run', (results.reduce((a, r) => a + r.crafted, 0) / n).toFixed(1));
+  // F03: what the Outpost's stat counter actually sold, now that it is bought through the
+  // button. One stat per purchase at upgradeCost, rather than a hand copy paying the sector-1
+  // price for both.
+  line('stat upgrades bought per run', (results.reduce((a, r) => a + (r.upgrades || 0), 0) / n).toFixed(1));
   line('augments installed per run', (results.reduce((a, r) => a + (r.augments || 0), 0) / n).toFixed(1));
   const faces = {};
   results.forEach(r => Object.entries(r.facesMet || {}).forEach(([k, v]) => { faces[k] = (faces[k] || 0) + v; }));
@@ -1996,15 +2196,29 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     console.log('\n── PAGE ERRORS ' + '─'.repeat(43));
     [...new Set(errors)].slice(0, 10).forEach(e => console.log('  ' + e));
   }
-  // Two independent counts of the same events. They agreed the day this check went in; if they
-  // ever stop agreeing, something is being counted twice again and the number above is wrong.
+  // F03: two-sided, and it says which side. The old form compared this file's count with the
+  // engine's AFTER the post-fight block had written this file's count into the engine, so the
+  // engine's number could only ever be >= this one and the check could fire on a double count
+  // and on nothing else. It could not see the engine under-counting at all, because the top-up
+  // silently repaired it - and the top-up is exactly the path that used to pay less than
+  // checkWinState. The repair is reported now: how much of the number the engine banked itself,
+  // and how much this file had to add.
   const simB = results.reduce((a, r) => a + r.bosses, 0), engB = results.reduce((a, r) => a + (r.engineBosses || 0), 0);
   const simE = results.reduce((a, r) => a + r.elites, 0), engE = results.reduce((a, r) => a + (r.engineElites || 0), 0);
-  if (simB !== engB || simE !== engE)
-    console.log(`\n  !! COUNTED TWICE: bosses ${simB} here vs ${engB} in the engine; elites ${simE} vs ${engE}.`
+  const topB = results.reduce((a, r) => a + (r.bossTopUps || 0), 0);
+  const topE = results.reduce((a, r) => a + (r.eliteTopUps || 0), 0);
+  const rawB = engB - topB, rawE = engE - topE;
+  const bad = [];
+  if (engB > simB) bad.push(`the engine banked ${engB} commander kills against ${simB} nodes here - it is counting one twice`);
+  if (engB < simB) bad.push(`the engine banked ${engB} commander kills against ${simB} nodes here, and the top-up did not close it`);
+  if (engE > simE) bad.push(`the engine banked ${engE} elite kills against ${simE} nodes here - it is counting one twice`);
+  if (engE < simE) bad.push(`the engine banked ${engE} elite kills against ${simE} nodes here, and the top-up did not close it`);
+  if (bad.length)
+    console.log(`\n  !! COUNTS DISAGREE: ${bad.join('; ')}.`
               + `\n     Every score above is wrong. Fix the post-fight block before believing any of this.`);
   else
-    console.log(`\n  counts agree: ${simB} bosses, ${simE} elites, counted two ways.`);
+    console.log(`\n  counts agree both ways: ${simB} commanders (${rawB} banked by the engine, ${topB} topped up here),`
+              + ` ${simE} elites (${rawE} banked, ${topE} topped up).`);
 
   console.log(`\n${n} expeditions, ${errors.length} page errors.\n`);
 
