@@ -6371,7 +6371,14 @@ function operatorCardHtml(char) {
 
         if (activePosSelector === char.id) { btnGroupHtml = `<button class="upg-btn sub-menu-btn pos-btn-1" data-action="assign-slot" data-id="${char.id}" data-slot="1">[1] FRONT</button> <button class="upg-btn sub-menu-btn pos-btn-2" data-action="assign-slot" data-id="${char.id}" data-slot="2">[2] MID</button> <button class="upg-btn sub-menu-btn pos-btn-3" data-action="assign-slot" data-id="${char.id}" data-slot="3">[3] BACK</button> <button class="upg-btn sub-menu-btn pos-btn-0" data-action="assign-slot" data-id="${char.id}" data-slot="0">[X] BENCH</button> <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
         else if (activePerkSelector === char.id) { btnGroupHtml = buyableFor(char).map(p => {
-            const twin = p.sig ? SIG_PERKS.find(s => s.fork === SIG_PERKS.find(x => x.id === p.id).fork && s.id !== p.id) : null;
+            // F06: `sig: true` on the capstone entry is what makes it print like a signature;
+            // it does not make it a SIG_PERKS row. The inner find returned undefined for a
+            // CAP_* id and reading .fork threw - inside the roster map, before innerHTML was
+            // assigned, so the Outpost came up stale and threw again on every later render
+            // until the selector cleared. The one door a banked point has to a capstone has
+            // been shut since E08b shipped. A capstone is above the forks and closes nothing.
+            const own = p.cap ? null : SIG_PERKS.find(x => x.id === p.id);
+            const twin = own ? SIG_PERKS.find(s => s.fork === own.fork && s.id !== own.id) : null;
             const short = scrap < p.cost;
             return `<button class="upg-btn sub-menu-btn perk-btn${p.sig ? ' perk-sig' : ''}" ${short ? 'disabled' : ''} data-action="assign-perk" data-id="${char.id}" data-perk="${p.id}"`
                 + (twin ? ` title="Closes ${twin.name}"` : '')
@@ -6653,6 +6660,15 @@ function renderPerkOffer() {
     if (!offer) { renderMap(); return; }
     const char = playerRoster.find(c => c.id === offer.charId);
     if (!char) { pendingPerkOffers.shift(); renderPerkOffer(); return; }
+    // F06: the options were rolled when the level was awarded, and two level-ups in one fight
+    // queue two offers rolled against the same open fork. Taking a signature from the first
+    // does not touch the second, so the stale screen could hand over the half the first closed
+    // - breaking E07's two-of-four - or the same signature a second time. Rolled again at the
+    // moment the screen is first drawn, which is the only moment the answer is knowable.
+    //
+    // Once, and written down: re-rolling on every render would make a reload a re-roll, which
+    // is the thing F02 exists to prevent.
+    if (!offer.shown) { offer.options = rollPerkOffer(char); offer.shown = true; saveGameState(); }
     switchScreen('screen-perk');
     document.getElementById('perk-title').innerText = `FIELD PROMOTION — ${char.name.toUpperCase()}`;
     // The two signatures on an offer are the two halves of one fork, so say so: taking either
@@ -6682,7 +6698,10 @@ function takePerkOffer(index) {
     const char = playerRoster.find(c => c.id === offer.charId);
     const id = offer.options[index];
     if (char && id) {
-        const sig = SIG_PERKS.find(p => p.id === id);
+        // The belt to the render's brace: a screen that is somehow stale cannot hand over a
+        // signature this operator can no longer take. unheldSigsFor is openForksFor flattened,
+        // so a half whose fork is shut - and a half already held - is not in it.
+        const sig = unheldSigsFor(char).some(p => p.id === id) ? SIG_PERKS.find(p => p.id === id) : null;
         const stat = PERK_POOL.find(p => p.id === id);
         const cap = capstoneOpen(char) && capstoneFor(char).id === id ? capstoneFor(char) : null;
         if (cap) {
@@ -6792,8 +6811,11 @@ function migrateTraits(roster) {
 // visible is the promotion screen it was decided on and then never again.
 function traitSummary(char) {
     if (!char.traits || char.traits.length === 0) return '';
+    // F06: a held capstone is a trait like any other, so it was in this list AND on the line
+    // below it - the card named it twice. It is named once, where it says what it is.
+    const capId = (capstoneFor(char) || {}).id;
     const counts = {};
-    char.traits.forEach(t => { counts[t] = (counts[t] || 0) + 1; });
+    char.traits.forEach(t => { if (t !== capId) counts[t] = (counts[t] || 0) + 1; });
     const held = Object.entries(counts).map(([t, n]) => n > 1 ? `${t} x${n}` : t).join(', ');
     const shut = forksFor(char)
         .map(g => g.find(p => !hasTrait(char, p.id) && g.some(o => hasTrait(char, o.id))))

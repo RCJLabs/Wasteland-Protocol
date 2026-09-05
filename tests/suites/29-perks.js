@@ -63,8 +63,11 @@ module.exports = {
 
     // ---- the offer screen: take a signature ----
     await page.evaluate(() => {
+      // F06: `shown` is what an offer carries once it has been drawn. renderPerkOffer rolls
+      // the options against the forks open at that moment and writes the flag, so a hand-built
+      // fixture that wants ITS three cards is describing an offer already on screen.
       pendingPerkOffers = [{ charId: playerRoster.find(c => c.classType === 'BRUISER').id,
-                             options: ['BULWARK', 'VETERAN', 'FORTIFIED'] }];
+                             options: ['BULWARK', 'VETERAN', 'FORTIFIED'], shown: true }];
       playerRoster.find(c => c.classType === 'BRUISER').perkPoints = 1;
       renderPerkOffer();
     });
@@ -96,7 +99,7 @@ module.exports = {
     const banked = await page.evaluate(() => {
       const ch = playerRoster.find(c => c.classType === 'MEDIC');
       ch.perkPoints = 1;
-      pendingPerkOffers = [{ charId: ch.id, options: ['FIELD_SURGEON', 'VETERAN', 'SWIFT'] }];
+      pendingPerkOffers = [{ charId: ch.id, options: ['FIELD_SURGEON', 'VETERAN', 'SWIFT'], shown: true }];
       renderPerkOffer();
       document.querySelector('[data-action="bank-perk"]').click();
       return { point: ch.perkPoints, none: !hasTrait(ch, 'FIELD_SURGEON'),
@@ -109,8 +112,8 @@ module.exports = {
       const a = playerRoster[0], b = playerRoster[1];
       a.perkPoints = 1; b.perkPoints = 1;
       pendingPerkOffers = [
-        { charId: a.id, options: ['VETERAN', 'FORTIFIED', 'SWIFT'] },
-        { charId: b.id, options: ['VETERAN', 'FORTIFIED', 'SWIFT'] }];
+        { charId: a.id, options: ['VETERAN', 'FORTIFIED', 'SWIFT'], shown: true },
+        { charId: b.id, options: ['VETERAN', 'FORTIFIED', 'SWIFT'], shown: true }];
       renderPerkOffer();
       const first = document.getElementById('perk-title').innerText;
       document.querySelector('[data-action="take-perk"]').click();
@@ -228,7 +231,9 @@ module.exports = {
     await page.evaluate(() => {
       activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const ch = playerRoster[0]; ch.perkPoints = 1;
-      pendingPerkOffers = [{ charId: ch.id, options: ['BULWARK', 'VETERAN', 'SWIFT'] }];
+      // Shown before the save, which is what makes the claim below meaningful: an offer the
+      // player has already been looking at does not change under them across a reload.
+      pendingPerkOffers = [{ charId: ch.id, options: ['BULWARK', 'VETERAN', 'SWIFT'], shown: true }];
       saveGameState();
     });
     await page.reload();

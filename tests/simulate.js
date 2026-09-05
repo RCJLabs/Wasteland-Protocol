@@ -649,7 +649,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, field: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  affixes: {}, champions: 0, eliteUnits: 0, affixedUnits: 0,
-                 promotions: 0, sigsTaken: 0, sigsBought: 0, capsTaken: 0, capsBought: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
+                 promotions: 0, promoEmpty: 0, sigsTaken: 0, sigsBought: 0, capsTaken: 0, capsBought: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
                  extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false,
@@ -874,6 +874,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     while (pendingPerkOffers.length) {
       const offer = pendingPerkOffers[0];
       const who = playerRoster.find(c => c.id === offer.charId);
+      // F06, and the E03 lesson again: the cards are rolled when the screen is DRAWN, because
+      // two promotions from one fight are both pre-rolled against the same open fork and the
+      // second would otherwise still be offering the half the first just closed. The sim used
+      // to reach past the screen straight into takePerkOffer, so it decided from a hand no
+      // player is ever dealt - and, now that takePerkOffer refuses a shut half, would have
+      // thrown promotions away on cards a real screen would never have shown.
+      renderPerkOffer();
       // E08b: a capstone is the card a player came to this screen for, so it is taken first.
       // Named explicitly rather than left to fall through to index 0 - it happens to be dealt
       // first, and a policy that relies on that measures the deal rather than the decision.
@@ -882,7 +889,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       const sigIdx = offer.options.findIndex(id => SIG_PERKS.some(p => p.id === id));
       if (capIdx >= 0) stat.capsTaken = (stat.capsTaken || 0) + 1;
       else if (sigIdx >= 0) stat.sigsTaken++;
+      const had = (who && who.traits ? who.traits.length : 0);
       takePerkOffer(capIdx >= 0 ? capIdx : sigIdx >= 0 ? sigIdx : 0);
+      // A promotion that bought nothing is the shape the F06 belt would make if the screen and
+      // the decision ever came apart again. Counted rather than assumed, and reported.
+      if (who && (who.traits ? who.traits.length : 0) === had) stat.promoEmpty++;
       stat.promotions++;
     }
     // E01: this used to heal a flat +30 once per operator per node. The Outpost's own button is
@@ -2144,6 +2155,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   results.forEach(r => Object.entries(r.items).forEach(([k, v]) => { items[k] = (items[k] || 0) + v; }));
   line('items used per run', Object.entries(items).map(([k, v]) => `${k} ${(v / n).toFixed(1)}`).join(', ') || 'none');
   line('promotions per run', `${mean(nums('promotions')).toFixed(1)} (${mean(nums('sigsTaken')).toFixed(1)} signatures)`);
+  line('promotions that bought nothing', `${mean(nums('promoEmpty')).toFixed(2)} per run`);
   line('signatures bought at the Outpost', `${mean(nums('sigsBought')).toFixed(1)} per run`);
   line('capstones reached', `${mean(nums('capsTaken')).toFixed(2)} taken on promotion, ${mean(nums('capsBought')).toFixed(2)} bought at the Outpost, per run`);
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
