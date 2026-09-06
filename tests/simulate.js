@@ -604,6 +604,34 @@
 // boundary in fewer NODES, so it crosses more sectors and is dealt more maps - each with its
 // 0.55 roll for a camp - while banking fewer fight payouts per sector. More camps, thinner
 // purse: the median purse on hand falls 240 to 207 and affordable offers 333/528 to 306/554.
+// ── F09: seven banners made honest, and what that moved ─────────────────────────────────
+// Matched pair, 3 x 150 an arm, this file byte-identical on both sides.
+//
+//                              pre-F09                        post-F09
+//   runs that ended the road   0 / 3 / 1 of 150               3 / 2 / 1 of 150
+//   wipes per run           7.29 / 7.19 / 7.18             6.90 / 6.97 / 7.27
+//   wipes at tier ten         84% / 81% / 81%                82% / 82% / 79%
+//   score, median         21,219 / 19,822 / 19,654       16,506 / 19,978 / 21,947
+//   nodes cleared, median      83 / 78 / 79                   71 / 76 / 78
+//   lost for good, per run  3.04 / 3.44 / 3.15             3.27 / 3.26 / 3.19
+//   deepest sector, by third  3.38/3.06/3.32 ...            2.94/3.04/3.22 ...
+//   turns per fight, median  29.1 / 30.7 / 30.2             31.7 / 30.9 / 29.4
+//
+// NOTHING SEPARATES, which is what the phase predicted. Wipes, the tier-ten share, the win
+// rate, lost for good, depth and turns per fight all overlap. Nodes cleared is the only row
+// with a consistent direction and it only touches - 71-78 against 78-83 - so it is a direction
+// and not a result; it also points the OPPOSITE way to three of the seven fixes, which are
+// player buffs and would lengthen a run rather than shorten it. Read it as spread: post-1 is
+// the low sample on every row at once (71 nodes, 16.5k score, 2.94 depth), which is one career
+// set being unlucky rather than seven fixes agreeing.
+//
+// ONE LIMIT ON THIS MEASUREMENT, STATED PLAINLY. The audit's named risk was HEADSHOT becoming
+// a real execute, and this pair has weak power over exactly that. Overdrives are 285 firings
+// in 150 careers - 0.2% of all moves - and HEADSHOT is one class's share of that, so perhaps
+// thirty to sixty firings an arm. A buff that rare cannot separate a wipes mean, and "no dial
+// moved" here is not the same claim as "HEADSHOT is balanced". What pins HEADSHOT is suite
+// 117, which drives the resolver directly: an armoured, resistant non-commander dies outright,
+// a commander does not, and the kill lands on the ledger rather than around it.
 const path = require('path');
 const { serve } = require('./server');
 
