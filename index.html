@@ -248,6 +248,15 @@
         <button class="return-btn" data-action="map">CONFIRM & RETURN TO MAP</button>
     </div>
 
+    <!-- F12: these two sit OUTSIDE every screen, because they are fired from many of them.
+         Inside screen-combat, a prompt raised on the promotion, relic, curse, gear, recall or
+         muster screen rendered into a container switchScreen had just set to display:none - so
+         it was invisible where it fired and surfaced later, out of context, on whatever screen
+         happened to be up when combat came back. The dossier stays in the combat screen on
+         purpose: it reads activeEntities and is only reachable by tapping a unit on the field. -->
+    <div id="explain" class="explain overlay"></div>
+    <div id="prompt" class="prompt overlay"></div>
+
     <div id="screen-combat">
         <div class="sky-layer" id="combat-sky-layer">
             <div id="queue-display">Q: INITIATING...</div>
@@ -266,8 +275,6 @@
         </div>
 
         <div id="dossier" class="dossier"></div>
-    <div id="explain" class="explain"></div>
-    <div id="prompt" class="prompt"></div>
 
         <div class="dashboard">
             <div id="command-deck"></div>

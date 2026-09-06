@@ -1791,7 +1791,7 @@ const FRONTS = [
       desc: 'Something large died, and everything came. Swarms on half the roads, and they come in numbers.' }
 ];
 let sectorFront = null;        // rolled per sector; null on saves from before fronts existed
-let frontBannerPending = false;
+let frontBannerPending = false; let frontBannerTimer = null;
 
 function frontById(id) { return FRONTS.find(f => f.id === id) || null; }
 function currentFront() { return frontById(sectorFront); }
@@ -5223,7 +5223,10 @@ function initEngine() {
     renderTitleScreen(); 
 }
 
-function switchScreen(screenId) { if (screenId !== 'screen-combat') stopAmbience(); document.querySelectorAll('#engine > div:not(.settings-icon):not(#screen-settings)').forEach(el => el.style.display = 'none'); document.getElementById(screenId).style.display = 'flex'; if (screenId === 'screen-map' || screenId === 'screen-outpost' || screenId === 'screen-citadel') { document.getElementById('btn-global-settings').style.display = 'block'; } else { document.getElementById('btn-global-settings').style.display = 'none'; } }
+// F12: `.overlay` is the third exception, beside the settings icon and the settings screen.
+// An overlay belongs to the game rather than to one screen of it - the prompts fire from
+// fifteen places outside combat - so the sweep that hides screens has to leave them alone.
+function switchScreen(screenId) { if (screenId !== 'screen-combat') stopAmbience(); document.querySelectorAll('#engine > div:not(.settings-icon):not(#screen-settings):not(.overlay)').forEach(el => el.style.display = 'none'); document.getElementById(screenId).style.display = 'flex'; if (screenId === 'screen-map' || screenId === 'screen-outpost' || screenId === 'screen-citadel') { document.getElementById('btn-global-settings').style.display = 'block'; } else { document.getElementById('btn-global-settings').style.display = 'none'; } }
 function openSettings() { disarmErase(); document.getElementById('screen-settings').style.display = 'flex'; }
 function closeSettings() { disarmErase(); document.getElementById('screen-settings').style.display = 'none'; }
 function saveSettings() { Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); }
@@ -6221,6 +6224,11 @@ function renderMap() {
         banner.classList.remove('front-banner-show');
         void banner.offsetWidth;   // restart the animation when sectors chain quickly
         banner.classList.add('front-banner-show');
+        // F12: under either reduced-motion path the banner is shown rather than animated, so
+        // nothing takes it off again - the animation's own last keyframe used to do that. Timed
+        // to the animation it replaces, and harmless when the animation did run.
+        clearTimeout(frontBannerTimer);
+        frontBannerTimer = setTimeout(() => banner.classList.remove('front-banner-show'), 3200);
     }
     
     let bHtml = '';
@@ -11586,6 +11594,7 @@ globalThis.WP = {
     get activeOrder() { return activeOrder; }, set activeOrder(v) { activeOrder = v; },
     get bestSector() { return bestSector; }, set bestSector(v) { bestSector = v; },
     get frontBannerPending() { return frontBannerPending; }, set frontBannerPending(v) { frontBannerPending = v; },
+    get frontBannerTimer() { return frontBannerTimer; }, set frontBannerTimer(v) { frontBannerTimer = v; },
     get regroupInsured() { return regroupInsured; }, set regroupInsured(v) { regroupInsured = v; },
     get shopRerollPick() { return shopRerollPick; }, set shopRerollPick(v) { shopRerollPick = v; },
     get pendingRelicOffer() { return pendingRelicOffer; }, set pendingRelicOffer(v) { pendingRelicOffer = v; },

@@ -96,8 +96,13 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .shop-node { border-color: #3aa17e; box-shadow: 0 0 10px rgba(58, 161, 126, 0.5); }
 .shop-node .node-lbl { color: #3aa17e; }
 
-#screen-event, #screen-camp, #screen-victory { display: none; flex-direction: column; justify-content: center; align-items: center; padding: 20px; height: 100%; box-sizing: border-box; background: linear-gradient(rgba(15,15,15,0.9), rgba(5,5,5,0.9)); }
-.event-box { background: #050505; border: 2px solid #B8860B; padding: 25px; width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; text-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.8); }
+/* F12: #screen-runover was missing from this list and had no rule of its own anywhere, so the
+   screen a run actually ends on was an unstyled flex row with no padding and no ground behind
+   it - while the screen a run ends WELL on had all of it. */
+#screen-event, #screen-camp, #screen-victory, #screen-runover { display: none; flex-direction: column; justify-content: center; align-items: center; padding: 20px; height: 100%; box-sizing: border-box; background: linear-gradient(rgba(15,15,15,0.9), rgba(5,5,5,0.9)); }
+/* F12: width 100% plus 25px of padding and a 2px border on a content box is 54px wider than
+   whatever holds it, at every width - so this overflowed on every phone the game runs on. */
+.event-box { box-sizing: border-box; background: #050505; border: 2px solid #B8860B; padding: 25px; width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; text-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.8); }
 .event-title { color: #B8860B; font-size: 22px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; border-bottom: 1px solid #333; padding-bottom: 10px; }
 .event-desc { color: #ccc; font-size: 14px; line-height: 1.6; margin-bottom: 15px; }
 /* Who this is and what they make of you, above their own words. The standing carries a word as
@@ -372,6 +377,9 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
 :root.motion-off .settings-icon:hover { transform: none; }
 :root.motion-off .title-btn:hover, :root.motion-off .title-btn:active { transform: none; }
 :root.motion-off .combo-flag { animation: none; }
+/* And the game's own motion setting, which had no rule for the splash at all: the blanket
+   0.01ms below runs the animation to its last keyframe, which is opacity 0. */
+:root.motion-off #front-banner.front-banner-show { animation: none !important; opacity: 1; }
 :root.motion-off * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 
 @media (prefers-reduced-motion: reduce) {
@@ -705,7 +713,10 @@ button.reach-short { border-color: #7a5a20; }
   .anim-lunge-right, .anim-lunge-left, .anim-recoil-left, .anim-recoil-right,
   .muzzle-flash, .tracer-line, .intent-pulse, .entity.dead.dying .portrait { animation: none !important; }
   .entity.dead.dying .portrait { transform: rotate(78deg) translateY(12%) translateX(5%); }
-  .front-banner-show { animation: none !important; opacity: 1; }
+  /* F12: this was written as a class, and #front-banner { opacity: 0 } is an id - so the rule
+     lost the cascade and the splash stayed invisible under the very setting it was written
+     for. Same selector weight as the thing it is overriding. */
+  #front-banner.front-banner-show { animation: none !important; opacity: 1; }
 }
 
 /* A cursed card is unmistakable: violet heat and a warning where the tier goes. */
