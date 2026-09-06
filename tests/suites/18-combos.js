@@ -52,8 +52,10 @@ module.exports = {
       playerRoster.forEach(h => {
         const { hero, foe } = window.__duel(h.classType);
         renderField();
+        // OVERDRIVE and HOLD are on every deck and belong to no class: the bar's spend and
+        // F10's pass. What is being counted here is what the CLASS brings.
         out[h.classType] = [...document.querySelectorAll('#command-deck [data-move]')]
-          .map(b => b.dataset.move).filter(m => m !== 'OVERDRIVE');
+          .map(b => b.dataset.move).filter(m => m !== 'OVERDRIVE' && m !== 'HOLD');
       });
       return out;
     });
@@ -401,7 +403,8 @@ module.exports = {
       const rendered = {};
       Object.keys(ABILITIES).forEach(c => {
         window.__duel(c); pendingAction = null; renderField();
-        rendered[c] = [...document.querySelectorAll('#command-deck [data-move]')].map(b => b.dataset.move);
+        rendered[c] = [...document.querySelectorAll('#command-deck [data-move]')]
+          .map(b => b.dataset.move).filter(m => m !== 'HOLD');
       });
       return { declared, rendered, overdrive: Object.keys(OVERDRIVES) };
     });
@@ -414,7 +417,10 @@ module.exports = {
     const selfCast = await page.evaluate(() => {
       window.__duel('BRUISER'); pendingAction = null; renderField();
       const b = [...document.querySelectorAll('#command-deck [data-move]')].find(x => x.dataset.move === 'IRON_GUARD');
-      const others = [...document.querySelectorAll('#command-deck [data-move]')].filter(x => x.dataset.move !== 'IRON_GUARD');
+      // HOLD is a self-action too - F10's pass - so the claim here is about everything that
+      // is neither of the two things that cast on their own operator.
+      const others = [...document.querySelectorAll('#command-deck [data-move]')]
+        .filter(x => x.dataset.move !== 'IRON_GUARD' && x.dataset.move !== 'HOLD');
       return { guard: b.dataset.action, rest: [...new Set(others.map(x => x.dataset.action))] };
     });
     ok('Iron Guard still casts on the user', selfCast.guard === 'self');

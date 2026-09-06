@@ -781,7 +781,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, field: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  affixes: {}, champions: 0, eliteUnits: 0, affixedUnits: 0,
-                 promotions: 0, promoEmpty: 0, sigsTaken: 0, sigsBought: 0, capsTaken: 0, capsBought: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
+                 promotions: 0, promoEmpty: 0, held: 0, turnsPlayer: 0, sigsTaken: 0, sigsBought: 0, capsTaken: 0, capsBought: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
                  extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false,
@@ -1144,7 +1144,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // deckFor, not ABILITIES: a class at mastery rank 3 fights with a fourth ability, and
     // reading the raw table meant every one of those was measured as never used.
     const deck = deckFor(actor).filter(a => !a.cd || (actor.cooldowns[a.cd] || 0) === 0);
-    if (!deck.length) return false;
+    // F10: this used to return false and the caller silently skipped the turn - the same hole
+    // the deck had on screen, where an operator with everything cooling was offered nothing
+    // that resolved the turn. The engine has HOLD now, so this presses it, and counts it: the
+    // "nothing to press" line below is what the hole used to be and has to read zero.
+    if (!deck.length) {
+        stat.held = (stat.held || 0) + 1;
+        stat.turnsPlayer = (stat.turnsPlayer || 0) + 1;
+        executeSelfAction('HOLD');
+        return true;
+    }
+    stat.turnsPlayer = (stat.turnsPlayer || 0) + 1;
     // Was there a decision to make at all? Taken here, at the top of the turn, because the
     // tactic block below spends the bar and would leave every measurement of it reading zero.
     // "The squad left them there" and "the squad had nothing that reached them" are different
@@ -2288,6 +2298,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('items used per run', Object.entries(items).map(([k, v]) => `${k} ${(v / n).toFixed(1)}`).join(', ') || 'none');
   line('promotions per run', `${mean(nums('promotions')).toFixed(1)} (${mean(nums('sigsTaken')).toFixed(1)} signatures)`);
   line('promotions that bought nothing', `${mean(nums('promoEmpty')).toFixed(2)} per run`);
+  // F10: before HOLD existed a turn with every ability cooling was skipped outright - by this
+  // file silently, and on screen by leaving the player nothing but the two ways out of the
+  // fight. Both halves of this line have to be readable: how often it happens, and that it is
+  // no longer a hole. The share is of PLAYER turns, which is the denominator that hole was in.
+  {
+    const tot = a => a.reduce((x, y) => x + y, 0);
+    const h = tot(nums('held')), t = tot(nums('turnsPlayer'));
+    line('turns held, nothing else to press', t
+      ? `${h} of ${t} player turns (${(100 * h / t).toFixed(2)}%), skipped outright before F10`
+      : 'no player turns recorded');
+  }
   line('signatures bought at the Outpost', `${mean(nums('sigsBought')).toFixed(1)} per run`);
   line('capstones reached', `${mean(nums('capsTaken')).toFixed(2)} taken on promotion, ${mean(nums('capsBought')).toFixed(2)} bought at the Outpost, per run`);
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));

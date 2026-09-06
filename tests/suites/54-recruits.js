@@ -94,7 +94,7 @@ module.exports = {
         window.__field(r.classType);
         renderField();
         const btns = [...document.querySelectorAll('#command-deck [data-move]')]
-          .filter(b => b.dataset.move !== 'OVERDRIVE');
+          .filter(b => b.dataset.move !== 'OVERDRIVE' && b.dataset.move !== 'HOLD');
         out[r.classType] = { shown: btns.map(b => b.dataset.move),
                              blocked: btns.filter(b => b.disabled).map(b => b.dataset.move),
                              want: ABILITIES[r.classType].map(a => a.move) };

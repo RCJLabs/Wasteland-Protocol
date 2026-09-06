@@ -998,3 +998,9 @@ button.reach-short { border-color: #7a5a20; }
 .req-clear { background: none; border: 1px solid #6b3a3a; color: #c98a8a; font: inherit;
              font-size: 0.72rem; letter-spacing: 0.06em; padding: 6px; cursor: pointer; }
 .req-clear:hover { border-color: #8b4a4a; color: #e0a8a8; }
+
+/* F10: the muster's loadout chips are now also drawn on the Outpost operator card and on the
+   recruit card, neither of which is the muster's grid - so the row stands on its own there
+   rather than spanning a column that does not exist. */
+.upgrade-header .muster-loadout,
+.recruit-info .muster-loadout { grid-column: auto; margin-top: 6px; }

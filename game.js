@@ -3307,8 +3307,19 @@ const ACTIONS = {
     'pick-order':       el => { if (orderById(el.dataset.id)) activeOrder = el.dataset.id; renderContracts(); },
     'bench-job':        el => takeBenchJob(el.dataset.id, el.dataset.job),
     'loadout-bench':    el => {
+        const kind = el.dataset.kind || 'roster';
+        // A recruit is not on the roster yet, so the choice is held on the offer and copied
+        // onto them at sign-on. Everywhere else it is written straight onto the operator.
+        if (kind === 'recruit') {
+            const tpl = pendingRecruit && recruitById(pendingRecruit.id);
+            if (tpl && masteryRank(tpl.classType) >= 3) { pendingRecruit.benchedMove = el.dataset.move; renderRecruit(); }
+            return;
+        }
         const ch = playerRoster.find(c => c.id === el.dataset.id);
-        if (ch && masteryRank(ch.classType) >= 3) { ch.benchedMove = el.dataset.move; renderMuster(); }
+        if (!ch || masteryRank(ch.classType) < 3) return;
+        ch.benchedMove = el.dataset.move;
+        if (kind === 'muster') { renderMuster(); return; }
+        saveGameState(); renderOutpost();
     },
     'node-combat':      el => { enterNode(el.dataset.node); initiateCombat(el.dataset.type, el.dataset.elite === '1'); },
 
@@ -4218,8 +4229,25 @@ function nextTurn() {
     processTurn();
 }
 
+// F10: what HOLD is worth, and why it is this and not five momentum. A plain swing that does
+// not kill grants NO momentum - the bar fills off kills, combos and blows taken - so a pass
+// that paid momentum would be the cheapest way in the game to charge an overdrive, and pressing
+// it on purpose would beat swinging. Armour cannot be farmed the same way: it is set rather
+// than added, it expires on the operator's next turn, and it is a third of what the Bruiser's
+// own brace grants for a whole turn and no cooldown. A pass has to be the worst thing on the
+// deck, or it is not a pass.
+const HOLD_PLATE = 5;
 function executeSelfAction(type) {
     let actEnt = turnQueue[activeIndex];
+    // Every deck has this, always: an operator whose abilities are all cooling used to have
+    // nothing that resolved the turn, and a rank III operator can bench their only free move.
+    if (type === 'HOLD') {
+        // Set, not added, so holding twice running is not twice the plate.
+        actEnt.armor = (actEnt.baseArmor || 0) + plate(HOLD_PLATE);
+        actEnt.armorTurns = Math.max(actEnt.armorTurns || 0, 1);
+        log(`> ${actEnt.name} holds the line (+${plate(HOLD_PLATE)} ARMOR until their next turn).`, "log-status");
+        spawnFCT(actEnt.id, "HOLD", "fct-status"); playSFX('click');
+    }
     if (type === 'IRON_GUARD') {
         actEnt.armor += plate(15); actEnt.armorTurns = 2; actEnt.guardTurns = 2; actEnt.cooldowns.iron_guard = cdFor(actEnt, 'iron_guard', 3);
         // Armour alone only ever protected the Bruiser. Bracing now covers the ranks behind it,
@@ -5438,13 +5466,7 @@ function renderMuster() {
         const rank = masteryRank(ch.classType);
         const title = rank >= 1 ? `<span class="muster-title" title="Dossier rank ${rank} — ${masteryXp(ch.classType).toLocaleString()} lifetime XP">★ ${MASTERY_TITLES[ch.classType]}</span>` : '';
         // Rank III brings four verbs to a three-slot deck: tap the one that sits out.
-        let loadout = '';
-        if (rank >= 3 && FOURTH_ABILITIES[ch.classType]) {
-            const all = [...(ABILITIES[ch.classType] || []), FOURTH_ABILITIES[ch.classType]];
-            const benched = (ch.benchedMove && all.some(a => a.move === ch.benchedMove)) ? ch.benchedMove : FOURTH_ABILITIES[ch.classType].move;
-            loadout = `<div class="muster-loadout">` + all.map(a =>
-                `<button class="loadout-chip ${a.move === benched ? 'chip-benched' : ''}" data-action="loadout-bench" data-id="${ch.id}" data-move="${a.move}">${a.move === benched ? '✕ ' : ''}${a.label}</button>`).join('') + `</div>`;
-        }
+        const loadout = loadoutChipsHtml(ch.classType, ch.benchedMove, ch.id, 'muster');
         // The bench got half XP and nothing else. One of them takes the expedition's job, and
         // only one - so the row offers it to whoever is not deployed, and taking it anywhere
         // moves it from wherever it was.
@@ -6426,7 +6448,10 @@ function operatorCardHtml(char) {
         else if (activeScarSelector === char.id) { btnGroupHtml = scarList.map(sc => `<button class="upg-btn sub-menu-btn scar-btn" ${scrap < scarPrice ? 'disabled' : ''} data-action="treat-scar" data-id="${char.id}" data-scar="${sc.id}" title="${sc.desc}">TREAT ${sc.name}</button>`).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
         else { btnGroupHtml = `<button class="upg-btn ${posClass}" data-action="pos-menu" data-id="${char.id}">${posText}</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="HP" data-cost="${cost}">+10 HP</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="DMG" data-cost="${cost}">+3 DMG</button> ${medHtml}${scarBtn}`; }
 
-        return `<div class="upgrade-card" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay}${masteryDisplay}${traitsDisplay}${scarDisplay}${bondDisplay} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> <div class="upgrade-btn-group">${btnGroupHtml}</div> <div class="upgrade-btn-group gear-row">${gearHtml}</div> </div>`;
+        // F10: the muster is the only other place this control exists, and a run is long past
+        // it by the time a class reaches rank III or a recruit is signed. Same chips, same rule.
+        const loadoutRow = loadoutChipsHtml(char.classType, char.benchedMove, char.id, 'roster');
+        return `<div class="upgrade-card" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay}${masteryDisplay}${traitsDisplay}${scarDisplay}${bondDisplay}${loadoutRow} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> <div class="upgrade-btn-group">${btnGroupHtml}</div> <div class="upgrade-btn-group gear-row">${gearHtml}</div> </div>`;
 }
 
 function renderOutpost() {
@@ -7254,6 +7279,7 @@ function recruitCardHtml(tpl) {
             <div class="recruit-stats">HP ${tpl.maxHp} · DMG ${tpl.dmgBase} · SPD ${tpl.speed}</div>
             ${res ? `<div class="recruit-res">${res}</div>` : ''}
             <ul class="recruit-verbs">${verbs}</ul>
+            ${loadoutChipsHtml(tpl.classType, pendingRecruit && pendingRecruit.benchedMove, tpl.id, 'recruit')}
         </div>
     </div>`;
 }
@@ -7297,6 +7323,8 @@ function signOnRecruit() {
     scrap -= pendingRecruit.cost;
     const ch = migrateTraits([JSON.parse(JSON.stringify(tpl))])[0];
     delete ch.rank; delete ch.pitch;
+    // F10: whatever was chosen on the card, before they were anybody's to edit.
+    if (pendingRecruit.benchedMove) ch.benchedMove = pendingRecruit.benchedMove;
     // They arrive hurt, carrying a quirk like anyone the muster rolls, and levelled to the
     // squad they are joining - a fresh recruit six sectors deep would be a body, not a hand.
     ch.hp = Math.max(1, Math.floor(ch.maxHp * RECRUIT_HEALTH));
@@ -8547,13 +8575,35 @@ const FOURTH_ABILITIES = {
 };
 // The deck an operator actually brings: the classic three below rank III; at III, four
 // minus whichever one the muster benched (the fourth sits out by default).
+// F10: the muster held the only copy of this, so the one operator who can never pass through
+// a muster - a recruit signed at a node - had no way to say which three of four they bring, and
+// arrived on deckFor's default of benching the FOURTH. The chips are the same control wherever
+// they are drawn; `id` is whose they are, and a recruit not yet on the roster is addressed by
+// the pending offer instead.
+function loadoutChipsHtml(classType, benched, id, kind) {
+    const fourth = FOURTH_ABILITIES[classType];
+    if (!fourth || masteryRank(classType) < 3) return '';
+    const all = [...(ABILITIES[classType] || []), fourth];
+    const out = (benched && all.some(a => a.move === benched)) ? benched : fourth.move;
+    return `<div class="muster-loadout">` + all.map(a =>
+        `<button class="loadout-chip ${a.move === out ? 'chip-benched' : ''}" data-action="loadout-bench"`
+        + ` data-id="${id}" data-kind="${kind || 'roster'}" data-move="${a.move}"`
+        + ` title="${a.move === out ? 'Sitting out this expedition' : 'Bring this one; tap to sit it out instead'}">`
+        + `${a.move === out ? '\u2715 ' : ''}${a.label}</button>`).join('') + `</div>`;
+}
+// Which of the four an operator is leaving behind, by the same rule deckFor applies.
+function benchedFor(char) {
+    const fourth = FOURTH_ABILITIES[char.classType];
+    if (!fourth) return null;
+    const all = [...(ABILITIES[char.classType] || []), fourth];
+    return (char.benchedMove && all.some(a => a.move === char.benchedMove)) ? char.benchedMove : fourth.move;
+}
 function deckFor(char) {
     const base = ABILITIES[char.classType] || [];
     const fourth = FOURTH_ABILITIES[char.classType];
     if (!fourth || masteryRank(char.classType) < 3) return base;
     const all = [...base, fourth];
-    const benched = (char.benchedMove && all.some(a => a.move === char.benchedMove)) ? char.benchedMove : fourth.move;
-    return all.filter(a => a.move !== benched);
+    return all.filter(a => a.move !== benchedFor(char));
 }
 
 // ── The manual's one blind spot ──────────────────────────────────────────────────────
@@ -9310,6 +9360,10 @@ function renderCommandDeck() {
     if (activeEntities.filter(e => e.isPlayer && e.hp > 0 && e.id !== aE.id).length > 0) {
         deck.push({ move: 'REPOSITION', label: '↔ Reposition', reach: 'self' });
     }
+    // F10: last, and on every deck. Without it a turn where everything is cooling had nothing
+    // on it that resolved the turn - only the two ways out of the fight - and the muster's own
+    // loadout chip lets a rank III operator bench the free move that used to guarantee one.
+    deck.push({ move: 'HOLD', label: '⊘ Hold', reach: 'self', act: 'self' });
 
     for (const a of deck) {
         const cd = a.cd ? (cds[a.cd] || 0) : 0;
@@ -11362,7 +11416,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    clearStaleClocks, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
+    clearStaleClocks, HOLD_PLATE, loadoutChipsHtml, benchedFor, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, noteKill, raiseBody, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder,
