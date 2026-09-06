@@ -5106,7 +5106,7 @@ function loadMeta() {
         bestRung = Math.max(0, Math.min(Number(d.bestRung) || 0, PROTOCOLS.length));
         mastery = (d.mastery && typeof d.mastery === 'object') ? d.mastery : {};
         grudges = (d.grudges && typeof d.grudges === 'object' && !Array.isArray(d.grudges)) ? d.grudges : {};
-        bestiary = (d.bestiary && typeof d.bestiary === 'object' && !Array.isArray(d.bestiary)) ? d.bestiary : {};
+        bestiary = foldBestiaryNames((d.bestiary && typeof d.bestiary === 'object' && !Array.isArray(d.bestiary)) ? d.bestiary : {});
         seenPrompts = Array.isArray(d.seenPrompts) ? d.seenPrompts.filter(id => typeof id === 'string') : [];
         // F04. Rebuilt rather than trusted, and absent in every career file written before the
         // shelf existed, which reads as an empty shelf.
@@ -5155,6 +5155,7 @@ function loadMeta() {
         mergeCounts(mastery, m.mastery);
         mergeCounts(grudges, m.grudges);
         if (m.bestiary && typeof m.bestiary === 'object' && !Array.isArray(m.bestiary)) {
+            m.bestiary = foldBestiaryNames(m.bestiary);
             Object.keys(m.bestiary).forEach(name => {
                 const was = bestiaryEntry(name), now = m.bestiary[name] || {};
                 bestiary[name] = { met: best(was.met, now.met), killed: best(was.killed, now.killed),
@@ -7977,6 +7978,62 @@ function noteBestiary(name, field) {
 // The Archive is a standing file on everything out here, so nothing reads as a stranger.
 function hasMet(name) { return !!metaUpgrades.archive || bestiaryEntry(name).met > 0; }
 
+// F11: what a commander brings on with it - the pack it whistles up, the lieutenant it hides
+// behind, the generator keeping it standing - stood on the field with no file at all, because
+// this read ENEMY_POOL and BOSS_POOL and those units live inside the BOSS_POOL rows rather
+// than beside them. Declared in one place here so a summon cannot be added to a commander
+// without the Archive learning about it.
+function summonedRoster() {
+    const out = []; const seen = new Set();
+    BOSS_POOL.forEach(b => {
+        const kind = [[b.enrage && b.enrage.summon, 'called up when it enrages'],
+                      [b.grudge && b.grudge.spawn, 'laid while the grudge phase runs'],
+                      [b.escort, 'stands beside it from the door'],
+                      [b.ward, 'keeps it standing until it is broken']];
+        kind.forEach(([spec, how]) => {
+            if (!spec || seen.has(spec.name)) return;
+            seen.add(spec.name);
+            out.push({ name: spec.name, faction: 'COMMAND', sig: spec.sig || null, rider: null,
+                       minTier: null, range: spec.range, isHeavy: false,
+                       resistances: spec.resistances || { phys: 0, bio: 0, energy: 0 },
+                       boss: false, summonedBy: b.name, how });
+        });
+    });
+    // And the commanders you have already put down, brought back off your own record.
+    out.push({ name: REVENANT_FILE, faction: 'COMMAND', sig: null, rider: null, minTier: null,
+               range: 'melee', isHeavy: true,
+               resistances: { phys: 0, bio: 0, energy: 0 }, boss: false,
+               summonedBy: 'The Ossuary', how: 'raised from the warlords you have felled' });
+    return out;
+}
+// F11: careers written before this commit hold marks under names nothing reads any more -
+// "Warlord, Risen", "Matriarch, Twice-Risen", "Warlord, Raised". Those are the SAME fights, so
+// they are folded onto the file that now counts them rather than left stranded or thrown away.
+// Read off the pool rather than off a regex, so a commander renamed later does not quietly
+// strand its own history a second time.
+function foldBestiaryNames(book) {
+    if (!book || typeof book !== 'object') return {};
+    const out = {};
+    const add = (key, from) => {
+        const to = out[key] || (out[key] = { met: 0, killed: 0, felled: 0 });
+        ['met', 'killed', 'felled'].forEach(f => { to[f] += Number(from && from[f]) || 0; });
+    };
+    // What a commander's file has ever been called: its own name, every mark risenName can
+    // write, and the raised form - which folds to the revenant's file rather than to theirs.
+    const suffix = (name, b) => name.indexOf(b.name + ', ') === 0 ? name.slice(b.name.length + 2) : null;
+    Object.keys(book).forEach(name => {
+        let key = name;
+        for (const b of BOSS_POOL) {
+            if (name === b.name) break;                       // already canonical
+            const tail = suffix(name, b);
+            if (tail === null) continue;
+            if (tail === 'Raised') { key = REVENANT_FILE; break; }
+            if (RISEN_MARK.indexOf(tail) > 0 || /^Risen \u00d7\d+$/.test(tail)) { key = b.name; break; }
+        }
+        add(key, book[name]);
+    });
+    return out;
+}
 // Every hostile that exists, ordinary stock first and then the commanders.
 function bestiaryRoster() {
     const out = [];
@@ -7990,13 +8047,25 @@ function bestiaryRoster() {
                                       range: b.range, isHeavy: true, resistances: b.resistances, boss: true,
                                       grudge: grudgeOn(b.id),
                                       passive: b.passive || null }));
+    summonedRoster().forEach(e => out.push(e));
     return out;
 }
 function bestiaryRecord(name) { return bestiaryRoster().find(e => e.name === name) || null; }
 
-// The name a unit is filed under: an affix is a modifier on a type, not a type of its own.
+// F11: the name a unit is FILED under, which is not the name on its sprite. An affix is a
+// modifier on a type; so is a grudge. A commander that has felled you once comes back named
+// "Warlord, Risen" and used to file under that - a key bestiaryRoster does not list and
+// bestiaryRecord cannot resolve - so the moment a commander became one you had history with,
+// its file stopped counting and tapping it opened "No file on this one". The commanders you
+// have fought most were exactly the ones the dossier had lost. Identity first: a commander
+// carries its bossId whatever it is called this time.
+const REVENANT_FILE = 'Raised Commander';
 function typeNameOf(ent) {
     if (!ent || ent.isPlayer) return null;
+    // A raised one is not the commander it was - a third of the health, half the damage - so
+    // it is its own file rather than more marks on theirs.
+    if (ent.classType === 'REVENANT') return REVENANT_FILE;
+    if (ent.bossId) { const b = BOSS_POOL.find(x => x.id === ent.bossId); if (b) return b.name; }
     // The prefix is whatever the affixes wrote, and a champion writes two of them, so this
     // takes the whole bracket rather than rebuilding it from one id and missing.
     return ent.eliteType ? String(ent.name).replace(/^\*[^*]*\*\s*/, '') : ent.name;
@@ -11432,7 +11501,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    clearStaleClocks, loadoutChipsHtml, benchedFor, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
+    clearStaleClocks, loadoutChipsHtml, benchedFor, REVENANT_FILE, summonedRoster, foldBestiaryNames, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, noteKill, raiseBody, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder,

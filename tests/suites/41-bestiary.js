@@ -12,22 +12,35 @@ module.exports = {
       const r = bestiaryRoster();
       const stock = Object.values(ENEMY_POOL).flat();
       return {
+        // F11: the roster has a third source now - what a commander brings on with it, and the
+        // warlords the Ossuary raises. This assertion is the one that would have caught that
+        // source going missing, so it counts three categories rather than being widened.
         total: r.length, stock: stock.length, bosses: r.filter(e => e.boss).length,
+        brought: r.filter(e => e.summonedBy).length,
+        broughtNames: r.filter(e => e.summonedBy).map(e => e.name).sort().join(', '),
+        declared: summonedRoster().length,
         // Read off the pool rather than pinned: the last warlord joined it and files like the
         // rest, and a new commander should file itself rather than need this line edited.
         commanders: BOSS_POOL.length, road: BOSS_ROTATION.length,
         named: r.every(e => e.name && e.faction && e.resistances),
-        sigsOnStock: r.filter(e => !e.boss).every(e => e.sig && ENEMY_SIGS[e.sig]),
+        // Ordinary STOCK, which is what this claim was always about: a commander's pack is a
+        // simple unit and carries no signature of its own, and the two that do (Bulldog's riot
+        // plate) still have to name a real one.
+        sigsOnStock: r.filter(e => !e.boss && !e.summonedBy).every(e => e.sig && ENEMY_SIGS[e.sig]),
+        sigsOnBrought: r.filter(e => e.summonedBy).every(e => !e.sig || !!ENEMY_SIGS[e.sig]),
         factions: [...new Set(r.map(e => e.faction))].sort().join(),
         expected: [...Object.keys(ENEMY_POOL), 'COMMAND'].sort().join(),
         found: !!bestiaryRecord('Juggernaut'), missing: bestiaryRecord('Nobody')
       };
     });
-    ok(`every hostile has a file (${roster.total} = ${roster.stock} stock + ${roster.bosses} warlords)`,
-      roster.total === roster.stock + roster.bosses && roster.stock >= 10
+    ok(`every hostile has a file (${roster.total} = ${roster.stock} stock + ${roster.bosses} warlords + ${roster.brought} brought on)`,
+      roster.total === roster.stock + roster.bosses + roster.brought && roster.stock >= 10
       && roster.bosses === roster.commanders && roster.commanders === roster.road + 1);
+    ok(`including everything a commander brings with it (${roster.broughtNames})`,
+      roster.brought === roster.declared && roster.brought >= 6);
     ok('each named, factioned and with resistances', roster.named);
     ok('every ordinary type carries a real signature', roster.sigsOnStock);
+    ok('and a summoned one names a real signature or none at all', roster.sigsOnBrought);
     // Read off the pools, so a new faction files itself rather than needing this line edited.
     ok(`filed under the factions that exist (${roster.factions})`, roster.factions === roster.expected);
     ok('lookup finds a real one and refuses an invented one', roster.found && roster.missing === null);
