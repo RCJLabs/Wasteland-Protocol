@@ -540,6 +540,31 @@
 //
 // The kill reconciliation is unchanged, still 1-2 bodies per arm against 22-26k (the F05
 // floor), and 0 page errors on all six.
+// ── F07: what a clock that belongs to its fall is worth ─────────────────────────────────
+// The only row the audit named for this phase was "lost for good", and it is the only row that
+// moved. Matched pair, 3 x 150 an arm, this file byte-identical on both sides.
+//
+//                              pre-F07                        post-F07
+//   lost for good, per run  3.89 / 3.75 / 3.80             2.85 / 3.11 / 2.96
+//   runs that ended the road   4 / 5 / 4 of 150               2 / 2 / 4 of 150
+//   wipes per run           7.29 / 7.15 / 6.95             7.01 / 7.17 / 7.08
+//   wipes at tier ten         83% / 84% / 80%                85% / 83% / 84%
+//   score, median         20,329 / 21,496 / 18,754       20,698 / 19,740 / 21,295
+//   nodes cleared, median      77 / 78 / 72                   81 / 78 / 80
+//   withdrawals, per run    8.23 / 7.61 / 6.99             8.23 / 8.07 / 7.81
+//   regroups spent          6.31 / 6.19 / 5.98             6.03 / 6.18 / 6.11
+//
+// Lost for good clears the D17 bar outright: same direction in all three samples and complete
+// separation, 3.75-3.89 against 2.85-3.11. About 0.79 fewer operators buried a run, a fifth of
+// them. That is the size of the population that was dying on a stale clock - anybody picked up
+// once and knocked down again, which at tier ten is most of a squad - and it is the number the
+// phase existed to move.
+//
+// NOTHING ELSE SEPARATES. Wipes, the tier-ten share, score, withdrawals and regroups all
+// overlap; nodes cleared touches at 78 without separating. Which is the right shape for this
+// phase: fewer operators are lost for good, and the road is no easier to walk. Read the
+// "ended the road" row as noise rather than as a cost - it is 2-5 careers out of 150 either
+// way, it overlaps, and it points the wrong way for a fix that only ever saves lives.
 const path = require('path');
 const { serve } = require('./server');
 
