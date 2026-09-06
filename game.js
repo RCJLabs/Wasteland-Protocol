@@ -7016,9 +7016,22 @@ function resolveEvent(idx) {
     renderEventChoices();
     renderCastTag(activeEvent.cast);
 }
+// F08: the three lines below stood copied in finishEvent, finishShop and finishCamp and were
+// simply missing from both recruit exits, so a RECRUIT node was free depth - walk in, sign or don't,
+// and walk out onto the same tier you arrived on, with the run summary never counting it.
+// bankNode is the fight's version of this and does more than a quiet node should: it resets
+// momentum and closes ranks. This is the quiet version, and now there is one of it.
+function finishQuietNode() {
+    currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState();
+    // renderMap does not stop for a promotion - only afterNode does, and that is the fight's
+    // exit. A quiet node can queue one too (a recruit's par levels, an event that pays XP), so
+    // the screen is put up here rather than left for whatever routes through afterNode next.
+    if (pendingPerkOffers.length) { renderPerkOffer(); return; }
+    renderMap();
+}
 function finishEvent() {
     activeEvent = null; eventOutcome = null;
-    currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap();
+    finishQuietNode();
 }
 
 let extractArmed = false;
@@ -7146,7 +7159,7 @@ function resolveCamp(type) {
 }
 function finishCamp() {
     atCamp = false; campOutcome = null;
-    currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap();
+    finishQuietNode();
 }
 
 // ── The Armory ──────────────────────────────────────────────────────────────────────────
@@ -7232,15 +7245,23 @@ function renderRecruit() {
     firePrompt('RECRUIT');
     if (!pendingRecruit) { renderMap(); return; }
     switchScreen('screen-recruit');
-    const tpl = recruitById(pendingRecruit.id);
+    // F08: recruitById reads the whole pool, so somebody already signed still came back with a
+    // card and a live SIGN button priced in scrap the player could afford - and signOnRecruit
+    // then refused it silently. A fallback can put a run back on a node it has already taken.
+    const signedAlready = !!(pendingRecruit.id && playerRoster.some(c => c.id === pendingRecruit.id));
+    const tpl = signedAlready ? null : recruitById(pendingRecruit.id);
     const body = document.getElementById('recruit-body');
     const note = document.getElementById('recruit-note');
     if (!tpl) {
         // Everyone who was out here is already with you. The camp is still worth stripping.
-        note.innerText = 'Cold ashes and a bedroll nobody is coming back for. Whoever was here has already thrown in with you.';
+        note.innerText = signedAlready
+            ? 'You have already been here. Whoever was holding this position is with you now.'
+            : 'Cold ashes and a bedroll nobody is coming back for. Whoever was here has already thrown in with you.';
         body.innerHTML = '';
         document.getElementById('recruit-sign').style.display = 'none';
-        document.getElementById('recruit-leave').innerText = `TAKE WHAT IS LEFT (+${EMPTY_POOL_SCRAP} SCRAP)`;
+        // The label quoted the base rather than what the button actually pays.
+        document.getElementById('recruit-leave').innerText = signedAlready
+            ? 'MOVE ON' : `TAKE WHAT IS LEFT (+${emptyPoolScrap()} SCRAP)`;
         return;
     }
     note.innerText = 'Somebody has been holding this position on their own. They will come, for a price.';
@@ -7270,22 +7291,34 @@ function signOnRecruit() {
     // "levels kept stalling, starving the perk economy". Levelling a recruit up to par on it left
     // them needing 1702 XP for level 9 where the squad they joined needs 810 - 2.1x, and 3.2x by
     // level 12 - so a signed recruit was quietly put on the curve the rest of the game abandoned.
-    while (ch.level < par) { ch.level++; ch.perkPoints++; ch.xpToNext = Math.floor(ch.xpToNext * XP_CURVE); }
+    let gained = 0;
+    while (ch.level < par) { ch.level++; ch.perkPoints++; ch.xpToNext = Math.floor(ch.xpToNext * XP_CURVE); gained++; }
     playerRoster.push(ch);
+    // F08: the levels above bank a point each and used to stop there, so somebody signed six
+    // sectors deep arrived with eight points nobody was ever asked about - the only door left
+    // was the Outpost, and until F06 that door threw. Offered here on the same rule awardXp
+    // uses: a screen while there is something to decide, and the point banked once there is
+    // not. The stack is safe now because F06 rolls each offer when its screen is drawn.
+    for (let i = 0; i < gained; i++) {
+        if (unheldSigsFor(ch).length || capstoneOpen(ch)) pendingPerkOffers.push({ charId: ch.id, options: rollPerkOffer(ch) });
+    }
     pendingRecruit.taken = true;
     if (runStats) runStats.recruited = (runStats.recruited || 0) + 1;
     playSFX('heal', 1.5);
-    saveGameState(); renderMap();
+    finishQuietNode();
 }
 
 function leaveRecruit() {
-    // An empty camp still pays out, the same way an exhausted relic pool does.
+    // An empty camp still pays out, the same way an exhausted relic pool does - and F08: at the
+    // same price. This paid the flat 150 while the pool it claims to mirror pays it through
+    // emptyPoolScrap, so the camp was worth a fifth of the relic pool by sector 5.
     if (pendingRecruit && !recruitById(pendingRecruit.id)) {
-        scrap += EMPTY_POOL_SCRAP;
-        if (runStats) runStats.scrapEarned += EMPTY_POOL_SCRAP;
+        const paid = emptyPoolScrap();
+        scrap += paid;
+        if (runStats) runStats.scrapEarned += paid;
     }
     pendingRecruit = null;
-    saveGameState(); renderMap();
+    finishQuietNode();
 }
 
 function shopItemLabel(it) {
@@ -7364,7 +7397,7 @@ function shopRerollQuirk(charId) {
 
 function finishShop() {
     activeShop = null; shopRerollPick = false; pendingRecruit = null;
-    currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState(); renderMap();
+    finishQuietNode();
 }
 
 // ── Enemies that do things ──────────────────────────────────────────────────────────────
