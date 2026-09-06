@@ -1,44 +1,55 @@
+/* F14: the type scale. TEXT SIZE used to reach nine rules out of a hundred and ninety-five -
+   166 fixed pixel sizes overrode it - so the setting moved almost nothing and the 8-to-11px
+   text most of this game is set in had no working way to get bigger. Every font-size is now in
+   rem against this root, so one number moves all of them. Non-font pixels are untouched: this
+   scales type, not layout. */
+html { font-size: calc(16px * var(--text-scale, 1)); }
+/* The root is 16px so a rem is a round number, but body is monospace and a monospace default is
+   13px - so everything that inherits rather than declaring a size was reading 13. Restated in
+   rem, which keeps it 13 at scale 1 and lets the setting move it for the first time. */
+body { font-size: 0.8125rem; }
+
 body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0; padding: 0; display: flex; justify-content: center; height: 100dvh; align-items: center; overflow: hidden; }
 #engine { width: 100%; max-width: 900px; height: 100dvh; background: #000; position: relative; display: flex; flex-direction: column; overflow: hidden; }
 
 #screen-title { display: flex; flex-direction: column; justify-content: center; align-items: center; height: 100%; background: linear-gradient(rgba(10, 10, 10, 0.25), rgba(0, 0, 0, 0.88)), repeating-linear-gradient(45deg, rgba(17, 17, 17, 0.35) 0, rgba(17, 17, 17, 0.35) 2px, transparent 2px, transparent 6px), url('bg_title.webp'); background-size: cover, auto, cover; background-position: center; text-align: center; padding: 20px; }
-.title-header { font-size: clamp(30px, 8vw, 60px); color: #B8860B; font-weight: bold; text-transform: uppercase; letter-spacing: 4px; text-shadow: 3px 3px 0px #8B0000, 0 0 15px rgba(184, 134, 11, 0.5); margin-bottom: 10px; }
-.title-sub { color: #666; font-size: clamp(12px, 3vw, 16px); letter-spacing: 8px; margin-bottom: 8vh; text-shadow: 1px 1px 2px #000; }
+.title-header { font-size: clamp(1.875rem, calc(8vw * var(--text-scale, 1)), 3.75rem); color: #B8860B; font-weight: bold; text-transform: uppercase; letter-spacing: 4px; text-shadow: 3px 3px 0px #8B0000, 0 0 15px rgba(184, 134, 11, 0.5); margin-bottom: 10px; }
+.title-sub { color: #666; font-size: clamp(0.75rem, calc(3vw * var(--text-scale, 1)), 1rem); letter-spacing: 8px; margin-bottom: 8vh; text-shadow: 1px 1px 2px #000; }
 .title-menu { display: flex; flex-direction: column; gap: 20px; width: 100%; max-width: 300px; }
-.title-btn { background: #111; color: #ccc; border: 2px solid #444; padding: 20px; font-family: monospace; font-size: calc(clamp(14px, 4vw, 18px) * var(--text-scale, 1)); font-weight: bold; cursor: pointer; text-transform: uppercase; transition: all 0.2s ease; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
+.title-btn { background: #111; color: #ccc; border: 2px solid #444; padding: 20px; font-family: monospace; font-size: clamp(0.875rem, calc(4vw * var(--text-scale, 1)), 1.125rem); font-weight: bold; cursor: pointer; text-transform: uppercase; transition: all 0.2s ease; box-shadow: 0 4px 6px rgba(0,0,0,0.5); }
 .title-btn:hover { background: #8B0000; color: #fff; border-color: #ff0000; box-shadow: 0 0 15px rgba(255,0,0,0.4); transform: translateY(-2px); }
 .title-btn:active { transform: translateY(2px); box-shadow: none; }
 .btn-continue { border-color: #B8860B; color: #B8860B; }
 .btn-meta { border-color: #4488ff; color: #4488ff; }
 .btn-corrupt { border-color: #8B0000; color: #ff6666; border-style: dashed; }
-.title-warning { text-align: center; font-size: 10px; letter-spacing: 1px; color: #ff8844; border: 1px solid #8B0000; background: rgba(60,0,0,0.35); padding: 6px 8px; margin-bottom: 6px; line-height: 1.4; }
+.title-warning { text-align: center; font-size: 0.625rem; letter-spacing: 1px; color: #ff8844; border: 1px solid #8B0000; background: rgba(60,0,0,0.35); padding: 6px 8px; margin-bottom: 6px; line-height: 1.4; }
 
-.settings-icon { position: absolute; top: 8px; right: 12px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; font-size: 24px; cursor: pointer; color: #888; transition: 0.2s; z-index: 100; text-shadow: 0 0 5px #000; }
+.settings-icon { position: absolute; top: 8px; right: 12px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: none; border: none; padding: 0; font-size: 1.5rem; cursor: pointer; color: #888; transition: 0.2s; z-index: 100; text-shadow: 0 0 5px #000; }
 .settings-icon:hover { color: #fff; transform: rotate(90deg); }
 #screen-settings { display: none; flex-direction: column; justify-content: flex-start; align-items: center; padding: 20px; height: 100%; overflow-y: auto; box-sizing: border-box; background: rgba(0,0,0,0.95); z-index: 200; position: absolute; top:0; left:0; width:100%; }
 .settings-menu { display: flex; flex-direction: column; gap: 12px; width: 100%; max-width: 300px; text-align: center; padding-bottom: 24px; }
 /* The settings list outgrew a phone screen. It scrolls, and its own buttons are compact so the
    whole list is reachable without one - the title screen's buttons stay full size. */
 .settings-menu .title-btn { padding: 13px 16px; }
-.settings-title { color: #B8860B; font-size: 24px; font-weight: bold; margin: 12px 0 16px; letter-spacing: 2px; flex-shrink: 0; }
+.settings-title { color: #B8860B; font-size: 1.5rem; font-weight: bold; margin: 12px 0 16px; letter-spacing: 2px; flex-shrink: 0; }
 
 /* The upgrade list scrolls inside its own container, with the header and the way out pinned.
    Scrolling the whole screen put RETURN TO TITLE below the fold once a fifth card existed. */
 #screen-citadel { display: none; flex-direction: column; padding: 20px; height: 100%; box-sizing: border-box; background: linear-gradient(rgba(10, 10, 20, 0.9), rgba(0, 0, 0, 0.95)); overflow: hidden; }
 #screen-citadel .outpost-roster { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 4px; }
 #screen-citadel .return-btn { flex-shrink: 0; }
-.citadel-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #4488ff; font-weight: bold; font-size: clamp(14px, 4.4vw, 18px); margin-bottom: 15px; flex-shrink: 0; padding-right: 56px; }
+.citadel-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #4488ff; font-weight: bold; font-size: clamp(0.875rem, calc(4.4vw * var(--text-scale, 1)), 1.125rem); margin-bottom: 15px; flex-shrink: 0; padding-right: 56px; }
 .skull-icon { color: #fff; text-shadow: 0 0 5px #ff4444; }
 
 #screen-map { display: none; flex-direction: column; padding: 20px; height: 100%; box-sizing: border-box; position: relative;}
-.map-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #B8860B; font-weight: bold; font-size: clamp(14px, 4.4vw, 18px); margin-bottom: 15px; flex-shrink: 0; padding-right: 56px; }
-.outpost-btn { background: #0a110a; border: 1px solid #6B8E23; color: #6B8E23; font-weight: bold; padding: 15px; margin-bottom: 15px; font-family: monospace; font-size: 14px; cursor: pointer; text-align: center; border-radius: 4px; transition: 0.2s; flex-shrink: 0;}
+.map-header { display: flex; justify-content: space-between; align-items: center; gap: 10px; color: #B8860B; font-weight: bold; font-size: clamp(0.875rem, calc(4.4vw * var(--text-scale, 1)), 1.125rem); margin-bottom: 15px; flex-shrink: 0; padding-right: 56px; }
+.outpost-btn { background: #0a110a; border: 1px solid #6B8E23; color: #6B8E23; font-weight: bold; padding: 15px; margin-bottom: 15px; font-family: monospace; font-size: 0.875rem; cursor: pointer; text-align: center; border-radius: 4px; transition: 0.2s; flex-shrink: 0;}
 .outpost-btn:hover { background: #6B8E23; color: #000; }
 
 /* F13: this could not shrink and had no ceiling, so every relic a run picked up came off the
    route graph. Capped at a share of the screen with its own scroll, and allowed to shrink below
    that when the graph's floor needs the room - a header has to stay a header. */
-.bounty-panel { background: #0a0a0a; border: 1px solid #4488ff; padding: 10px; margin-bottom: 15px; font-size: 11px; display: flex; flex-direction: column; gap: 5px; flex-shrink: 1; max-height: 38%; overflow-y: auto; }
+.bounty-panel { background: #0a0a0a; border: 1px solid #4488ff; padding: 10px; margin-bottom: 15px; font-size: 0.6875rem; display: flex; flex-direction: column; gap: 5px; flex-shrink: 1; max-height: 38%; overflow-y: auto; }
 /* A control has to be pressable: N13 set 44px as the floor for anything on this screen and the
    first draft of this line was 17px tall. The negative margin keeps the panel the height it was
    while the target reaches the floor - the row it replaced was a title, this one is a button. */
@@ -57,12 +68,12 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .set-list { display: flex; flex-direction: column; gap: 2px; margin-top: 7px; }
 .set-list:empty { display: none; }
 .set-head { color: #4488ff; font-weight: bold; letter-spacing: 1px; border-bottom: 1px solid #222; padding-bottom: 3px; margin-bottom: 2px; }
-.set-item { display: flex; justify-content: space-between; gap: 8px; font-size: 10px; letter-spacing: 0.5px; }
-.set-tag { flex-shrink: 0; letter-spacing: 1px; font-size: 9px; }
-.set-up { color: #c9a84a; font-weight: bold; font-size: 10px; letter-spacing: 0.5px; line-height: 1.45; }
+.set-item { display: flex; justify-content: space-between; gap: 8px; font-size: 0.625rem; letter-spacing: 0.5px; }
+.set-tag { flex-shrink: 0; letter-spacing: 1px; font-size: 0.5625rem; }
+.set-up { color: #c9a84a; font-weight: bold; font-size: 0.625rem; letter-spacing: 0.5px; line-height: 1.45; }
 .set-near { color: #8a8578; }
 .set-near .set-tag { color: #7ab0d0; }
-.set-note { font-size: 9px; color: #6a655c; letter-spacing: 0; margin-top: 2px; }
+.set-note { font-size: 0.5625rem; color: #6a655c; letter-spacing: 0; margin-top: 2px; }
 
 /* F13: and the graph keeps a floor whatever the panel above it is doing. */
 .map-viewport { flex-grow: 1; min-height: 45%; border: 1px solid #222; background: linear-gradient(rgba(15,15,15,0.9), rgba(5,5,5,0.9)), repeating-linear-gradient(0deg, transparent, transparent 19px, #1a1a1a 19px, #1a1a1a 20px), repeating-linear-gradient(90deg, transparent, transparent 19px, #1a1a1a 19px, #1a1a1a 20px); overflow-y: auto; display: flex; flex-direction: column; align-items: center; padding: 30px 0; position: relative; }
@@ -92,12 +103,12 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .wx-blood { background: #ff4444; box-shadow: 0 0 6px #ff4444; }
 
 .map-node { width: 75px; height: 75px; border-radius: 50%; background: #111; border: 2px solid #444; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: all 0.3s; font-family: monospace; color: #888; padding: 0; position: relative; }
-.node-lbl { font-size: 9px; margin-top: 4px; letter-spacing: 1px; font-weight: bold; text-align: center; }
-.node-icon { font-size: 22px; }
+.node-lbl { font-size: 0.5625rem; margin-top: 4px; letter-spacing: 1px; font-weight: bold; text-align: center; }
+.node-icon { font-size: 1.375rem; }
 .node-locked { opacity: 0.3; cursor: not-allowed; }
 .node-cleared { border-color: #6B8E23; color: #555; background: #0a110a; }
 .node-cleared .node-icon { filter: grayscale(100%); opacity: 0.5; }
-.node-cleared::after { content: '✓'; position: absolute; color: #6B8E23; font-size: 30px; font-weight: bold; opacity: 0.5; }
+.node-cleared::after { content: '✓'; position: absolute; color: #6B8E23; font-size: 1.875rem; font-weight: bold; opacity: 0.5; }
 
 .elite-node { border-color: #8B0000; box-shadow: 0 0 10px #8B0000; }
 .elite-node .node-lbl { color: #ff4444; }
@@ -115,8 +126,8 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 /* F12: width 100% plus 25px of padding and a 2px border on a content box is 54px wider than
    whatever holds it, at every width - so this overflowed on every phone the game runs on. */
 .event-box { box-sizing: border-box; background: #050505; border: 2px solid #B8860B; padding: 25px; width: 100%; max-width: 500px; display: flex; flex-direction: column; gap: 15px; text-align: center; box-shadow: 0 10px 20px rgba(0,0,0,0.8); }
-.event-title { color: #B8860B; font-size: 22px; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; border-bottom: 1px solid #333; padding-bottom: 10px; }
-.event-desc { color: #ccc; font-size: 14px; line-height: 1.6; margin-bottom: 15px; }
+.event-title { color: #B8860B; font-size: 1.375rem; font-weight: bold; text-transform: uppercase; letter-spacing: 2px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+.event-desc { color: #ccc; font-size: 0.875rem; line-height: 1.6; margin-bottom: 15px; }
 /* Who this is and what they make of you, above their own words. The standing carries a word as
    well as a colour, for the same reason the status marks do. */
 /* The standing contract is one of the board's rows but not one of its three: a rule above it
@@ -124,17 +135,17 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 /* A spot whose prerequisite is not standing yet: still visible on the hill, clearly not yours
    to buy. Dimmed rather than hidden, so the tree is legible before it is affordable. */
 .upgrade-card.upg-sealed { opacity: 0.55; border-color: #3a3a3a; }
-.upgrade-pitch { color: #8a8a8a; font-size: calc(11px * var(--text-scale, 1)); line-height: 1.4; margin-top: 4px; }
+.upgrade-pitch { color: #8a8a8a; font-size: 0.6875rem; line-height: 1.4; margin-top: 4px; }
 .bounty-standing { border-top: 1px solid #3a3a2a; margin-top: 6px; padding-top: 8px; color: #d2a24c; }
 .event-cast { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 10px 0 12px; }
-.event-cast .cast-name { color: #B8860B; font-size: calc(11px * var(--text-scale, 1)); letter-spacing: 1.5px; }
-.event-cast .cast-band { font-size: calc(10px * var(--text-scale, 1)); letter-spacing: 1px; padding: 3px 8px; border: 1px solid; }
+.event-cast .cast-name { color: #B8860B; font-size: 0.6875rem; letter-spacing: 1.5px; }
+.event-cast .cast-band { font-size: 0.625rem; letter-spacing: 1px; padding: 3px 8px; border: 1px solid; }
 .cast-band.cast-good { color: #6B8E23; border-color: #4a6b19; background: rgba(40,60,10,0.35); }
 .cast-band.cast-bad  { color: #ff6b6b; border-color: #8B0000; background: rgba(70,10,10,0.35); }
 .cast-band.cast-idle { color: #9a9a9a; border-color: #4a4a4a; background: rgba(255,255,255,0.03); }
 .cast-band.cast-new  { color: #7fa7d4; border-color: #35506b; background: rgba(15,30,50,0.4); }
 .event-choices { display: flex; flex-direction: column; gap: 10px; }
-.event-btn { background: #111; color: #fff; border: 1px solid #444; padding: 12px; font-family: monospace; font-size: 13px; cursor: pointer; transition: 0.2s; text-transform: uppercase; }
+.event-btn { background: #111; color: #fff; border: 1px solid #444; padding: 12px; font-family: monospace; font-size: 0.8125rem; cursor: pointer; transition: 0.2s; text-transform: uppercase; }
 .event-btn:hover:not(:disabled) { background: #B8860B; color: #000; border-color: #B8860B; }
 .event-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
@@ -149,20 +160,20 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 #screen-outpost { display: none; flex-direction: column; gap: 15px; padding: 20px; height: 100%; box-sizing: border-box; overflow-y: auto;}
 
 .op-tabs { display: flex; gap: 10px; margin-bottom: 5px; flex-wrap: wrap; }
-.op-tab-btn { flex: 1; min-width: 30%; padding: 10px; background: #111; border: 1px solid #444; color: #888; cursor: pointer; font-weight: bold; font-family: monospace; font-size: 12px; }
+.op-tab-btn { flex: 1; min-width: 30%; padding: 10px; background: #111; border: 1px solid #444; color: #888; cursor: pointer; font-weight: bold; font-family: monospace; font-size: 0.75rem; }
 .op-tab-active { background: #B8860B; color: #000; border-color: #B8860B; }
 
 .outpost-roster { display: grid; grid-template-columns: 1fr; gap: 15px; }
 .upgrade-card { background: #0a0a0a; border: 1px solid #333; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
 .upgrade-header { display: flex; justify-content: space-between; align-items: center; color: #B8860B; font-weight: bold; border-bottom: 1px solid #222; padding-bottom: 5px;}
-.upgrade-stats { display: flex; justify-content: space-between; font-size: 11px; color: #888; }
+.upgrade-stats { display: flex; justify-content: space-between; font-size: 0.6875rem; color: #888; }
 .upgrade-btn-group { display: flex; gap: 10px; margin-top: 5px; flex-wrap: wrap;}
-.upg-btn { flex: 1; min-width: 30%; padding: 10px; background: #111; color: #ccc; border: 1px solid #444; cursor: pointer; font-family: monospace; font-size: 12px; transition: 0.2s;}
+.upg-btn { flex: 1; min-width: 30%; padding: 10px; background: #111; color: #ccc; border: 1px solid #444; cursor: pointer; font-family: monospace; font-size: 0.75rem; transition: 0.2s;}
 .upg-btn:hover:not(:disabled) { background: #333; border-color: #888; color: #fff;}
 .upg-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 /* How many slots are left, next to what is already bolted on. The list used to only ever
    grow and could say neither. */
-.aug-slots { color: #4488ff; font-size: 10px; font-variant-numeric: tabular-nums; }
+.aug-slots { color: #4488ff; font-size: 0.625rem; font-variant-numeric: tabular-nums; }
 .aug-full { color: #6f7c8a; }
 .sub-menu-btn { min-width: 45%; } 
 
@@ -177,59 +188,59 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .perk-btn { background: #1a1a2a; border-color: #4488ff; color: #4488ff; font-weight: bold; }
 .perk-btn:hover:not(:disabled) { background: #2a2a4a; color: #fff; }
 .cost-txt { color: #B8860B; }
-.return-btn { background: #111; color: #ccc; border: 1px solid #444; padding: 15px; font-family: monospace; font-size: 14px; cursor: pointer; text-transform: uppercase; margin-top: auto; transition: 0.2s; flex-shrink:0;}
+.return-btn { background: #111; color: #ccc; border: 1px solid #444; padding: 15px; font-family: monospace; font-size: 0.875rem; cursor: pointer; text-transform: uppercase; margin-top: auto; transition: 0.2s; flex-shrink:0;}
 .return-btn:hover { background: #222; border-color: #888; }
 
 .inventory-sect { background: #111; border: 1px solid #444; padding: 10px; margin-top: 10px; }
-.inventory-title { color: #B8860B; font-weight: bold; font-size: 13px; margin-bottom: 5px; display:flex; justify-content: space-between;}
+.inventory-title { color: #B8860B; font-weight: bold; font-size: 0.8125rem; margin-bottom: 5px; display:flex; justify-content: space-between;}
 .inventory-grid { display: flex; gap: 5px; flex-wrap: wrap; }
-.inv-slot { background: #1a1a1a; border: 1px solid #333; padding: 6px; font-size: 11px; color: #aaa; cursor: pointer; flex: 1; min-width: 45%; text-align: center; }
+.inv-slot { background: #1a1a1a; border: 1px solid #333; padding: 6px; font-size: 0.6875rem; color: #aaa; cursor: pointer; flex: 1; min-width: 45%; text-align: center; }
 .inv-slot:hover:not(:disabled) { background: #333; color: #fff; border-color: #888; }
 
 #screen-combat { display: none; flex-direction: column; height: 100%; }
 .sky-layer { background-size: cover; background-position: center bottom; flex-grow: 1; display: flex; flex-direction: column; position: relative; }
-#queue-display { text-align: center; color: #ccc; padding: 8px; font-size: clamp(10px, 3vw, 12px); letter-spacing: 2px; font-weight: bold; background: rgba(0,0,0,0.7); text-shadow: 1px 1px 2px #000; border-bottom: 1px solid #222; }
+#queue-display { text-align: center; color: #ccc; padding: 8px; font-size: clamp(0.625rem, calc(3vw * var(--text-scale, 1)), 0.75rem); letter-spacing: 2px; font-weight: bold; background: rgba(0,0,0,0.7); text-shadow: 1px 1px 2px #000; border-bottom: 1px solid #222; }
 
-.runover-score { font-family: monospace; font-size: clamp(38px, 12vw, 60px); font-weight: bold; color: #B8860B; text-align: center; letter-spacing: 2px; text-shadow: 2px 2px 0 #8B0000; margin: 6px 0 2px; }
-.runover-best { text-align: center; font-size: 11px; letter-spacing: 2px; color: #6B8E23; text-transform: uppercase; margin-bottom: 14px; min-height: 14px; }
-.runover-lines { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #aaa; border-top: 1px solid #222; border-bottom: 1px solid #222; padding: 10px 0; margin-bottom: 14px; }
+.runover-score { font-family: monospace; font-size: clamp(2.375rem, calc(12vw * var(--text-scale, 1)), 3.75rem); font-weight: bold; color: #B8860B; text-align: center; letter-spacing: 2px; text-shadow: 2px 2px 0 #8B0000; margin: 6px 0 2px; }
+.runover-best { text-align: center; font-size: 0.6875rem; letter-spacing: 2px; color: #6B8E23; text-transform: uppercase; margin-bottom: 14px; min-height: 14px; }
+.runover-lines { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; color: #aaa; border-top: 1px solid #222; border-bottom: 1px solid #222; padding: 10px 0; margin-bottom: 14px; }
 .runover-line { display: flex; justify-content: space-between; gap: 10px; }
 .runover-line span:last-child { color: #ccc; font-weight: bold; }
-.title-wins { text-align: center; font-size: 11px; letter-spacing: 2px; color: #c9a84a; margin-bottom: 8px; }
+.title-wins { text-align: center; font-size: 0.6875rem; letter-spacing: 2px; color: #c9a84a; margin-bottom: 8px; }
 /* The last sector counts the same as every other one; it just says so in gold. */
 .sector-last { color: #c9a84a; }
 /* The order picker sits above the contracts because it is the bigger decision: a contract
    changes how hard the road is, an order changes how much of it there is. */
-.order-note { font-size: 11px; color: #8a8272; text-align: center; padding: 0 14px; line-height: 1.5; }
+.order-note { font-size: 0.6875rem; color: #8a8272; text-align: center; padding: 0 14px; line-height: 1.5; }
 .order-list { display: flex; flex-direction: column; gap: 8px; padding: 0 14px; }
 .order-card { display: flex; flex-direction: column; gap: 4px; text-align: left; background: #0a0a0a; border: 1px solid #333; color: #999; padding: 10px 12px; font-family: monospace; cursor: pointer; }
 .order-card.order-on { border-color: #B8860B; background: #171308; color: #ddd; }
 /* The longest order has the longest name and the longest reach line; on a narrow card they do
    not both fit, so the reach drops under the name rather than wrapping through it. */
 .order-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.order-name { font-weight: bold; letter-spacing: 1px; font-size: 13px; white-space: nowrap; }
+.order-name { font-weight: bold; letter-spacing: 1px; font-size: 0.8125rem; white-space: nowrap; }
 .order-card.order-on .order-name { color: #B8860B; }
-.order-reach { font-size: 10px; letter-spacing: 1px; color: #8a8272; white-space: nowrap; }
-.order-desc { font-size: 11px; line-height: 1.45; }
+.order-reach { font-size: 0.625rem; letter-spacing: 1px; color: #8a8272; white-space: nowrap; }
+.order-desc { font-size: 0.6875rem; line-height: 1.45; }
 /* The recall, rendered into the sector-secured panel rather than on a screen of its own. */
 .recall-head { color: #6B8E23; text-align: center; letter-spacing: 2px; margin: 4px 0 8px; }
-.recall-note { font-size: 11px; color: #aaa; line-height: 1.55; margin-bottom: 12px; }
-.recall-lines { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: #aaa; border-top: 1px solid #222; border-bottom: 1px solid #222; padding: 10px 0; margin-bottom: 14px; }
+.recall-note { font-size: 0.6875rem; color: #aaa; line-height: 1.55; margin-bottom: 12px; }
+.recall-lines { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; color: #aaa; border-top: 1px solid #222; border-bottom: 1px solid #222; padding: 10px 0; margin-bottom: 14px; }
 .return-btn.recall-home { border-color: #6B8E23; color: #6B8E23; margin-bottom: 10px; }
 .runover-score.score-won { color: #c9a84a; text-shadow: 2px 2px 0 #4a3a10; }
-#victory-title { font-size: clamp(24px, 8vw, 34px); text-shadow: 2px 2px 0 #4a3a10; }
-.victory-sub { text-align: center; font-size: 11px; letter-spacing: 2px; color: #8a7a3a; text-transform: uppercase; margin-bottom: 10px; }
-#weather-banner { text-align: center; font-size: 11px; font-weight: bold; padding: 4px; letter-spacing: 1px; display: none; text-shadow: 1px 1px 2px #000; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
+#victory-title { font-size: clamp(1.5rem, calc(8vw * var(--text-scale, 1)), 2.125rem); text-shadow: 2px 2px 0 #4a3a10; }
+.victory-sub { text-align: center; font-size: 0.6875rem; letter-spacing: 2px; color: #8a7a3a; text-transform: uppercase; margin-bottom: 10px; }
+#weather-banner { text-align: center; font-size: 0.6875rem; font-weight: bold; padding: 4px; letter-spacing: 1px; display: none; text-shadow: 1px 1px 2px #000; box-shadow: 0 2px 4px rgba(0,0,0,0.5); }
 /* The ground reads quieter than the sky: weather is an event happening to the fight, ground is
    the fight's own floor. Each terrain keeps one colour across the map dot and this line. */
-#ground-banner { text-align: center; font-size: 10px; font-weight: bold; padding: 3px; letter-spacing: 1px; display: none; text-shadow: 1px 1px 2px #000; border-top: 1px solid rgba(0,0,0,0.5); }
+#ground-banner { text-align: center; font-size: 0.625rem; font-weight: bold; padding: 3px; letter-spacing: 1px; display: none; text-shadow: 1px 1px 2px #000; border-top: 1px solid rgba(0,0,0,0.5); }
 .tr-tunnel { background: #2a1f14; color: #c9a227; }
 .tr-flats  { background: #1d2430; color: #8fb6d6; }
 .tr-ruins  { background: #23241f; color: #a8b09a; }
 /* On the map it is a single lettered chip beside the weather dot, so the two never merge into
    one indistinguishable mark. */
 .node-ground { position: absolute; right: 3px; bottom: 3px; width: 13px; height: 13px; line-height: 13px;
-  font-size: 9px; font-weight: bold; text-align: center; border: 1px solid rgba(0,0,0,0.6); }
+  font-size: 0.5625rem; font-weight: bold; text-align: center; border: 1px solid rgba(0,0,0,0.6); }
 .weather-smog { background: rgba(40, 60, 10, 0.8); color: #aaffaa; display: block !important; border-bottom: 1px solid #6B8E23; }
 .weather-sand { background: rgba(80, 50, 10, 0.8); color: #ffcc66; display: block !important; border-bottom: 1px solid #B8860B; }
 .weather-shrap { background: rgba(40, 40, 40, 0.8); color: #cccccc; display: block !important; border-bottom: 1px solid #888; }
@@ -239,9 +250,9 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .weather-haze { background: rgba(62, 16, 16, 0.85); color: #ff9d9d; display: block !important; border-bottom: 1px solid #c85a5a; }
 /* A faction's own sky over its own ground. It gets its own line under the two banners rather
    than rewording either: both are still true, and the confluence is the third fact. */
-.confluence-banner { background: rgba(30, 24, 40, 0.9); color: #d9b8ff; border-bottom: 1px solid #7d5fa8; font-size: 10px; letter-spacing: 1px; padding: 3px 8px; text-align: center; }
+.confluence-banner { background: rgba(30, 24, 40, 0.9); color: #d9b8ff; border-bottom: 1px solid #7d5fa8; font-size: 0.625rem; letter-spacing: 1px; padding: 3px 8px; text-align: center; }
 
-.intent-icon { position: absolute; top: -25px; font-size: 14px; background: #111; border: 1px solid #444; border-radius: 50%; width: 22px; height: 22px; display: flex; justify-content: center; align-items: center; z-index: 20; box-shadow: 0 2px 4px #000; }
+.intent-icon { position: absolute; top: -25px; font-size: 0.875rem; background: #111; border: 1px solid #444; border-radius: 50%; width: 22px; height: 22px; display: flex; justify-content: center; align-items: center; z-index: 20; box-shadow: 0 2px 4px #000; }
 
 .battlefield { position: relative; display: flex; justify-content: center; gap: clamp(18px, 9vw, 70px); flex-grow: 1; align-items: flex-end; padding: 0 11px; box-sizing: border-box; margin-bottom: 12vh; /* overridden per backdrop by applyCombatScenery; relative so tracer lines can anchor to it */ }
 .team { display: flex; align-items: flex-end; justify-content: center; min-width: 0; }
@@ -284,7 +295,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .entity.targetable-enemy .portrait { filter: drop-shadow(0 0 12px #ff0000); cursor: pointer; }
 .entity.targetable-ally .portrait { filter: drop-shadow(0 0 12px #6B8E23); cursor: pointer; }
 .entity.targetable-enemy:active .portrait { filter: drop-shadow(0 0 20px #ff0000) brightness(1.5); }
-.hp-text { font-size: clamp(9px, 2.5vw, 12px); font-weight: bold; margin-bottom: 2px; color: #fff; text-shadow: 1px 1px 3px #000; text-align: center; white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 3px; }
+.hp-text { font-size: clamp(0.5625rem, calc(2.5vw * var(--text-scale, 1)), 0.75rem); font-weight: bold; margin-bottom: 2px; color: #fff; text-shadow: 1px 1px 3px #000; text-align: center; white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 3px; }
 /* What a slot too narrow for its own text stops paying for - see fitSlotText, which measures
    the ink rather than the box. The max is the bar underneath drawn again in digits; the
    letter-spacing on the chips and tags is tracking and nothing else. */
@@ -295,23 +306,23 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .hp-fill { height: 100%; transition: width 0.3s ease; }
 .player-hp { background-color: #8B0000; } .enemy-hp { background-color: #8B0000; }
 .res-row { display: flex; justify-content: center; gap: 3px; margin-top: 2px; line-height: 1; }
-.res { font-size: 10px; font-weight: bold; line-height: 1; padding: 1px 2px; border-radius: 2px; text-shadow: 0 1px 2px #000; background: rgba(0,0,0,0.55); }
+.res { font-size: 0.625rem; font-weight: bold; line-height: 1; padding: 1px 2px; border-radius: 2px; text-shadow: 0 1px 2px #000; background: rgba(0,0,0,0.55); }
 .res-weak { color: #ff9c3a; }
 .res-strong { color: #7f8ea3; }
 .res-immune { color: #55606e; text-decoration: line-through; }
 /* Six statuses can stack on one unit, which will not fit on the HP line beside the numbers.
    They get their own row and wrap onto a second line rather than being squeezed and clipped. */
-.status-badge { font-size: 10px; line-height: 12px; display: flex; flex-wrap: wrap; align-items: center;
+.status-badge { font-size: 0.625rem; line-height: 12px; display: flex; flex-wrap: wrap; align-items: center;
   justify-content: center; gap: 1px; margin-bottom: 1px; text-shadow: 1px 1px 2px #000;
   max-width: calc(100% - 2 * var(--overlap)); margin-left: auto; margin-right: auto; }
 /* Four cues per status, in this order of reliability: the letter, the border shape, the turn
    count, and only then the colour. A player who cannot separate the reds from the greens still
    reads B3 in a square from O2 in a dashed box. The legend is in the field manual. */
 .st { display: inline-flex; align-items: baseline; gap: 1px; padding: 0 2px; min-width: 15px;
-  justify-content: center; font-size: 9px; line-height: 13px; letter-spacing: 0;
+  justify-content: center; font-size: 0.5625rem; line-height: 13px; letter-spacing: 0;
   border: 1px solid currentColor; background: rgba(8,6,4,0.72); text-shadow: 0 0 2px #000; }
 .st b { font-weight: 700; }
-.st i { font-style: normal; opacity: 0.85; font-size: 8px; }
+.st i { font-style: normal; opacity: 0.85; font-size: 0.5rem; }
 .st-bleed   { color: #ff6b6b; border-radius: 0; }                          /* square */
 .st-stun    { color: #ffd24a; border-radius: 0; border-style: double; border-width: 3px; }
 .st-armor   { color: #9acd32; border-radius: 999px; padding: 0 4px; }      /* pill */
@@ -329,12 +340,12 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
    wholesale on every render; this sits beside them, so floating text survives long enough to be
    painted. Above the sprites, and never in the way of a tap. */
 .fx-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 30; }
-.fct { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); font-weight: bold; font-size: clamp(14px, 4vw, 20px); text-shadow: 2px 2px 4px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; animation: floatUp 1s ease-out forwards; pointer-events: none; z-index: 20; white-space: nowrap; }
-.fct-dmg { color: #ff4444; } .fct-heal { color: #6B8E23; } .fct-status { color: #B8860B; } .fct-weak { color: #ffaa00; font-size: clamp(18px, 5vw, 24px); } .fct-combo { color: #ff44ff; font-size: clamp(20px, 6vw, 28px); }
+.fct { position: absolute; top: 20%; left: 50%; transform: translateX(-50%); font-weight: bold; font-size: clamp(0.875rem, calc(4vw * var(--text-scale, 1)), 1.25rem); text-shadow: 2px 2px 4px #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000; animation: floatUp 1s ease-out forwards; pointer-events: none; z-index: 20; white-space: nowrap; }
+.fct-dmg { color: #ff4444; } .fct-heal { color: #6B8E23; } .fct-status { color: #B8860B; } .fct-weak { color: #ffaa00; font-size: clamp(1.125rem, calc(5vw * var(--text-scale, 1)), 1.5rem); } .fct-combo { color: #ff44ff; font-size: clamp(1.25rem, calc(6vw * var(--text-scale, 1)), 1.75rem); }
 
 #momentum-container { background: #111; height: 12px; width: 100%; border-top: 2px solid #333; position: relative; border-bottom: 2px solid #000; }
 #momentum-fill { background: linear-gradient(90deg, #4488ff, #ff44ff); height: 100%; width: 0%; transition: width 0.3s ease-in-out; }
-#momentum-txt { position: absolute; top: 0px; left: 50%; transform: translateX(-50%); font-size: 9px; font-weight: bold; color: #fff; text-shadow: 1px 1px 1px #000; letter-spacing: 1px; }
+#momentum-txt { position: absolute; top: 0px; left: 50%; transform: translateX(-50%); font-size: 0.5625rem; font-weight: bold; color: #fff; text-shadow: 1px 1px 1px #000; letter-spacing: 1px; }
 
 .btn-overdrive { background: #2a002a; border-color: #ff44ff; color: #ff44ff; font-weight: bold; text-shadow: 0 0 5px #ff44ff; animation: pulseOD 1.5s infinite; }
 @keyframes pulseOD { 0% { box-shadow: 0 0 5px #ff44ff; } 50% { box-shadow: 0 0 15px #ff44ff; } 100% { box-shadow: 0 0 5px #ff44ff; } }
@@ -348,13 +359,17 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 
 .dashboard { height: 35vh; max-height: 250px; background: #050505; border: 2px solid #333; display: grid; grid-template-columns: 1fr 1fr; box-sizing: border-box; margin: 5px; }
 #command-deck { border-right: 2px solid #333; padding: 10px; display: flex; flex-direction: column; justify-content: flex-start; gap: 8px; overflow-y: auto; min-width: 0; }
-#log { padding: 10px; overflow-y: auto; font-size: calc(clamp(10px, 3vw, 12px) * var(--text-scale, 1)); color: #555; display: flex; flex-direction: column; }
-.log-turn { color: #aaa; margin-top: 5px; } .log-heal { color: #6B8E23; } .log-dmg { color: #8B0000; } .log-status { color: #B8860B; } .log-combo { color: #ff44ff; font-weight: bold; }
-button { background: #111; color: #ccc; border: 1px solid #444; padding: clamp(10px, 3vh, 15px); font-family: monospace; font-size: calc(clamp(10px, 3vw, 13px) * var(--text-scale, 1)); cursor: pointer; text-transform: uppercase; transition: 0.2s; flex-shrink:0;}
+/* F14: measured against the dashboard's own #050505, the two commonest classes in the log
+   failed 4.5:1 outright - the base text at 2.66 and, worse, every damage line in the game at
+   1.98. The other three already cleared it and are untouched, so the log keeps its palette and
+   only the two unreadable ones move: a lighter grey, and a red that still reads as blood. */
+#log { padding: 10px; overflow-y: auto; font-size: clamp(0.625rem, calc(3vw * var(--text-scale, 1)), 0.75rem); color: #8a8a8a; display: flex; flex-direction: column; }
+.log-turn { color: #aaa; margin-top: 5px; } .log-heal { color: #6B8E23; } .log-dmg { color: #e05a4a; } .log-status { color: #B8860B; } .log-combo { color: #ff44ff; font-weight: bold; }
+button { background: #111; color: #ccc; border: 1px solid #444; padding: clamp(10px, 3vh, 15px); font-family: monospace; font-size: clamp(0.625rem, calc(3vw * var(--text-scale, 1)), 0.8125rem); cursor: pointer; text-transform: uppercase; transition: 0.2s; flex-shrink:0;}
 button:hover:not(:disabled) { background: #222; border-color: #888; }
 button:active { background: #000; }
 button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
-.dash-msg { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 14px; color: #666; text-align: center; }
+.dash-msg { display: flex; align-items: center; justify-content: center; height: 100%; font-size: 0.875rem; color: #666; text-align: center; }
 
 /* Keyboard users get no indication of position without this - there was none at all. */
 :focus-visible { outline: 2px solid #B8860B; outline-offset: 2px; }
@@ -365,7 +380,7 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
 /* Retreat is the paid way out, so it reads in the scrap colour rather than the leaving one. */
 .btn-retreat { border-color: #7a6a3a; color: #d2a24c; }
 .btn-retreat:disabled { border-color: #33302a; color: #6b6355; }
-.withdraw-cost { font-size: calc(11px * var(--text-scale, 1)); line-height: 1.5; color: #d9b26a;
+.withdraw-cost { font-size: 0.6875rem; line-height: 1.5; color: #d9b26a;
   border: 1px dashed #6b5a2a; background: rgba(30,22,6,0.6); padding: 8px 10px; margin-bottom: 6px; }
 
 /* The touch floor. Measured rather than assumed: these six were the controls under 44px on a
@@ -402,7 +417,7 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
     * { transition-duration: 0.01ms !important; }
 }
 
-.outpost-notice { border: 1px solid #8B0000; background: rgba(60,0,0,0.35); color: #ff9c6b; font-size: 11px; line-height: 1.5; padding: 8px 10px; margin-bottom: 10px; letter-spacing: 0.5px; }
+.outpost-notice { border: 1px solid #8B0000; background: rgba(60,0,0,0.35); color: #ff9c6b; font-size: 0.6875rem; line-height: 1.5; padding: 8px 10px; margin-bottom: 10px; letter-spacing: 0.5px; }
 .btn-armed { background: #8B0000 !important; color: #fff !important; border-color: #ff4444 !important; }
 
 /* Three values on a 400px header used to run together - 'SECTOR 1' beside '1,111 PTS' read as
@@ -410,17 +425,17 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
    line up and the columns stop moving as the numbers grow. */
 .stat-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #262119; border: 1px solid #332c22; margin: 0 56px 14px 0; flex-shrink: 0; }
 .stat { background: #0c0b09; padding: 5px 9px 6px; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.stat-label { font-size: 8px; letter-spacing: 1.6px; text-transform: uppercase; color: #6b6459; line-height: 1; }
-.stat-value { font-size: clamp(14px, 4.6vw, 19px); font-weight: bold; line-height: 1.15; color: #B8860B; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat-label { font-size: 0.5rem; letter-spacing: 1.6px; text-transform: uppercase; color: #6b6459; line-height: 1; }
+.stat-value { font-size: clamp(0.875rem, calc(4.6vw * var(--text-scale, 1)), 1.1875rem); font-weight: bold; line-height: 1.15; color: #B8860B; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .stat-score .stat-value { color: #8fa0b5; }
 .stat-scrap .stat-value { color: #c9a227; }
 
 /* Screen name sits on its own line so the numbers below it get the full width, and so it
    never has to share a row with the settings gear. */
-.screen-title-bar { color: #B8860B; font-weight: bold; font-size: clamp(15px, 4.6vw, 19px); letter-spacing: 1px; margin: 0 56px 8px 0; flex-shrink: 0; }
+.screen-title-bar { color: #B8860B; font-weight: bold; font-size: clamp(0.9375rem, calc(4.6vw * var(--text-scale, 1)), 1.1875rem); letter-spacing: 1px; margin: 0 56px 8px 0; flex-shrink: 0; }
 .stat-bar-4 { grid-template-columns: repeat(4, 1fr); margin-right: 0; }
 .stat-bar-4 .stat { padding: 5px 6px 6px; }
-.stat-bar-4 .stat-value { font-size: clamp(13px, 4vw, 17px); }
+.stat-bar-4 .stat-value { font-size: clamp(0.8125rem, calc(4vw * var(--text-scale, 1)), 1.0625rem); }
 .stat-parts .stat-value { color: #a9a196; }
 .stat-chems .stat-value { color: #7fae5e; }
 .stat-tech .stat-value { color: #6aa6d8; }
@@ -428,13 +443,13 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
 #screen-dev { display: none; flex-direction: column; padding: 20px; height: 100%; box-sizing: border-box; overflow-y: auto; background: linear-gradient(rgba(8,10,14,0.96), rgba(0,0,0,0.98)); }
 .dev-body { display: flex; flex-direction: column; gap: 12px; }
 .dev-group { border: 1px solid #26303c; background: #0b0e12; padding: 9px 10px 11px; }
-.dev-title { font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: #6aa6d8; margin-bottom: 7px; }
+.dev-title { font-size: 0.625rem; letter-spacing: 1.4px; text-transform: uppercase; color: #6aa6d8; margin-bottom: 7px; }
 .dev-row { display: flex; flex-wrap: wrap; gap: 6px; }
-.dev-btn { flex: 1 1 auto; min-width: 78px; font-size: 11px; padding: 9px 6px; }
+.dev-btn { flex: 1 1 auto; min-width: 78px; font-size: 0.6875rem; padding: 9px 6px; }
 
 /* A pairing the player can see before spending the turn, rather than discovering afterwards. */
 .combo-flag { position: absolute; top: -46px; left: 50%; transform: translateX(-50%); z-index: 25;
-  font-size: 9px; font-weight: bold; letter-spacing: 1px; white-space: nowrap; padding: 2px 5px;
+  font-size: 0.5625rem; font-weight: bold; letter-spacing: 1px; white-space: nowrap; padding: 2px 5px;
   color: #ff44ff; background: rgba(30,0,30,0.9); border: 1px solid #ff44ff; border-radius: 2px;
   text-shadow: 0 0 4px #ff44ff; animation: pulseOD 1.2s infinite; }
 .entity.has-combo .portrait { filter: drop-shadow(0 0 14px #ff44ff); }
@@ -443,18 +458,18 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
 /* An ability whose pairing is already live on the field, so the player can find a combo
    without selecting each one in turn to see what lights up. */
 button.combo-ready { border-color: #ff44ff; color: #ff9cff; box-shadow: 0 0 10px rgba(255,68,255,0.35) inset; }
-.combo-tag { font-size: 9px; letter-spacing: 1px; color: #ff44ff; text-shadow: 0 0 4px #ff44ff; }
+.combo-tag { font-size: 0.5625rem; letter-spacing: 1px; color: #ff44ff; text-shadow: 0 0 4px #ff44ff; }
 
 /* Formation feedback. Rank is stated on each deployed unit; a swing that will land short and a
    unit currently covering the line behind it are both called out before the turn is spent. */
-.rank-chip { font-size: 8px; letter-spacing: 1px; font-weight: bold; line-height: 11px;
+.rank-chip { font-size: 0.5rem; letter-spacing: 1px; font-weight: bold; line-height: 11px;
   text-align: center; color: #0b0b0b; border-radius: 2px; margin-bottom: 2px; opacity: 0.9; }
 .rank-1 { background: #c98b3a; }
 .rank-2 { background: #8a9a5b; }
 .rank-3 { background: #6a8fb5; }
 
 .reach-flag, .guard-flag { position: absolute; left: 50%; transform: translateX(-50%); z-index: 25;
-  font-size: 9px; font-weight: bold; letter-spacing: 1px; white-space: nowrap; padding: 2px 5px;
+  font-size: 0.5625rem; font-weight: bold; letter-spacing: 1px; white-space: nowrap; padding: 2px 5px;
   border-radius: 2px; }
 .reach-flag { top: -46px; color: #ffb347; background: rgba(40,22,0,0.9); border: 1px solid #ffb347;
   text-shadow: 0 0 4px #ffb347; }
@@ -464,12 +479,12 @@ button.combo-ready { border-color: #ff44ff; color: #ff9cff; box-shadow: 0 0 10px
 .entity.covering .portrait { filter: drop-shadow(0 0 12px #7fd4ff); }
 
 button.reach-short { border-color: #7a5a20; }
-.reach-tag { font-size: 9px; letter-spacing: 1px; color: #ffb347; }
+.reach-tag { font-size: 0.5625rem; letter-spacing: 1px; color: #ffb347; }
 /* E12: what a move is made of, on the button that fires it. Deliberately quieter than the
    combo and reach tags - those are situational and worth interrupting for, where this is on
    every damaging button all the time and only has to be readable when looked for. The colour
    is the type, not the target's relationship to it: the resist badges on a card carry that. */
-.dmg-tag { font-size: 9px; font-weight: bold; letter-spacing: 0; padding: 0 2px; border-radius: 2px;
+.dmg-tag { font-size: 0.5625rem; font-weight: bold; letter-spacing: 0; padding: 0 2px; border-radius: 2px;
            background: rgba(0,0,0,0.35); vertical-align: 1px; }
 .dmg-phys   { color: #9aa3ad; }
 .dmg-bio    { color: #7fbf5a; }
@@ -477,13 +492,13 @@ button.reach-short { border-color: #7a5a20; }
 
 /* The commander's cache: three relics, one decision. */
 #screen-relic { display: none; flex-direction: column; padding: 18px 14px; gap: 12px; overflow-y: auto; }
-.relic-offer-note { text-align: center; font-size: 12px; color: #8a8578; letter-spacing: 1px; margin-bottom: 4px; }
+.relic-offer-note { text-align: center; font-size: 0.75rem; color: #8a8578; letter-spacing: 1px; margin-bottom: 4px; }
 .relic-choices { display: flex; flex-direction: column; gap: 12px; }
 .relic-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
   text-align: left; padding: 12px 14px; line-height: 1.4; }
-.relic-card-tier { font-size: 9px; letter-spacing: 2px; opacity: 0.75; }
-.relic-card-name { font-size: 15px; font-weight: bold; }
-.relic-card-desc { font-size: 11px; color: #b9b4a6; white-space: normal; }
+.relic-card-tier { font-size: 0.5625rem; letter-spacing: 2px; opacity: 0.75; }
+.relic-card-name { font-size: 0.9375rem; font-weight: bold; }
+.relic-card-desc { font-size: 0.6875rem; color: #b9b4a6; white-space: normal; }
 .relic-common { border-color: #8a9a5b; color: #b7c98a; }
 .relic-rare { border-color: #b07fd4; color: #d9b6f2; box-shadow: 0 0 10px rgba(176,127,212,0.25) inset; }
 .relic-rare .relic-card-desc { color: #c8b6d8; }
@@ -503,14 +518,14 @@ button.reach-short { border-color: #7a5a20; }
    to stop the next `min-height: 0` from doing it again. Removing this line alone breaks
    nothing today, which is worth knowing before someone deletes it thinking it does. */
 #screen-contracts > * { flex-shrink: 0; }
-.contract-note { font-size: 11px; line-height: 1.5; color: #8a8578; margin-bottom: 12px; flex-shrink: 0; }
+.contract-note { font-size: 0.6875rem; line-height: 1.5; color: #8a8578; margin-bottom: 12px; flex-shrink: 0; }
 .contract-list { display: flex; flex-direction: column; gap: 10px; }
 .contract-card { display: flex; flex-direction: column; gap: 4px; text-align: left; padding: 10px 12px;
   line-height: 1.4; border-color: #4a463c; color: #8a8578; }
 .contract-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; width: 100%; }
-.contract-name { font-size: 13px; font-weight: bold; letter-spacing: 1px; }
-.contract-bonus { font-size: 11px; font-variant-numeric: tabular-nums; }
-.contract-desc { font-size: 10.5px; white-space: normal; opacity: 0.85; }
+.contract-name { font-size: 0.8125rem; font-weight: bold; letter-spacing: 1px; }
+.contract-bonus { font-size: 0.6875rem; font-variant-numeric: tabular-nums; }
+.contract-desc { font-size: 0.65625rem; white-space: normal; opacity: 0.85; }
 .contract-on { border-color: #B8860B; color: #d9a93d; box-shadow: 0 0 10px rgba(184,134,11,0.2) inset; }
 /* Pinned to the bottom of the scroll, because making the page scroll pushed DEPLOY off it on
    every handset - trading a feature you could not reach for an action you could not reach.
@@ -518,7 +533,7 @@ button.reach-short { border-color: #7a5a20; }
 .contract-footer { flex-shrink: 0; padding: 12px 0 0; position: sticky; bottom: -20px;
   background: linear-gradient(rgba(0,0,0,0.86), rgba(0,0,0,0.98) 22%); margin: 0 -20px; padding-left: 20px;
   padding-right: 20px; padding-bottom: 20px; }
-.contract-mult { text-align: center; font-size: 13px; font-weight: bold; letter-spacing: 1px;
+.contract-mult { text-align: center; font-size: 0.8125rem; font-weight: bold; letter-spacing: 1px;
   color: #B8860B; margin-bottom: 10px; font-variant-numeric: tabular-nums; }
 .contract-back { border-color: #888; color: #888; margin-top: 8px; }
 
@@ -527,8 +542,8 @@ button.reach-short { border-color: #7a5a20; }
   overflow: hidden; background: linear-gradient(rgba(12,11,8,0.96), rgba(0,0,0,0.98)); }
 .codex-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 16px; padding-bottom: 6px; }
 .codex-entry { border-left: 2px solid #B8860B; padding-left: 10px; }
-.codex-title { font-size: calc(12px * var(--text-scale, 1)); font-weight: bold; letter-spacing: 2px; color: #B8860B; margin-bottom: 6px; }
-.codex-line { font-size: calc(11px * var(--text-scale, 1)); line-height: 1.6; color: #a9a396; margin-bottom: 3px; }
+.codex-title { font-size: 0.75rem; font-weight: bold; letter-spacing: 2px; color: #B8860B; margin-bottom: 6px; }
+.codex-line { font-size: 0.6875rem; line-height: 1.6; color: #a9a396; margin-bottom: 3px; }
 #screen-codex .return-btn { flex-shrink: 0; margin-top: 12px; }
 
 /* The momentum market: cheap spends that never cost the action. */
@@ -542,8 +557,8 @@ button.reach-short { border-color: #7a5a20; }
    They wrap three-and-two now, with the basis picked so three fit a row rather than four. */
 .tactic-btn { flex: 1 1 28%; min-width: 0; display: flex; flex-direction: column; align-items: center;
   gap: 2px; padding: 7px 2px; border-color: #7a5c14; color: #d9a93d; overflow: hidden; }
-.tactic-name { font-size: 9.5px; letter-spacing: 0.5px; }
-.tactic-cost { font-size: 9px; letter-spacing: 0; color: #b8912f; }
+.tactic-name { font-size: 0.59375rem; letter-spacing: 0.5px; }
+.tactic-cost { font-size: 0.5625rem; letter-spacing: 0; color: #b8912f; }
 .tactic-btn:disabled { border-color: #222; }
 .tactic-btn:disabled .tactic-cost { color: #555; }
 
@@ -556,13 +571,13 @@ button.reach-short { border-color: #7a5a20; }
    splitting three-and-one across the card. min-width:0 so the emoji label can shrink. */
 .craft-btn { flex: 1 1 45%; min-width: 0; display: flex; flex-direction: column; align-items: flex-start;
   gap: 3px; padding: 8px; text-transform: none; overflow: hidden; }
-.craft-name { font-size: 11.5px; color: #ccc; }
-.craft-what { font-size: 10px; color: #8fa06a; letter-spacing: 0.3px; }
-.craft-cost { font-size: 10px; color: #B8860B; }
+.craft-name { font-size: 0.71875rem; color: #ccc; }
+.craft-what { font-size: 0.625rem; color: #8fa06a; letter-spacing: 0.3px; }
+.craft-cost { font-size: 0.625rem; color: #B8860B; }
 /* Deliberately NOT dimmed further when the recipe is unaffordable: what a thing does is
    exactly what a player needs to read while deciding what to save materials for. */
 /* The bag reads as one line - name, then what it does, pushed to the far edge before [SELL]. */
-.inv-what { color: #8fa06a; font-size: 10px; margin-left: 6px; }
+.inv-what { color: #8fa06a; font-size: 0.625rem; margin-left: 6px; }
 /* In combat the bag replaces the whole deck, which is one narrow column: side by side, the
    name and the effect fought for it and "EMP Charge" broke across two lines with the emoji
    stranded. Stacked, every item fits any deck width and it reads like the bench does.
@@ -571,7 +586,7 @@ button.reach-short { border-color: #7a5a20; }
    fit without a scroll. Nobody should have to scroll to cancel out of a menu mid-fight. */
 .bag-btn { border-color: #B8860B; color: #B8860B; display: flex; flex-direction: column;
   align-items: flex-start; gap: 2px; min-width: 0; text-transform: none; padding: 6px 10px; }
-.item-what { color: #8fa06a; font-size: 10px; }
+.item-what { color: #8fa06a; font-size: 0.625rem; }
 .bag-back { color: #8B0000; border-color: #8B0000; padding: 7px 10px; }
 
 /* ── The Citadel, drawn ─────────────────────────────────────────────────────────────────
@@ -591,42 +606,42 @@ button.reach-short { border-color: #7a5a20; }
 #muster-deploy { position: sticky; bottom: -20px; margin: 0 -20px; padding: 12px 20px 20px;
   background: linear-gradient(rgba(0,0,0,0.86), rgba(0,0,0,0.98) 22%); border-left: 0; border-right: 0;
   border-bottom: 0; }
-.muster-head { display: flex; justify-content: flex-end; font-size: 11px; letter-spacing: 1px;
+.muster-head { display: flex; justify-content: flex-end; font-size: 0.6875rem; letter-spacing: 1px;
   color: #B8860B; margin-bottom: 8px; flex-shrink: 0; font-variant-numeric: tabular-nums; }
 .muster-list { display: flex; flex-direction: column; gap: 8px; }
 .muster-row { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; align-items: center;
   border: 1px solid #33301f; padding: 8px 10px; opacity: 0.65; }
 .muster-row.muster-deployed { border-color: #6B8E23; opacity: 1; }
 .muster-who { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
-.muster-name { font-size: 13px; font-weight: bold; }
-.muster-class { font-size: 9px; letter-spacing: 1px; color: #8a8578; }
-.muster-quirk { font-size: 9px; letter-spacing: 1px; color: #ffaa00; }
-.muster-quirk-desc { flex-basis: 100%; font-size: 9.5px; color: #8a8578; }
-.muster-stats { grid-column: 1; font-size: 10px; color: #b9b4a6; font-variant-numeric: tabular-nums; }
+.muster-name { font-size: 0.8125rem; font-weight: bold; }
+.muster-class { font-size: 0.5625rem; letter-spacing: 1px; color: #8a8578; }
+.muster-quirk { font-size: 0.5625rem; letter-spacing: 1px; color: #ffaa00; }
+.muster-quirk-desc { flex-basis: 100%; font-size: 0.59375rem; color: #8a8578; }
+.muster-stats { grid-column: 1; font-size: 0.625rem; color: #b9b4a6; font-variant-numeric: tabular-nums; }
 .muster-ctl { grid-column: 2; grid-row: 1 / 3; display: flex; flex-direction: column; gap: 5px; }
-.muster-rank { font-size: 10px; letter-spacing: 1px; padding: 7px 10px; min-width: 72px; }
+.muster-rank { font-size: 0.625rem; letter-spacing: 1px; padding: 7px 10px; min-width: 72px; }
 .rank-btn-1 { border-color: #c98b3a; color: #c98b3a; }
 .rank-btn-2 { border-color: #8a9a5b; color: #8a9a5b; }
 .rank-btn-3 { border-color: #6a8fb5; color: #6a8fb5; }
 .rank-btn-0 { border-color: #444; color: #666; }
-.muster-reroll { font-size: 12px; padding: 5px; border-color: #7a5c14; color: #d9a93d; }
-.muster-note { flex-shrink: 0; font-size: 10px; line-height: 1.5; color: #8a8578; margin: 10px 0; }
+.muster-reroll { font-size: 0.75rem; padding: 5px; border-color: #7a5c14; color: #d9a93d; }
+.muster-note { flex-shrink: 0; font-size: 0.625rem; line-height: 1.5; color: #8a8578; margin: 10px 0; }
 
 /* Dossiers: the title on the card, and the four-into-three loadout at the muster. */
-.mastery-line { font-size: 9px; color: #c9a84a; text-transform: uppercase; margin-top: 2px; letter-spacing: 1px; }
-.muster-title { font-size: 9px; letter-spacing: 1px; color: #c9a84a; }
+.mastery-line { font-size: 0.5625rem; color: #c9a84a; text-transform: uppercase; margin-top: 2px; letter-spacing: 1px; }
+.muster-title { font-size: 0.5625rem; letter-spacing: 1px; color: #c9a84a; }
 .muster-loadout { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .loadout-chip { background: #111; border: 1px solid #4a5a3a; color: #9ab07a; font-family: monospace;
-  font-size: 9px; padding: 5px 7px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; }
+  font-size: 0.5625rem; padding: 5px 7px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; }
 /* The bench's second axis. Chips rather than a menu: three jobs, one holder, and the row the
    holder is on is marked so the muster reads at a glance as a line and a bench that works. */
 .muster-jobs { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px; margin-top: 5px; }
 .job-chip { background: #16150f; border: 1px solid #45412f; color: #8a8578; font-family: inherit;
-            font-size: 9px; letter-spacing: 1px; padding: 4px 7px; cursor: pointer; min-height: 26px; }
+            font-size: 0.5625rem; letter-spacing: 1px; padding: 4px 7px; cursor: pointer; min-height: 26px; }
 .job-chip:hover { border-color: #6fb0d0; }
 .job-on { border-color: #6fb0d0; color: #9fd8f0; background: #0e1a20; }
 .muster-working { border-left: 2px solid #6fb0d0; }
-.muster-jobline { flex-shrink: 0; font-size: 10px; line-height: 1.5; color: #8a8578; letter-spacing: 0.5px;
+.muster-jobline { flex-shrink: 0; font-size: 0.625rem; line-height: 1.5; color: #8a8578; letter-spacing: 0.5px;
                   border: 1px solid #33301f; padding: 6px 8px; }
 .muster-jobline.job-taken { color: #9fd8f0; border-color: #45605f; }
 .loadout-chip.chip-benched { border-color: #6b3a3a; color: #8a6a6a; opacity: 0.7; text-decoration: line-through; }
@@ -635,15 +650,15 @@ button.reach-short { border-color: #7a5a20; }
 #screen-chronicle { display: none; flex-direction: column; padding: 18px 14px; gap: 10px; height: 100%; box-sizing: border-box; }
 .chronicle-career { flex-shrink: 0; border: 1px solid #4a4030; padding: 8px 10px; display: flex; flex-direction: column; gap: 4px; }
 .chronicle-career:empty { display: none; }
-.career-line { display: flex; justify-content: space-between; font-size: 10px; letter-spacing: 1px; color: #b9b4a6; }
+.career-line { display: flex; justify-content: space-between; font-size: 0.625rem; letter-spacing: 1px; color: #b9b4a6; }
 .career-line span:last-child { color: #d9a93d; }
 .chronicle-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
 .chronicle-list { flex-shrink: 0; display: flex; flex-direction: column; gap: 8px; }
 .chronicle-entry { border: 1px solid #33301f; background: #0a0a08; padding: 8px 10px; }
-.chronicle-epitaph { font-size: 12px; color: #d5cfc0; font-style: italic; line-height: 1.4; }
-.chronicle-facts { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 5px; font-size: 9px; letter-spacing: 1px; color: #8a8578; text-transform: uppercase; }
+.chronicle-epitaph { font-size: 0.75rem; color: #d5cfc0; font-style: italic; line-height: 1.4; }
+.chronicle-facts { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-top: 5px; font-size: 0.5625rem; letter-spacing: 1px; color: #8a8578; text-transform: uppercase; }
 .chronicle-seed { color: #7ab0d0; }
-.chronicle-empty { font-size: 11px; color: #8a8578; text-align: center; padding: 30px 10px; line-height: 1.6; }
+.chronicle-empty { font-size: 0.6875rem; color: #8a8578; text-align: center; padding: 30px 10px; line-height: 1.6; }
 .chronicle-rung { color: #c08ad0; }
 .career-rung span:last-child { color: #c08ad0; }
 /* The ladder: eight rows that have to stay readable at 320px, so the description wraps onto
@@ -653,17 +668,17 @@ button.reach-short { border-color: #7a5a20; }
    several blocks in a narrow column and this must not be the one that widens it. */
 .chronicle-dossiers { flex-shrink: 0; border: 1px solid #4a4030; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
 .chronicle-dossiers:empty { display: none; }
-.dossier-head { font-size: 10px; letter-spacing: 1px; color: #c08ad0; margin-bottom: 3px; }
-.dossier-row { display: grid; grid-template-columns: 20px 1fr auto; gap: 1px 6px; font-size: 10px; letter-spacing: 1px; align-items: baseline; }
+.dossier-head { font-size: 0.625rem; letter-spacing: 1px; color: #c08ad0; margin-bottom: 3px; }
+.dossier-row { display: grid; grid-template-columns: 20px 1fr auto; gap: 1px 6px; font-size: 0.625rem; letter-spacing: 1px; align-items: baseline; }
 .dossier-mark { color: #8a8578; }
 .dossier-cls { color: #b9b4a6; }
 .dossier-xp { color: #d9a93d; font-variant-numeric: tabular-nums; }
-.dossier-next { grid-column: 2 / 4; font-size: 9px; color: #7d786c; letter-spacing: 0; line-height: 1.35; text-transform: none; }
+.dossier-next { grid-column: 2 / 4; font-size: 0.5625rem; color: #7d786c; letter-spacing: 0; line-height: 1.35; text-transform: none; }
 .dossier-r1 .dossier-mark, .dossier-r1 .dossier-cls { color: #9a9488; }
 .dossier-r2 .dossier-mark, .dossier-r2 .dossier-cls { color: #d9a93d; }
 .dossier-r3 .dossier-mark, .dossier-r3 .dossier-cls { color: #c08ad0; }
 .dossier-r0 .dossier-cls, .dossier-r0 .dossier-xp { color: #5c584e; }
-.dossier-note { font-size: 9px; color: #7d786c; letter-spacing: 0; line-height: 1.4; text-transform: none; margin-top: 5px; border-top: 1px solid #3a3428; padding-top: 5px; }
+.dossier-note { font-size: 0.5625rem; color: #7d786c; letter-spacing: 0; line-height: 1.4; text-transform: none; margin-top: 5px; border-top: 1px solid #3a3428; padding-top: 5px; }
 
 /* E14: the roll of the dead. Permadeath had no memory outside the run that caused it - the
    record was built, narrowed on the way to disk, and never read back. */
@@ -674,31 +689,31 @@ button.reach-short { border-color: #7a5a20; }
 
 .chronicle-roll { flex-shrink: 0; border: 1px solid #5a3030; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
 .chronicle-roll:empty { display: none; }
-.roll-head { font-size: 10px; letter-spacing: 1px; color: #c86a5a; margin-bottom: 3px; }
-.roll-row { display: grid; grid-template-columns: 14px auto 1fr auto; gap: 1px 6px; font-size: 10px; letter-spacing: 1px; align-items: baseline; }
+.roll-head { font-size: 0.625rem; letter-spacing: 1px; color: #c86a5a; margin-bottom: 3px; }
+.roll-row { display: grid; grid-template-columns: 14px auto 1fr auto; gap: 1px 6px; font-size: 0.625rem; letter-spacing: 1px; align-items: baseline; }
 .roll-mark { color: #8b4a4a; }
 .roll-name { color: #d5cfc0; }
-.roll-cls { font-size: 9px; color: #8a8578; letter-spacing: 1px; }
-.roll-where { color: #d9a93d; font-variant-numeric: tabular-nums; font-size: 9px; }
-.roll-what { grid-column: 2 / 5; font-size: 9px; color: #7d786c; letter-spacing: 0; line-height: 1.35;
+.roll-cls { font-size: 0.5625rem; color: #8a8578; letter-spacing: 1px; }
+.roll-where { color: #d9a93d; font-variant-numeric: tabular-nums; font-size: 0.5625rem; }
+.roll-what { grid-column: 2 / 5; font-size: 0.5625rem; color: #7d786c; letter-spacing: 0; line-height: 1.35;
              text-transform: none; font-style: italic; padding-bottom: 3px; }
-.roll-none, .roll-more { font-size: 9px; color: #7d786c; letter-spacing: 0; line-height: 1.4; text-transform: none; }
+.roll-none, .roll-more { font-size: 0.5625rem; color: #7d786c; letter-spacing: 0; line-height: 1.4; text-transform: none; }
 .roll-more { margin-top: 4px; border-top: 1px solid #3a2828; padding-top: 4px; }
 .career-lost span:last-child { color: #c86a5a; }
 
 .chronicle-ladder { flex-shrink: 0; border: 1px solid #4a4030; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
 .chronicle-ladder:empty { display: none; }
-.ladder-head { font-size: 10px; letter-spacing: 1px; color: #c08ad0; margin-bottom: 3px; }
-.ladder-sealed { font-size: 10px; letter-spacing: 1px; color: #8a8578; line-height: 1.5; }
-.ladder-rung { display: grid; grid-template-columns: 14px 1fr auto; gap: 2px 6px; font-size: 10px; letter-spacing: 1px; align-items: baseline; }
+.ladder-head { font-size: 0.625rem; letter-spacing: 1px; color: #c08ad0; margin-bottom: 3px; }
+.ladder-sealed { font-size: 0.625rem; letter-spacing: 1px; color: #8a8578; line-height: 1.5; }
+.ladder-rung { display: grid; grid-template-columns: 14px 1fr auto; gap: 2px 6px; font-size: 0.625rem; letter-spacing: 1px; align-items: baseline; }
 .ladder-mark { color: #8a8578; }
 .ladder-name { color: #b9b4a6; }
 .ladder-mult { color: #d9a93d; font-variant-numeric: tabular-nums; }
-.ladder-desc { grid-column: 2 / 4; font-size: 9px; color: #7d786c; letter-spacing: 0; line-height: 1.35; text-transform: none; }
+.ladder-desc { grid-column: 2 / 4; font-size: 0.5625rem; color: #7d786c; letter-spacing: 0; line-height: 1.35; text-transform: none; }
 .ladder-cleared .ladder-mark, .ladder-cleared .ladder-name { color: #c08ad0; }
 .ladder-open .ladder-mark, .ladder-open .ladder-name { color: #d9a93d; }
 .ladder-locked .ladder-name, .ladder-locked .ladder-mult { color: #5c584e; }
-.title-epitaph { text-align: center; font-size: 10px; font-style: italic; color: #8a8272; margin-bottom: 10px; line-height: 1.5; max-width: 300px; align-self: center; }
+.title-epitaph { text-align: center; font-size: 0.625rem; font-style: italic; color: #8a8272; margin-bottom: 10px; line-height: 1.5; max-width: 300px; align-self: center; }
 
 /* ── Combat that moves: all transforms, no new art. ────────────────────────────────── */
 @keyframes lungeRight { 0% { transform: translateX(0); } 45% { transform: translateX(26px); } 100% { transform: translateX(0); } }
@@ -740,51 +755,51 @@ button.reach-short { border-color: #7a5a20; }
 .seed-panel { flex-shrink: 0; border: 1px dashed #3a4a5a; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
 .seed-row { display: flex; gap: 6px; }
 .seed-input { flex: 1; min-width: 0; background: #0a0a08; border: 1px solid #444; color: #d5cfc0;
-    font-family: monospace; font-size: 11px; padding: 8px; letter-spacing: 1px; text-transform: uppercase; }
+    font-family: monospace; font-size: 0.6875rem; padding: 8px; letter-spacing: 1px; text-transform: uppercase; }
 .seed-input:focus { outline: none; border-color: #7ab0d0; }
 .seed-daily-btn { flex-shrink: 0; background: #111; border: 1px solid #7ab0d0; color: #7ab0d0;
-    font-family: monospace; font-size: 10px; padding: 8px; cursor: pointer; text-transform: uppercase; }
+    font-family: monospace; font-size: 0.625rem; padding: 8px; cursor: pointer; text-transform: uppercase; }
 .seed-daily-btn:hover { background: #7ab0d0; color: #000; }
-.seed-note { font-size: 9px; color: #8a8578; line-height: 1.5; }
+.seed-note { font-size: 0.5625rem; color: #8a8578; line-height: 1.5; }
 .ascension-btn { background: #140a14; border: 1px solid #8a3fbf; color: #c98aff; font-family: monospace;
-  font-size: 10px; padding: 8px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; }
+  font-size: 0.625rem; padding: 8px; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; }
 .ascension-btn:hover { background: #8a3fbf; color: #000; }
 
 /* The sector front: a badge that rides the map header, and a splash on sector entry. */
 #front-badge { display: flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0;
-    border: 1px solid #6b3a3a; background: #140808; color: #c96a5a; font-size: 11px;
+    border: 1px solid #6b3a3a; background: #140808; color: #c96a5a; font-size: 0.6875rem;
     letter-spacing: 2px; padding: 5px 8px; }
-.front-icon { font-size: 12px; }
+.front-icon { font-size: 0.75rem; }
 #front-banner { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%);
     z-index: 40; pointer-events: none; opacity: 0; text-align: center;
     background: rgba(10, 4, 4, 0.92); border: 2px solid #8B0000; padding: 18px 26px; }
-.front-banner-name { color: #ff6a4a; font-size: 20px; font-weight: bold; letter-spacing: 3px; }
-.front-banner-desc { color: #b9a68a; font-size: 11px; margin-top: 8px; max-width: 260px; line-height: 1.5; }
+.front-banner-name { color: #ff6a4a; font-size: 1.25rem; font-weight: bold; letter-spacing: 3px; }
+.front-banner-desc { color: #b9a68a; font-size: 0.6875rem; margin-top: 8px; max-width: 260px; line-height: 1.5; }
 @keyframes frontBanner { 0% { opacity: 0; transform: translate(-50%, -60%); }
     12% { opacity: 1; transform: translate(-50%, -50%); } 80% { opacity: 1; } 100% { opacity: 0; } }
 .front-banner-show { animation: frontBanner 3.2s ease-out forwards; }
 
 /* The tie between two operators, on the roster card. */
-.bond-line { font-size: 9px; color: #7ab0d0; text-transform: uppercase; margin-top: 2px; }
+.bond-line { font-size: 0.5625rem; color: #7ab0d0; text-transform: uppercase; margin-top: 2px; }
 /* Earned, not rolled - so it reads in the wound colour rather than the quirk colour. */
-.scar-line { font-size: 9px; color: #c96a5a; text-transform: uppercase; margin-top: 2px; letter-spacing: 1px; }
+.scar-line { font-size: 0.5625rem; color: #c96a5a; text-transform: uppercase; margin-top: 2px; letter-spacing: 1px; }
 .upg-btn.scar-btn { border-color: #8B4A3A; color: #d98a78; }
 
 /* Gear slots on the Outpost card. */
 .gear-row { border-top: 1px dashed #33301f; padding-top: 6px; margin-top: 6px; }
-.gear-slot { border-color: #4a5a6b; color: #8fb0c9; font-size: 10px; }
+.gear-slot { border-color: #4a5a6b; color: #8fb0c9; font-size: 0.625rem; }
 .gear-pick { border-color: #B8860B; color: #d9a93d; }
-.gear-none { font-size: 10px; color: #8a8578; padding: 4px 0; }
+.gear-none { font-size: 0.625rem; color: #8a8578; padding: 4px 0; }
 
 /* The Armory: a stall of rows, price on the right, the stock list scrolls inside. */
 #screen-shop { display: none; flex-direction: column; padding: 18px 14px; gap: 10px; height: 100%; box-sizing: border-box; }
-#shop-scrap { flex-shrink: 0; font-size: 12px; color: #d9a93d; letter-spacing: 1px; }
+#shop-scrap { flex-shrink: 0; font-size: 0.75rem; color: #d9a93d; letter-spacing: 1px; }
 #shop-stock { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
 .shop-row { display: flex; align-items: center; gap: 10px; border: 1px solid #333; background: #0a0a08; padding: 10px; }
 .shop-info { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-.shop-name { font-size: 12px; font-weight: bold; color: #d5cfc0; text-transform: uppercase; letter-spacing: 1px; }
-.shop-desc { font-size: 10px; color: #8a8578; line-height: 1.4; }
-.shop-buy { flex-shrink: 0; background: #111; border: 1px solid #3aa17e; color: #3aa17e; font-family: monospace; font-size: 12px; padding: 8px 10px; cursor: pointer; }
+.shop-name { font-size: 0.75rem; font-weight: bold; color: #d5cfc0; text-transform: uppercase; letter-spacing: 1px; }
+.shop-desc { font-size: 0.625rem; color: #8a8578; line-height: 1.4; }
+.shop-buy { flex-shrink: 0; background: #111; border: 1px solid #3aa17e; color: #3aa17e; font-family: monospace; font-size: 0.75rem; padding: 8px 10px; cursor: pointer; }
 .shop-buy:hover:not(:disabled) { background: #3aa17e; color: #000; }
 .shop-buy:disabled { opacity: 0.3; cursor: not-allowed; }
 
@@ -794,21 +809,21 @@ button.reach-short { border-color: #7a5a20; }
 .recruit-card { display: flex; flex-direction: column; align-items: center; gap: 10px; border: 1px solid #333; background: #0a0a08; padding: 12px; }
 .recruit-portrait { width: auto; max-width: 62%; max-height: 190px; object-fit: contain; filter: drop-shadow(0 6px 10px rgba(0,0,0,0.7)); }
 .recruit-info { width: 100%; display: flex; flex-direction: column; gap: 4px; }
-.recruit-name { font-size: 15px; font-weight: bold; color: #d5cfc0; text-transform: uppercase; letter-spacing: 2px; text-align: center; }
-.recruit-class { font-size: 10px; color: #B8860B; text-transform: uppercase; letter-spacing: 1px; text-align: center; }
-.recruit-pitch { font-size: 11px; color: #8a8578; line-height: 1.5; font-style: italic; text-align: center; margin: 4px 0; }
-.recruit-stats { font-size: 11px; color: #d5cfc0; text-align: center; letter-spacing: 1px; }
-.recruit-res { font-size: 10px; color: #6B8E23; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
+.recruit-name { font-size: 0.9375rem; font-weight: bold; color: #d5cfc0; text-transform: uppercase; letter-spacing: 2px; text-align: center; }
+.recruit-class { font-size: 0.625rem; color: #B8860B; text-transform: uppercase; letter-spacing: 1px; text-align: center; }
+.recruit-pitch { font-size: 0.6875rem; color: #8a8578; line-height: 1.5; font-style: italic; text-align: center; margin: 4px 0; }
+.recruit-stats { font-size: 0.6875rem; color: #d5cfc0; text-align: center; letter-spacing: 1px; }
+.recruit-res { font-size: 0.625rem; color: #6B8E23; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
 .recruit-verbs { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
-.recruit-verbs li { font-size: 10px; color: #8a8578; border-left: 2px solid #333; padding-left: 7px; }
+.recruit-verbs li { font-size: 0.625rem; color: #8a8578; border-left: 2px solid #333; padding-left: 7px; }
 .recruit-verbs b { color: #d5cfc0; font-weight: bold; }
 #recruit-sign { border-color: #3aa17e; color: #3aa17e; }
 #recruit-sign:disabled { opacity: 0.35; cursor: not-allowed; }
 .map-node.recruit-node .node-icon { color: #3aa17e; }
-.shop-tag { flex-shrink: 0; font-size: 10px; color: #666; letter-spacing: 1px; }
+.shop-tag { flex-shrink: 0; font-size: 0.625rem; color: #666; letter-spacing: 1px; }
 .shop-pick { display: flex; flex-direction: column; gap: 6px; border: 1px dashed #3aa17e; padding: 10px; }
-.shop-pick-title { font-size: 10px; color: #3aa17e; letter-spacing: 1px; }
-.shop-pick-btn { background: #111; border: 1px solid #444; color: #ccc; font-family: monospace; font-size: 11px; padding: 8px; cursor: pointer; text-align: left; }
+.shop-pick-title { font-size: 0.625rem; color: #3aa17e; letter-spacing: 1px; }
+.shop-pick-btn { background: #111; border: 1px solid #444; color: #ccc; font-family: monospace; font-size: 0.6875rem; padding: 8px; cursor: pointer; text-align: left; }
 .shop-pick-btn:hover { border-color: #3aa17e; color: #3aa17e; }
 .shop-pick-cancel { color: #8a8578; text-align: center; }
 #shop-leave { flex-shrink: 0; }
@@ -823,7 +838,7 @@ button.reach-short { border-color: #7a5a20; }
 /* Enemy signatures: the name of the thing a hostile does, on the hostile that does it. */
 /* The live state - plate remaining, LIVE, LOCKED - is the half that matters mid-fight, so the
    badge wraps rather than truncating: an ellipsis ate exactly the part worth reading. */
-.sig-tag { font-size: 7.5px; line-height: 1.25; letter-spacing: .5px; text-transform: uppercase;
+.sig-tag { font-size: 0.46875rem; line-height: 1.25; letter-spacing: .5px; text-transform: uppercase;
   text-align: center; color: #d98a5a; border: 1px solid #6b3a22; background: rgba(20,8,4,0.78);
 /* No overflow-wrap at all, which is the default and is the point: it wraps at the spaces and
    nowhere else. It used to say "anywhere", which breaks INSIDE a word as soon as the line is
@@ -844,13 +859,13 @@ button.reach-short { border-color: #7a5a20; }
   flex-direction: column; gap: 8px; padding: 14px;
   background: rgba(8, 7, 5, 0.97); border: 1px solid #6b5a2a; box-shadow: 0 8px 28px rgba(0,0,0,0.85); }
 .dossier-body { display: flex; flex-direction: column; gap: 8px; }
-.dossier-name { font-size: 15px; font-weight: bold; color: #d9a93d; letter-spacing: 1px; text-transform: uppercase; }
-.dossier-sub { font-size: 9px; letter-spacing: 1.5px; color: #8a8578; text-transform: uppercase; margin-top: -4px; }
+.dossier-name { font-size: 0.9375rem; font-weight: bold; color: #d9a93d; letter-spacing: 1px; text-transform: uppercase; }
+.dossier-sub { font-size: 0.5625rem; letter-spacing: 1.5px; color: #8a8578; text-transform: uppercase; margin-top: -4px; }
 .dossier-sig { display: flex; flex-direction: column; gap: 3px; border-left: 2px solid #d98a5a;
   padding: 6px 0 6px 8px; background: rgba(30,14,6,0.5); }
-.dossier-sig-name { font-size: 12px; font-weight: bold; color: #d98a5a; text-transform: uppercase; letter-spacing: 1px; }
-.dossier-sig-kind { font-size: 8px; letter-spacing: 1.5px; color: #8a8578; }
-.dossier-sig-desc { font-size: 11px; line-height: 1.5; color: #c9c0ab; }
+.dossier-sig-name { font-size: 0.75rem; font-weight: bold; color: #d98a5a; text-transform: uppercase; letter-spacing: 1px; }
+.dossier-sig-kind { font-size: 0.5rem; letter-spacing: 1.5px; color: #8a8578; }
+.dossier-sig-desc { font-size: 0.6875rem; line-height: 1.5; color: #c9c0ab; }
 /* What was bolted onto this particular hostile, under the species file rather than inside it:
    an affix belongs to the unit standing there, and the file behind it is the same either way.
    Deep red against the file's amber, matching the glow an affixed hostile already carries. */
@@ -859,17 +874,17 @@ button.reach-short { border-color: #7a5a20; }
 .dossier-affix .dossier-sig-name { color: #c86a5a; }
 .dos-res-row { display: flex; gap: 6px; }
 .dos-res { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 2px; align-items: center;
-  border: 1px solid #333; padding: 5px 2px; font-size: 8px; letter-spacing: 1px; color: #7a7266; }
+  border: 1px solid #333; padding: 5px 2px; font-size: 0.5rem; letter-spacing: 1px; color: #7a7266; }
 .dos-res.dos-strong { border-color: #4a6b3a; color: #9ab07a; }
 .dos-res.dos-weak { border-color: #6b3a3a; color: #d98a8a; }
 .dos-res.dos-immune { border-color: #3a5a6b; color: #7fb0c9; }
-.dossier-tally { display: flex; justify-content: space-between; gap: 6px; font-size: 9px;
+.dossier-tally { display: flex; justify-content: space-between; gap: 6px; font-size: 0.5625rem;
   letter-spacing: 1px; color: #8a8578; border-top: 1px solid #2a2620; padding-top: 8px; }
-.dossier-tally b { color: #d5cfc0; font-size: 12px; }
+.dossier-tally b { color: #d5cfc0; font-size: 0.75rem; }
 .dossier-tally .dos-cost b { color: #d98a8a; }
-.dossier-none { font-size: 11px; color: #8a8578; text-align: center; padding: 16px 0; }
+.dossier-none { font-size: 0.6875rem; color: #8a8578; text-align: center; padding: 16px 0; }
 .dossier-close { background: #111; border: 1px solid #444; color: #999; font-family: monospace;
-  font-size: 11px; padding: 9px; cursor: pointer; letter-spacing: 1px; }
+  font-size: 0.6875rem; padding: 9px; cursor: pointer; letter-spacing: 1px; }
 .dossier-close:hover { border-color: #d9a93d; color: #d9a93d; }
 /* An idle hostile invites a tap without pretending to be a target. */
 .entity.inspectable { cursor: help; }
@@ -885,34 +900,47 @@ button.reach-short { border-color: #7a5a20; }
   background: rgba(10, 9, 6, 0.97); border: 1px solid #B8860B;
   box-shadow: 0 -6px 24px rgba(0,0,0,0.8); padding: 12px 14px;
   display: flex; flex-direction: column; gap: 7px; }
-.prompt-title { font-size: 12px; font-weight: bold; letter-spacing: 2px; color: #d9a93d; text-transform: uppercase; }
-.prompt-body { font-size: 11.5px; line-height: 1.6; color: #c9c0ab; }
+.prompt-title { font-size: 0.75rem; font-weight: bold; letter-spacing: 2px; color: #d9a93d; text-transform: uppercase; }
+.prompt-body { font-size: 0.71875rem; line-height: 1.6; color: #c9c0ab; }
 .prompt-row { display: flex; gap: 8px; align-items: stretch; margin-top: 2px; }
 .prompt-ok { flex: 1 1 auto; background: #111; border: 1px solid #B8860B; color: #d9a93d;
-  font-family: monospace; font-size: 12px; letter-spacing: 1px; padding: 9px; cursor: pointer; }
+  font-family: monospace; font-size: 0.75rem; letter-spacing: 1px; padding: 9px; cursor: pointer; }
 .prompt-ok:hover { background: #B8860B; color: #000; }
 .prompt-off { flex: 0 0 auto; background: none; border: 1px solid #3a352c; color: #7a7266;
-  font-family: monospace; font-size: 9px; letter-spacing: 1px; padding: 9px 8px; cursor: pointer; }
+  font-family: monospace; font-size: 0.5625rem; letter-spacing: 1px; padding: 9px 8px; cursor: pointer; }
 .prompt-off:hover { border-color: #8a8578; color: #a9a396; }
 
 /* Read the room: what is coming, what a target will absorb, and where a number came from. */
-.threat-tag { font-size: 9px; font-weight: bold; letter-spacing: 1px; text-align: center;
+.threat-tag { font-size: 0.5625rem; font-weight: bold; letter-spacing: 1px; text-align: center;
   color: #e0a95a; border: 1px solid #6b4a1a; background: rgba(24,14,2,0.8); padding: 1px 3px; margin-bottom: 2px; }
 .threat-tag.threat-fatal { color: #ff8a7a; border-color: #8B0000; background: rgba(40,4,4,0.9);
   animation: threatPulse 1.4s ease-in-out infinite; }
 @keyframes threatPulse { 0%,100% { box-shadow: 0 0 0 rgba(255,68,68,0); } 50% { box-shadow: 0 0 9px rgba(255,68,68,0.65); } }
-.soak-tag { font-size: 9px; letter-spacing: 1px; text-align: center; color: #9fb6c9;
+.soak-tag { font-size: 0.5625rem; letter-spacing: 1px; text-align: center; color: #9fb6c9;
   border: 1px solid #3a5a6b; background: rgba(6,16,22,0.8); padding: 1px 3px; margin-bottom: 2px; }
+/* F14: these carry the arithmetic behind a blow and were plain divs - no tab stop, no role,
+   so the one surface that explains a number was mouse-only. */
 .log-explainable { cursor: help; }
-.log-explainable:hover { text-decoration: underline dotted; }
+.log-explainable:hover, .log-explainable:focus-visible { text-decoration: underline dotted; }
+.log-explainable:focus-visible, .dossier:focus-visible, .explain:focus-visible,
+.prompt-card:focus-visible { outline: 2px solid #B8860B; outline-offset: 2px; }
+/* F14: what an intent icon means, on the screen rather than in the manual. */
+.intent-legend { display: flex; flex-wrap: wrap; gap: 4px 10px; padding: 6px 8px; margin: 0 5px 4px;
+  border: 1px solid #2a2820; background: #0a0a08; font-size: 0.5625rem; letter-spacing: 0.06em; }
+.intent-legend-item { display: flex; align-items: center; gap: 4px; color: #8a8578; white-space: nowrap; }
+.intent-legend-item b { color: #c9a84a; font-weight: normal; }
+/* F14: the overdrive fork is a one-time, run-locking choice and explained itself only in a
+   title tooltip, which does not exist on a touch screen. */
+.od-choice-note { color: #b9a68a; font-size: 0.625rem; line-height: 1.45; padding: 4px 6px;
+  border-left: 2px solid #8B0000; margin: 2px 0 4px; }
 .explain { display: none; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
   width: min(300px, 88%); max-height: 80%; overflow-y: auto; z-index: 70; justify-content: center; }
 .explain-card { width: 100%; background: rgba(8,7,5,0.97); border: 1px solid #6b5a2a;
   box-shadow: 0 8px 28px rgba(0,0,0,0.85); padding: 14px; display: flex; flex-direction: column; gap: 10px; }
-.ex-head { font-size: 13px; font-weight: bold; color: #d9a93d; letter-spacing: 1px; text-transform: uppercase; }
-.ex-sub { font-size: 9px; letter-spacing: 1.5px; color: #8a8578; text-transform: uppercase; margin-top: -8px; }
+.ex-head { font-size: 0.8125rem; font-weight: bold; color: #d9a93d; letter-spacing: 1px; text-transform: uppercase; }
+.ex-sub { font-size: 0.5625rem; letter-spacing: 1.5px; color: #8a8578; text-transform: uppercase; margin-top: -8px; }
 .ex-rows { display: flex; flex-direction: column; }
-.ex-row { display: flex; justify-content: space-between; gap: 10px; font-size: 11px;
+.ex-row { display: flex; justify-content: space-between; gap: 10px; font-size: 0.6875rem;
   padding: 5px 0; border-bottom: 1px solid #1f1c15; color: #c9c0ab; }
 .ex-row span:last-child { font-weight: bold; font-variant-numeric: tabular-nums; }
 .ex-row.ex-base { color: #8a8578; }
@@ -921,11 +949,11 @@ button.reach-short { border-color: #7a5a20; }
 .ex-down span:last-child, .ex-row .ex-down { color: #d98a8a; }
 .ex-row.ex-soak { color: #9fb6c9; }
 .ex-row.ex-total { border-bottom: 0; border-top: 1px solid #6b5a2a; margin-top: 3px; padding-top: 7px;
-  color: #d9a93d; font-size: 13px; font-weight: bold; }
+  color: #d9a93d; font-size: 0.8125rem; font-weight: bold; }
 
 /* An operator on the floor with a clock over them. It reads like the threat tag because it is
    the same question asked from the other side: who is about to be lost. */
-.down-tag { background: rgba(20, 0, 0, 0.92); border: 1px solid #B22222; color: #ff6b6b; font-size: 11px;
+.down-tag { background: rgba(20, 0, 0, 0.92); border: 1px solid #B22222; color: #ff6b6b; font-size: 0.6875rem;
   font-weight: bold; padding: 2px 7px; letter-spacing: 1px; white-space: nowrap; animation: down-pulse 1s ease-in-out infinite; }
 .down-tag.down-lost { border-color: #4a4a4a; color: #6e6e6e; animation: none; letter-spacing: 2px; }
 @keyframes down-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.45; } }
@@ -935,13 +963,13 @@ button.reach-short { border-color: #7a5a20; }
    the tag down with it and left an empty patch of rubble where an operator was. */
 .entity.dead.bleeding-out { opacity: 1; filter: none; }
 .entity.bleeding-out .portrait { filter: grayscale(0.35) drop-shadow(0 0 10px rgba(200, 30, 30, 0.9)); }
-.down-tag { font-size: 12px; }
+.down-tag { font-size: 0.75rem; }
 :root.motion-off .down-tag { animation: none; }
 
 /* Walking out: the offer is a priced decision, so both halves of it are on the panel rather
    than described in prose. Green because it is the one ending that is not a defeat. */
 .camp-walk { border-color: #6B8E23; color: #6B8E23; }
-.camp-walk-locked { font-size: 11px; color: #6a6a5a; text-align: center; padding: 10px 6px; font-style: italic; }
+.camp-walk-locked { font-size: 0.6875rem; color: #6a6a5a; text-align: center; padding: 10px 6px; font-style: italic; }
 /* The collector's cache: the one camp option that is not on the menu every time. Violet
    rather than the camp's greens and golds, because it is not a service - it is a bargain, and
    it should not read as another way to feel better. Both halves are on the button: a curse
@@ -949,18 +977,18 @@ button.reach-short { border-color: #7a5a20; }
 .camp-cache { border-color: #7a3f7a; background: #150a15; display: flex; flex-direction: column;
   align-items: flex-start; gap: 4px; text-transform: none; padding: 10px 12px; }
 .camp-cache:hover:not(:disabled) { background: #241024; border-color: #a4508b; }
-.cache-head { color: #c07ac0; font-weight: bold; letter-spacing: 1px; font-size: 12px;
+.cache-head { color: #c07ac0; font-weight: bold; letter-spacing: 1px; font-size: 0.75rem;
   text-transform: uppercase; }
-.cache-gain { color: #8fa06a; font-size: 11px; }
-.cache-cost { color: #b05a5a; font-size: 11px; }
-.cache-price { color: #6a6a5a; font-size: 10px; font-style: italic; }
+.cache-gain { color: #8fa06a; font-size: 0.6875rem; }
+.cache-cost { color: #b05a5a; font-size: 0.6875rem; }
+.cache-price { color: #6a6a5a; font-size: 0.625rem; font-style: italic; }
 .camp-extract-panel { border: 1px solid #6B8E23; background: #0b0f08; padding: 12px 14px; margin-bottom: 12px; display: flex; flex-direction: column; gap: 6px; }
-.camp-extract-head { color: #6B8E23; font-weight: bold; letter-spacing: 2px; font-size: 13px; }
-.camp-extract-line { font-size: 11px; color: #8a8578; line-height: 1.5; }
-.camp-extract-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 11px; color: #8a8578; letter-spacing: 1px; }
-.camp-extract-row b { color: #d5cfc0; font-size: 12px; text-align: right; }
+.camp-extract-head { color: #6B8E23; font-weight: bold; letter-spacing: 2px; font-size: 0.8125rem; }
+.camp-extract-line { font-size: 0.6875rem; color: #8a8578; line-height: 1.5; }
+.camp-extract-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 0.6875rem; color: #8a8578; letter-spacing: 1px; }
+.camp-extract-row b { color: #d5cfc0; font-size: 0.75rem; text-align: right; }
 .camp-extract-row em { color: #6B8E23; font-style: normal; }
-.camp-extract-warn { font-size: 10px; color: #B22222; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+.camp-extract-warn { font-size: 0.625rem; color: #B22222; letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
 .camp-walk-go { border-color: #6B8E23; color: #6B8E23; font-weight: bold; }
 .chronicle-walked { border-color: #3d5216; }
 .chronicle-walked .chronicle-epitaph b { color: #6B8E23; letter-spacing: 1px; }
@@ -980,18 +1008,18 @@ button.reach-short { border-color: #7a5a20; }
 .doctrine-card { display: flex; flex-direction: column; gap: 3px; text-align: left; padding: 8px 10px;
     border: 1px solid #3a3a2a; background: #0c0c08; color: #b9b4a6; font-family: inherit; cursor: pointer; }
 .doctrine-head { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
-.doctrine-name { font-size: 11px; font-weight: bold; letter-spacing: 2px; color: #d5cfc0; }
-.doctrine-bonus { font-size: 11px; font-weight: bold; color: #B8860B; font-variant-numeric: tabular-nums; }
-.doctrine-rule { font-size: 10px; color: #b9b4a6; line-height: 1.4; }
-.doctrine-edge { font-size: 10px; color: #6B8E23; line-height: 1.4; }
-.doctrine-no { font-size: 9.5px; color: #B22222; letter-spacing: 1px; }
+.doctrine-name { font-size: 0.6875rem; font-weight: bold; letter-spacing: 2px; color: #d5cfc0; }
+.doctrine-bonus { font-size: 0.6875rem; font-weight: bold; color: #B8860B; font-variant-numeric: tabular-nums; }
+.doctrine-rule { font-size: 0.625rem; color: #b9b4a6; line-height: 1.4; }
+.doctrine-edge { font-size: 0.625rem; color: #6B8E23; line-height: 1.4; }
+.doctrine-no { font-size: 0.59375rem; color: #B22222; letter-spacing: 1px; }
 .doctrine-card.doctrine-on { border-color: #B8860B; background: #17130a; }
 .doctrine-card.doctrine-on .doctrine-name { color: #B8860B; }
 .doctrine-card.doctrine-unmet { opacity: 0.6; }
 
 /* Live on the map header, the way the front is: still keeping it, or visibly not. */
 #doctrine-badge { display: flex; align-items: center; justify-content: center; gap: 8px; flex-shrink: 0;
-    border: 1px solid #6b5a20; background: #121006; color: #B8860B; font-size: 11px;
+    border: 1px solid #6b5a20; background: #121006; color: #B8860B; font-size: 0.6875rem;
     letter-spacing: 2px; padding: 5px 8px; }
 #doctrine-badge.doctrine-badge-broken { border-color: #6b2020; background: #140808; color: #B22222; }
 .doctrine-badge-mult { font-variant-numeric: tabular-nums; opacity: 0.85; }

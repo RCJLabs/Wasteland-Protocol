@@ -2,7 +2,10 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<!-- F14: maximum-scale=1 and user-scalable=no meant the one universal way to make a screen
+     bigger was switched off, on the game whose body text is 8 to 11px. Nothing here needs
+     pinch-zoom disabled - there is no map to pan and no canvas to draw on. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Wasteland Protocol</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#0a0a0a">
@@ -282,7 +285,10 @@
 
         <div class="dashboard">
             <div id="command-deck"></div>
-            <div id="log"></div>
+            <!-- F14: the fight narrates itself here and said none of it out loud. Polite, so
+                 it waits for a gap rather than cutting across whatever is being read. -->
+            <div id="log" role="log" aria-live="polite" aria-relevant="additions"
+                 aria-label="Combat log"></div>
         </div>
     </div>
 </div>

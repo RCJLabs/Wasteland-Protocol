@@ -5232,7 +5232,19 @@ function initEngine() {
 // F12: `.overlay` is the third exception, beside the settings icon and the settings screen.
 // An overlay belongs to the game rather than to one screen of it - the prompts fire from
 // fifteen places outside combat - so the sweep that hides screens has to leave them alone.
-function switchScreen(screenId) { if (screenId !== 'screen-combat') stopAmbience(); document.querySelectorAll('#engine > div:not(.settings-icon):not(#screen-settings):not(.overlay)').forEach(el => el.style.display = 'none'); document.getElementById(screenId).style.display = 'flex'; if (screenId === 'screen-map' || screenId === 'screen-outpost' || screenId === 'screen-citadel') { document.getElementById('btn-global-settings').style.display = 'block'; } else { document.getElementById('btn-global-settings').style.display = 'none'; } }
+function switchScreen(screenId) { if (screenId !== 'screen-combat') stopAmbience(); document.querySelectorAll('#engine > div:not(.settings-icon):not(#screen-settings):not(.overlay)').forEach(el => el.style.display = 'none'); document.getElementById(screenId).style.display = 'flex'; if (screenId === 'screen-map' || screenId === 'screen-outpost' || screenId === 'screen-citadel') { document.getElementById('btn-global-settings').style.display = 'block'; } else { document.getElementById('btn-global-settings').style.display = 'none'; } focusScreen(screenId); }
+// F14: the screen changed under the caret and nothing moved with it, so a keyboard was left
+// tabbing from wherever the last screen had got to - usually the top of the document. The
+// screen itself takes focus rather than its first button: announcing "map" and letting the
+// player tab in reads better than dropping them onto one control out of twenty, and it does
+// not steal the press from a button that was just used to get here.
+function focusScreen(screenId) {
+    const el = document.getElementById(screenId);
+    if (!el || typeof el.focus !== 'function') return;
+    el.setAttribute('tabindex', '-1');
+    if (!el.hasAttribute('aria-label')) el.setAttribute('aria-label', screenId.replace('screen-', '').replace(/-/g, ' '));
+    try { el.focus({ preventScroll: true }); } catch (e) { /* older engines */ }
+}
 function openSettings() { disarmErase(); document.getElementById('screen-settings').style.display = 'flex'; }
 function closeSettings() { disarmErase(); document.getElementById('screen-settings').style.display = 'none'; }
 function saveSettings() { Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); }
@@ -7667,6 +7679,20 @@ function enemyDmgMult(enemy) {
 // CHARGE and SALVO are not rolled from any table - they are the two turns of a wind-up, and
 // they are here because the board has to be able to draw them. See chargeIntent.
 const INTENT_ICONS = { AOE: '🧨', HEAVY: '💥', STATUS: '☣️', DEFEND: '🛡️', ATTACK: '⚔️', FLANK: '🌀', CHARGE: '⚡', SALVO: '☄️' };
+// F14: what each of them means, in one line, on the screen they appear on. The icons carry the
+// whole forecast - which is the game's central read - and nothing anywhere said what they were.
+const INTENT_WORDS = { ATTACK: 'one target', AOE: 'the line', HEAVY: 'a big one',
+                       STATUS: 'a status', DEFEND: 'bracing', FLANK: 'going round',
+                       CHARGE: 'winding up', SALVO: 'everyone' };
+// Drawn for the intents actually on the field, so it is a key to this fight rather than a table.
+function intentLegendHtml() {
+    const live = [...new Set(activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.intent)
+        .map(e => e.intent.type))].filter(t => INTENT_WORDS[t]);
+    if (!live.length) return '';
+    return `<div class="intent-legend" aria-label="What the icons over each enemy mean">`
+        + live.map(t => `<span class="intent-legend-item">${INTENT_ICONS[t] || ''} <b>${INTENT_WORDS[t]}</b></span>`).join('')
+        + `</div>`;
+}
 
 function intentFor(type, enemy) {
     const icon = (type === 'ATTACK' && enemy.range === 'ranged') ? '🔫' : INTENT_ICONS[type];
@@ -9140,7 +9166,14 @@ const logEl = document.getElementById('log');
 function log(msg, styleClass = "log-dmg", hitId = null) {
     const el = document.createElement('div'); el.className = styleClass; el.innerText = msg;
     // A logged blow keeps a handle on its own arithmetic: tap the line to read it back.
-    if (hitId !== null) { el.classList.add('log-explainable'); el.dataset.action = 'explain'; el.dataset.hit = String(hitId); }
+    // F14: a plain div with a click handler is a control only for a mouse. The arithmetic
+    // behind a blow is the one surface that answers "why did that number happen", and it was
+    // unreachable from a keyboard.
+    if (hitId !== null) {
+        el.classList.add('log-explainable'); el.dataset.action = 'explain'; el.dataset.hit = String(hitId);
+        el.tabIndex = 0; el.setAttribute('role', 'button');
+        el.setAttribute('aria-label', `Explain: ${msg}`);
+    }
     // The line still goes in - suites read the log's text - but pinning it to the bottom reads
     // scrollHeight, and that is a forced layout on every logged blow.
     logEl.appendChild(el); if (!paintOff) logEl.scrollTop = logEl.scrollHeight;
@@ -9438,8 +9471,13 @@ function renderCommandDeck() {
         const pair = OVERDRIVES[aE.classType] || [];
         if (!odChoices[aE.classType] && pair.length === 2) {
             // The first full bar of the run: both options on the table, and using one is choosing.
+            // F14: what each one DOES was in a title tooltip, which does not exist on a touch
+            // screen - so the one-time choice that locks the class for the rest of the run was
+            // being made off two names. The line is in the deck now, where the thumb is.
+            deckHtml += `<div class="od-choice-note">One of these, and it is the ${aE.classType.replace(/_/g, ' ')}'s for the rest of the expedition.</div>`;
             pair.forEach(o => {
-                deckHtml += `<button class="title-btn btn-overdrive" data-action="queue" data-move="OVERDRIVE" data-variant="${o.id}" title="${o.desc}">OVERDRIVE: ${o.name}</button>`;
+                deckHtml += `<button class="title-btn btn-overdrive" data-action="queue" data-move="OVERDRIVE" data-variant="${o.id}" title="${o.desc}">OVERDRIVE: ${o.name}</button>`
+                          + `<div class="od-choice-note">${o.desc}</div>`;
             });
         } else {
             const o = overdriveFor(aE.classType);
@@ -9503,6 +9541,7 @@ function renderCommandDeck() {
     }
 
     if (inventory.length > 0) { deckHtml += `<button style="border-color:#B8860B; color:#B8860B;" data-action="bag">BAG (${inventory.length})</button>`; }
+    deckHtml += intentLegendHtml();
     // Last in the deck on purpose: the deck is a list of things to do to the enemy, and the way
     // out belongs under them, not above the first ability the eye lands on. One press arms it.
     if (canWithdraw()) {
@@ -11526,7 +11565,8 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    clearStaleClocks, loadoutChipsHtml, benchedFor, REVENANT_FILE, summonedRoster, foldBestiaryNames, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
+    clearStaleClocks, loadoutChipsHtml, benchedFor, REVENANT_FILE, summonedRoster, foldBestiaryNames,
+    INTENT_WORDS, intentLegendHtml, focusScreen, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, noteKill, raiseBody, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder,
