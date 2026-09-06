@@ -339,6 +339,10 @@ function moveReachFor(move, ent) {
 }
 
 // A cooldown mod shaves a turn off the listed price, never below 1.
+// F09: and so does a charged sky - which is the whole of ION STORM's banner, "cooldowns a turn
+// shorter". Eleven moves used to set their cooldown directly instead of asking here, among them
+// all three self-actions and most of the classic deck, so the storm shortened maybe a third of
+// what a squad presses. Every cooldown in the game is now priced through this one function.
 function cdFor(ent, id, base) {
     const mods = { COUNTERWEIGHT: 'heavy_wrench', PRESSURE_SYRINGE: 'cauterize',
                    SPOTTING_SCOPE: 'spotters_mark', WAR_HARNESS: 'rip_and_tear',
@@ -1908,14 +1912,27 @@ function generateSectorMap(rng = Math.random) {
         if (n.type === 'BOSS') n.weather = 'BLOODLUST';
         else if (FIGHT_NODES.includes(n.type)) {
             const fr = frontById(sectorFront);
-            if (currentSector === 1 && n.tier === 1) n.weather = 'CLEAR';
+            if (currentSector === 1 && n.tier === openingTier()) n.weather = 'CLEAR';
             else if (fr && fr.sky && rng() < (fr.skyChance || 0)) n.weather = fr.sky;
             else if (rng() < WEATHER_CHANCE) n.weather = FACTIONS[n.type].weather;
+            // F09: HARSH_SKIES promises "every node carries weather", and used to keep that
+            // promise by re-rolling inside initiateCombat whenever the node had forecast CLEAR
+            // - which broke the forecast contract the rest of this block exists to hold. The
+            // roll belongs here, where the node can show what it will be fought under.
+            // Deliberately after the plain-opening line and not exempt from it: "every node
+            // carries weather, it is never clear" is a signed contract, and it has always
+            // outranked the opening fight's calm. Only the sky - the ground and the formation
+            // of an opening node stay plain.
+            if (hasContract('HARSH_SKIES') && (n.weather || 'CLEAR') === 'CLEAR')
+                n.weather = WEATHER_IDS[Math.floor(rng() * WEATHER_IDS.length)];
         }
         // Ground follows the place, so a refinery reliably fights like a refinery. The opening
         // node is plain for the same reason its sky is: nothing new in the first fight. A
         // commander's arena stays plain too - the commander is the variable there.
-        if (FIGHT_NODES.includes(n.type) && !(currentSector === 1 && n.tier === 1)) {
+        // F09: keyed on the literal tier 1, while the Road Crew upgrade opens the run on tier
+        // 2 - so anybody who had bought it fought their first fight under weather, on ground
+        // and against a formation, which is the one fight the rule exists to keep plain.
+        if (FIGHT_NODES.includes(n.type) && !(currentSector === 1 && n.tier === openingTier())) {
             const choices = FACTIONS[n.type].ground || [];
             if (choices.length && rng() < GROUND_CHANCE)
                 n.terrain = choices.length === 1 || rng() < GROUND_SIGNATURE ? choices[0]
@@ -1923,7 +1940,7 @@ function generateSectorMap(rng = Math.random) {
         }
         // Who is standing there, decided now so the node can say so. The opening fight of the
         // run is a plain patrol for the same reason its sky and its ground are plain.
-        if (FIGHT_NODES.includes(n.type) && !(currentSector === 1 && n.tier === 1))
+        if (FIGHT_NODES.includes(n.type) && !(currentSector === 1 && n.tier === openingTier()))
             n.formation = rollFormation(n.type, effTierAt(n.tier), rng);
     });
 
@@ -4204,7 +4221,7 @@ function nextTurn() {
 function executeSelfAction(type) {
     let actEnt = turnQueue[activeIndex];
     if (type === 'IRON_GUARD') {
-        actEnt.armor += plate(15); actEnt.armorTurns = 2; actEnt.guardTurns = 2; actEnt.cooldowns.iron_guard = 3;
+        actEnt.armor += plate(15); actEnt.armorTurns = 2; actEnt.guardTurns = 2; actEnt.cooldowns.iron_guard = cdFor(actEnt, 'iron_guard', 3);
         // Armour alone only ever protected the Bruiser. Bracing now covers the ranks behind it,
         // which is what gives the front rank a job beyond absorbing whatever walks into it.
         log(`> ${actEnt.name} braces and covers the line behind (+${plate(15)} ARMOR).`, "log-status");
@@ -4215,7 +4232,7 @@ function executeSelfAction(type) {
         const cost = hasTrait(actEnt, 'SECOND_LUNG') ? 0 : Math.max(1, Math.floor(actEnt.maxHp * FIEND_CHARGE_COST));
         actEnt.hp = Math.max(1, actEnt.hp - cost);
         actEnt.chargeTurns = CHARGE_TURNS + 1;   // spent down at the start of his own next turn
-        actEnt.cooldowns.over_the_top = 4;
+        actEnt.cooldowns.over_the_top = cdFor(actEnt, 'over_the_top', 4);
         log(cost > 0
             ? `> ${actEnt.name} goes over the top. -${cost} HP, and everything hits harder.`
             : `> ${actEnt.name} goes over the top without breaking stride.`, "log-status");
@@ -4229,7 +4246,7 @@ function executeSelfAction(type) {
             a.hp = Math.min(a.maxHp, a.hp + heal);
             spawnFCT(a.id, `+${heal}`, "fct-heal");
         });
-        actEnt.cooldowns.purge_valve = hasTrait(actEnt, 'SPARE_FILTERS') ? 2 : 3;
+        actEnt.cooldowns.purge_valve = cdFor(actEnt, 'purge_valve', hasTrait(actEnt, 'SPARE_FILTERS') ? 2 : 3);
         log(`> ${actEnt.name} vents the tanks. The squad is scrubbed clean and patched for ${heal}.`, "log-heal");
         playSFX('heal', 1.4);
     }
@@ -8841,13 +8858,18 @@ function initiateCombat(nodeType, isEliteNode) {
     }
     // A fight entered from the map keeps the promise its node made; a fight staged directly
     // (dev tools, suites) still rolls as before.
+    const hadForecast = !!forecastWeather;
     if (forecastWeather) { currentWeather = forecastWeather; forecastWeather = null; }
+    // F09: HARSH_SKIES used to re-roll here whenever the sky came out CLEAR, forecast or not,
+    // which broke the one contract this block exists to keep - the node showed CLEAR and the
+    // fight was not. The node is dressed at generation now, so a fight entered from the map
+    // already shows what it gets. A fight staged with no node behind it has nothing that could
+    // have been dressed, so the contract is still honoured here - but never over a forecast.
+    if (!hadForecast && hasContract('HARSH_SKIES') && currentWeather === 'CLEAR')
+        currentWeather = WEATHER_IDS[Math.floor(Math.random() * WEATHER_IDS.length)];
     currentTerrain = forecastTerrain || 'OPEN_ROAD'; forecastTerrain = null;
     currentFormation = forecastFormation || null; forecastFormation = null;
     if (currentTerrain !== 'OPEN_ROAD') firePrompt('GROUND');
-    if (hasContract('HARSH_SKIES') && currentWeather === 'CLEAR') {
-        currentWeather = WEATHER_IDS[Math.floor(Math.random() * WEATHER_IDS.length)];
-    }
     // A front whose description promises the boss fights under its sky delivers that; the rest
     // tilt the roads only. Generalising this to every front with a sky would have had three of
     // them quietly cancelling the arena's bloodlust without ever saying so.
@@ -9831,7 +9853,12 @@ function resolveAction(targetId) {
             const front = livingEnemies.find(e => e.hp > 0);
             if (front) { front.stunnedTurns = 1; spawnFCT(front.id, "STUNNED", "fct-status"); }
         } else if (variant.id === 'HEADSHOT') {
-            let d = target.classType === 'BOSS' ? actEnt.dmgBase * 4.0 : target.maxHp; applyDamageHit(actEnt, target, d, 'phys', null);
+            // F09: this passed target.maxHp through mitigate, so a Juggernaut with plate and a
+            // phys resistance kept most of its bar and the banner's "outright" was a lie
+            // against exactly the targets worth spending an overdrive on. A commander is the
+            // stated exception and still takes 4x through the normal arithmetic.
+            if (target.classType === 'BOSS') applyDamageHit(actEnt, target, actEnt.dmgBase * 4.0, 'phys', null);
+            else applyDamageHit(actEnt, target, target.maxHp, 'phys', null, { pierce: true });
         } else if (variant.id === 'OVERWATCH') {
             all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.2, 'phys', null); if (e.hp > 0) { e.markedTurns = 3; spawnFCT(e.id, "MARKED", "fct-status"); } });
         } else if (variant.id === 'APEX_PREDATOR') {
@@ -9923,14 +9950,14 @@ function resolveAction(targetId) {
             if (Math.abs(f - 1) > 0.005) hitTrace.push({ label, f }); traceMark = dmgMult; };
 
         // Each ability's own profile first - flat rates and positional swings both settle here.
-        if (pendingAction === 'FLASHBANG') { dmgMult = 0.4; actEnt.cooldowns.flashbang = hasTrait(actEnt, 'QUICK_HANDS') ? 3 : 4; }
+        if (pendingAction === 'FLASHBANG') { dmgMult = 0.4; actEnt.cooldowns.flashbang = cdFor(actEnt, 'flashbang', hasTrait(actEnt, 'QUICK_HANDS') ? 3 : 4); }
         if (pendingAction === 'HEAVY_WRENCH') { dmgMult = 1.5; actEnt.cooldowns.heavy_wrench = cdFor(actEnt, 'heavy_wrench', 3); }
-        if (pendingAction === 'FERAL_BITE') { dmgMult = 1.2; actEnt.cooldowns.feral_bite = 3; }
-        if (pendingAction === 'DEADEYE') { if (dist === livingEnemies.length - 1 && dist !== 0) dmgMult = hasTrait(actEnt, 'PATIENT_HUNTER') ? 2.1 : 1.8; else dmgMult = hasMod(actEnt, 'LONG_BARREL') ? 1.0 : 0.8; actEnt.cooldowns.deadeye = 2; }
-        if (pendingAction === 'BUCKSHOT') { dmgMult *= (dist === 0 ? (hasTrait(actEnt, 'POINT_BLANK') ? 1.8 : 1.5) : 0.8); actEnt.cooldowns.buckshot = 2; }
-        if (pendingAction === 'ACID_FLASK') { dmgMult = 0.5; actEnt.cooldowns.acid_flask = 3; }
-        if (pendingAction === 'THERMITE') { dmgMult *= 1.6; actEnt.cooldowns.thermite = hasTrait(actEnt, 'CONTROLLED_BURN') ? 3 : 4; }
-        if (pendingAction === 'EXECUTE_SHOT') { dmgMult *= 1.4; actEnt.cooldowns.execute_shot = 3; }
+        if (pendingAction === 'FERAL_BITE') { dmgMult = 1.2; actEnt.cooldowns.feral_bite = cdFor(actEnt, 'feral_bite', 3); }
+        if (pendingAction === 'DEADEYE') { if (dist === livingEnemies.length - 1 && dist !== 0) dmgMult = hasTrait(actEnt, 'PATIENT_HUNTER') ? 2.1 : 1.8; else dmgMult = hasMod(actEnt, 'LONG_BARREL') ? 1.0 : 0.8; actEnt.cooldowns.deadeye = cdFor(actEnt, 'deadeye', 2); }
+        if (pendingAction === 'BUCKSHOT') { dmgMult *= (dist === 0 ? (hasTrait(actEnt, 'POINT_BLANK') ? 1.8 : 1.5) : 0.8); actEnt.cooldowns.buckshot = cdFor(actEnt, 'buckshot', 2); }
+        if (pendingAction === 'ACID_FLASK') { dmgMult = 0.5; actEnt.cooldowns.acid_flask = cdFor(actEnt, 'acid_flask', 3); }
+        if (pendingAction === 'THERMITE') { dmgMult *= 1.6; actEnt.cooldowns.thermite = cdFor(actEnt, 'thermite', hasTrait(actEnt, 'CONTROLLED_BURN') ? 3 : 4); }
+        if (pendingAction === 'EXECUTE_SHOT') { dmgMult *= 1.4; actEnt.cooldowns.execute_shot = cdFor(actEnt, 'execute_shot', 3); }
         if (pendingAction === 'SPOTTERS_MARK') { dmgMult = 0.4; actEnt.cooldowns.spotters_mark = cdFor(actEnt, 'spotters_mark', 3); }
         if (pendingAction === 'RIP_AND_TEAR') { dmgMult *= 1.2; actEnt.cooldowns.rip_and_tear = cdFor(actEnt, 'rip_and_tear', 3); }
         // The mastered fourth verbs, priced like the classics.
@@ -10008,13 +10035,18 @@ function resolveAction(targetId) {
 
         snap('combo');
         if (hasRelic('THERMAL_CORE') && atkType === 'energy') { dmgMult *= relicSetActive('Reactor Rig') ? 1.5 : 1.3; }
-        if (hasRelic('WHETSTONE') && isMelee(pendingAction)) { dmgMult *= relicSetActive('Full Arsenal') ? 1.3 : 1.2; }
-        if (hasRelic('RANGEFINDER') && isRanged(pendingAction)) { dmgMult *= relicSetActive('Full Arsenal') ? 1.25 : 1.15; }
+        // F09: these asked isMelee/isRanged, which read the move's row in MOVE_REACH and know
+        // nothing about the operator holding it. A bayoneted Pipe Rifle was therefore melee for
+        // reach, Rotor Lift and the ground, and ranged for the relics - taking Rangefinder's
+        // bonus and Hungry Blade's non-melee penalty, and never Whetstone's. effReach is the
+        // same answer the rest of this resolver already uses.
+        if (hasRelic('WHETSTONE') && effReach === 'melee') { dmgMult *= relicSetActive('Full Arsenal') ? 1.3 : 1.2; }
+        if (hasRelic('RANGEFINDER') && effReach === 'ranged') { dmgMult *= relicSetActive('Full Arsenal') ? 1.25 : 1.15; }
         if (hasRelic('VULTURES_INSTINCT') && isCombo) { dmgMult *= 1.25; }
         if (hasRelic('GLASS_CANNON_CORE')) { dmgMult *= 1.4; }
         // Rotor Lift: a hovering drone is a ranged problem. Swinging at it is most of a wasted turn.
         if (hasSig(target, 'ROTOR_LIFT') && moveReachFor(pendingAction, actEnt) === 'melee') dmgMult *= 0.4;
-        if (hasRelic('HUNGRY_BLADE') && !isMelee(pendingAction)) { dmgMult *= 0.85; }
+        if (hasRelic('HUNGRY_BLADE') && effReach !== 'melee') { dmgMult *= 0.85; }
 
         // A sandstorm blinds anything fired across the field. This used to be a second hand-kept
         // list that had drifted - a thrown molotov was somehow unaffected - and now reads the
@@ -10043,11 +10075,6 @@ function resolveAction(targetId) {
         comboKill = isCombo;
         applyDamageHit(actEnt, target, Math.floor(baseDmg * dmgMult), atkType, pendingAction);
         comboKill = false;
-
-        if (actEnt.quirk && actEnt.quirk.id === 'VAMPIRIC' && actEnt.hp < actEnt.maxHp) {
-             actEnt.hp = Math.min(actEnt.maxHp, actEnt.hp + 2);
-             spawnFCT(actEnt.id, "+2", "fct-heal");
-        }
 
         if (hasRelic('BLOOD_VIAL') && atkType === 'bio' && actEnt.hp < actEnt.maxHp) {
             const fed = relicSetActive('Field Surgery') ? 10 : 5;
@@ -10083,7 +10110,7 @@ function resolveAction(targetId) {
             } }
         if (pendingAction === 'RIP_AND_TEAR' && target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns, 3); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400); }
         if (pendingAction === 'MOLOTOV') {
-            actEnt.cooldowns.molotov = 3; triggerShake();
+            actEnt.cooldowns.molotov = cdFor(actEnt, 'molotov', 3); triggerShake();
             if (hasMod(actEnt, 'NAPALM_MIX') && target.hp > 0) { target.oiledTurns = Math.max(target.oiledTurns, 3); setTimeout(() => spawnFCT(target.id, "OILED", "fct-weak"), 450); }
             let secondaries = livingEnemies.filter(e => e.id !== targetId);
             if (secondaries.length > 0) { let sTarg = secondaries[Math.floor(Math.random() * secondaries.length)]; applyDamageHit(actEnt, sTarg, Math.floor(baseDmg * (hasTrait(actEnt, 'BACKDRAFT') ? 1.0 : 0.7)), atkType, null);
@@ -10327,11 +10354,17 @@ function raiseBody(ent, share) {
     return true;
 }
 
-function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
+function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
     if (target.hp <= 0) return;
     // Mitigation is figured per victim, so a bond partner who steps in takes the blow through
     // their own armor and resists rather than the original target's.
-    const figure = t => mitigate(attacker, t, calcDmg, atkType, abilityStr);
+    // F09: `pierce` is the one thing a banner can promise that mitigation cannot express -
+    // HEADSHOT says "execute one target outright", and outright is not a number to be shaved
+    // by armour and a resistance. It still comes through here so the blow keeps its ledger:
+    // the kill, the contracts, the bestiary, the Tally, the card that explains it.
+    const pierce = !!(opts && opts.pierce);
+    const figure = t => pierce ? { n: Math.max(1, t.hp), rv: 0 }
+                               : mitigate(attacker, t, calcDmg, atkType, abilityStr);
     let { n: netDmg, rv: resistValue } = figure(target);
     // File the whole story of this number: what it started as, what bent it, what soaked it.
     const filed = { attacker: attacker.name, target: target.name, raw: calcDmg,
@@ -10347,10 +10380,23 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr) {
             spawnFCT(savior.id, 'STEPS IN', 'fct-status');
             target = savior;
             ({ n: netDmg, rv: resistValue } = figure(target));
+            // F09: the record was filed before the swap, so the tap-to-explain card named the
+            // operator the blow was MEANT for while the log line beside it named the one who
+            // took it. The card explains a number, and the number is the saviour's.
+            filed.target = target.name;
         }
     }
     // Riot Plate drains by what it soaked; breaking it is a moment worth announcing, and it is
     // why a single heavy hit beats chip damage against a Juggernaut.
+    // F09: "Heals 2 on every hit they land" - and it used to sit in the aimed-swing branch of
+    // resolveAction, so the splash half of an area move, the second blow of HARRY, an
+    // Entrenched bayonet's follow-up and every overdrive paid nothing. Here it is one hit, one
+    // heal, wherever the hit came from - the same move F05 made for the death ledger.
+    if (attacker && attacker.isPlayer && attacker.quirk && attacker.quirk.id === 'VAMPIRIC'
+        && netDmg > 0 && attacker.hp > 0 && attacker.hp < attacker.maxHp) {
+        attacker.hp = Math.min(attacker.maxHp, attacker.hp + 2);
+        spawnFCT(attacker.id, "+2", "fct-heal");
+    }
     if (hasSig(target, 'RIOT_PLATE') && (target.plate || 0) > 0 && netDmg > 0) {
         target.plate -= netDmg;
         if (target.plate <= 0) {
