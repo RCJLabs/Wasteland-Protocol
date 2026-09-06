@@ -20,9 +20,18 @@ module.exports = {
     await page.goto(`${base}/index.html`);
     await page.waitForTimeout(600);
 
+    // F13 folded the hand and the pairs behind one tap, because a mid-run panel was taking the
+    // route graph's screen. What this suite is about - which pairs the panel claims, and whether
+    // it agrees with the engine - is unchanged; it is one tap further in, so the tap is here.
+    const open = () => {
+      const h = document.getElementById('relic-head');
+      if (h && h.getAttribute('aria-expanded') !== 'true') h.click();
+    };
     const hand = ids => page.evaluate(list => {
       activeRelics = list.map(id => RELIC_POOL.find(r => r.id === id)).filter(Boolean);
       renderMap();
+      const h = document.getElementById('relic-head');
+      if (h && h.getAttribute('aria-expanded') !== 'true') { h.click(); }
       const el = document.getElementById('set-list');
       return { text: el.innerText, html: el.innerHTML,
                up: [...el.querySelectorAll('.set-up-name')].map(n => n.innerText),
@@ -60,6 +69,8 @@ module.exports = {
         for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
         activeRelics = pool.slice(0, 1 + Math.floor(Math.random() * 12)).map(id => RELIC_POOL.find(r => r.id === id));
         renderMap();
+        const rh = document.getElementById('relic-head');
+        if (rh && rh.getAttribute('aria-expanded') !== 'true') rh.click();
         const shown = new Set([...document.querySelectorAll('.set-up-name')].map(n => n.innerText));
         RELIC_SETS.forEach(s => { checked++; if (shown.has(s.name) !== relicSetActive(s.name)) mismatches++; });
       }

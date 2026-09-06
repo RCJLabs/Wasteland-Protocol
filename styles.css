@@ -35,7 +35,18 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .outpost-btn { background: #0a110a; border: 1px solid #6B8E23; color: #6B8E23; font-weight: bold; padding: 15px; margin-bottom: 15px; font-family: monospace; font-size: 14px; cursor: pointer; text-align: center; border-radius: 4px; transition: 0.2s; flex-shrink: 0;}
 .outpost-btn:hover { background: #6B8E23; color: #000; }
 
-.bounty-panel { background: #0a0a0a; border: 1px solid #4488ff; padding: 10px; margin-bottom: 15px; font-size: 11px; display: flex; flex-direction: column; gap: 5px; flex-shrink: 0; }
+/* F13: this could not shrink and had no ceiling, so every relic a run picked up came off the
+   route graph. Capped at a share of the screen with its own scroll, and allowed to shrink below
+   that when the graph's floor needs the room - a header has to stay a header. */
+.bounty-panel { background: #0a0a0a; border: 1px solid #4488ff; padding: 10px; margin-bottom: 15px; font-size: 11px; display: flex; flex-direction: column; gap: 5px; flex-shrink: 1; max-height: 38%; overflow-y: auto; }
+/* A control has to be pressable: N13 set 44px as the floor for anything on this screen and the
+   first draft of this line was 17px tall. The negative margin keeps the panel the height it was
+   while the target reaches the floor - the row it replaced was a title, this one is a button. */
+.relic-head { display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  cursor: pointer; user-select: none; min-height: 44px; padding: 0 2px; margin: -6px 0 -2px; }
+.relic-head:hover, .relic-head:focus-visible { color: #7ab0f0; }
+.relic-count { color: #ffaa00; font-weight: bold; letter-spacing: 1px; }
+#relic-list:empty, #set-list:empty { display: none; }
 .bounty-title { color: #4488ff; font-weight: bold; letter-spacing: 1px; border-bottom: 1px solid #222; padding-bottom: 3px; }
 .bounty-item { display: flex; justify-content: space-between; color: #aaa; }
 .bounty-complete { color: #6B8E23; text-decoration: line-through; }
@@ -53,7 +64,8 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .set-near .set-tag { color: #7ab0d0; }
 .set-note { font-size: 9px; color: #6a655c; letter-spacing: 0; margin-top: 2px; }
 
-.map-viewport { flex-grow: 1; border: 1px solid #222; background: linear-gradient(rgba(15,15,15,0.9), rgba(5,5,5,0.9)), repeating-linear-gradient(0deg, transparent, transparent 19px, #1a1a1a 19px, #1a1a1a 20px), repeating-linear-gradient(90deg, transparent, transparent 19px, #1a1a1a 19px, #1a1a1a 20px); overflow-y: auto; display: flex; flex-direction: column; align-items: center; padding: 30px 0; position: relative; }
+/* F13: and the graph keeps a floor whatever the panel above it is doing. */
+.map-viewport { flex-grow: 1; min-height: 45%; border: 1px solid #222; background: linear-gradient(rgba(15,15,15,0.9), rgba(5,5,5,0.9)), repeating-linear-gradient(0deg, transparent, transparent 19px, #1a1a1a 19px, #1a1a1a 20px), repeating-linear-gradient(90deg, transparent, transparent 19px, #1a1a1a 19px, #1a1a1a 20px); overflow-y: auto; display: flex; flex-direction: column; align-items: center; padding: 30px 0; position: relative; }
 /* The route graph: nodes positioned absolutely on a tall canvas, edges drawn under them.
    Gold-dashed edges are where you can go, green where you have been, near-black what the
    routing has already cut off. */

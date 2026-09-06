@@ -1792,6 +1792,11 @@ const FRONTS = [
 ];
 let sectorFront = null;        // rolled per sector; null on saves from before fronts existed
 let frontBannerPending = false; let frontBannerTimer = null;
+// F13: the relic hand is folded away by default. Measured at 400x800 with thirteen relics the
+// panel took 460px of an 800px screen and left the route graph 165; at 320x568 and 360x640 it
+// left 62px, which is less than one node row - the map was a header with a sliver under it.
+// This is a view preference rather than run state, so it lives here and resets with the page.
+let relicsOpen = false;
 
 function frontById(id) { return FRONTS.find(f => f.id === id) || null; }
 function currentFront() { return frontById(sectorFront); }
@@ -3305,6 +3310,7 @@ const ACTIONS = {
     'toggle-prompts':   () => { globalSettings.prompts = globalSettings.prompts === false; Store.set(SETTINGS_KEY, JSON.stringify(globalSettings)); updateSettingsUI(); },
     'ascension-cycle':  () => { ascension = (ascension + 1) % (unlockedProtocols() + 1); renderContracts(); },
     'pick-order':       el => { if (orderById(el.dataset.id)) activeOrder = el.dataset.id; renderContracts(); },
+    'toggle-relics':    () => { relicsOpen = !relicsOpen; renderMap(); },
     'bench-job':        el => takeBenchJob(el.dataset.id, el.dataset.job),
     'loadout-bench':    el => {
         const kind = el.dataset.kind || 'roster';
@@ -6250,8 +6256,19 @@ function renderMap() {
     }
     document.getElementById('bounty-list').innerHTML = bHtml;
 
+    // F13: folded to a count by default, and the fold carries the two facts the list was being
+    // read for - how many, and how many pairs are up - so a closed panel still answers the
+    // question a player opens it with.
+    const setsUp = setState().filter(x => x.live).length;
+    const relHead = document.getElementById('relic-head');
+    relHead.innerHTML = `<span>${relicsOpen ? '\u25BE' : '\u25B8'} SQUAD RELICS</span>`
+        + `<span class="relic-count">${activeRelics.length}${setsUp ? ` \u00b7 ${setsUp} SET${setsUp === 1 ? '' : 'S'} UP` : ''}</span>`;
+    relHead.setAttribute('aria-expanded', relicsOpen ? 'true' : 'false');
+    relHead.title = relicsOpen ? 'Fold the hand away' : 'Show every relic and every pair';
+
     let rHtml = '';
-    if (activeRelics.length === 0) { rHtml = `<div class="bounty-item"><span>No Relics Acquired</span></div>`; }
+    if (!relicsOpen) { rHtml = ''; }
+    else if (activeRelics.length === 0) { rHtml = `<div class="bounty-item"><span>No Relics Acquired</span></div>`; }
     else { activeRelics.forEach(r => { rHtml += `<div class="relic-item" title="${r.desc}">♦ ${r.name}</div>`; }); }
     document.getElementById('relic-list').innerHTML = rHtml;
 
@@ -6269,7 +6286,7 @@ function renderMap() {
     const sets = setState();
     const liveSets = sets.filter(x => x.live), nearSets = sets.filter(x => !x.live);
     let sHtml = '';
-    if (activeRelics.length) {
+    if (activeRelics.length && relicsOpen) {
         sHtml = `<div class="set-head">RELIC SETS · ${liveSets.length} OF ${RELIC_SETS.length} UP</div>`
             // The live ones share a line: at depth a squad has seven of them up, and seven rows
             // each ending in the word UP is height spent saying the same thing the head says.

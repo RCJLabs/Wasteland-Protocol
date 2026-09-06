@@ -73,7 +73,11 @@
             <div class="bounty-title">ACTIVE BOUNTIES</div>
             <div id="bounty-list"></div>
             
-            <div class="bounty-title" style="margin-top: 8px;">SQUAD RELICS</div>
+            <!-- F13: the title is the control. A mid-run squad holds eleven relics and the
+                 panel was built for three, so what a run is CARRYING is one line by default and
+                 the whole hand is one tap away. -->
+            <div class="bounty-title relic-head" id="relic-head" style="margin-top: 8px;"
+                 data-action="toggle-relics" role="button" tabindex="0"></div>
             <div id="relic-list" style="margin-top: 4px;"></div>
             <div id="set-list" class="set-list"></div>
         </div>
