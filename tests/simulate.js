@@ -710,6 +710,34 @@
 //   armour at that tally           +32 (20 -> 52)  +8 (20 -> 28)
 //   damage at that tally           x1.59           x1.12
 //   what LAST TALLY spends         0.96 of a swing 0.24
+//
+// G03: A PAIRED MEASUREMENT THAT NEEDED THE RIGHT ARM, NOT A BIGGER ONE.
+//
+// G03 stops a walked-out relic arming every run for the rest of a Vault-less career. The
+// default arm is blind to it for a plain reason: `--extract off` is the default, nothing ever
+// walks out, and the flag the defect lives on is only ever written by an extraction.
+//
+// `--extract 3` puts the path under the sample - 40 to 55 of every 100 runs walk out - and the
+// same arm never buys THE VAULT. That was checked rather than assumed, over a 60-run career
+// with an instrumented copy: skull income with runs ending around sector 3 does not reach the
+// Vault's price often enough to matter, so the sample is a Vault-less extracting career, which
+// is precisely the state the leak lived in. Both readings mattered - the first guess was that
+// the sim would buy the Vault immediately and mask the whole thing.
+//
+// Paired 3 x 100, --extract 3, frozen pre-G03 tree against the fix. One row separates:
+//
+//                                pre-G03              G03
+//   operators lost for good      2.51 / 2.27 / 2.62   2.93 / 2.84 / 2.92   per run
+//
+// Complete separation, same direction three times: 2.27-2.62 against 2.84-2.93. That is the
+// free relic's whole worth - about four tenths of an operator a run - and it prices the leak
+// rather than reporting a regression, because the pre arm IS the leak.
+//
+// Touched and not separated, recorded so nobody re-reads them as findings: walked out
+// (48/40/46 against 55/44/55), nodes cleared median (67/63/65 against 67/64/73), median score
+// of a walk-out (26.2k/24.5k/25.5k against 28.2k/24.7k/24.3k), deepest sector by third. Runs
+// that ended the road sat at 1-3 per 100 in both arms and cannot be read here at all, for the
+// reason the F10 note above gives.
 const path = require('path');
 const { serve } = require('./server');
 

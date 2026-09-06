@@ -5744,6 +5744,18 @@ function buildNewRun(diff) {
     noteFavourites();
     const kept = heirloomRelic();
     activeRelics = kept ? [kept] : [];
+    // G03: a walked-out relic is carried, not banked, so the run that receives it spends it.
+    // The Vault is the thing that banks, and it re-reads what you were holding at every run's
+    // end, so it needs no clearing here. Without this the flag was written by an extraction and
+    // cleared by nothing: stashHeirloom returns early for a player without the Vault, so a wipe
+    // could never overwrite what a walk-out wrote, and one successful extraction armed every
+    // run for the rest of that career - the Vault's whole job, for free, from a building the
+    // player does not own.
+    if (metaUpgrades.heirloomWalked) {
+        metaUpgrades.heirloomWalked = false;
+        if (!metaUpgrades.vault) metaUpgrades.heirloom = null;
+        saveMeta();
+    }
     // The Cache stocks a relic of its own, and never a second copy of what the Vault held.
     if (metaUpgrades.cache) {
         const stocked = rollRelic(0);
