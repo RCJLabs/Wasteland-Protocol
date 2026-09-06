@@ -4236,14 +4236,22 @@ function nextTurn() {
 // than added, it expires on the operator's next turn, and it is a third of what the Bruiser's
 // own brace grants for a whole turn and no cooldown. A pass has to be the worst thing on the
 // deck, or it is not a pass.
+//
+// And it never TAKES armour. Setting it flat to base+5 stopped it stacking, and also stripped
+// anything bigger already standing - a Bruiser who braced for +15 and then held dropped to +5.
+// The paired 3 x 150 caught that as the only row that separated: runs that ended the road fell
+// 4/4/4 to 1/2/1, which is a pass making the game harder, which a pass must not do. Raising to
+// the floor rather than setting to it keeps both properties - holding twice is still not twice
+// the plate, and holding after bracing is still braced.
 const HOLD_PLATE = 5;
 function executeSelfAction(type) {
     let actEnt = turnQueue[activeIndex];
     // Every deck has this, always: an operator whose abilities are all cooling used to have
     // nothing that resolved the turn, and a rank III operator can bench their only free move.
     if (type === 'HOLD') {
-        // Set, not added, so holding twice running is not twice the plate.
-        actEnt.armor = (actEnt.baseArmor || 0) + plate(HOLD_PLATE);
+        // Raised to a floor, not added and not set: holding twice running is not twice the
+        // plate, and holding while better armour stands does not take it off.
+        actEnt.armor = Math.max(actEnt.armor || 0, (actEnt.baseArmor || 0) + plate(HOLD_PLATE));
         actEnt.armorTurns = Math.max(actEnt.armorTurns || 0, 1);
         log(`> ${actEnt.name} holds the line (+${plate(HOLD_PLATE)} ARMOR until their next turn).`, "log-status");
         spawnFCT(actEnt.id, "HOLD", "fct-status"); playSFX('click');

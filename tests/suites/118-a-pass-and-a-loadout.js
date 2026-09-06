@@ -97,7 +97,13 @@ module.exports = {
       // And it lapses on their own next turn rather than riding the fight.
       me.armorTurns = 1; applyTurnStartEffects(me);
       const lapsed = { armor: me.armor, turns: me.armorTurns };
-      return { m0, hp0, once, twice, lapsed, base: 4, plate: plate(HOLD_PLATE) };
+      // Holding while something better already stands must not take it off. The paired sim
+      // caught this as the one row that separated - the win rate FELL - because a flat set
+      // stripped a brace down to the pass's own floor.
+      me.armor = me.baseArmor + 30; me.armorTurns = 2;
+      executeSelfAction('HOLD');
+      const overBrace = { armor: me.armor, turns: me.armorTurns };
+      return { m0, hp0, once, twice, lapsed, overBrace, base: 4, plate: plate(HOLD_PLATE) };
     });
     ok(`holding grants a guard (${held.base} -> ${held.once.armor} armour for ${held.once.turns})`,
       held.once.armor === held.base + held.plate && held.once.turns === 1);
@@ -107,6 +113,8 @@ module.exports = {
     ok(`holding twice is not twice the plate (${held.twice.armor})`, held.twice.armor === held.once.armor);
     ok(`and the guard lapses on their next turn (${held.lapsed.armor} back to base)`,
       held.lapsed.armor === held.base);
+    ok(`holding while better armour stands does not take it off (${held.overBrace.armor})`,
+      held.overBrace.armor === held.base + 30 && held.overBrace.turns === 2);
 
     // ── The recruit chooses their three of four ─────────────────────────────────────
     const rec = await page.evaluate(() => {
