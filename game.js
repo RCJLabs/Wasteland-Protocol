@@ -598,6 +598,19 @@ function growTally(keeper, mark) {
     setTimeout(() => spawnFCT(keeper.id, `TALLY ${keeper.tallyStacks}`, 'fct-status'), 260);
     return true;
 }
+// How many people this fight has actually cost the squad, each of them once. A body on the
+// field is not a different person from a name in the ledger: loseOperator pushes to
+// runStats.fallen and leaves the body in activeEntities, so adding the two lists counts a
+// permanent loss twice. Down-but-not-fallen is the recoverable half; the ledger is the rest.
+function yoursDown() {
+    const onField = activeEntities.filter(e => e.isPlayer && e.hp <= 0 && !e.fallen).length;
+    return onField + ((runStats && (runStats.fallen || []).length) || 0);
+}
+// What a keeper has seen but not yet written down. One reading, shared by the intent roll and
+// the resolver, so the icon over it cannot promise a count the swing will not make - E03.
+function uncountedYours(keeper) {
+    return Math.max(0, yoursDown() - ((keeper && keeper.countedYours) || 0));
+}
 function noteTally(dead) {
     if (!dead || dead.isPlayer) return;
     const keeper = activeEntities.find(e => e.classType === 'BOSS' && e.hp > 0 && e.tally && e.id !== dead.id);
@@ -7777,7 +7790,13 @@ function rollIntent(enemy) {
     // A signature action outranks the generic table when it is off cooldown and its roll comes
     // up - so a turret sometimes covers the field instead of simply shooting again.
     const sig = sigOf(enemy);
-    if (sig && sig.kind === 'action' && (enemy.sigCd || 0) <= 0 && Math.random() < sig.weight) {
+    // G01: counting each loss once means a firing with nothing new to count would do nothing
+    // at all, and the Ossuary would spend a quarter of its turns standing there - a defect
+    // traded for a defect. So it does not raise the intent it cannot cash, for the same reason
+    // BURROW will not go under with nothing left on the field to come up at. The weight roll
+    // is spent either way, so the draw sequence is what it was.
+    if (sig && sig.kind === 'action' && (enemy.sigCd || 0) <= 0 && Math.random() < sig.weight
+        && !(enemy.sig === 'COUNT_YOURS' && uncountedYours(enemy) === 0)) {
         return { type: 'SIG', icon: sig.icon, sig: enemy.sig };
     }
     // A boss past its threshold can be locked into one behaviour - the Colossus stops aiming
@@ -11307,11 +11326,22 @@ function executeEnemyAi(enemy) {
 
         else if (enemy.sig === 'COUNT_YOURS') {
             // The tally was its own dead. It has started counting yours.
-            const down = activeEntities.filter(e => e.isPlayer && e.hp <= 0).length
-                       + ((runStats && (runStats.fallen || []).length) || 0);
-            if (enemy.tally && down > 0) {
+            //
+            // G01: written down once each, which took two corrections. It read the field and
+            // the ledger and added them, so an operator lost in this fight - a body still on
+            // the field AND a name in runStats.fallen - was two marks for one death. And it
+            // kept no record of what it had already counted, so on a two-turn cooldown it
+            // re-read the whole casualty list every firing: one loss filled the eight-stack
+            // tally by itself inside four firings, each stack +4 armour and +6% damage, and
+            // the Ossuary's last phase spends what it counted. The arithmetic landed hardest
+            // on the final fight of a run that was already going badly, which is the opposite
+            // of what a tally of your dead is supposed to mean.
+            const fresh = uncountedYours(enemy);
+            if (enemy.tally && fresh > 0) {
                 let add = 0;
-                for (let i = 0; i < down; i++) { if (growTally(enemy, null)) add++; else break; }
+                for (let i = 0; i < fresh; i++) { if (growTally(enemy, null)) add++; else break; }
+                // What it has seen, whether or not the ledger had room left to write it.
+                enemy.countedYours = yoursDown();
                 if (add) log(`> ${enemy.name} adds your dead to the count. ${add} more.`, 'log-dmg');
                 else log(`> ${enemy.name} counts yours too, and the ledger is already full.`, 'log-status');
                 if (add) { spawnFCT(enemy.id, `TALLY +${add}`, 'fct-weak'); playSFX('enrage'); }
@@ -11610,7 +11640,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    clearStaleClocks, loadoutChipsHtml, benchedFor, REVENANT_FILE, summonedRoster, foldBestiaryNames,
+    clearStaleClocks, loadoutChipsHtml, benchedFor, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
     INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,

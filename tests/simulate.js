@@ -679,6 +679,37 @@
 // The other half of F10 is not measured here and does not need to be: which three of four a
 // rank III operator brings is a control that did not exist on two of the three screens that
 // edit a roster. Suite 118 drives all three.
+//
+// G01: A PAIRED MEASUREMENT WITH NO POWER, AND WHY THAT IS THE FINDING.
+//
+// G01 fixes the Ossuary's COUNT YOURS, which re-counted the squad's dead on every firing. That
+// is a balance change on a commander, so a paired 3 x 150 was started against a frozen pre-G01
+// tree. The first arm settled it before the second began:
+//
+//   runs that ended the road   0 of 150 (0%)
+//
+// The Ossuary is the final boss, COUNT YOURS is its learned move and nothing else in the game
+// carries that signature, and LEARNED_AT means it only brings it from the third meeting. Zero
+// runs reach it, so the branch never executes here and no number this file prints can move.
+// The remaining five arms were stopped rather than run: an hour of machine time cannot buy
+// power over a code path the sample never enters.
+//
+// The same 150 runs reached 1102 commander fights, 1031 of them carrying a grudge, at 26% won.
+// So the harness reads the road's seven warlords in enormous depth and has never once seen the
+// eighth. That is why an eight-reader audit and fifteen phases went past a defect that let a
+// single casualty cap the last boss's tally, and it is a gap in the instrument rather than a
+// footnote about this phase: the fight the whole game is pointed at is the one fight nothing
+// measures. Filed separately.
+//
+// What replaces the sim here is arithmetic, which is exact and needs no sample. Suite 124 pins
+// the new arm and the mutants pin the old one, both at the resolver:
+//
+//                                  before          after
+//   one loss, one firing           2 marks         1 mark      (body AND ledger were added)
+//   two losses, four firings       2, 4, 6, 8      2, 2, 2, 2
+//   armour at that tally           +32 (20 -> 52)  +8 (20 -> 28)
+//   damage at that tally           x1.59           x1.12
+//   what LAST TALLY spends         0.96 of a swing 0.24
 const path = require('path');
 const { serve } = require('./server');
 
