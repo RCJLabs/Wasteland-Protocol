@@ -84,37 +84,36 @@ module.exports = {
     ok('and it is not one of the three abilities, so it costs nobody a slot',
       always.moves.indexOf('HOLD') === -1);
 
-    // ── What holding buys, and what it must not ─────────────────────────────────────
+    // ── What holding costs, and what it must not pay ───────────────────────────────
+    // The phase asked for "a guard tick or five momentum". Both were tried and both were
+    // wrong: momentum on inspection, because a plain swing that does not kill grants none, so
+    // a pass that paid it would be the cheapest overdrive charge in the game; the guard on
+    // measurement, because three arms of 150 put the win rate at 2.30% without it and 0.78%
+    // with it. HOLD spends the turn and buys nothing, and these assertions hold it there.
     const held = await page.evaluate(() => {
       const { me } = window.__locked(true);
       me.baseArmor = 4; me.armor = 4; me.armorTurns = 0;
-      const m0 = momentum, hp0 = me.hp;
+      const before = { momentum, hp: me.hp, armor: me.armor, turns: me.armorTurns,
+                       cds: JSON.stringify(me.cooldowns) };
+      const logBefore = window.__logText ? window.__logText() : document.getElementById('log').innerText;
       executeSelfAction('HOLD');
-      const once = { armor: me.armor, turns: me.armorTurns, momentum, hp: me.hp };
-      // Twice running is not twice the plate: it is set, not added.
+      const after = { momentum, hp: me.hp, armor: me.armor, turns: me.armorTurns,
+                      cds: JSON.stringify(me.cooldowns) };
+      const said = document.getElementById('log').innerText.slice(logBefore.length);
+      // Holding twice running is still just two spent turns.
       executeSelfAction('HOLD');
-      const twice = { armor: me.armor, turns: me.armorTurns };
-      // And it lapses on their own next turn rather than riding the fight.
-      me.armorTurns = 1; applyTurnStartEffects(me);
-      const lapsed = { armor: me.armor, turns: me.armorTurns };
-      // Holding while something better already stands must not take it off. The paired sim
-      // caught this as the one row that separated - the win rate FELL - because a flat set
-      // stripped a brace down to the pass's own floor.
-      me.armor = me.baseArmor + 30; me.armorTurns = 2;
-      executeSelfAction('HOLD');
-      const overBrace = { armor: me.armor, turns: me.armorTurns };
-      return { m0, hp0, once, twice, lapsed, overBrace, base: 4, plate: plate(HOLD_PLATE) };
+      const twice = { armor: me.armor, momentum, hp: me.hp };
+      return { before, after, twice, said: /holds the line/.test(said) };
     });
-    ok(`holding grants a guard (${held.base} -> ${held.once.armor} armour for ${held.once.turns})`,
-      held.once.armor === held.base + held.plate && held.once.turns === 1);
-    ok(`and no momentum, which a pass must not pay (${held.m0} -> ${held.once.momentum})`,
-      held.once.momentum === held.m0);
-    ok(`nor costs health (${held.hp0} -> ${held.once.hp})`, held.once.hp === held.hp0);
-    ok(`holding twice is not twice the plate (${held.twice.armor})`, held.twice.armor === held.once.armor);
-    ok(`and the guard lapses on their next turn (${held.lapsed.armor} back to base)`,
-      held.lapsed.armor === held.base);
-    ok(`holding while better armour stands does not take it off (${held.overBrace.armor})`,
-      held.overBrace.armor === held.base + 30 && held.overBrace.turns === 2);
+    ok(`holding pays no momentum, which a pass must not (${held.before.momentum} -> ${held.after.momentum})`,
+      held.after.momentum === held.before.momentum);
+    ok(`nor any armour, which measured as costing runs (${held.before.armor} -> ${held.after.armor})`,
+      held.after.armor === held.before.armor && held.after.turns === held.before.turns);
+    ok(`nor health, nor a cooldown (${held.after.hp} hp)`,
+      held.after.hp === held.before.hp && held.after.cds === held.before.cds);
+    ok('and holding twice running is still just two spent turns',
+      held.twice.armor === held.before.armor && held.twice.momentum === held.before.momentum);
+    ok('but it says so in the log, so a spent turn is legible', held.said === true);
 
     // ── The recruit chooses their three of four ─────────────────────────────────────
     const rec = await page.evaluate(() => {

@@ -632,6 +632,53 @@
 // moved" here is not the same claim as "HEADSHOT is balanced". What pins HEADSHOT is suite
 // 117, which drives the resolver directly: an armoured, resistant non-commander dies outright,
 // a commander does not, and the kill lands on the ledger rather than around it.
+// ── F10: three arms, and a pass that pays nothing ───────────────────────────────────────
+// The phase asked for a HOLD action buying "a small, honest return, a guard tick or five
+// momentum". Both returns were tried, both were rejected, and the second took three arms to
+// settle - so the investigation is written down here rather than the conclusion alone.
+//
+// Five momentum went on inspection. A plain swing that does not kill grants NO momentum in
+// this game - the bar fills off kills, combos and blows taken - so a pass paying five would be
+// the cheapest overdrive charge available and worth pressing on purpose, which is the risk the
+// phase names against itself.
+//
+// The guard tick went on measurement. Runs that ended the road, 150 an expedition set:
+//
+//   HOLD absent, turn consumed        4,4,4,3,2,6   23/900   2.56%
+//   HOLD present, grants nothing          3,2,3      8/450   1.78%
+//   HOLD present, grants the guard    1,1,2,1,1,1    7/900   0.78%
+//
+// Read the first two together: they are the SAME behaviour. The pre arm has no HOLD branch at
+// all, so its pass already grants nothing, and the isolation arm is HEAD with those two lines
+// removed. Identical code, and they differ by 0.78 points - which is this row's noise floor at
+// 150 and the most useful number in the table. Pooled as one arm they are 31/1350, 2.30%,
+// against 0.78% with the guard. The guard is the only thing that separates and removing it
+// puts the row back on the baseline.
+//
+// THE MECHANISM IS NOT UNDERSTOOD, and no story is offered for it here. Free armour on a squad
+// lowering its own win rate has none, and every other dial moved the player's way at the same
+// time - score 20.1-22.0k against 19.3-21.4k, nodes cleared 74-81 against 71-78, operators
+// lost 2.90-3.17 against 2.79-3.25. What is established is narrow: those two lines cost runs,
+// they are not needed for the thing the phase is for, and a pass that quietly costs the run is
+// worse than a pass that pays nothing. Filed as a finding. A fix would need the mechanism.
+//
+// TWO METHOD NOTES, because both cost time here and both generalise.
+//
+// This row cannot be read at three samples. It is a tail count with a mean near three, and the
+// pre and isolation arms above are identical code reading 3.83 and 2.67. Every phase this
+// session has quoted "runs that ended the road" at 3 x 150; nothing has been claimed on it
+// alone, and nothing should be. Six an arm resolved this one, and only because the effect was
+// large.
+//
+// And the order of operations was wrong. Two mechanisms were proposed and both were wrong - a
+// flat armour set stripping a bigger guard (a real defect, fixed, but not the cause) and the
+// armour expiry zeroing permanent armour (players have no permanent armour, so nothing to
+// zero). Isolating the variable settled in one arm what two rounds of reasoning did not. Build
+// the third arm first.
+//
+// The other half of F10 is not measured here and does not need to be: which three of four a
+// rank III operator brings is a control that did not exist on two of the three screens that
+// edit a roster. Suite 118 drives all three.
 const path = require('path');
 const { serve } = require('./server');
 
