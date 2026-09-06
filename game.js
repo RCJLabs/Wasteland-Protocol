@@ -2207,7 +2207,11 @@ const CONSEQUENCE_POOL = {
             const dmg = 0.75 * difficultyMult * Math.pow(SECTOR_DMG_SCALE, currentSector - 1);
             const hunters = generateEnemies(fac, hp, false, dmg, null).slice(0, 2);
             hunters.forEach((u, i) => { u.id = `hunt_${Date.now()}_${i}`; });
-            pursuit = { units: hunters };
+            // G04: marked as a hunt rather than a chase. What crossSector clears is the squad
+            // that watched you leave a fight; this is somebody who took your trail because of
+            // what you did, and the line below promises them in the next fight - which, on a
+            // commander's node, is across the sector line.
+            pursuit = { units: hunters, hunt: true };
             return `They have been walking since you took it, and they are not tired. ${hunters.length} of them will be waiting in the next fight.`;
         }
     },
@@ -6454,8 +6458,14 @@ function renderMap() {
 // that wanted the crossing could not have it without also driving the node flow. It kept a hand
 // copy instead, and a hand copy of a crossing is a list of everything somebody remembered.
 function crossSector() {
-    // A sector's worth of road between you and them is enough. Nothing follows across.
-    pursuit = null; retreatNode = null;
+    // A sector's worth of road between you and them is enough - for the squad that watched the
+    // withdrawal. G04: a booked PURSUIT is not that. It is somebody who took the trail because
+    // of what the squad did, it says so out loud ("they have been walking since you took it"),
+    // and it promises them in the next fight. The commander's node is always the last tier of
+    // its sector, so a PURSUIT that came due there was armed by afterNode and deleted by this
+    // line a moment later - every time, not sometimes. The chase still stops at the line.
+    if (!pursuit || !pursuit.hunt) pursuit = null;
+    retreatNode = null;
     checkBountyProgress('SECTOR');
     currentSector++; currentTier = openingTier();
     sectorFront = rollFront(seededRng('front:' + currentSector), currentSector); frontBannerPending = true;
@@ -7189,11 +7199,15 @@ function resolveEvent(idx) {
 // momentum and closes ranks. This is the quiet version, and now there is one of it.
 function finishQuietNode() {
     currentTier++; if (runStats) runStats.nodes++; noteDepth(); saveGameState();
-    // renderMap does not stop for a promotion - only afterNode does, and that is the fight's
-    // exit. A quiet node can queue one too (a recruit's par levels, an event that pays XP), so
-    // the screen is put up here rather than left for whatever routes through afterNode next.
-    if (pendingPerkOffers.length) { renderPerkOffer(); return; }
-    renderMap();
+    // G04: the same exit a fight takes. renderMap stops for nothing that has come due, so a
+    // consequence booked before this node waited for the next FIGHT - an event, a camp, a shop
+    // and both recruit doors all route through here and none of them could deliver one. The
+    // fuse is counted in nodes; a quiet node is a node, which is the whole of F08's point.
+    //
+    // afterNode is the one chain - consequences, then a relic offer, then a promotion, then
+    // the map. F08 put the promotion check here by hand because renderMap did not have one;
+    // afterNode already did, so the hand copy goes.
+    afterNode();
 }
 function finishEvent() {
     activeEvent = null; eventOutcome = null;

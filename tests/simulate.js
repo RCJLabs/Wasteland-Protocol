@@ -738,6 +738,35 @@
 // of a walk-out (26.2k/24.5k/25.5k against 28.2k/24.7k/24.3k), deepest sector by third. Runs
 // that ended the road sat at 1-3 per 100 in both arms and cannot be read here at all, for the
 // reason the F10 note above gives.
+//
+// G04: A ROW THAT SEPARATED, AND WAS THE INSTRUMENT ALL ALONG.
+//
+// G04 sends finishQuietNode out through afterNode, so an event, a camp, a shop or a recruit
+// door settles what has come due instead of leaving it for the next fight. A paired 3 x 150
+// separated on one row, in the direction that would mean the fix had broken something:
+//
+//   consequences resolved, mean   0.75 / 0.77 / 0.79   ->   0.70 / 0.67 / 0.59
+//
+// Nothing had broken. settleDue() counted its own loop iterations, and the engine was now
+// settling those consequences before settleDue ever ran - the resolutions did not stop, they
+// moved to the other side of the fence. This file calls bankNode rather than collectLoot at a
+// fight's exit precisely so it can drive resolveConsequence itself, which is why the counter
+// was honest before and stopped being honest the moment a second call site appeared.
+//
+// Counted off pendingConsequences now, so a resolution lands in the number whoever drove it.
+// Re-run with the repaired counter in BOTH arms, paired 3 x 150:
+//
+//   consequences resolved, mean   0.87 / 0.75 / 0.85   ->   0.68 / 0.79 / 0.89
+//   of what was booked            96% / 93% / 96%      ->   94% / 94% / 93%
+//
+// Overlapping, direction inconsistent, no separation - and the second row says plainly that
+// nothing is being lost on either side. Nothing else moved either: score, nodes, operators lost
+// and runs that ended the road were all flat across the first pass.
+//
+// The general shape, because it will happen again: a readout that counts a policy's own actions
+// measures the policy, not the game. When a phase moves work from the harness into the engine,
+// every counter that lives in the harness has to be checked before its output is read as a
+// finding. This one would have read as "the fix loses a fifth of all consequences".
 const path = require('path');
 const { serve } = require('./server');
 
@@ -1689,9 +1718,21 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // also means the cast meeting a consequence carries (meetCast) lands, where the hand copy
   // called the pool's resolve() and nothing else. Guarded on the due list so it never falls
   // into resolveConsequence's empty branch, which is a call to afterNode.
+  //
+  // G04: and the counter moved off this loop. finishQuietNode ends in afterNode now - the same
+  // chain a fight's exit takes - so the engine settles what is due at an event, a camp, a shop
+  // or a recruit door before this ever runs, and a counter that only counted its own iterations
+  // reported those as never having happened. Measured 0.75/0.77/0.79 against 0.70/0.67/0.59 on
+  // a paired 3 x 150: complete separation, and entirely an artefact of where the resolving was
+  // being driven from. Counted off the pending list instead, so a resolution lands in the
+  // number whichever side of the fence drove it.
+  let lastPending = 0;
   const settleDue = () => {
     let guard = 0;
-    while (consequencesDue().length && guard++ < 20) { stat.consequences++; resolveConsequence(); }
+    while (consequencesDue().length && guard++ < 20) resolveConsequence();
+    const now = pendingConsequences.length;
+    if (now < lastPending) stat.consequences += lastPending - now;
+    lastPending = now;
   };
 
   while (stat.nodes < capNodes) {
@@ -1759,6 +1800,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // uncollected could be a fuse that never lands, or a debt that was never taken on.
       if (pendingConsequences.length > owedBefore) {
         stat.booked += pendingConsequences.length - owedBefore;
+        lastPending = pendingConsequences.length;   // the baseline moves with a booking
         pendingConsequences.slice(owedBefore).forEach(c => { stat.bookedKinds[c.kind] = (stat.bookedKinds[c.kind] || 0) + 1; });
       }
       currentTier++; stat.nodes++; noteDepth(); runStats.nodes++;
