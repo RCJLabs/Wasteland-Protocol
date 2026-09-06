@@ -565,6 +565,45 @@
 // phase: fewer operators are lost for good, and the road is no easier to walk. Read the
 // "ended the road" row as noise rather than as a cost - it is 2-5 careers out of 150 either
 // way, it overlaps, and it points the wrong way for a fix that only ever saves lives.
+// ── F08: what a recruit node costs now that it costs something ──────────────────────────
+// Matched pair, 3 x 150 an arm, this file byte-identical on both sides.
+//
+//                              pre-F08                        post-F08
+//   promotions per run     11.3 / 11.5 / 11.0             18.7 / 19.5 / 18.6
+//   signatures per run       9.5 / 9.7 / 9.6               11.3 / 11.6 / 11.3
+//   nodes cleared, median      78 / 86 / 79                   71 / 80 / 73
+//   deepest sector, by third  3.20/3.36/2.94 ...            3.22/3.26/3.56 ...
+//   runs that ended the road   5 / 2 / 3 of 150               4 / 1 / 1 of 150
+//   wipes per run           7.04 / 7.17 / 7.19             7.01 / 7.22 / 6.99
+//   score, median         20,767 / 20,751 / 19,518       20,281 / 20,472 / 19,501
+//   lost for good, per run  3.27 / 2.95 / 3.41             3.05 / 3.11 / 3.04
+//   recruit offers seen       528 / 509 / 536                554 / 517 / 462
+//   signed on the spot        232 / 214 / 211                211 / 220 / 199
+//
+// TWO ROWS CLEAR THE D17 BAR, and they are the same row twice. Promotions go 11.0-11.5 to
+// 18.6-19.5 and signatures 9.5-9.7 to 11.3-11.6, both with complete separation. The arithmetic
+// says what it is rather than leaving it to be guessed: a recruit signed at par 9 gains eight
+// levels, and this file signs about one a run, so +7.6 screens is the eight points that used
+// to bank themselves in silence now being offered. The signature row is the half that matters:
+// those points are not new, they were always on the operator - what changed is that they are
+// now spent on the class the recruit was signed FOR, rather than sitting behind an Outpost
+// menu that threw from E08b until F06 opened it.
+//
+// NODES CLEARED FALLS AND DOES NOT SEPARATE. The medians drop 81.0 to 74.7 as a mean, which is
+// the right direction and about the right size - a run walks two or three recruit camps and
+// each now costs the tier it always should have - but 71/80/73 against 78/86/79 overlaps, so
+// by this file's own rule it is a direction and not a result. Said plainly rather than rounded
+// into one.
+//
+// NO DIFFICULTY DIAL MOVES. Wipes, runs that ended the road, score, lost for good and depth by
+// thirds all overlap. Two effects point opposite ways and roughly cancel: the squad is stronger
+// by two signatures a run, and the road is about six nodes shorter.
+//
+// One second-order row worth naming so nobody reads it as a defect: offers seen goes UP while
+// signings go DOWN. Advancing the tier at a recruit node means a run reaches the sector
+// boundary in fewer NODES, so it crosses more sectors and is dealt more maps - each with its
+// 0.55 roll for a camp - while banking fewer fight payouts per sector. More camps, thinner
+// purse: the median purse on hand falls 240 to 207 and affordable offers 333/528 to 306/554.
 const path = require('path');
 const { serve } = require('./server');
 
