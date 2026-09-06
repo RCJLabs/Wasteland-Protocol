@@ -61,6 +61,21 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .bounty-title { color: #4488ff; font-weight: bold; letter-spacing: 1px; border-bottom: 1px solid #222; padding-bottom: 3px; }
 .bounty-item { display: flex; justify-content: space-between; color: #aaa; }
 .bounty-complete { color: #6B8E23; text-decoration: line-through; }
+/* F15: the front banner's idiom - a card that arrives, holds, and leaves - reused for the one
+   moment the board never had a voice for. It rides above every screen rather than the map,
+   because a CRAFT contract settles at the workbench and a SECTOR one at the crossing. */
+.settle-banner { position: absolute; top: 12%; left: 50%; transform: translate(-50%, -50%);
+  z-index: 130; pointer-events: none; opacity: 0; text-align: center; max-width: 88%;
+  background: rgba(6, 12, 6, 0.95); border: 2px solid #6B8E23; padding: 12px 18px; }
+.settle-banner-name { color: #9fd14a; font-size: 0.8125rem; font-weight: bold; letter-spacing: 2px; }
+.settle-banner-desc { color: #b9c6a0; font-size: 0.6875rem; margin-top: 5px; letter-spacing: 1px; }
+@keyframes settleBanner { 0% { opacity: 0; transform: translate(-50%, -70%); }
+  10% { opacity: 1; transform: translate(-50%, -50%); } 78% { opacity: 1; } 100% { opacity: 0; } }
+.settle-banner-show { animation: settleBanner 2.8s ease-out forwards; }
+/* Shown rather than animated where motion is off, at a weight that beats the id above - the
+   lesson F12 paid for. */
+:root.motion-off #settle-banner.settle-banner-show { animation: none !important; opacity: 1; }
+
 .relic-item { color: #ffaa00; font-weight: bold; display: flex; justify-content: space-between; margin-top: 2px;}
 /* E15: what those relics add up to. Nine pairs upgrade each other and the engine read that
    state in seven places, but no screen ever said which pairs were up - or, the state worth
@@ -744,6 +759,7 @@ button.reach-short { border-color: #7a5a20; }
      lost the cascade and the splash stayed invisible under the very setting it was written
      for. Same selector weight as the thing it is overriding. */
   #front-banner.front-banner-show { animation: none !important; opacity: 1; }
+  #settle-banner.settle-banner-show { animation: none !important; opacity: 1; }
 }
 
 /* A cursed card is unmistakable: violet heat and a warning where the tier goes. */

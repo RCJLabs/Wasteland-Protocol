@@ -150,13 +150,20 @@ module.exports = {
         { type: 'COMBO', desc: 'm', current: 0, target: 9, reward: 1, claimed: false }];
       const before = scrap;
       checkBountyProgress('KILL');
+      // F15: it pays at once and is marked settled; the slot turns over on the board's next
+      // draw, so the row can be shown struck through before it is handed back.
+      const paidAt = { scrap: scrap - before, stillThere: activeBounties[0].desc === 'k',
+                       claimed: activeBounties[0].claimed };
+      switchScreen('screen-map'); renderMap();
       const replaced = activeBounties[0];
-      return { paid: scrap - before, slots: activeBounties.length,
+      return { paid: paidAt.scrap, paidAt, slots: activeBounties.length,
                replacedType: replaced.type, fresh: replaced.current === 0,
                noRepeat: new Set(activeBounties.map(b => b.type)).size === 3 };
     });
-    ok(`a settled contract pays and a new one takes its slot (+${rotation.paid} scrap)`,
-      rotation.paid === 7 && rotation.slots === 3 && rotation.fresh);
+    ok(`a settled contract pays at once and is marked, not swapped (+${rotation.paid} scrap)`,
+      rotation.paid === 7 && rotation.paidAt.stillThere && rotation.paidAt.claimed);
+    ok(`and a new one takes its slot on the next draw (${rotation.replacedType})`,
+      rotation.slots === 3 && rotation.fresh);
     ok('and the board never hands back a type it is already carrying', rotation.noRepeat);
 
     const standing = await page.evaluate(() => {

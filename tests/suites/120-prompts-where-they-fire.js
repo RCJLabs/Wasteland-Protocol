@@ -55,13 +55,35 @@ module.exports = {
       const par = id => (document.getElementById(id).parentElement || {}).id;
       switchScreen('screen-outpost');
       const combat = getComputedStyle(document.getElementById('screen-combat')).display;
+      // Stated as the property rather than as a list of names: everything at the engine root
+      // is either a screen the sweep hides or a card marked to survive it, and there is no
+      // third kind. A frozen list would have to be edited by every phase that adds an overlay,
+      // which is exactly the edit that would hide a screen wrongly left unmarked.
+      const kids = [...document.getElementById('engine').children]
+        .filter(e => e.tagName === 'DIV' && !e.classList.contains('settings-icon'));
+      const overlays = kids.filter(e => e.classList.contains('overlay')).map(e => e.id).sort();
+      const unaccounted = kids.filter(e => !e.id.startsWith('screen-') && !e.classList.contains('overlay'))
+                              .map(e => e.id || '(unnamed)');
+      const bothWays = kids.filter(e => e.id.startsWith('screen-') && e.classList.contains('overlay'))
+                           .map(e => e.id);
+      // What the marking is for. Read as "the sweep wrote nothing on it" rather than "it is
+      // visible": explain and prompt are hidden by their own rules until something raises
+      // them, so a computed `display: none` says nothing about whether switchScreen hid them.
+      // The inline display is cleared first - comparing before against after would be blind to
+      // a sweep that had already run and would only be writing the same 'none' a second time.
+      overlays.forEach(id => { document.getElementById(id).style.display = ''; });
+      switchScreen('screen-map');
+      const swept = overlays.filter(id => document.getElementById(id).style.display !== '');
+      switchScreen('screen-outpost');
       return { prompt: par('prompt'), explain: par('explain'), dossier: par('dossier'), combat,
-               overlays: [...document.querySelectorAll('#engine > .overlay')].map(e => e.id).sort() };
+               overlays, unaccounted, bothWays, swept, kids: kids.length };
     });
     ok(`the prompt and the explain card sit at the engine root (${where.prompt}, ${where.explain})`,
       where.prompt === 'engine' && where.explain === 'engine');
-    ok(`marked as overlays, which is what spares them the sweep (${where.overlays.join(', ')})`,
-      where.overlays.join() === 'explain,prompt');
+    ok(`every one of the ${where.kids} things at the engine root is a screen or an overlay (${where.unaccounted.join(', ') || 'nothing unaccounted for'})`,
+      where.unaccounted.length === 0 && where.bothWays.length === 0);
+    ok(`and being marked one is what spares it the sweep (${where.overlays.join(', ')})`,
+      where.overlays.length >= 2 && where.swept.length === 0);
     ok(`while the dossier stays with the field it reads (${where.dossier})`,
       where.dossier === 'screen-combat');
     ok(`and the combat screen is still hidden when another is up (${where.combat})`,

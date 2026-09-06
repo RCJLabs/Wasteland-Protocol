@@ -13,13 +13,20 @@ module.exports = {
       activeBounties[0].current = activeBounties[0].target - 1;
       const scrapBefore = scrap;
       checkBountyProgress(beforeType);
-      return { beforeType, beforeDesc, afterType: activeBounties[0].type,
+      // F15: the settled contract is marked rather than swapped out, so that the board can
+      // draw it struck through once before it goes - a contract that finished at the workbench
+      // used to vanish between two glances with nothing said. The board a player sees is the
+      // one renderMap has drawn, so that is where "replaced" is read.
+      const settled = { held: activeBounties[0].desc === beforeDesc, claimed: activeBounties[0].claimed };
+      switchScreen('screen-map'); renderMap();
+      return { beforeType, beforeDesc, settled, afterType: activeBounties[0].type,
                afterDesc: activeBounties[0].desc, afterProgress: activeBounties[0].current,
                count: activeBounties.length,
                anyClaimed: activeBounties.some(b => b.claimed), paid: scrap > scrapBefore,
                types: activeBounties.map(b => b.type) };
     });
     ok('the board still holds three contracts', bounty.count === 3);
+    ok('a settled contract survives to be drawn settled once', bounty.settled.held && bounty.settled.claimed);
     ok('a completed contract is replaced by a different one',
       bounty.afterType !== bounty.beforeType && bounty.afterDesc !== bounty.beforeDesc);
     ok('the replacement starts at zero progress', bounty.afterProgress === 0);
