@@ -4632,7 +4632,12 @@ function renderSquadBroken() {
     const left = regroupsLeft();
     switchScreen('screen-runover');
     document.getElementById('runover-title').innerText = 'SQUAD BROKEN';
-    document.getElementById('runover-desc').innerText = regroupInsured
+    // H01: what this screen says depends on whether there is anything left to say it about.
+    // With no fallbacks the expedition does NOT hold, and describing the price of a regroup that
+    // cannot happen is the screen telling a player they have a choice they do not have.
+    document.getElementById('runover-desc').innerText = left <= 0
+        ? `The squad is down and there is nothing left to fall back on. The expedition ends here — what they salvaged still reaches the Citadel.`
+        : regroupInsured
         ? `The squad is down but the expedition holds. The Regroup Bond covers this one — no scrap lost, back to the start of Sector ${currentSector}.`
         : `The squad is down but the expedition holds. Regrouping costs half your scrap and pushes you back to the start of Sector ${currentSector}.`;
     document.getElementById('runover-score').innerText = `${left} REGROUP${left === 1 ? '' : 'S'} LEFT`;
@@ -4642,8 +4647,17 @@ function renderSquadBroken() {
         ['DEPTH REACHED', `SECTOR ${runStats.deepestSector} \u00B7 TIER ${runStats.deepestTier}`],
         ['SKULLS BANKED', `\uD83D\uDC80 ${bossSkulls}`]
     ].map(l => `<div class="runover-line"><span>${l[0]}</span><span>${l[1]}</span></div>`).join('');
+    // H01: the button was offered live at nought. regroupSquad guards - it calls endRun and
+    // returns - so pressing REGROUP (0 LEFT) did not do nothing, it ENDED THE RUN, with no
+    // confirmation and under a label that reads as the way to keep going. Two buttons doing the
+    // same thing, one of them dressed as the opposite.
+    //
+    // Nothing new is invented here. The Citadel disables a spot that cannot be bought and
+    // relabels it MAXED or BUILT; the Outpost disables what the purse will not cover - 34
+    // controls across those two screens on the states swept for this. The one control that ends
+    // an expedition was the one place the convention was not applied.
     document.getElementById('runover-choices').innerHTML =
-        `<button class="event-btn" style="border-color:#6B8E23; color:#6B8E23;" data-action="regroup">REGROUP (${left} LEFT)</button>` +
+        `<button class="event-btn" style="border-color:${left > 0 ? '#6B8E23' : '#555'}; color:${left > 0 ? '#6B8E23' : '#777'};" ${left > 0 ? '' : 'disabled'} data-action="regroup">${left > 0 ? `REGROUP (${left} LEFT)` : 'NO FALLBACKS LEFT'}</button>` +
         `<button class="event-btn" style="border-color:#8B0000; color:#ff6666;" data-action="end-run">END RUN &amp; BANK SCORE</button>`;
     saveGameState();
 }
