@@ -9904,6 +9904,8 @@ function applyTurnStartEffects(ent) {
 // misses some of that. One honest measurement beats a cache that is sometimes right: a fight
 // that fits - which is most of them, and every fight before a crowd shows up - costs exactly
 // one, and only a field that does not fit pays for the other six.
+// N13's floor, named here so the stylesheet and the fit cannot drift apart on it.
+const TOUCH_FLOOR = 44;
 const FIELD_FIT_MIN = 0.6;    // past this the sprites stop being readable; better to clip a hair
 const FIELD_PAD = 11;         // the breathing room each side, and the budget recentreField spends
 const FIELD_FIT_STEPS = 6;    // bisection depth: 0.006 of resolution across the range
@@ -9942,12 +9944,39 @@ function fitField() {
         if (ok && (best === null || f > best)) best = f;
         return ok;
     };
-    if (!fits(1)) {
+    const search = () => {
+        best = null;
+        if (fits(1)) return;
         let lo = FIELD_FIT_MIN, hi = 1;
         for (let i = 0; i < FIELD_FIT_STEPS; i++) { const mid = (lo + hi) / 2; if (fits(mid)) lo = mid; else hi = mid; }
         // Nothing in the range fitted, so take the smallest sprites the range allows and let the
         // sliver that is left run over rather than shrinking the fight into illegibility.
         if (best === null) fits(FIELD_FIT_MIN);
+    };
+    // G08: how big a sprite is and how big the thing you tap is are two questions, and the floor
+    // N13 put under a slot was written as `44px * fit` - so when C11 and D15 made the field
+    // shrink, the touch target shrank with it. Measured over 1365 sprites on generated fields:
+    // 29% under 44px at 320px and 7% at 400px, the smallest 31.1px, which is 44 x 0.706 exactly.
+    // A team of three is not `crowded` and had no floor at all, which is where most of the rest
+    // came from.
+    //
+    // The floor is offered to the SEARCH rather than applied after it. That distinction is the
+    // whole fix: setting a wider floor once the bisection has already converged invalidates the
+    // scale it settled on, which was tried and put 48 sprites over the edge at 320px and took
+    // the minimum down to 26.4px. Searched with the floor in place, a fit that exists is found
+    // with the floor honoured; where none exists the floor is dropped and the old search runs
+    // again, so nothing that fits today stops fitting.
+    //
+    // At 320px there is a genuine bind and it is not a defect: eight sprites at 44px is 352px
+    // against 308px of glass, and both ways out are spoken for - clipping is what C11 fixed,
+    // and overlapping a crowded row is what D15 removed, because at four operators on a 320px
+    // screen the health readouts printed over each other. Two of the three can hold. There the
+    // floor yields, exactly as it does now.
+    field.style.setProperty('--touch-floor', TOUCH_FLOOR + 'px');
+    search();
+    if (best === null) {
+        field.style.removeProperty('--touch-floor');
+        search();
     }
     const f = best === null ? FIELD_FIT_MIN : best;
     field.style.setProperty('--field-fit', String(f));
@@ -11829,7 +11858,7 @@ globalThis.WP = {
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },

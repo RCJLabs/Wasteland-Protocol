@@ -404,8 +404,13 @@ button:disabled { opacity: 0.2; cursor: not-allowed; border-color: #222; }
    else already cleared it, and suite 46 keeps it that way across seven screens. */
 .op-tab-btn, .upg-btn, .inv-slot,
 .prompt-ok, .prompt-off { min-height: 44px; }
-/* A tightened hostile line squeezed its slots to 43px wide, one short of the same floor. */
-.team.crowded .entity { min-width: calc(44px * var(--field-fit, 1)); }
+/* A tightened hostile line squeezed its slots to 43px wide, one short of the same floor.
+   G08: every slot, not only a crowded one - a team of three is not crowded and had no floor at
+   all. The size comes from fitField, which offers the full 44px to its search and drops the
+   property entirely on a field that cannot take it; the fallback below is that case, and is
+   what this rule has always been. */
+.battlefield .team .entity { min-width: var(--touch-floor, calc(44px * var(--field-fit, 1))); }
+.battlefield .team.crowded .entity { min-width: var(--touch-floor, calc(44px * var(--field-fit, 1))); }
 
 .entity:focus-visible { outline-offset: -2px; }
 
