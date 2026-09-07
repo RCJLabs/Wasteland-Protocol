@@ -3,6 +3,7 @@
 const path = require('path');
 const fs = require('fs');
 const { serve } = require('./server');
+const { untouchedExports } = require('./coverage');
 
 let chromium;
 try { ({ chromium } = require('playwright')); }
@@ -31,6 +32,23 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
   const browser = await chromium.launch(launch);
 
   let passed = 0, failed = 0;
+  // G11: what the battery never reaches. It reported assertions passed and nothing at all
+  // about the surface it does not touch, so "3,700 green" read as coverage when it is only a
+  // count of the things somebody thought to check. Measured when this was added: 817 symbols
+  // on the engine's one export, 141 of them named by no suite - the audit counted 129, so the
+  // untouched set was growing faster than suites were closing it. Among them victoryWalk and
+  // victoryPress, which are the two ways a run can end well.
+  //
+  // Named, not exercised. This asks whether a suite mentions the symbol in code at all, which
+  // is the weakest useful question and the only one that can be answered without running a
+  // coverage instrument over a module the page loads. A name that appears only in a comment
+  // does not count - the prose is stripped first - but a name that is mentioned and never
+  // pressed does. Read it as a floor on what is untested, never as a ceiling on what is.
+  //
+  // A readout, not a gate. Failing the battery whenever a new export arrives would turn the
+  // number into an obstacle to route around, and the point of it is to be looked at.
+  let exportNames = [];
+
 
   // Preflight, in a context WITHOUT the bridge below - this is the window a real visitor gets.
   // The engine is a module and must not put anything on it but its one namespaced export.
@@ -45,7 +63,11 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
                      'runStats','bossSkulls','metaUpgrades','turnQueue','initEngine','ASSET_LIST'];
       return { leaked: names.filter(n => n in window),
                wp: typeof window.WP === 'object' && window.WP !== null,
-               booted: getComputedStyle(document.getElementById('screen-title')).display };
+               booted: getComputedStyle(document.getElementById('screen-title')).display,
+               // Read here rather than from the source: what the suites can reach is what the
+               // object actually carries, and a regex over an export statement that long has
+               // been wrong before.
+               exports: window.WP ? Object.keys(window.WP) : [] };
     });
     console.log('\nGlobal namespace');
     const check = (name, cond) => { cond ? passed++ : failed++; console.log(`  ${cond ? 'PASS' : 'FAIL'}  ${name}`); };
@@ -53,6 +75,7 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
     check('it exposes exactly one namespaced surface', r.wp);
     check('the game still boots as a module', r.booted === 'flex');
     if (r.leaked.length) console.log('        leaked:', r.leaked.join(', '));
+    exportNames = r.exports;
     await clean.close();
   }
 
@@ -127,6 +150,26 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
 
   await browser.close();
   server.close();
+
+  // ── What the battery never reached ──────────────────────────────────────────────
+  // Only on a whole battery: a filtered run reaches a handful of suites and the number it
+  // would print is a fact about the filter rather than about the game.
+  if (exportNames.length) {
+    if (ONLY.length) {
+      console.log(`coverage  not measured — ${SUITES.length} of ${ALL_SUITES.length} suites ran`);
+    } else {
+      const sources = ALL_SUITES.map(f => fs.readFileSync(path.join(__dirname, 'suites', f), 'utf8'));
+      const untouched = untouchedExports(exportNames, sources);
+      const reached = exportNames.length - untouched.length;
+      console.log(`coverage  ${reached} of ${exportNames.length} exports named by a suite`);
+      if (untouched.length) {
+        console.log(`          ${untouched.length} are not:`);
+        for (let i = 0; i < untouched.length; i += 6) {
+          console.log('            ' + untouched.slice(i, i + 6).join(', '));
+        }
+      }
+    }
+  }
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed ? 1 : 0);
 })().catch(e => { console.error(e); process.exit(1); });
