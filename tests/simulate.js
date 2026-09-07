@@ -797,6 +797,57 @@
 // mistakes have now been made here; the rule that survives them is that the size of the
 // mechanism and the size of the effect have to agree before either is believed.
 //
+// G02: THE LAST FIGHT, MEASURED FOR THE FIRST TIME - AND THE CHECK THAT EARNED IT.
+//
+// `--stage N` is above. The thing to be careful about with a staged arm is that the person
+// building it chooses what the squad carries, so a generous profile makes the fight look
+// winnable and the number means nothing. The profile here was measured rather than chosen, and
+// then the staging was made to predict something it had not been fitted to.
+//
+// THE CHECK. The organic run says that of the 26 runs in 150 that reached sector 5, six went on
+// to reach sector 7 - 23%. That figure was not used to build anything. A staged-at-5 arm, 150
+// runs, has to reproduce it:
+//
+//   reached sector 7, organic, conditional on reaching 5     6 of 26    23%
+//   reached sector 7, staged at 5                           39 of 150   26%
+//
+// Close enough to stand on, and the sample that failed to separate is the one being trusted, so
+// the risk runs the safe way: a staging that flattered the squad would have overshot here.
+//
+// One row does NOT match and is recorded rather than smoothed. Staged-at-5 has a median deepest
+// sector of 6, so more than half reach sector 6, against 10 of 26 organic - 38%. The likely
+// reason is the divergence already known: staging does not simulate the attrition of getting to
+// sector 5, so a staged squad arrives with a roster of 7 where a real one has 6. A deeper bench
+// helps early in a sector and stops helping at the wall, which is the shape of a discrepancy
+// that shows at sector 6 and closes by sector 7. Not chased further, because the row the phase
+// rests on is the one that matched.
+//
+// THE MEASUREMENT, 100 runs staged at sector 7. Every figure below is CONDITIONAL ON ARRIVING
+// and none of it is a win rate. How often a career reaches sector 7 at all is what an unstaged
+// run measures, and that is about 4% - the two must never be quoted as one number.
+//
+//   runs that reached the last warlord    90 of 100
+//   meetings with it                     170, 24 won (14%)
+//   runs that felled it                   24 of 90 (27%)
+//   runs that ended the road              24 of 100
+//   grudge on it when met                 0 to 3
+//   wipes per run                         2.28   (one sector, not seven)
+//   score, median                        31,174
+//
+// So the last fight is winnable by a squad that arrives in the shape the road leaves one in:
+// about one arrival in four walks out of it. Read the 27% as an upper bound - the staged bench
+// is a body deeper than a real one - but not as an artefact, because the arm that produced it
+// predicted the sector-5 handoff it was not built from.
+//
+// AND THE MOVE NOTHING HAD EVER SEEN. COUNT YOURS was faced 165 times across the sample. G01
+// fixed it from source, having established that 0 of 150 runs reach the commander that carries
+// it; this is the first time anything in this repo has watched it fire. It is gated on grudge
+// rather than depth - learnedMove wants LEARNED_AT stacks and a stack is earned by FELLING the
+// commander - so a ten-run pilot saw it 14 times and only after two wins had banked the grudge.
+// The readout prints the grudge range beside the count for that reason: "not yet, the grudge
+// never reached the gate" and "absent with the grudge high enough" are different facts, and the
+// second one would be a finding.
+
 // G13: WHETHER THE 0-1% WIN RATE IS THE GAME OR THIS FILE'S OWN PLAY.
 //
 // Three levers were built here and documented and never once run against the win rate:
