@@ -1,3 +1,9 @@
 node_modules/
 npm-debug.log*
 .DS_Store
+
+# Throwaway measurement probes. A probe that drives the engine has to sit in tests/ so its
+# require('./server') resolves and so tests/run.js's own paths hold, but it is scaffolding for
+# one phase and is deleted when that phase lands - it is never part of the battery. The
+# underscore prefix also keeps it out of run.js's suite glob, which reads tests/suites only.
+tests/_*.js
