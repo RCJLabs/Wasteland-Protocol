@@ -76,11 +76,24 @@ module.exports = {
     ok(`the count is a real subset, not everything or nothing (${(100 * missed.length / live.length).toFixed(0)}% untouched)`,
       missed.length / live.length > 0.02 && missed.length / live.length < 0.6);
 
-    // The two endings are the example worth keeping in the record: a run can be won or walked
-    // out of, and no suite names either function.
+    // The two endings were G11's example of the gap: a run can be won or walked out of, and at
+    // the time no suite named either function. G02 covered them from 135-the-last-warlord, and
+    // this assertion FAILED THREE BATTERIES when it did - because as written it gated on those
+    // two staying uncovered, so closing the gap broke the battery.
+    //
+    // That is the exact failure this file's own header warns about one screen up: "A readout,
+    // not a gate. Failing the battery whenever a new export arrives would turn the number into
+    // an obstacle to route around, and the point of it is to be looked at." The warning was
+    // written and then contradicted eight lines later.
+    //
+    // Flipped, so it ratchets the way progress goes. Gating on a symbol staying REACHED is a
+    // test that only fails if coverage goes backwards; gating on one staying UNREACHED punishes
+    // the work the readout exists to prompt. The two endings stay the example either way.
     const endings = [sym('victory', 'Walk'), sym('victory', 'Press')];
-    ok(`both ways a run ends well exist and neither is named by a suite (${endings.filter(n => missed.includes(n)).length} of 2 untouched)`,
-      endings.every(n => live.includes(n)) && endings.every(n => missed.includes(n)));
+    ok(`both ways a run ends well are on the export surface (${endings.join(', ')})`,
+      endings.every(n => live.includes(n)));
+    ok(`and both are now named by a suite, which they were not when this line was written (${endings.filter(n => !missed.includes(n)).length} of 2 reached)`,
+      endings.every(n => !missed.includes(n)));
 
     // ── This suite naming a symbol is enough to move the number ───────────────────
     // Which is the honest limit of the measure, stated as an assertion rather than a caveat.
