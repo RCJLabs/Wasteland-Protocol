@@ -797,6 +797,57 @@
 // mistakes have now been made here; the rule that survives them is that the size of the
 // mechanism and the size of the effect have to agree before either is believed.
 //
+// H02: A FEATURE REFUTED BY ITS OWN FEASIBILITY MEASUREMENT, TWICE.
+//
+// The Reckoning was to be a commander at capped grudge fought with its late-fight behaviour from
+// the bell - harder without being a stat wall, because GRUDGE.cap says in as many words that "a
+// wall you cannot pass is not a nemesis". `--reckoning` exists to price that before building it.
+//
+// FIRST ARM, AND IT MEASURED THE OPPOSITE OF WHAT IT LOOKED LIKE. It called openGrudgePhase at
+// the bell. The phase ladder is 1 -> 2 (the ordinary enrage, half health) -> 3 (the grudge phase,
+// a quarter), each rung gated on the one below - so setting phase 3 made `phase === 1` false and
+// the ordinary enrage never fired at all. The commander lost its damage scale and speed bonus and
+// gained a gear with nothing to spend:
+//
+//   wipes per run   normal 4.22 / 4.25 / 4.28   reckoning 4.08 / 4.16 / 4.04
+//
+// Complete separation, the wrong way round. The win rate was a null and would have been easy to
+// explain away; what caught it was a row separating in a direction the mechanism could not
+// produce, which is the rule G05 was written to leave behind.
+//
+// SECOND ARM, CORRECTED, AND THE ANSWER DID NOT CHANGE. openEnragePhase was lifted out of the
+// turn loop so the enrage could be opened at the bell without touching the ladder, leaving the
+// grudge phase to fire at a quarter health exactly as before. One rung up rather than past it:
+//
+//                        normal              reckoning
+//   commander win rate   16% / 16% / 16%     17% / 21% / 20%     (~330 fights an arm)
+//   bosses felled, mean  0.62 / 0.61 / 0.59  0.66 / 0.79 / 0.72
+//
+// Same direction three times and complete separation on both rows. A commander that opens
+// enraged is EASIER, and the mechanism now agrees with the number rather than contradicting it.
+//
+// WHY, AND IT IS THE USEFUL PART. Both of a commander's late gears are CASH-OUTS OF ACCUMULATED
+// FIGHT STATE rather than gears. spendTally converts a tally the fight built - at the bell it is
+// zero, so it sheds nothing and multiplies nothing. raiseFelled has nothing to raise before
+// anybody has fallen. reEscort only fires if the column is down, and at the bell it is up.
+// backbreaker picks the most broken operator, so at full health it lands on a healthy one instead
+// of a dying one. The persistent buffs do apply, so the commander is a little stronger on paper
+// and has spent its whole situational payload on an empty board.
+//
+// SO THE PREMISE IS WRONG, not the tuning. A commander's escalation is not a set of gears that
+// could be pre-engaged; it is a set of responses to damage already done, and it cannot be
+// front-loaded by construction. Filed as refuted rather than deferred - a third design on the
+// same premise would measure the same thing a third time.
+//
+// What survives is worth keeping. openEnragePhase is now a function the caller guards, the same
+// shape openGrudgePhase already had, where before there was one of each - and `--reckoning`
+// stays as the arm that priced it, because the next person to have this idea should be able to
+// re-run it in one command rather than rediscover it in two days.
+//
+// AND IT BEARS ON THE NEXT ITEM. H04 wants to move danger down the sector away from tier ten.
+// This says commander difficulty cannot simply be relocated: most of what makes a commander
+// dangerous is built during its own fight and does not travel.
+
 // G02: THE LAST FIGHT, MEASURED FOR THE FIRST TIME - AND THE CHECK THAT EARNED IT.
 //
 // `--stage N` is above. The thing to be careful about with a staged arm is that the person
@@ -1014,6 +1065,14 @@ const RUNG = Math.max(0, Number(flag('rung', '0')) || 0);
 // measured rather than explained, because crossSector itself does not heal and the mechanism was
 // not chased. `perks 0` is not a gap: this policy spends a perk point the moment it is awarded.
 const STAGE = Math.max(0, Number(flag('stage', '0')) || 0);
+// H02 feasibility, MEASUREMENT ONLY - nothing in the game offers this yet. The Reckoning is a
+// commander fought with its late-fight behaviour from turn one rather than with bigger numbers:
+// GRUDGE.cap carries the comment "a wall you cannot pass is not a nemesis", so raising the stat
+// bands is out by the codebase's own stated principle. What is not capped is TIMING - the grudge
+// phase only opens under a quarter health. `--reckoning` opens it at the bell so the fight can be
+// priced before anything is built. A reckoning nobody survives is a trap; one nobody loses is a
+// button; the number worth knowing is where between those it lands.
+const RECKONING = flag('reckoning', 'off') !== 'off';
 // What a squad had on arrival, by sector, from the table above. Levels and relic counts are
 // applied through the engine's own doors - awardXp and the relic pool - rather than written onto
 // the operators, because every hand copy this file has ever kept has drifted from the engine it
@@ -1105,7 +1164,7 @@ const FACES = flag('faces', 'warm');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning }) => {
   const stat = { order: null, fulfilled: false, won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
                  upgrades: 0, odAimed: 0, bossTopUps: 0, eliteTopUps: 0, reqBought: 0, reqGrudge: null,
                  engineKills: 0, killGap: 0,
@@ -1878,6 +1937,19 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const fight = (nodeType, elite) => {
     initiateCombat(nodeType, elite);
+    // H02: the reckoning arm, opened at the bell rather than at a quarter health.
+    if (reckoning && nodeType === 'BOSS') {
+      const boss = activeEntities.find(e => !e.isPlayer && e.bossId);
+      // One rung up the ladder it already has, NOT past it. The first version called
+      // openGrudgePhase here, which set phase 3 and so skipped phase 2 - the commander lost its
+      // ordinary enrage and got a third gear with nothing to spend, and wiped fewer squads than
+      // a normal one. A reckoning opens the enrage at the bell and leaves the grudge phase to
+      // fire at a quarter health exactly as it always did.
+      if (boss && boss.phase === 1) {
+        openEnragePhase(boss);
+        stat.reckonings = (stat.reckonings || 0) + 1;
+      }
+    }
     stat.fights++;
     // Who is on the field, not who was picked. This was read once at the muster, so a recruit
     // signed in sector 3 and fielded for the rest of the run never appeared in the classes line,
@@ -2432,7 +2504,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }

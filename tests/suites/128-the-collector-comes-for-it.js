@@ -88,21 +88,34 @@ module.exports = {
         const before = deployed().map(u => ({ id: u.id, hp: u.hp, maxHp: u.maxHp }));
         const paid = Math.min(scrap, price);
         settleCollector();
-        const worst = Math.max(...deployed().map(u => {
+        // The bite is floored per operator - Math.floor(maxHp * share) - so the share that
+        // comes back out depends on the bar it was taken from. Report the bar too, and let the
+        // assertion do the same arithmetic the engine did, instead of allowing a tolerance that
+        // only holds for bars the share happens to divide evenly. G05 recorded this exact trap
+        // and this suite shipped with it anyway: at 65 maxHp a tenth is floor(6.5)/65 = 0.092,
+        // and the +-0.002 that used to be here failed roughly one battery in three.
+        const bitten = deployed().map(u => {
           const w = before.find(b => b.id === u.id);
-          return w ? (w.hp - u.hp) / w.maxHp : 0; }));
-        return { price, paid, share: +worst.toFixed(3) };
+          return w ? { lost: w.hp - u.hp, maxHp: w.maxHp } : { lost: 0, maxHp: 1 };
+        });
+        const worstIdx = bitten.reduce((best, b, i, a) =>
+          (b.lost / b.maxHp) > (a[best].lost / a[best].maxHp) ? i : best, 0);
+        const w = bitten[worstIdx];
+        return { price, paid, share: +(w.lost / w.maxHp).toFixed(4), lost: w.lost, maxHp: w.maxHp };
       };
       window.__boss(0);   const none = read();
       window.__boss(250); const half = read();
       window.__boss(500); const full = read();
       return { none, half, full, bite: COLLECTOR_BITE };
     });
-    ok(`paying none of it costs the full bite (${scaled.none.share} of a bar, cap ${scaled.bite})`,
-      scaled.none.share === scaled.bite);
-    ok(`paying half of it costs half (${scaled.half.share})`,
-      Math.abs(scaled.half.share - scaled.bite / 2) < 0.002);
-    ok(`paying all of it costs none (${scaled.full.share})`, scaled.full.share === 0);
+    // Each expectation is floored the way the engine floors it, against the bar it was actually
+    // taken from - so the assertion is exact at every roster the draft can deal.
+    const floored = (frac, maxHp) => Math.floor(maxHp * frac) / maxHp;
+    ok(`paying none of it costs the full bite (${scaled.none.lost} of ${scaled.none.maxHp}, cap ${scaled.bite})`,
+      scaled.none.lost === Math.floor(scaled.none.maxHp * scaled.bite));
+    ok(`paying half of it costs half (${scaled.half.lost} of ${scaled.half.maxHp} = ${scaled.half.share}, floored expectation ${floored(scaled.bite / 2, scaled.half.maxHp).toFixed(4)})`,
+      scaled.half.lost === Math.floor(scaled.half.maxHp * (scaled.bite / 2)));
+    ok(`paying all of it costs none (${scaled.full.lost} of ${scaled.full.maxHp})`, scaled.full.lost === 0);
 
     // ── The set still discounts it ────────────────────────────────────────────────
     const terms = await page.evaluate(() => {

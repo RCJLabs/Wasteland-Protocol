@@ -11083,6 +11083,93 @@ function venomDose(enemy, quiet) {
     renderField();
 }
 
+// Nothing here is changed. The guard, the order of the effects and the turn-loop plumbing all
+// stay exactly where they were; only the body moved, so openEnragePhase and openGrudgePhase
+// are now the same shape - a function the caller guards - rather than one of each.
+function openEnragePhase(enemy) {
+    enemy.phase = 2;
+    playSFX('enrage');
+    const e = protocolEnrage(enemy.enrage);
+    log(`> ${e.cry || 'THE COMMANDER ENRAGES!'}`, "log-dmg");
+    spawnFCT(enemy.id, "ENRAGED!", "fct-status"); triggerShake();
+
+    if (e.dmgScale) enemy.dmgBase = Math.floor(enemy.dmgBase * e.dmgScale);
+    if (e.speedBonus) enemy.speed += e.speedBonus;
+    // The ossuary opens. Whatever gets up feeds the tally again when it goes back down.
+    // renderField, not fitEnemyRow: the row-fitting takes the team element and the scales
+    // it is fitting, and the units that just walked on do not exist in the DOM yet.
+    if (e.raiseFelled) {
+        // Through the same seam as everything else the fight spawns. This was the one site
+        // that already read the stash, and the `|| 1` it fell back to was a unit built at no
+        // scale at all - which cannot happen now, because the fallback is the live curve.
+        const sc = spawnScale(enemy);
+        const up = raiseFelled(enemy, e.raiseFelled, sc.mult, sc.dmg);
+        if (up && e.revenantWard) {
+            enemy.revenantWard = e.revenantWard;
+            log(`> While they stand, nothing you land on it lands properly.`, 'log-status');
+        }
+        renderField();
+    }
+    if (e.armorBonus) { enemy.armor += e.armorBonus; enemy.baseArmor = (enemy.baseArmor || 0) + e.armorBonus; }
+    if (e.forceAoe) enemy.forceAoe = true;
+
+    // The Marshal calls the column in. Only if the column is actually down - it is one hound,
+    // put back, not a second one stacked on the first.
+    if (e.reEscort && !bossRetinueUp(enemy, 'escortId')) reRaiseRetinue(enemy, 'escort');
+    // The Stormcaller opens the sky: now, and faster from here.
+    if (e.stormTurn) { enemy.stormTurn = e.stormTurn; enemy.stormClock = 0; turnTheSky(enemy); }
+
+    // Plague Wind: no reinforcements, it simply infects the whole line at once.
+    if (e.plague) {
+        activeEntities.filter(t => t.isPlayer && t.hp > 0).forEach(t => {
+            t.bleedingTurns = Math.max(t.bleedingTurns, 3);
+            spawnFCT(t.id, "PLAGUE", "fct-status");
+        });
+        log(`> The squad is choking on rot.`, "log-status");
+    }
+
+    // The tank goes wide open at once: two doses in a breath, and the most broken operator
+    // on the field gets picked up and put back down.
+    if (e.venomBurst && enemy.venom) {
+        for (let i = 0; i < e.venomBurst && enemy.venomStacks < enemy.venom.max; i++) venomDose(enemy, true);
+    }
+    if (e.backbreaker) {
+        const hurt = activeEntities.filter(t => t.isPlayer && t.hp > 0)
+            .sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp))[0];
+        if (hurt) {
+            log(`> ${enemy.name} picks up ${hurt.name}. BACKBREAKER!`, 'log-dmg');
+            spawnFCT(enemy.id, 'BACKBREAKER', 'fct-status');
+            applyDamageHit(enemy, hurt, Math.floor(enemy.dmgBase * (e.backbreaker.mult || 1.8)),
+                enemy.dmgType || 'phys', 'BACKBREAKER');
+            if (hurt.hp > 0 && e.backbreaker.stun) {
+                hurt.stunnedTurns = Math.max(hurt.stunnedTurns, e.backbreaker.stun);
+                spawnFCT(hurt.id, 'STUNNED', 'fct-status');
+            }
+        }
+    }
+
+    if (e.summon) {
+        const sc = spawnScale(enemy);
+        const proto = {
+            name: e.summon.name, classType: e.summon.classType, range: e.summon.range,
+            maxHp: Math.floor(e.summon.hp * sc.mult), hp: Math.floor(e.summon.hp * sc.mult),
+            speed: e.summon.speed, armor: 0, baseArmor: 0, isPlayer: false,
+            dmgBase: Math.floor(e.summon.dmg * sc.dmg), img: e.summon.img, scale: e.summon.scale,
+            hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
+            resistances: { ...e.summon.resistances }
+        };
+        if (e.summon.isHovering) proto.isHovering = true;
+        for (let i = 0; i < (e.summonCount || 2); i++) {
+            let n = JSON.parse(JSON.stringify(proto));
+            n.id = `summon_${Date.now()}_${i}`;
+            n.intent = rollIntent(n);
+            activeEntities.push(n); turnQueue.push(n);
+        }
+        log(`> ${e.summonCount || 2}x ${e.summon.name} joins the fight!`, "log-dmg");
+    }
+
+}
+
 function executeEnemyAi(enemy) {
     if (!combatActive) return;
     // A commander's first turn is a look, not a blow. Every other fight on the road is a
@@ -11189,88 +11276,15 @@ function executeEnemyAi(enemy) {
         setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return;
     }
 
+// H02: the ordinary enrage, lifted out of the turn loop. It was eighty lines inline behind
+// the health check that was its only trigger, which meant nothing else could ever open it -
+// and the first attempt at a Reckoning went straight past it into openGrudgePhase, setting
+// phase 3 and skipping phase 2 entirely. That commander lost its enrage and gained a gear it
+// had nothing to spend on, and measured 3 x 100 it wiped FEWER squads than an ordinary one:
+// 4.08/4.16/4.04 against 4.22/4.25/4.28, complete separation the wrong way round.
+//
     if (enemy.classType === 'BOSS' && enemy.phase === 1 && enemy.hp <= enemy.maxHp * (hasProtocol('BLOODRITE') ? 0.6 : 0.5)) {
-        enemy.phase = 2;
-        playSFX('enrage');
-        const e = protocolEnrage(enemy.enrage);
-        log(`> ${e.cry || 'THE COMMANDER ENRAGES!'}`, "log-dmg");
-        spawnFCT(enemy.id, "ENRAGED!", "fct-status"); triggerShake();
-
-        if (e.dmgScale) enemy.dmgBase = Math.floor(enemy.dmgBase * e.dmgScale);
-        if (e.speedBonus) enemy.speed += e.speedBonus;
-        // The ossuary opens. Whatever gets up feeds the tally again when it goes back down.
-        // renderField, not fitEnemyRow: the row-fitting takes the team element and the scales
-        // it is fitting, and the units that just walked on do not exist in the DOM yet.
-        if (e.raiseFelled) {
-            // Through the same seam as everything else the fight spawns. This was the one site
-            // that already read the stash, and the `|| 1` it fell back to was a unit built at no
-            // scale at all - which cannot happen now, because the fallback is the live curve.
-            const sc = spawnScale(enemy);
-            const up = raiseFelled(enemy, e.raiseFelled, sc.mult, sc.dmg);
-            if (up && e.revenantWard) {
-                enemy.revenantWard = e.revenantWard;
-                log(`> While they stand, nothing you land on it lands properly.`, 'log-status');
-            }
-            renderField();
-        }
-        if (e.armorBonus) { enemy.armor += e.armorBonus; enemy.baseArmor = (enemy.baseArmor || 0) + e.armorBonus; }
-        if (e.forceAoe) enemy.forceAoe = true;
-
-        // The Marshal calls the column in. Only if the column is actually down - it is one hound,
-        // put back, not a second one stacked on the first.
-        if (e.reEscort && !bossRetinueUp(enemy, 'escortId')) reRaiseRetinue(enemy, 'escort');
-        // The Stormcaller opens the sky: now, and faster from here.
-        if (e.stormTurn) { enemy.stormTurn = e.stormTurn; enemy.stormClock = 0; turnTheSky(enemy); }
-
-        // Plague Wind: no reinforcements, it simply infects the whole line at once.
-        if (e.plague) {
-            activeEntities.filter(t => t.isPlayer && t.hp > 0).forEach(t => {
-                t.bleedingTurns = Math.max(t.bleedingTurns, 3);
-                spawnFCT(t.id, "PLAGUE", "fct-status");
-            });
-            log(`> The squad is choking on rot.`, "log-status");
-        }
-
-        // The tank goes wide open at once: two doses in a breath, and the most broken operator
-        // on the field gets picked up and put back down.
-        if (e.venomBurst && enemy.venom) {
-            for (let i = 0; i < e.venomBurst && enemy.venomStacks < enemy.venom.max; i++) venomDose(enemy, true);
-        }
-        if (e.backbreaker) {
-            const hurt = activeEntities.filter(t => t.isPlayer && t.hp > 0)
-                .sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp))[0];
-            if (hurt) {
-                log(`> ${enemy.name} picks up ${hurt.name}. BACKBREAKER!`, 'log-dmg');
-                spawnFCT(enemy.id, 'BACKBREAKER', 'fct-status');
-                applyDamageHit(enemy, hurt, Math.floor(enemy.dmgBase * (e.backbreaker.mult || 1.8)),
-                    enemy.dmgType || 'phys', 'BACKBREAKER');
-                if (hurt.hp > 0 && e.backbreaker.stun) {
-                    hurt.stunnedTurns = Math.max(hurt.stunnedTurns, e.backbreaker.stun);
-                    spawnFCT(hurt.id, 'STUNNED', 'fct-status');
-                }
-            }
-        }
-
-        if (e.summon) {
-            const sc = spawnScale(enemy);
-            const proto = {
-                name: e.summon.name, classType: e.summon.classType, range: e.summon.range,
-                maxHp: Math.floor(e.summon.hp * sc.mult), hp: Math.floor(e.summon.hp * sc.mult),
-                speed: e.summon.speed, armor: 0, baseArmor: 0, isPlayer: false,
-                dmgBase: Math.floor(e.summon.dmg * sc.dmg), img: e.summon.img, scale: e.summon.scale,
-                hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
-                resistances: { ...e.summon.resistances }
-            };
-            if (e.summon.isHovering) proto.isHovering = true;
-            for (let i = 0; i < (e.summonCount || 2); i++) {
-                let n = JSON.parse(JSON.stringify(proto));
-                n.id = `summon_${Date.now()}_${i}`;
-                n.intent = rollIntent(n);
-                activeEntities.push(n); turnQueue.push(n);
-            }
-            log(`> ${e.summonCount || 2}x ${e.summon.name} joins the fight!`, "log-dmg");
-        }
-
+        openEnragePhase(enemy);
         enemy.intent = rollIntent(enemy); renderField(); setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return;
     }
 
@@ -11872,7 +11886,7 @@ globalThis.WP = {
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, SECTOR_HP_SCALE, SECTOR_DMG_SCALE, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, openEnragePhase, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
