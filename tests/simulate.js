@@ -979,6 +979,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
                  extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false,
+                 benchHeld: null,
                  booked: 0, bookedKinds: {}, augments: 0,
                  relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0,
                  bossGrudge: [], metGrudge: [], scars: [], recovered: 0, clockLeft: [], downFaced: 0, downReach: 0, downByMove: 0, downByItem: 0, downByBar: 0, barSaves: 0 };
@@ -1120,6 +1121,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     const jobId = { scout: 'SCOUT', quartermaster: 'QUARTERMASTER', medic: 'MEDIC' }[benchPolicy];
     const holder = playerRoster.find(p => p.gridPos === 0);
     if (jobId && holder) takeBenchJob(holder.id, jobId);
+    // G13: read back what the ENGINE holds rather than what the flag asked for. The job is the
+    // one policy lever this file could not see in its own output, so `--bench scout` silently
+    // doing nothing - no benched roster member, a renamed job id, a refused call - would have
+    // reported itself as taken for as long as anybody cared to look.
+    stat.benchHeld = benchJob ? benchJob.job : null;
   }
   // Banked here rather than during the draft, because a doctrine can ask about the SHAPE of the
   // line and not only its membership - THE WALL wants to know who is holding rank 1, and nobody
@@ -2189,7 +2195,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   ORDER_NAME = ordSpec ? ordSpec.name : ORDER;
   ORDER_SECTORS = ordSpec ? ordSpec.sectors : FINAL_SECTOR_N;
 
-  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}, tactics ${TACTICS}, relics ${RELICS}, meta ${META}, faces ${FACES}${RUNG > 0 ? `, ascension \u25B2${RUNG}` : ''}` +
+  console.log(`\nSimulating ${RUNS} expeditions at difficulty ${DIFFICULTY}, draft ${DRAFT}${BENCH !== 'off' ? `, bench ${BENCH}` : ''}, tactics ${TACTICS}, relics ${RELICS}, meta ${META}, faces ${FACES}${RUNG > 0 ? `, ascension \u25B2${RUNG}` : ''}` +
               (CONTRACTS.length ? ` under ${CONTRACTS.join(', ')}` : '') +
               (WITHDRAW_POLICY ? ', running from fights it is losing' : ', fighting every node to a finish') + '\n');
 
@@ -2411,6 +2417,19 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // that mutates run state to measure it is one restart away from being the bug it found.
     const m = await page.evaluate(r => PROTOCOLS[Math.min(r, PROTOCOLS.length) - 1].mult, RUNG);
     line(`raw score, median (\u00F7${m.toFixed(2)})`, withCI(nums('score').map(v => Math.round(v / m)), v => v.toLocaleString()));
+  }
+
+  // G13: the muster's other free lever, reported the same way the doctrine is. Printed only
+  // when it was asked for, and printed as what was actually held - `asked for scout, held
+  // nothing` is the line that would have caught a lever wired to nothing.
+  if (BENCH !== 'off') {
+    const held = results.filter(r => r.benchHeld);
+    console.log('\n\u2500\u2500 THE BENCH ' + '\u2500'.repeat(45));
+    line(`asked for ${BENCH}`, held.length === n ? `held on all ${n} runs`
+      : held.length ? `held on ${held.length} of ${n}` : `HELD ON NONE - the lever did nothing`);
+    const jobs = {};
+    held.forEach(r => { jobs[r.benchHeld] = (jobs[r.benchHeld] || 0) + 1; });
+    Object.entries(jobs).forEach(([k, v]) => line('  ' + k, v));
   }
 
   const withDoc = results.filter(r => r.doctrine);
