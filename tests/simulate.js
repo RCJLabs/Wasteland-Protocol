@@ -797,6 +797,53 @@
 // mistakes have now been made here; the rule that survives them is that the size of the
 // mechanism and the size of the effect have to agree before either is believed.
 //
+// G13: WHETHER THE 0-1% WIN RATE IS THE GAME OR THIS FILE'S OWN PLAY.
+//
+// Three levers were built here and documented and never once run against the win rate:
+// `--tactics smart` reads threatBoard and forecastFor instead of buying STIM every time,
+// `--draft doctrine` fields a line that keeps a free multiplier, `--bench scout` takes the job
+// the muster hands out for nothing. Each is a thing a player does without thinking about it.
+// Relics were deliberately LEFT at `rare`: `avoid` refuses every curse, and the curses are
+// meant to be worth taking, so putting it in the arm would have smuggled a balance opinion
+// into a policy meant to hold only obvious play.
+//
+// The first attempt measured nothing, because `--draft doctrine` was fielding nobody on a fifth
+// of its runs - see the commit for G13 and suite 134. What follows is the paired 3 x 150 after
+// that was fixed, interleaved A/E/A/E/A/E so machine drift falls on both arms, and every one of
+// the six arms confirmed clean of the empty-line failure before it was read.
+//
+//                            default              smart + doctrine + scout
+//   runs that ended the road   3 / 1 / 3            7 / 2 / 5      of 150
+//   reached sector 7           6 / 10 / 5          19 / 7 / 14
+//   deepest sector, median     3 / 3 / 3            3 / 3 / 4
+//   nodes cleared, median     80 / 76 / 72         80 / 71 / 77
+//   score, median           22.1k / 20.2k / 20.0k  24.5k / 20.8k / 25.2k
+//   wipes per run           7.17 / 7.18 / 6.90     7.23 / 7.18 / 7.51
+//
+// NOTHING SEPARATES UNDER D17. Not one row manages same-direction-three-times AND no overlap.
+// Score comes closest and still overlaps by 1.3k. `reached sector 7` reverses direction in the
+// second pair, which is the more sensitive form of the same signal as the win rate and is the
+// reason the win rate's own three-for-three is not worth anything here - F10 already recorded
+// that this row cannot be read at three samples of 150, having watched two identical arms read
+// 3.83 and 2.67.
+//
+// BUT THE BOUND IS THE ANSWER, and it does not need the row to separate. Pooled over 450 runs
+// an arm: the road is finished 7 times against 14, and sector 7 is reached 21 times against 40.
+// About a doubling on both, with Poisson intervals that overlap and a per-pair direction that
+// does not hold - so a doubling is the shape of it, not a result. What IS established is the
+// ORDER: three levers a player pulls without thinking move this from roughly 1.5% to roughly
+// 3%. They do not move it to 15%. A win rate that would make the end of the road something a
+// player meets is not sitting in this policy's unpressed buttons.
+//
+// So the answer to the question the phase asked is: mostly the game. The road runs seven
+// sectors, the median run abandons it at three, 81% of wipes are at tier ten, and playing it
+// better in every way this file knows how still finishes it about three times in a hundred.
+// Whether that is wrong is a design decision - it is the item this file has been calling "what
+// the capstone win rate should be" - but it is no longer a question about the instrument. Two
+// further things a real player does are still unmeasured and worth naming rather than
+// forgetting: no policy here banks a capstone to take later, and none re-drafts its line
+// between expeditions as the roster changes.
+
 // G06: A NULL, MEASURED ON THE ARM WHERE THE THING ACTUALLY HAPPENS.
 //
 // G06 stops Scavenger's Debt being dodged by arriving at a warlord broke. Under the default
