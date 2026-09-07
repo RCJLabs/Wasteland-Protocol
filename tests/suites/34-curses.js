@@ -148,7 +148,7 @@ module.exports = {
     // ---- the ledger curses ----
     const ledger = await page.evaluate(() => {
       const orig = Math.random;
-      const winScrap = (relicIds, nodeType) => {
+      const winScrap = (relicIds, nodeType, takeLoot) => {
         activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
         playerRoster.forEach(c => { c.quirk = null; });
         activeRelics = (relicIds || []).map(id => RELIC_POOL.find(r => r.id === id));
@@ -164,17 +164,27 @@ module.exports = {
         checkWinState();
         Math.random = orig;
         const btn = document.querySelector('[data-action="loot"]');
-        return { amount: btn ? Number(btn.dataset.amount) : -1, scrapNow: scrap };
+        const amount = btn ? Number(btn.dataset.amount) : -1;
+        // G06: the collector is settled when the fight PAYS, not at the kill, so reading the
+        // purse before the loot is banked now reads it before he has been anywhere near it.
+        // The other three cases read the button on purpose and must not bank.
+        const atKill = scrap;
+        if (takeLoot) collectLoot(pendingLoot);
+        return { amount, atKill, scrapNow: scrap };
       };
       const plain = winScrap([], 'RAIDERS');
       const debt = winScrap(['SCAVENGERS_DEBT'], 'RAIDERS');
       const vulture = winScrap(['VULTURE_ROYALTY'], 'RAIDERS');
-      const bossDebt = winScrap(['SCAVENGERS_DEBT'], 'BOSS');
+      const bossDebt = winScrap(['SCAVENGERS_DEBT'], 'BOSS', true);
       return { plain: plain.amount, debt: debt.amount, vulture: vulture.amount,
-               collectorTook: bossDebt.scrapNow === 500 };
+               boss: { paid: bossDebt.amount, atKill: bossDebt.atKill, after: bossDebt.scrapNow },
+               collectorTook: bossDebt.scrapNow === 1000 + bossDebt.amount - 500 };
     });
     ok(`the debt pays +40 on the road (${ledger.plain} -> ${ledger.debt})`, ledger.debt === ledger.plain + 40);
-    ok('and the collector takes 500 at the warlord', ledger.collectorTook);
+    ok(`and the collector takes 500 at the warlord, out of what it paid (1000 + ${ledger.boss.paid} - 500 = ${ledger.boss.after})`,
+      ledger.collectorTook);
+    ok(`taking nothing at the kill itself (${ledger.boss.atKill} still in the purse)`,
+      ledger.boss.atKill === 1000);
     ok(`vulture royalty taxes the take (${ledger.plain} -> ${ledger.vulture})`, ledger.vulture === Math.floor(ledger.plain * 0.75));
 
     const vultureGear = await page.evaluate(() => {

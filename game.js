@@ -115,6 +115,7 @@ let activeEvent = null; let pendingConsequences = []; let recentEvents = []; let
 // reset. The other three lost the player something instead: a rerolled event with its
 // follow-up thread un-fired, a camp offered again, a muster skipped outright.
 let pendingLoot = null;    // the spoils of a won fight, waiting on the LOOT button
+let collectorDue = false;  // a warlord fell holding Scavenger's Debt; settled when the loot banks
 let squadBroken = false;   // standing on SQUAD BROKEN, with REGROUP and END RUN still unpressed
 let musterPending = false; // the run is built and the line has not been sent in yet
 let atCamp = false;        // standing in a camp
@@ -1014,7 +1015,7 @@ const RELIC_POOL = [
     // Cursed relics are never dealt at random - they arrive only as a cache decision or a
     // collector's gamble, so every one aboard was chosen.
     { id: 'GLASS_CANNON_CORE',  tier: 'CURSED', name: "Glass Cannon Core",  desc: "All damage dealt +40% — but the squad deploys at 85% health, every fight." },
-    { id: 'SCAVENGERS_DEBT',    tier: 'CURSED', name: "Scavenger's Debt",   desc: "+40 Scrap after every fight — but the collector takes 500 at each warlord." },
+    { id: 'SCAVENGERS_DEBT',    tier: 'CURSED', name: "Scavenger's Debt",   desc: "+40 Scrap after every fight — but the collector takes 500 at each warlord, in scrap or in blood." },
     { id: 'LEAD_LINED_COAT',    tier: 'CURSED', name: "Lead-Lined Coat",    desc: "The squad takes -20% damage — but moves 3 SPD slower in the turn order." },
     { id: 'HUNGRY_BLADE',       tier: 'CURSED', name: "Hungry Blade",       desc: "Melee hits feed the attacker 6 HP — but everything that is not melee deals -15%." },
     { id: 'VULTURE_ROYALTY',    tier: 'CURSED', name: "Vulture Royalty",    desc: "Elites always drop gear — but every victory pays -25% Scrap." },
@@ -1060,6 +1061,37 @@ function relicSetActive(name) {
 // a rule agree right up until one of them changes.
 function bladeBite() { return relicSetActive('The Long Knife') ? 12 : 6; }
 function collectorPrice() { return relicSetActive("The Collector's Terms") ? 200 : 500; }
+// What the squad pays in blood for the part of the price it cannot pay in scrap, at a full
+// shortfall. Vela already answers "the money is not there" this way; the collector is the same
+// kind of creditor and gets the same kind of answer.
+const COLLECTOR_BITE = 0.20;
+// G06: the price was taken inside the commander-kill branch, which runs BEFORE collectLoot
+// banks the fight - so it came out of the purse the squad walked in with rather than the money
+// the warlord was standing on - and it was capped at whatever was on hand. Measured: a purse of
+// 10 against a price of 500 paid 10 and walked away, so emptying the purse at the shop before
+// the boss node dodged 98% of a curse. A curse you can step around by knowing when it fires is
+// a decision about the interface, not about the run.
+//
+// Settled against the payout now, and a shortfall is not a discount: what the scrap cannot
+// cover comes out of the squad, in proportion to what went unpaid. Arriving empty is the worst
+// way to meet the collector rather than the cheapest.
+function settleCollector() {
+    if (!hasRelic('SCAVENGERS_DEBT')) return null;
+    const price = collectorPrice();
+    const paid = Math.min(scrap, price);
+    scrap -= paid;
+    const short = price - paid;
+    if (!short) {
+        log(`> The collector's men are already here. They take ${price} Scrap.`, "log-dmg");
+        return { price, paid, short: 0, bit: 0 };
+    }
+    const share = COLLECTOR_BITE * (short / price);
+    const bitten = deployed().filter(u => u.hp > 0);
+    bitten.forEach(u => { u.hp = Math.max(1, u.hp - Math.floor(u.maxHp * share)); });
+    log(`> The collector's men are already here. They take ${paid} Scrap, and ${short} out of the squad.`, "log-dmg");
+    playSFX('hit'); triggerShake();
+    return { price, paid, short, bit: share, hurt: bitten.length };
+}
 function magnetPay() { return relicSetActive('Quartermaster') ? 30 : 15; }
 function salvageBonus() { return relicSetActive('Quartermaster') ? 2 : 1; }
 function coatDrag() { return relicSetActive('Deadweight') ? 1 : 3; }
@@ -4770,7 +4802,7 @@ function renderChronicle() {
 }
 
 function endRun() {
-    squadBroken = false; pendingLoot = null; atCamp = false; campOutcome = null;
+    squadBroken = false; pendingLoot = null; collectorDue = false; atCamp = false; campOutcome = null;
     activeEvent = null; eventOutcome = null; musterPending = false;
     combatActive = false; activeEntities = []; turnQueue = []; pendingCombat = null;
     momentum = 0; addMomentum(0);
@@ -4941,6 +4973,9 @@ function bankNode(raw, abandoned) {
     const amount = nodeSalvage(raw);
     // A node you ran from is not a node you cleared, and the run summary should not claim it was.
     scrap += amount;
+    // The one choke point both the game and the harness bank through, which is why the collector
+    // is settled here rather than at either of their own exits.
+    if (collectorDue) { collectorDue = false; settleCollector(); }
     if (runStats) {
         runStats.scrapEarned += amount;
         if (abandoned) runStats.withdrawals = (runStats.withdrawals || 0) + 1; else runStats.nodes++;
@@ -5783,7 +5818,7 @@ function buildNewRun(diff) {
     // F02: a new run is standing on no screen at all. confirmNewGame goes straight to the map
     // and beginExpedition sets the muster flag itself, so nothing here can inherit the screen
     // the last run ended on.
-    pendingLoot = null; squadBroken = false; musterPending = false;
+    pendingLoot = null; collectorDue = false; squadBroken = false; musterPending = false;
     atCamp = false; campOutcome = null; activeEvent = null; eventOutcome = null;
     saveGameState(); 
 }
@@ -5894,7 +5929,7 @@ function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify
     // F02. `event` is stored as a title rather than the object: an event's desc and choices
     // are functions of the run, so what is worth keeping is which one is open, not the shape
     // it had when it opened. `meta` is the career mirror - see metaBlob.
-    pendingLoot, squadBroken, musterPending, musterRerolls, atCamp, campOutcome, eventOutcome,
+    pendingLoot, collectorDue, squadBroken, musterPending, musterRerolls, atCamp, campOutcome, eventOutcome,
     grudgeCall, rungCredit,
     event: activeEvent ? activeEvent.title : null, meta: metaBlob() })); }
 
@@ -5968,6 +6003,7 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         // an event, or a camp outcome naming a kind that no longer exists, restores as no
         // screen at all rather than as a screen the game cannot draw.
         pendingLoot = (typeof d.pendingLoot === 'number' && d.pendingLoot >= 0) ? d.pendingLoot : null;
+        collectorDue = !!d.collectorDue;
         squadBroken = !!d.squadBroken;
         musterPending = !!d.musterPending;
         musterRerolls = Math.max(0, Number(d.musterRerolls) || 0);
@@ -11552,12 +11588,10 @@ function checkWinState() {
                 runStats.regroups++;
                 log(`> The squad regroups behind the kill. +1 FALLBACK (${regroupsLeft()}/${totalRegroups()}).`, "log-heal");
             }
-            // Scavenger's Debt comes due wherever a warlord falls.
-            if (hasRelic('SCAVENGERS_DEBT')) {
-                const taken = Math.min(scrap, collectorPrice());
-                scrap -= taken;
-                log(`> The collector's men are already here. They take ${taken} Scrap.`, "log-dmg");
-            }
+            // Scavenger's Debt comes due wherever a warlord falls - but it is collected when
+            // the fight pays out, not here, so the money the warlord was standing on is on the
+            // table when the collector counts it.
+            if (hasRelic('SCAVENGERS_DEBT')) collectorDue = true;
         }
         if (isCurrentNodeElite) {
             checkBountyProgress('ELITE'); if (runStats) runStats.elites++;
@@ -11678,7 +11712,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    clearStaleClocks, loadoutChipsHtml, benchedFor, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
+    clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
     INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
@@ -11786,6 +11820,7 @@ globalThis.WP = {
     get activeScarSelector() { return activeScarSelector; }, set activeScarSelector(v) { activeScarSelector = v; },
     get activeEvent() { return activeEvent; }, set activeEvent(v) { activeEvent = v; },
     get pendingLoot() { return pendingLoot; }, set pendingLoot(v) { pendingLoot = v; },
+    get collectorDue() { return collectorDue; }, set collectorDue(v) { collectorDue = v; },
     get squadBroken() { return squadBroken; }, set squadBroken(v) { squadBroken = v; },
     get musterPending() { return musterPending; }, set musterPending(v) { musterPending = v; },
     get atCamp() { return atCamp; }, set atCamp(v) { atCamp = v; },

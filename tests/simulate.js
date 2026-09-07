@@ -796,6 +796,36 @@
 // where "noise" was argued for six samples before the effect turned out to be real. Both
 // mistakes have now been made here; the rule that survives them is that the size of the
 // mechanism and the size of the effect have to agree before either is believed.
+//
+// G06: A NULL, MEASURED ON THE ARM WHERE THE THING ACTUALLY HAPPENS.
+//
+// G06 stops Scavenger's Debt being dodged by arriving at a warlord broke. Under the default
+// policy the relic is held in 3% of runs at 1.88 warlords each - about nine collections across
+// 150 runs, which no aggregate row can resolve. `--relics curse` takes every cursed card
+// offered and puts it in 38% of runs at 2.10 warlords: roughly 120 collections, which can.
+// Both figures were measured before the arm was chosen rather than after.
+//
+// Paired 3 x 150, --relics curse, frozen pre-G06 tree. Nothing separates under D17:
+//
+//   score, median            20.4k / 20.2k / 20.9k   ->   20.5k / 21.4k / 19.5k
+//   nodes cleared, median    75 / 73 / 77            ->   81 / 75 / 75
+//   operators lost for good  3.34 / 2.99 / 3.42      ->   3.05 / 3.66 / 3.00
+//
+// The exposure control says the arms are comparable: the relic was held in 35/37/41% of runs
+// against 40/39/41%, so both sides met the collector about as often.
+//
+// Two rows lean the way the mechanism does, and neither is claimable. `bosses felled, mean`
+// runs 2.15 / 2.17 / 2.26 against 2.09 / 2.15 / 2.05 - same direction three times, but the
+// ranges touch at 2.15, so it misses complete separation by nothing at all. `runs that ended
+// the road` is 4/3/3 against 1/2/2, which does separate, and is exactly the row the F10 note
+// above says cannot be read at three samples of 150. They are recorded because they point the
+// expected way - a curse that can no longer be sidestepped costs a little depth - and not
+// because either is established.
+//
+// Not chased further, and the asymmetry is the reason: in G05 a row separated that would have
+// been written down as a finding, so the extra samples bought a correction. Here nothing
+// separates, so more samples would only sharpen a number the phase does not rest on - G06 is a
+// correctness fix to a curse that was 98% avoidable, not a difficulty tuning.
 const path = require('path');
 const { serve } = require('./server');
 
@@ -2002,7 +2032,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         }
         if (runStats.regroups < totalRegroups()) runStats.regroups++;
         checkBountyProgress('BOSS');
-        if (hasRelic('SCAVENGERS_DEBT')) { const taken = Math.min(scrap, collectorPrice()); scrap -= taken; }
+        // G06: the flag, not a hand copy of the price. The collector is settled inside bankNode
+        // now - the one choke point this file and the engine both bank through - so the top-up
+        // only has to say that a warlord fell, the same as the engine's own branch does.
+        if (hasRelic('SCAVENGERS_DEBT')) collectorDue = true;
         const gDrop = rollGear(); if (gDrop) gearStash.push(gDrop);
         // The engine did not count this kill, so it did not stage the offer either. Stage it.
         if (!pendingRelicOffer) { const o = rollRelicOffer(); if (o.length) pendingRelicOffer = o; }

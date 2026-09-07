@@ -117,7 +117,12 @@ module.exports = {
       // Lay the whole hostile line down, which is what widens their boxes.
       activeEntities.filter(e => !e.isPlayer).forEach(e => { e.hp = 0; e.deadRendered = true; });
       renderField();
-      await new Promise(r => setTimeout(r, 60));
+      // Read synchronously, with no wait at all. The claim is that renderField re-fits rather
+      // than remembering, and a wait lets the portrait load handler's own re-fit land first and
+      // answer for it - so the sleep that used to be here was both a race AND a hole in the
+      // assertion. Measured, that 60ms bet also lost about one battery in nine and the failure
+      // read as a layout defect. The load-handler path is a separate thing and is covered by
+      // the block below, which empties the field so no new art can arrive.
       const field = document.querySelector('.battlefield');
       const s = fieldSpan(field);
       combatActive = false;
