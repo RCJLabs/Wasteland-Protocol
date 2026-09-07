@@ -177,8 +177,12 @@
 
     <div id="screen-relic">
         <div class="screen-title-bar">COMMANDER'S CACHE</div>
-        <div class="relic-offer-note">The commander's stash is open. Take one.</div>
+        <div class="relic-offer-note">The commander's stash is open. Take one, or don't.</div>
         <div id="relic-choices" class="relic-choices"></div>
+        <!-- G07: always here, not only when the table is bad. A cursed card is "marked
+             unmistakably, never forced", and a screen whose only control hands you something
+             is not a choice. It is also the only exit when the clean pool has run dry. -->
+        <button id="relic-decline" class="relic-decline" data-action="decline-relic">WALK AWAY</button>
     </div>
 
     <div id="screen-dev">

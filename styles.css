@@ -509,6 +509,12 @@ button.reach-short { border-color: #7a5a20; }
 #screen-relic { display: none; flex-direction: column; padding: 18px 14px; gap: 12px; overflow-y: auto; }
 .relic-offer-note { text-align: center; font-size: 0.75rem; color: #8a8578; letter-spacing: 1px; margin-bottom: 4px; }
 .relic-choices { display: flex; flex-direction: column; gap: 12px; }
+/* Quieter than the cards it sits under - leaving is allowed, not encouraged - but a real
+   control at the tap-target floor N13 set, not a line of text pretending to be one. */
+.relic-decline { margin-top: 14px; width: 100%; min-height: 44px; background: transparent;
+  border: 1px solid #4a4638; color: #8a8578; font-family: monospace; font-size: 0.75rem;
+  letter-spacing: 2px; cursor: pointer; }
+.relic-decline:hover, .relic-decline:focus-visible { border-color: #8a8578; color: #c0bba8; }
 .relic-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
   text-align: left; padding: 12px 14px; line-height: 1.4; }
 .relic-card-tier { font-size: 0.5625rem; letter-spacing: 2px; opacity: 0.75; }

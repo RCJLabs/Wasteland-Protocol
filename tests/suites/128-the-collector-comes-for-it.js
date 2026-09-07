@@ -22,6 +22,12 @@ module.exports = {
         currentSlot = 1; confirmNewGame(1.0); currentSector = 1;
         activeRelics = (relics || ['SCAVENGERS_DEBT']).map(id => RELIC_POOL.find(r => r.id === id));
         initiateCombat('BOSS', false);
+        // Clear the board first. A contract that settles on this same win pays into scrap, and
+        // every reading below is an exact purse - so a BOSS bounty completing on the kill puts
+        // 90 in the pocket and the arithmetic stops being about the collector. 34-curses hit
+        // this years-of-commits ago and says so; this suite shipped without the guard and
+        // failed about one battery in eight until it was added.
+        activeBounties = []; standingBounty = null;
         scrap = purse;
         window.__hp = deployed().map(u => ({ id: u.id, hp: u.hp, maxHp: u.maxHp }));
         return collectorPrice();
@@ -117,7 +123,9 @@ module.exports = {
       // And an ordinary node is not a warlord.
       currentSlot = 1; confirmNewGame(1.0);
       activeRelics = [RELIC_POOL.find(r => r.id === 'SCAVENGERS_DEBT')];
-      initiateCombat('RAIDERS', false); scrap = 2000;
+      initiateCombat('RAIDERS', false);
+      activeBounties = []; standingBounty = null;
+      scrap = 2000;
       activeEntities.filter(e => !e.isPlayer).forEach(e => e.hp = 0);
       checkWinState(); collectLoot(pendingLoot);
       out.ordinary = { purse: scrap, due: collectorDue };
@@ -170,6 +178,7 @@ module.exports = {
       // The next ordinary node banks too. The collector has been paid and is not still standing
       // there - a flag that settles but never clears would charge every node for the rest of it.
       initiateCombat('RAIDERS', false);
+      activeBounties = []; standingBounty = null;
       activeEntities.filter(e => !e.isPlayer).forEach(e => e.hp = 0);
       checkWinState(); collectLoot(pendingLoot);
       return { afterBoss, due, afterNext: scrap };
