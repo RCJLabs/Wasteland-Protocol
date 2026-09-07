@@ -1091,13 +1091,38 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       wantDoctrine = want;
     }
   } else if (draftPolicy === 'doctrine' && doctrineOffer.length) {
-    // Take one at random and field a line that keeps it. Anything the doctrine will not have
-    // is simply not drafted, which is the whole of the constraint.
+    // G13: a doctrine is a predicate on the WHOLE line, and this used to build the line one
+    // legal member at a time - asking holds() of every prefix. Two of the seven cannot be true
+    // of a prefix at all. BROAD SPECTRUM wants all three damage types across the line, which no
+    // single operator covers. THE WALL is worse: it asks who is holding rank 1, and the ranks
+    // are not handed out until after the draft, so during the build every candidate reads
+    // gridPos 0 and the answer is always no. The comment forty lines down already knew this -
+    // the doctrine BANKING step was moved below the draft for exactly that reason - and the
+    // draft policy kept doing it anyway.
+    //
+    // The failure was silent and total. `legal` came back empty on the first pass, the loop
+    // broke with `draft` still empty, `draft.forEach(...gridPos...)` was a no-op, and the run
+    // played out with NOBODY STANDING. Measured before the fix: 3 of 7 doctrines rejected every
+    // single-member line, and 19 of 50 runs on this policy hit a node with an empty line.
+    //
+    // So: build the whole line first, place it, then ask. Ordering matters because THE WALL
+    // reads rank 1, so this walks ordered selections rather than combinations - 7 take 3 is 210
+    // of them, once per run.
     const want = doctrineOffer[Math.floor(Math.random() * doctrineOffer.length)];
     const d = doctrineById(want);
-    const shuffled = [...playerRoster].sort(() => Math.random() - 0.5);
-    shuffled.forEach(c => { if (draft.length < slots.length && d.holds([...draft, c])) draft.push(c); });
-    wantDoctrine = want;
+    const place = line => { playerRoster.forEach(p => { p.gridPos = 0; });
+                            line.forEach((p, i) => { p.gridPos = slots[i]; }); };
+    const ordered = (pool, k) => k === 0 ? [[]]
+      : pool.flatMap((c, i) => ordered(pool.filter((_, j) => j !== i), k - 1).map(rest => [c, ...rest]));
+    const cands = ordered(playerRoster, Math.min(slots.length, playerRoster.length))
+      .sort(() => Math.random() - 0.5);
+    let held = null;
+    for (const cand of cands) { place(cand); if (d.holds(cand)) { held = cand; break; } }
+    playerRoster.forEach(p => { p.gridPos = 0; });   // the tail below does the real placing
+    if (held) { draft.push(...held); wantDoctrine = want; }
+    // Nothing this roster can field keeps it. Recorded rather than swallowed, and the line is
+    // drafted the ordinary way so the run is still a run.
+    else { stat.doctrineUnfieldable = want; }
   } else if (draftPolicy.startsWith('only:')) {
     const want = draftPolicy.slice(5);
     const one = byClass([want])[0];
@@ -1114,6 +1139,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     draft.push(pickFrom(legal));
   }
   draft.forEach((p, i) => { p.gridPos = slots[i]; });
+  // G13: what the draft actually fielded, read back off the roster rather than off the policy's
+  // own intentions. A policy that silently fields nobody is what this phase went looking for a
+  // balance answer and found instead - the run still ran, still reported depth and score and a
+  // win rate, and every one of those numbers described a squad that was not there.
+  stat.lineSize = deployedLine().length;
   // Whoever is left is on the bench and eligible for the job the flag asks for. Any of the
   // roster still at gridPos 0 will do - the job holds only while its holder stays benched,
   // which this policy never deploys them out of on purpose.
@@ -2417,6 +2447,22 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // that mutates run state to measure it is one restart away from being the bug it found.
     const m = await page.evaluate(r => PROTOCOLS[Math.min(r, PROTOCOLS.length) - 1].mult, RUNG);
     line(`raw score, median (\u00F7${m.toFixed(2)})`, withCI(nums('score').map(v => Math.round(v / m)), v => v.toLocaleString()));
+  }
+
+  // G13: the draft is the one thing every other number rests on, so an empty line is not a row
+  // in a table - it invalidates the run. Printed first, and printed whether or not it happened.
+  {
+    const empty = results.filter(r => r.lineSize === 0);
+    const unfieldable = results.filter(r => r.doctrineUnfieldable);
+    if (empty.length) {
+      console.log(`\n!! ${empty.length} of ${n} RUNS FIELDED NOBODY - every figure below is from a squad that was not there`);
+    }
+    if (unfieldable.length) {
+      const by = {};
+      unfieldable.forEach(r => { by[r.doctrineUnfieldable] = (by[r.doctrineUnfieldable] || 0) + 1; });
+      console.log(`\ndoctrine unfieldable by this roster on ${unfieldable.length} of ${n} runs: ` +
+        Object.entries(by).map(([k, v]) => `${k} x${v}`).join(', ') + ' - drafted the ordinary way instead');
+    }
   }
 
   // G13: the muster's other free lever, reported the same way the doctrine is. Printed only
