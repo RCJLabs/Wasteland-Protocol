@@ -133,7 +133,9 @@
     <div id="screen-codex">
         <div class="screen-title-bar">FIELD MANUAL</div>
         <div id="codex-body" class="codex-body"></div>
-        <button class="return-btn" data-action="title">CLOSE</button>
+        <!-- G10: back to whatever it was opened over, not to the title. Looking a rule up
+             mid-fight must not be a way to leave the fight. -->
+        <button class="return-btn" data-action="codex-close">CLOSE</button>
     </div>
 
     <div id="screen-contracts">
