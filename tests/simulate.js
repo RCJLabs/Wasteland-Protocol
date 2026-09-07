@@ -934,6 +934,47 @@ const ORDER = flag('order', 'long').toUpperCase();
 // by clearing it, so the sim skips the climb and sets the rung directly - the question it can
 // answer is "what does rung N do to the win rate", not "can this policy climb".
 const RUNG = Math.max(0, Number(flag('rung', '0')) || 0);
+// G02: the last fight nothing measures. The Ossuary sits at the top of sector 7, is not in the
+// rotation that holds the road, and is never dealt at any other depth. G01 measured 0 of 150
+// runs reaching it while the same 150 saw 1102 fights against the seven warlords below it, and
+// G13 then established that the gap is not this file's play: every obvious lever together moves
+// the win rate from about 1.5% to about 3%, not to 15%. So the road will not be walked to the
+// end often enough to measure what is standing there, and a longer sample buys nothing.
+//
+// `--stage N` starts an expedition at the TOP OF THE ROAD INTO sector N, carrying what a squad
+// that got there was measured to carry. It does not stage the boss fight - it stages the
+// ARRIVAL, and the sector is then played the ordinary way, so whatever state the squad is in
+// when it reaches the commander is a state the game produced rather than one this file invented.
+//
+// The profile is measured, not chosen. 150 expeditions on the default policy, snapshotting every
+// deployed line at the moment it crossed into a sector:
+//
+//   sector   reached   line  lvl  maxHp  dmg  hp%   roster  relics  gear  scrap  regroups
+//     2      144/150     3    6    110    33  100      7       4      1     181      5
+//     3       91/150     3    7    130    41  100      7       7      2     348      4
+//     4       50/150     3    9    147    46  100      7       9      2     662      4
+//     5       26/150     3   10    165    47  100      6      13      3     897      3
+//     6       10/150     3   11    173    50  100      6      15      3    1515      5
+//     7        6/150     3   13    201    54  100      5      15      3    2228      2
+//
+// Read the caveats with it. Sector 7's row rests on six runs, which is why staging is validated
+// at sector 5 (n=26) rather than trusted at 7 - see the check in the header below. The hp% column
+// is 100 at every depth and every sample size, so a staged squad arrives whole; that is taken as
+// measured rather than explained, because crossSector itself does not heal and the mechanism was
+// not chased. `perks 0` is not a gap: this policy spends a perk point the moment it is awarded.
+const STAGE = Math.max(0, Number(flag('stage', '0')) || 0);
+// What a squad had on arrival, by sector, from the table above. Levels and relic counts are
+// applied through the engine's own doors - awardXp and the relic pool - rather than written onto
+// the operators, because every hand copy this file has ever kept has drifted from the engine it
+// copied (E01b, F02, G04, G06 all began that way).
+const STAGE_PROFILE = {
+  2: { lvl: 6,  maxHp: 110, dmg: 33, relics: 4,  gear: 1, scrap: 181,  regroups: 5, roster: 7 },
+  3: { lvl: 7,  maxHp: 130, dmg: 41, relics: 7,  gear: 2, scrap: 348,  regroups: 4, roster: 7 },
+  4: { lvl: 9,  maxHp: 147, dmg: 46, relics: 9,  gear: 2, scrap: 662,  regroups: 4, roster: 7 },
+  5: { lvl: 10, maxHp: 165, dmg: 47, relics: 13, gear: 3, scrap: 897,  regroups: 3, roster: 6 },
+  6: { lvl: 11, maxHp: 173, dmg: 50, relics: 15, gear: 3, scrap: 1515, regroups: 5, roster: 6 },
+  7: { lvl: 13, maxHp: 201, dmg: 54, relics: 15, gear: 3, scrap: 2228, regroups: 2, roster: 5 }
+};
 // A commander's offer deals three cards and sometimes one of them is cursed. This file took
 // `offer.find(RARE) || offer[0]`, which is two opinions dressed as one: prefer a rare, and
 // otherwise take whatever happens to sit first. "Cursed relics are refused" was that policy
@@ -1013,7 +1054,7 @@ const FACES = flag('faces', 'warm');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile }) => {
   const stat = { order: null, fulfilled: false, won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
                  upgrades: 0, odAimed: 0, bossTopUps: 0, eliteTopUps: 0, reqBought: 0, reqGrudge: null,
                  engineKills: 0, killGap: 0,
@@ -1225,6 +1266,68 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // The real deploy button is what applies a doctrine's edge and banks its multiplier, so the
   // sim goes through it rather than around it.
   musterDeploy();
+
+  // G02: put the squad at the mouth of a deeper sector, carrying what a squad that walked there
+  // was measured to carry. Everything here goes through a door the game already has - awardXp
+  // levels an operator through the engine's own curve, the relic pool hands out the relics it
+  // would hand out, equipGear is the control the Armory drives - so nothing below is a copy of
+  // an engine rule that can drift away from it.
+  if (stagePolicy > 1 && stageProfile[stagePolicy]) {
+    const prof = stageProfile[stagePolicy];
+    stat.staged = stagePolicy;
+    // 1. levels, through the XP curve rather than onto the stat block
+    deployedLine().forEach(c => {
+      let guard = 0;
+      while ((c.level || 1) < prof.lvl && guard++ < 60) awardXp(c, Math.max(1, c.xpToNext - c.xp));
+    });
+    // 1b. and the Outpost counter, which is where most of a deep squad's bar actually comes
+    //     from - levelling alone left a staged line at 80hp against the 201 the profile
+    //     measured, and the readout below is what caught it. Bought at zero cost, because the
+    //     purse is set to the profile afterwards and a staged squad should not arrive having
+    //     just spent it.
+    deployedLine().forEach(c => {
+      let g2 = 0;
+      while (c.maxHp < prof.maxHp && g2++ < 60) buyUpgrade(c.id, 'HP', 0);
+      g2 = 0;
+      while (c.dmgBase < prof.dmg && g2++ < 60) buyUpgrade(c.id, 'DMG', 0);
+    });
+    // 2. relics, from the pool the game would have offered, cursed ones excluded - a staged
+    //    squad is standing in for one that got there, and one that got there was not obliged to
+    //    take curses on the way.
+    let guard = 0;
+    while (activeRelics.length < prof.relics && guard++ < 40) {
+      const left = unownedRelics().filter(r => r.tier !== 'CURSED');
+      if (!left.length) break;
+      activeRelics.push(left[Math.floor(Math.random() * left.length)]);
+    }
+    // 3. gear, on the line, through the Armory's own control
+    // equipGear fits from the stash and returns nothing, so the piece goes in the stash first
+    // and the fit is confirmed off the operator rather than off a return value.
+    let want = prof.gear;
+    deployedLine().forEach(c => {
+      if (want <= 0) return;
+      const fits = GEAR_POOL.filter(g => g.slot !== 'mod' || g.cls === c.classType);
+      const g = fits[Math.floor(Math.random() * fits.length)];
+      if (!g) return;
+      gearStash.push(g.id);
+      equipGear(c.id, g.id);
+      if (c.trinket === g.id || c.weaponMod === g.id) want--;
+      else { const i = gearStash.indexOf(g.id); if (i !== -1) gearStash.splice(i, 1); }
+    });
+    // 4. the purse and the fallbacks
+    scrap = prof.scrap;
+    if (runStats) runStats.regroups = Math.min(prof.regroups, totalRegroups());
+    // 5. and the road itself. crossSector is the only door into a new sector - it rolls the
+    //    front, generates the map, resets the tier and writes the save, and every one of those
+    //    was a thing this file used to do by hand until E01b took the copy out.
+    while (currentSector < stagePolicy) crossSector();
+    stat.stagedAt = { sector: currentSector, tier: currentTier,
+                      lvl: deployedLine().map(c => c.level || 1),
+                      maxHp: deployedLine().map(c => c.maxHp),
+                      relics: activeRelics.length,
+                      gear: deployedLine().filter(c => c.trinket || c.weaponMod).length,
+                      scrap, regroups: regroupsLeft(), roster: playerRoster.length };
+  }
   // And the muster's other control, which this file did not touch until E12c: which three of the
   // four a rank III operator brings. buildNewRun benches the FOURTH by default, so every figure
   // this file printed before E12c was taken from a squad fighting with its base three, and the
@@ -2278,7 +2381,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -2494,6 +2597,52 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // that mutates run state to measure it is one restart away from being the bug it found.
     const m = await page.evaluate(r => PROTOCOLS[Math.min(r, PROTOCOLS.length) - 1].mult, RUNG);
     line(`raw score, median (\u00F7${m.toFixed(2)})`, withCI(nums('score').map(v => Math.round(v / m)), v => v.toLocaleString()));
+  }
+
+  // G02: the last fight, and the only block in this file that is only ever printed on a staged
+  // run. Everything here is conditional on ARRIVING - a staged sample says nothing about how
+  // often a real career gets here, which is what `runs that ended the road` on an unstaged run
+  // is for, and the two must never be quoted as one number.
+  if (STAGE > 1) {
+    // Read the gate off the engine rather than keeping a copy of the number here.
+    const LEARNED_GATE = await page.evaluate(() => LEARNED_AT);
+    console.log('\n\u2500\u2500 STAGED AT SECTOR ' + STAGE + ' ' + '\u2500'.repeat(36));
+    const one = results.find(r => r.stagedAt);
+    if (one) {
+      const a = one.stagedAt;
+      line('a staged squad arrives as', `sector ${a.sector} tier ${a.tier}, line ${a.lvl.join('/')} at ${a.maxHp.join('/')} hp`);
+      line('  carrying', `${a.relics} relics, ${a.gear} pieces of gear, ${a.scrap} scrap, ${a.regroups} fallbacks, roster ${a.roster}`);
+    }
+    const staged = results.filter(r => r.staged).length;
+    line('runs staged', `${staged} of ${n}`);
+    // Every boss node in the last sector deals the same warlord, and a regrouped run fights it
+    // again - so meetings outnumber runs and the two are reported apart.
+    const metRuns = results.filter(r => r.bossMet.some(m => m.id === 'OSSUARY'));
+    const meetings = results.flatMap(r => r.bossMet).filter(m => m.id === 'OSSUARY');
+    line('runs that reached the last warlord', `${metRuns.length} of ${n}`);
+    if (meetings.length) {
+      const won = meetings.filter(m => m.won).length;
+      line('  meetings with it', `${meetings.length}, ${won} won (${Math.round(100 * won / meetings.length)}%)`);
+      const wonRuns = results.filter(r => r.bossMet.some(m => m.id === 'OSSUARY' && m.won)).length;
+      line('  runs that felled it', `${wonRuns} of ${metRuns.length}`);
+    }
+    const ended = results.filter(r => r.endedBy === 'won').length;
+    line('runs that ended the road', `${ended} of ${n}`);
+    // The move nothing had ever seen fire. G01 fixed COUNT YOURS by reading the source, because
+    // no measurement could reach it - this is the first thing in the repo that can watch it
+    // work. It is gated on grudge, not on depth: learnedMove wants LEARNED_AT stacks, and a
+    // grudge stack is earned by FELLING the commander. So a staged sample only sees it after it
+    // has beaten the last warlord twice, which is why the grudge is printed beside it - a run
+    // of "not yet" with a grudge below the gate is the sample being short, not the move being
+    // absent, and the two must not read the same.
+    const grudges = results.flatMap(r => r.bossMet).filter(m => m.id === 'OSSUARY').map(m => m.grudge || 0);
+    line('grudge on it when met', grudges.length ? `${Math.min(...grudges)} to ${Math.max(...grudges)} (it brings its own move at ${'' + LEARNED_GATE})` : 'never met');
+    const sigs = {};
+    results.forEach(r => Object.entries(r.sigsFaced || {}).forEach(([k, v]) => { sigs[k] = (sigs[k] || 0) + v; }));
+    const named = Object.entries(sigs).sort((a, b) => b[1] - a[1]);
+    line('every signature faced in this sector', named.length ? named.map(([k, v]) => `${k} x${v}`).join(', ') : 'none');
+    line('COUNT YOURS among them', sigs.COUNT_YOURS ? `yes, ${sigs.COUNT_YOURS} times` :
+      (Math.max(0, ...grudges) >= LEARNED_GATE ? 'NO - and the grudge was high enough, so this is a finding' : 'not yet - the grudge never reached the gate in this sample'));
   }
 
   // G13: the draft is the one thing every other number rests on, so an empty line is not a row
