@@ -20,9 +20,9 @@
 const WIDTHS = [320, 400, 480];
 module.exports = {
   name: 'The field at full density',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       globalSettings.motion = 'off';

@@ -22,9 +22,9 @@
 // that recruit needed 1702 XP where the squad it joined needed 810.
 module.exports = {
   name: 'A point that can buy the verb',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── A banked point buys a signature, and pays for the privilege ──────────────────
     const buy = await page.evaluate(() => {

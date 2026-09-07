@@ -3,9 +3,9 @@
 // any hostile on the field opens its file on a tap, whenever the squad is not mid-aim.
 module.exports = {
   name: 'Know your enemy',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the roster covers everything the wasteland fields ----
     const roster = await page.evaluate(() => {

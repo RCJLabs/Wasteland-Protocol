@@ -3,14 +3,14 @@
 // breaks it, and asserts the game still starts and stays playable.
 module.exports = {
   name: 'Hostile storage',
-  run: async ({ page, context, ok, base }) => {
+  run: async ({ page, context, ok, base, engineUp }) => {
     const boot = async (setup, label) => {
       const p2 = await context.newPage();
       const errs = [];
       p2.on('pageerror', e => errs.push(e.message));
       if (setup) await p2.addInitScript(setup);
       await p2.goto(`${base}/index.html`);
-      await p2.waitForTimeout(900);
+      await engineUp(p2);
       const state = await p2.evaluate(() => ({
         title: getComputedStyle(document.getElementById('screen-title')).display,
         menu: document.getElementById('title-menu-container').innerText.trim(),

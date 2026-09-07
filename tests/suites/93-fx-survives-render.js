@@ -18,9 +18,9 @@
 // did not change, so the 117 spawnFCT call sites are untouched.
 module.exports = {
   name: 'The hits you can see',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     const fight = () => page.evaluate(async () => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;

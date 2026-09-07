@@ -3,9 +3,9 @@
 // two slots per operator, and every weapon mod changes behaviour, never just arithmetic.
 module.exports = {
   name: 'Gear',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the pool ----
     const pool = await page.evaluate(() => ({
@@ -279,7 +279,7 @@ module.exports = {
     // ---- persistence ----
     const saved = await page.evaluate(() => { saveGameState(); return true; });
     await page.reload();
-    await page.waitForTimeout(700);
+    await engineUp(page);
     await page.click('.title-btn.btn-continue');
     await page.waitForTimeout(500);
     const back = await page.evaluate(() => ({

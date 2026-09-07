@@ -3,11 +3,11 @@
 // that no longer exist. These start from saves written by earlier builds.
 module.exports = {
   name: 'Legacy saves',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     const notFound = [];
     page.on('response', r => { if (r.status() === 404) notFound.push(r.url().split('/').pop()); });
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- a roster saved before the WebP migration ----
     await page.evaluate(() => {
@@ -17,7 +17,7 @@ module.exports = {
       saveGameState();
     });
     await page.reload();
-    await page.waitForTimeout(600);
+    await engineUp(page);
     notFound.length = 0;
     await page.click('.title-btn.btn-continue');
     await page.waitForTimeout(400);
@@ -52,7 +52,7 @@ module.exports = {
       localStorage.setItem(BASE_SAVE_KEY + 1, JSON.stringify(raw));
     });
     await page.reload();
-    await page.waitForTimeout(600);
+    await engineUp(page);
     notFound.length = 0;
     await page.click('.title-btn.btn-continue');
     await page.waitForTimeout(1000);

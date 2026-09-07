@@ -15,9 +15,9 @@
 // dilemma with one working branch is not a dilemma.
 module.exports = {
   name: 'The ending',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => {
       window.__run = () => { activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null; };
       // Stage the last fight, having felled some number of commanders on the way there.

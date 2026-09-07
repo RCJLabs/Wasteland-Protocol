@@ -12,9 +12,9 @@
 // is marked now and rotated on the render AFTER the one that shows it settled.
 module.exports = {
   name: 'The bounty you never saw settle',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__board = type => {

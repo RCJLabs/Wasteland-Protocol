@@ -21,9 +21,9 @@
 // tables change what a unit does on its turn without changing what the turn is worth.
 module.exports = {
   name: 'What they do the other turns',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     const fight = () => page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;

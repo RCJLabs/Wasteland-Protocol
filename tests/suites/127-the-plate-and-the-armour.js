@@ -9,9 +9,9 @@
 // arithmetic. Sized after the affixes now, from one helper the three build sites share.
 module.exports = {
   name: 'The plate and the armour',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── Half the bar it actually fights on, affix or no affix ─────────────────────
     const drawn = await page.evaluate(() => {

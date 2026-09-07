@@ -26,9 +26,9 @@
 // pair every other commander's enrage carries in addition to something of its own.
 module.exports = {
   name: 'One scale for everything a fight spawns',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── The expression is gone from every spawn site ──────────────────────────────────
     const scan = await page.evaluate(async () => {

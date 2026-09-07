@@ -3,9 +3,9 @@
 // route graphs now: taking a node commits you to the paths it connects to.
 module.exports = {
   name: 'The branching wasteland',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the generator keeps its promises, on every map it makes ----
     const gen = await page.evaluate(() => {
@@ -133,7 +133,7 @@ module.exports = {
       return { shape: sectorMap.nodes.map(n => n.id + n.type).join(), pos: currentNodeId };
     });
     await page.reload();
-    await page.waitForTimeout(700);
+    await engineUp(page);
     await page.click('.title-btn.btn-continue');
     await page.waitForTimeout(500);
     const reloaded = await page.evaluate((prev) => ({

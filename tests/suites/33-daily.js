@@ -3,9 +3,9 @@
 // live, and the date derives a shared seed: the Daily Protocol.
 module.exports = {
   name: 'The Daily Protocol',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the generator core ----
     const core = await page.evaluate(() => {

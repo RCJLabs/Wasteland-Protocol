@@ -17,9 +17,9 @@
 // it badly needs rather than a free relic.
 module.exports = {
   name: 'Curses',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => {
       window.__run = () => { activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
                              activeRelics = []; pendingRelicOffer = null; };

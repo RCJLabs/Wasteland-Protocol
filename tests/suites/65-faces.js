@@ -18,9 +18,9 @@
 // workshop all gate at +2, so the whole tier needed meeting him twice in one run.
 module.exports = {
   name: 'Faces',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => {
       window.__run = () => { activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
                              castState = {}; activeRelics = []; };

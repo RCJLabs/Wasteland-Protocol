@@ -4,9 +4,9 @@
 // squad has to answer rather than out-damage.
 module.exports = {
   name: 'Warlords worth meeting',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the roster ----
     const pool = await page.evaluate(() => ({

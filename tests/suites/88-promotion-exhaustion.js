@@ -13,9 +13,9 @@
 // through the menu that already exists for exactly this.
 module.exports = {
   name: 'A promotion with something left to decide',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; });
 

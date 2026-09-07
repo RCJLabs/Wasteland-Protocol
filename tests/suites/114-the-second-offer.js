@@ -19,9 +19,9 @@
 // line that says what it is.
 module.exports = {
   name: 'The second offer that reopens the fork',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       // An operator with both forks shut, a point banked and the capstone open - which is

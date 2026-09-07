@@ -18,9 +18,9 @@
 // not for a long time: SECTOR_HP_SCALE is 1.25 and SECTOR_DMG_SCALE is 1.28.
 module.exports = {
   name: 'Prices from sector one',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── Sector one is byte-identical to what it always charged ───────────────────────
     const door = await page.evaluate(() => {

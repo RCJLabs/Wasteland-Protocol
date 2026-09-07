@@ -2,9 +2,9 @@
 // not terminate in an unwinnable slog, and resistances must be visible before committing.
 module.exports = {
   name: 'Perks, curve and resistances',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- 03: perks are repeatable ----
     const perks = await page.evaluate(() => {

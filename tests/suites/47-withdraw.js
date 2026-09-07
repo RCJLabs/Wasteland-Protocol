@@ -4,9 +4,9 @@
 // decision in a run, and it was made before any information arrived.
 module.exports = {
   name: 'Withdrawing from a fight',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // A clean stage: a fight in progress with an operator on the clock, no quirks or relics
     // bending the arithmetic, and the squad wounded enough that leaving is a real question.
@@ -187,7 +187,7 @@ module.exports = {
     });
     const kept = await page.evaluate(() => ({ before: pursuit ? pursuit.units.length : 0 }));
     await page.reload();
-    await page.waitForTimeout(600);
+    await engineUp(page);
     const after = await page.evaluate(() => {
       currentSlot = 1; loadGameState();
       return { after: pursuit ? pursuit.units.length : 0 };

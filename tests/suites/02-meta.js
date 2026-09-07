@@ -1,9 +1,9 @@
 // Finding 01: skulls and Citadel upgrades are global and must outlive any single run.
 module.exports = {
   name: 'Citadel meta-progression persists',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(500);
+    await engineUp(page);
 
     const r = await page.evaluate(() => {
       currentSlot = 1;
@@ -22,7 +22,7 @@ module.exports = {
     ok('a second new run does not wipe skulls', r.skullsNow === 3);
 
     await page.reload();
-    await page.waitForTimeout(500);
+    await engineUp(page);
     const after = await page.evaluate(() => ({ skulls: bossSkulls, lvl: metaUpgrades.startLevel }));
     ok('meta survives a page reload', after.skulls === 3 && after.lvl === 2);
 

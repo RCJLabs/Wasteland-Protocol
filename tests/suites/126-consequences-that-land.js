@@ -15,9 +15,9 @@
 // toward the fuse, which is exactly what F08 established; they just could not pay it out.
 module.exports = {
   name: 'Consequences that land',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__fresh = () => { currentSlot = 1; confirmNewGame(1.0);

@@ -3,9 +3,9 @@
 // fight is already doing rather than from a second model of it that could drift.
 module.exports = {
   name: 'Read the room',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     const stage = () => page.evaluate(() => {
       activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;

@@ -2,9 +2,9 @@
 // slots do. A player learned the resistance badges by losing a turn to a bio-immune drone.
 module.exports = {
   name: 'Field manual',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     const shape = await page.evaluate(() => ({
       entries: CODEX.length,

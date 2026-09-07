@@ -17,9 +17,9 @@
 // dragged clear, and it would have reported a scar rate of zero whatever the chance was set to.
 module.exports = {
   name: 'Scars',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => {
       window.__run = () => { activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null; };
       // Forcing a roll rather than waiting for one: every scar helper takes its rng, and the

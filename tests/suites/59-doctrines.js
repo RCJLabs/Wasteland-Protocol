@@ -8,9 +8,9 @@
 // of this had the Shotgunner down as a melee class and the Scavenger down as not one.
 module.exports = {
   name: 'Doctrines',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__line = classes => {

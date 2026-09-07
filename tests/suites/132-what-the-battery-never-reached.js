@@ -13,9 +13,9 @@ const { stripComments, namesIn, untouchedExports } = require('../coverage');
 
 module.exports = {
   name: 'What the battery never reached',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // A suite that spells an engine symbol out in code marks it covered - by this measure,
     // which counts names. So the ones this file talks ABOUT are assembled from pieces rather

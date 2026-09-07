@@ -18,9 +18,9 @@
 // failure this phase was warned about before it started. It stays flat and wants its own phase.
 module.exports = {
   name: 'A plate worth what it says',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── The curve: 1.0 where the game starts, and the damage curve thereafter ──────────
     const curve = await page.evaluate(() => {

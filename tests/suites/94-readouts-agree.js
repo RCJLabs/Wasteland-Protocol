@@ -15,9 +15,9 @@
 // could be measured against a different line than the swing would reach.
 module.exports = {
   name: 'Every readout points at the same swing',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── The soak tag and the resolver now agree, whatever the move is made of ──────────
     const typed = await page.evaluate(() => {

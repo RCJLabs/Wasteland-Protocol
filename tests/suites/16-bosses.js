@@ -2,7 +2,7 @@
 // now draws a different commander, and they have to differ in behaviour, not just numbers.
 module.exports = {
   name: 'Boss roster',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     // The rotation is a seeded shuffle per run, so a sector no longer implies a commander.
     // Everything below walks to the sector that holds the one under test.
     const sectorOf = id => page.evaluate(
@@ -10,7 +10,7 @@ module.exports = {
     const notFound = [];
     page.on('response', r => { if (r.status() === 404) notFound.push(r.url().split('/').pop()); });
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the roster rotates and every entry is distinct ----
     const roster = await page.evaluate(() => ({
@@ -340,7 +340,7 @@ module.exports = {
       return { bg: bossForSector(3).bg, name: bossForSector(3).short };
     });
     await page.reload();
-    await page.waitForTimeout(700);
+    await engineUp(page);
     await page.click('.title-btn.btn-continue');
     // D18: same fixed-sleep race as the art check above - wait for the arena to actually be
     // painted rather than for a number of milliseconds to pass.

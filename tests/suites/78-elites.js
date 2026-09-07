@@ -17,9 +17,9 @@
 // description promises - because a description nobody checks is how ARMORED decayed unnoticed.
 module.exports = {
   name: 'Elites with teeth',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── The table ────────────────────────────────────────────────────────────────────────
     const table = await page.evaluate(() => ({

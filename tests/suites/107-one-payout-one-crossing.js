@@ -15,9 +15,9 @@
 // fightPayout, bankNode and crossSector are those rules with the screens lifted off them.
 module.exports = {
   name: 'One payout, one crossing',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     const fresh = () => page.evaluate(() => {
       activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;

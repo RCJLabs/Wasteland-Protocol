@@ -3,9 +3,9 @@
 // fresh - and unlike withdrawing it can fail, which is the whole of the risk.
 module.exports = {
   name: 'Retreating',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     const stage = (o = {}) => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null; armedExit = null; retreatNode = null;
@@ -212,7 +212,7 @@ module.exports = {
     });
     const held = await page.evaluate(() => ({ node: retreatNode, offered: availableNodeIds().length }));
     await page.reload();
-    await page.waitForTimeout(600);
+    await engineUp(page);
     const reloaded = await page.evaluate(() => {
       currentSlot = 1; loadGameState();
       const after = { node: retreatNode, offered: availableNodeIds() };

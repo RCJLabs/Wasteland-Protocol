@@ -6,9 +6,9 @@
 // one sine at seven pitches, a heat layer wired to nothing, a crit that is a hit at 1.25x.
 module.exports = {
   name: 'A real mix',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- every bed is layered, and no two are the same shape ----
     const beds = await page.evaluate(() => {

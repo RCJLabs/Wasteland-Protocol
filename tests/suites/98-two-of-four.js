@@ -21,9 +21,9 @@
 // because both halves are put on the screen side by side with a stat card to say no with.
 module.exports = {
   name: 'Two of four, and which two is yours',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── The data has a shape, and a validator that says so ───────────────────────────
     const shape = await page.evaluate(() => {

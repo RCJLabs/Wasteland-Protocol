@@ -3,9 +3,9 @@
 // nothing. The board could also issue 'defeat 2 elite squads' in a sector containing one.
 module.exports = {
   name: 'Relic economy',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the pool ----
     const pool = await page.evaluate(() => ({
@@ -291,7 +291,7 @@ module.exports = {
       afterLoot.screen === 'flex' && afterLoot.map === 'none');
     ok('and the saved run carries no stale fight to resume into', !afterLoot.snapshot);
     await page.reload();
-    await page.waitForTimeout(700);
+    await engineUp(page);
     await page.click('.title-btn.btn-continue');
     await page.waitForTimeout(500);
     const resumed = await page.evaluate(() => ({

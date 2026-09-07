@@ -10,9 +10,9 @@
 // his debts. A set that just made a curse stronger would be a bigger number, not a build.
 module.exports = {
   name: 'Relic sets',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => {
       // confirmNewGame rebuilds the run and empties the relic list, so anything holding relics
       // has to put them on afterwards - a set armed before it is silently unarmed after.

@@ -13,9 +13,9 @@
 // turns up empty.
 module.exports = {
   name: 'The collector comes for it',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__boss = (purse, relics) => {

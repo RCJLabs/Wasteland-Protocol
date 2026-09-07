@@ -17,9 +17,9 @@
 // is a sweep at the turn boundary and a suite that skips the boundary would be testing nothing.
 module.exports = {
   name: 'The dead who come back',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       // A fight, with one operator put on the floor and the queue parked on somebody else so

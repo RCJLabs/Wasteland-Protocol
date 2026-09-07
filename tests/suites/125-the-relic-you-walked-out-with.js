@@ -13,9 +13,9 @@
 // run that receives it.
 module.exports = {
   name: 'The relic you walked out with',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__career = vault => {

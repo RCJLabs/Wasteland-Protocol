@@ -16,9 +16,9 @@
 // extra steps.
 module.exports = {
   name: 'Doctrines somebody can take',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       // A line built by class, standing in the ranks given. Returns what each doctrine says.

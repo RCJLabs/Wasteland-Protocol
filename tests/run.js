@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { serve } = require('./server');
 const { untouchedExports } = require('./coverage');
+const { engineUp } = require('./boot');
 
 let chromium;
 try { ({ chromium } = require('playwright')); }
@@ -56,7 +57,7 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
     const clean = await browser.newContext();
     const page = await clean.newPage();
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(900);
+    await engineUp(page);
     const r = await page.evaluate(() => {
       const names = ['confirmNewGame','initiateCombat','renderMap','scrap','playerRoster','currentSector',
                      'checkWinState','ACTIONS','BASE_SAVE_KEY','activeEntities','generateEnemies','playSFX',
@@ -130,7 +131,7 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
 
     console.log(`\n${suite.name}`);
     try {
-      await suite.run({ page, context, ok, base });
+      await suite.run({ page, context, ok, base, engineUp });
     } catch (e) {
       // The suite's name goes on the throw line itself. It is printed above too, but an
       // intermittent abort is usually read back out of a filtered log where that line is gone.

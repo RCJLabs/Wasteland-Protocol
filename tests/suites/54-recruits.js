@@ -8,9 +8,9 @@
 // walks every class anyone can field and demands the whole set, and it names none of them.
 module.exports = {
   name: 'Recruits',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- who exists, and who you have to go and find ----
     const pool = await page.evaluate(() => ({

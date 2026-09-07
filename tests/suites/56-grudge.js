@@ -6,9 +6,9 @@
 // heavier, faster, better armoured, and holding a third phase it never needed the first time.
 module.exports = {
   name: 'The grudge',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // buildNewRun re-rolls bossSalt, which reshuffles the rotation - so every stage pins the
     // salt and then looks the sector up under that same pinned salt. Without this the harness

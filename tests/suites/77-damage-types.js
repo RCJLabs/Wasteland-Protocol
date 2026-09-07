@@ -12,9 +12,9 @@
 // answer it gives is the one the damage pipeline actually applies.
 module.exports = {
   name: 'Damage types',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── The classification is reachable, total, and sound ────────────────────────────────
     const t = await page.evaluate(() => ({

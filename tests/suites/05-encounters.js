@@ -2,9 +2,9 @@
 // grow and mix as a run goes deeper.
 module.exports = {
   name: 'Encounter generation',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(500);
+    await engineUp(page);
 
     const r = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;

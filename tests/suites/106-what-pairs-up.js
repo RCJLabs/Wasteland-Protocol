@@ -16,9 +16,9 @@
 // always had its own line on the curses page; it is the clean fourteen that were never written up.
 module.exports = {
   name: 'What pairs up',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // F13 folded the hand and the pairs behind one tap, because a mid-run panel was taking the
     // route graph's screen. What this suite is about - which pairs the panel claims, and whether

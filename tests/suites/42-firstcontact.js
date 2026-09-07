@@ -2,9 +2,9 @@
 // at the moment their system first matters - and the player can shut them off for good.
 module.exports = {
   name: 'First contact',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     // The harness runs every suite with onboarding off so a teaching card never sits over a
     // control another suite is driving. This is the one suite that wants it on.
     await page.evaluate(() => {

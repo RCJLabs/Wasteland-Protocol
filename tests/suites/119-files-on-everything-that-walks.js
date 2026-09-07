@@ -23,9 +23,9 @@
 // rather than off a regex - a commander renamed later must not strand its history twice.
 module.exports = {
   name: 'Files on everything that walks',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── A commander keeps one file however many times it comes back ─────────────────
     const kept = await page.evaluate(() => {

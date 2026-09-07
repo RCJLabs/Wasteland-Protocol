@@ -14,9 +14,9 @@
 // and the consumable ids, and an open-world dealsDamage() answers true for those.
 module.exports = {
   name: 'The fourth ability cashes',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── the list, and what it is derived from ────────────────────────────────────────
     const list = await page.evaluate(() => {

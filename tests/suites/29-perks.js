@@ -2,9 +2,9 @@
 // perks offered on the spot, and the class signatures among them change what abilities do.
 module.exports = {
   name: 'Field promotions',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the signature table ----
     const table = await page.evaluate(() => ({
@@ -237,7 +237,7 @@ module.exports = {
       saveGameState();
     });
     await page.reload();
-    await page.waitForTimeout(700);
+    await engineUp(page);
     await page.click('.title-btn.btn-continue');
     await page.waitForTimeout(500);
     const resumed = await page.evaluate(() => ({

@@ -1,9 +1,9 @@
 // Finding 09: the game should install like an app and play with no network.
 module.exports = {
   name: 'Installable and offline',
-  run: async ({ page, context, ok, base }) => {
+  run: async ({ page, context, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(500);
+    await engineUp(page);
 
     const man = await page.evaluate(async () => {
       const link = document.querySelector('link[rel="manifest"]');
@@ -38,7 +38,7 @@ module.exports = {
 
     await context.setOffline(true);
     await page.reload({ waitUntil: 'load' });
-    await page.waitForTimeout(1200);
+    await engineUp(page);
     const offline = await page.evaluate(() => ({
       title: getComputedStyle(document.getElementById('screen-title')).display,
       menu: document.getElementById('title-menu-container').innerText.trim().length > 0,

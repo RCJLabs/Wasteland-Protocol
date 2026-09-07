@@ -1,9 +1,9 @@
 // Finding 05: the endless run must end on a wipe, bank a score, and keep the meta intact.
 module.exports = {
   name: 'Endless run scoring',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(500);
+    await engineUp(page);
 
     const shape = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
@@ -47,7 +47,7 @@ module.exports = {
     ok('the summary reports depth reached', /SECTOR 2/.test(run.lines));
 
     await page.reload();
-    await page.waitForTimeout(600);
+    await engineUp(page);
     const title = await page.evaluate(() => ({
       menu: document.getElementById('title-menu-container').innerText, best: bestScore }));
     ok('the title screen shows the personal best', /BEST RUN/.test(title.menu) && title.best > 0);

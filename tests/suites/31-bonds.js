@@ -3,9 +3,9 @@
 // a shared overdrive discount - and every pair carries a name.
 module.exports = {
   name: 'Bonds',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- every pair has a name ----
     const names = await page.evaluate(() => {

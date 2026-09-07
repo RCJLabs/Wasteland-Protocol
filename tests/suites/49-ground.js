@@ -4,9 +4,9 @@
 // map so routing around it is a decision made before the node is entered.
 module.exports = {
   name: 'Ground that matters',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the table ----
     const table = await page.evaluate(() => {
@@ -228,7 +228,7 @@ module.exports = {
       initiateCombat('RAIDERS', false); currentTerrain = 'TUNNELS'; saveGameState();
     });
     await page.reload();
-    await page.waitForTimeout(600);
+    await engineUp(page);
     const kept = await page.evaluate(() => {
       currentSlot = 1; loadGameState();
       const had = !!pendingCombat; if (had) resumeCombat(pendingCombat);

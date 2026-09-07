@@ -11,9 +11,9 @@
 // killer. The record is per-person now, stamped when the blow lands.
 module.exports = {
   name: 'The roll of the dead',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     const wipe = () => page.evaluate(() => {
       [1, 2, 3].forEach(s => { Store.remove(chronicleKey(s)); Store.remove(careerKey(s)); });

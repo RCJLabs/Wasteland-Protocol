@@ -2,9 +2,9 @@
 // with occasional flavour. And every run had exactly the same shape.
 module.exports = {
   name: 'Events and contracts',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the event pool ----
     // An event's description and choice list may each be a literal or a function of the run so
@@ -153,7 +153,7 @@ module.exports = {
       saveGameState();
     });
     await page.reload();
-    await page.waitForTimeout(700);
+    await engineUp(page);
     await page.click('.title-btn.btn-continue');
     await page.waitForTimeout(400);
     const persisted = await page.evaluate(() => ({

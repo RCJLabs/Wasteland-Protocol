@@ -4,9 +4,9 @@
 // bookkeeping - an anonymous card that fired once and evaporated. These four remember.
 module.exports = {
   name: 'Faces that come back',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the table ----
     const shape = await page.evaluate(() => ({
@@ -206,7 +206,7 @@ module.exports = {
     ok('worst standing first, so the summary leads with what it cost', memory.worstFirst === 'KESS');
 
     await page.reload();
-    await page.waitForTimeout(600);
+    await engineUp(page);
     const reloaded = await page.evaluate(() => {
       currentSlot = 1; loadGameState();
       return { orrin: castStanding('ORRIN'), kess: castStanding('KESS'), fired: firedEvents.length };

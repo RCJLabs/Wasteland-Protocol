@@ -14,9 +14,9 @@
 // ledger that was already broken for both.
 module.exports = {
   name: 'The kill that nobody counted',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       // One hostile on an otherwise empty field, one operator, and a board that counts.

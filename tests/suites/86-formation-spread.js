@@ -27,9 +27,9 @@
 const BEFORE = { THE_SWARM: 0.056, RISING_FLIGHT: 0.195, UNDERTOW: 0.165, THE_NEST: 0.132 };
 module.exports = {
   name: 'Formations drawn evenly enough to learn',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── The retiming itself, pinned so a revert is caught without waiting on a sweep ──────
     const spacing = await page.evaluate(() => {

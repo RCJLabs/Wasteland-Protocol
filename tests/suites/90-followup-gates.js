@@ -20,9 +20,9 @@
 // a decorative flavour choice with no consequence.
 module.exports = {
   name: "Kess's road down is as real as her road up",
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; });
 
     // ── Both Kess follow-ups gate exactly where they claim to, and nowhere else ─────────

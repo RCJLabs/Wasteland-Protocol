@@ -9,9 +9,9 @@
 // the node tells you which one it is while you can still route around it.
 module.exports = {
   name: 'Formations',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the table is sound ----
     const table = await page.evaluate(() => ({

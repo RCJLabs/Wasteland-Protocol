@@ -13,9 +13,9 @@
 // because a signature that cannot cash is not a turn.
 module.exports = {
   name: 'The tally that counts once',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__keeper = () => {

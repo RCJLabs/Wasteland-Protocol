@@ -2,9 +2,9 @@
 // screen-level effects must respect a reduced-motion preference.
 module.exports = {
   name: 'Keyboard and motion',
-  run: async ({ page, context, ok, base }) => {
+  run: async ({ page, context, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- every control is reachable ----
     const survey = async setup => {
@@ -82,7 +82,7 @@ module.exports = {
     const motion = await context.newPage();
     await motion.emulateMedia({ reducedMotion: 'reduce' });
     await motion.goto(`${base}/index.html`);
-    await motion.waitForTimeout(600);
+    await engineUp(motion);
     const anim = await motion.evaluate(() => {
       const probe = (cls) => {
         const el = document.createElement('div');
@@ -99,7 +99,7 @@ module.exports = {
     const normal = await context.newPage();
     await normal.emulateMedia({ reducedMotion: 'no-preference' });
     await normal.goto(`${base}/index.html`);
-    await normal.waitForTimeout(500);
+    await engineUp(normal);
     ok('shake still plays for everyone else',
       await normal.evaluate(() => {
         const el = document.createElement('div'); el.className = 'fx-shake';

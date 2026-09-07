@@ -11,9 +11,9 @@
 // squad that picked up a curse before a common banked the curse and armed the next run with it.
 module.exports = {
   name: 'A relic you can refuse',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__offer = cards => {

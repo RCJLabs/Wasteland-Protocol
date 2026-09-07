@@ -5,11 +5,11 @@
 // than picking a target.
 module.exports = {
   name: 'The Choir and the Carrion',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     const notFound = [];
     page.on('response', r => { if (r.status() === 404) notFound.push(r.url().split('/').pop()); });
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the rosters ----
     const roster = await page.evaluate(() => {

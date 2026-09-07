@@ -10,9 +10,9 @@
 // the failure mode a meta screen invites, since a building that does nothing still looks built.
 module.exports = {
   name: 'The Citadel',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => {
       window.__wipe = () => {
         careerWins = 0; bossSkulls = 0;

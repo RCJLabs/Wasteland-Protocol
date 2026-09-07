@@ -22,9 +22,9 @@
 // overdrive choice explained itself in a title tooltip, which does not exist on touch.
 module.exports = {
   name: 'Text that scales, a log you can read',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__contrast = (fg, bg) => {

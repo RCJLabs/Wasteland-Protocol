@@ -11,9 +11,9 @@
 // ground rules never covered: a faction's own sky standing over its own ground.
 module.exports = {
   name: 'The sky',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => {
       window.__at = (w, t) => { currentWeather = w; currentTerrain = t || 'OPEN_ROAD'; };
       window.__clear = () => { currentWeather = 'CLEAR'; currentTerrain = 'OPEN_ROAD'; };

@@ -12,9 +12,9 @@
 // was double-banking is noteFightWon, which is what runStats.fightsWon now makes visible.
 module.exports = {
   name: 'The harness reads the engine, not a copy of it',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; });
 
     // ── medBay is reachable, and is the heal the harness now drives ────────────────────

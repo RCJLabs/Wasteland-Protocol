@@ -7,9 +7,9 @@
 // clock, so the danger is not "somebody fell" - it is "somebody fell and this is still going".
 module.exports = {
   name: 'The dead stay dead',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // A fight with one operator and one dummy, both indestructible unless the suite says so.
     await page.evaluate(() => {

@@ -11,9 +11,9 @@
 // and it looks identical from the outside.
 module.exports = {
   name: 'The ladder',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => {
       window.__at = rung => { careerWins = 1; bestRung = PROTOCOLS.length; ascension = rung; };
       window.__off = () => { ascension = 0; careerWins = 0; bestRung = 0; };

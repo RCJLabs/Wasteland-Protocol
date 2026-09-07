@@ -20,9 +20,9 @@
 // compared. If painting ever starts deciding anything, this fails.
 module.exports = {
   name: 'Painting decides nothing',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── It is off unless a harness asks for it ─────────────────────────────────────────
     const def = await page.evaluate(() => ({ v: paintOff, t: typeof paintOff }));

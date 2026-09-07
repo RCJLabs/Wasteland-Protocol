@@ -11,9 +11,9 @@
 // enough different shapes, for that to matter.
 module.exports = {
   name: 'Consequences',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => {
       window.__run = () => { activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
                              pendingConsequences = []; runStats.nodes = 0; };

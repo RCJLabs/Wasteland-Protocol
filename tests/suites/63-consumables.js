@@ -15,9 +15,9 @@
 // itself: every description is checked by performing the thing it describes.
 module.exports = {
   name: 'Consumables',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => {
       window.__run = () => { activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
                              materials = { parts: 9, chems: 9, tech: 9 }; inventory.length = 0; };

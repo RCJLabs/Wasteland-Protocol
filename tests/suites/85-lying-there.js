@@ -26,9 +26,9 @@
 // so it is a decision with a reason attached rather than an absence a later phase finishes.
 module.exports = {
   name: 'What a fall costs',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__fight = (n = 2) => {

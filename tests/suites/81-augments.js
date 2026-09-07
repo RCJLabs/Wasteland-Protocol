@@ -14,9 +14,9 @@
 // that the screen says how much room is left - because a list that only ever grew could not.
 module.exports = {
   name: 'Augments have a ceiling',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     const table = await page.evaluate(() => ({
       slots: AUGMENT_SLOTS,

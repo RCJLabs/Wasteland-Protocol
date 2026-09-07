@@ -3,9 +3,9 @@
 // was a blood moon" is a sentence a player says about a run.
 module.exports = {
   name: 'Sector fronts',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the table ----
     const table = await page.evaluate(() => ({

@@ -27,9 +27,9 @@
 // behind you") and which this file had simply never used.
 module.exports = {
   name: 'The recruit node, actually reached',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__reset = () => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; };

@@ -26,9 +26,9 @@
 // ends WELL on had the full treatment.
 module.exports = {
   name: 'Prompts where they fire',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── A prompt is visible on the screen it fires on ───────────────────────────────
     const seen = await page.evaluate(() => {
@@ -135,7 +135,7 @@ module.exports = {
     // On a fresh page: the blocks above enter sectors and raise prompts, and this is measuring
     // a cascade rather than whatever those left standing.
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.emulateMedia({ reducedMotion: 'reduce' });
     const media = await page.evaluate(() => {
       const b = document.getElementById('front-banner');

@@ -4,9 +4,9 @@
 // a third time in the markup, where the names had already drifted apart from the table's.
 module.exports = {
   name: 'The Citadel, stocked',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- one table, and everything reads it ----
     const table = await page.evaluate(async () => {
@@ -178,7 +178,7 @@ module.exports = {
       bossSkulls = 12; saveMeta();
     });
     await page.reload();
-    await page.waitForTimeout(600);
+    await engineUp(page);
     const kept = await page.evaluate(() => {
       loadMeta();
       return { archive: metaUpgrades.archive, rerolls: metaUpgrades.rerolls,

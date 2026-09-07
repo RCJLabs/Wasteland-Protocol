@@ -21,9 +21,9 @@ const SCREENS = [
 
 module.exports = {
   name: 'Screens that fit what is on them',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     const sizes = [[412, 915], [400, 800], [360, 740], [320, 640]];
     for (const [w, h] of sizes) {

@@ -12,9 +12,9 @@
 // with and without, rather than asserted against the table that declares it.
 module.exports = {
   name: 'Above the fork',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── the table ────────────────────────────────────────────────────────────────────
     const table = await page.evaluate(() => {

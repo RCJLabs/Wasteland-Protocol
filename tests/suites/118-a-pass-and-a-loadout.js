@@ -25,9 +25,9 @@
 // the same control the muster has, drawn from one helper rather than a second copy of it.
 module.exports = {
   name: 'A pass, and a loadout for the recruit',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__rankIII = cls => noteMastery(cls, (MASTERY_RANKS[2] || 3000) * 4);

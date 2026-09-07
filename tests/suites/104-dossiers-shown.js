@@ -19,9 +19,9 @@
 // Surfacing only. Nothing here changes what mastery does or when.
 module.exports = {
   name: 'The dossiers, shown',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── The gap this closes, still measurable ────────────────────────────────────────
     const gap = await page.evaluate(() => {

@@ -8,9 +8,9 @@
 // while you are shallow, and everything the panel promises has to actually arrive.
 module.exports = {
   name: 'Walking out',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__run = (sec, tier = 5) => {

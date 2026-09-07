@@ -16,9 +16,9 @@
 // ten times the rung being reached for.
 module.exports = {
   name: 'A skull with somewhere to go',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       // A career that has bought the hillside out and is still earning.

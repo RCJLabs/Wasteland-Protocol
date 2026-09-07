@@ -1,9 +1,9 @@
 // Finding 02: a fight must survive a reload, so refreshing cannot undo damage or dodge a loss.
 module.exports = {
   name: 'Combat survives a reload',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(500);
+    await engineUp(page);
 
     const before = await page.evaluate(() => {
       localStorage.clear(); currentSlot = 1; loadMeta(); confirmNewGame(1.0); sectorFront = null;
@@ -15,7 +15,7 @@ module.exports = {
     });
 
     await page.reload();
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.click('.title-btn.btn-continue');
     await page.waitForTimeout(700);
 

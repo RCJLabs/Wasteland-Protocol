@@ -22,9 +22,9 @@
 // the same tables the resolver reads.
 module.exports = {
   name: 'Read your own deck',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── One entry per class, and it cannot be missed ─────────────────────────────────
     const cover = await page.evaluate(() => {

@@ -2,11 +2,11 @@
 // build their markup once.
 module.exports = {
   name: 'Housekeeping',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     let sawDialog = false;
     page.on('dialog', async d => { sawDialog = true; await d.dismiss(); });
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- 08: state that was written and never read is gone ----
     const surface = await page.evaluate(() => ({

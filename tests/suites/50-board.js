@@ -4,9 +4,9 @@
 // held that you would rather have spent.
 module.exports = {
   name: 'A living board',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the pools ----
     const pools = await page.evaluate(() => {
@@ -223,7 +223,7 @@ module.exports = {
     });
     const kept = await page.evaluate(() => ({ desc: standingBounty.desc, at: standingBounty.current }));
     await page.reload();
-    await page.waitForTimeout(600);
+    await engineUp(page);
     const back = await page.evaluate(() => {
       currentSlot = 1; loadGameState();
       const after = { desc: standingBounty.desc, at: standingBounty.current, board: activeBounties[0].current };

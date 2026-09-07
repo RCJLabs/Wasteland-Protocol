@@ -26,9 +26,9 @@
 // payload with a validator in the migrateRelics idiom.
 module.exports = {
   name: 'What the save keeps',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── The two halves are one list now ─────────────────────────────────────────────
     const drift = await page.evaluate(() => {
@@ -96,7 +96,7 @@ module.exports = {
     });
     const was = await page.evaluate(() => window.__was);
     await page.reload();
-    await page.waitForTimeout(600);
+    await engineUp(page);
     const now = await page.evaluate(() => {
       currentSlot = 1; loadGameState();
       if (pendingCombat) resumeCombat(pendingCombat);
@@ -133,7 +133,7 @@ module.exports = {
 
     // ── An old save has none of this, and must not fall over ─────────────────────
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     const old = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       currentSector = 2; currentTier = 5;

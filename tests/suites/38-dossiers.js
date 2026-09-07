@@ -4,9 +4,9 @@
 // bring-three-of-four loadout picked at the muster.
 module.exports = {
   name: 'Dossiers',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the tables cover every class ----
     const tables = await page.evaluate(() => {

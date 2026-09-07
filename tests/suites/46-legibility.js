@@ -4,9 +4,9 @@
 // was no text scaling, and six controls sat under the 44px touch floor.
 module.exports = {
   name: 'Legible to everyone',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- a status says what it is four ways ----
     const table = await page.evaluate(() => ({
@@ -150,7 +150,7 @@ module.exports = {
       Store.set(SETTINGS_KEY, JSON.stringify(globalSettings));
     });
     await page.reload();
-    await page.waitForTimeout(600);
+    await engineUp(page);
     const kept = await page.evaluate(() => ({
       sfx: globalSettings.sfxVol, amb: globalSettings.ambVol,
       motion: globalSettings.motion, text: globalSettings.textScale,

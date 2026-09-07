@@ -3,9 +3,9 @@
 // checks it had its effect. It also asserts no inline handlers remain anywhere.
 module.exports = {
   name: 'Delegated controls',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(500);
+    await engineUp(page);
 
     // Several actions appear on more than one screen (title, citadel, map all offer some of
     // them), so always drive the one the player can actually see.

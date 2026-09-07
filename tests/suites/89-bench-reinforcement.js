@@ -15,9 +15,9 @@
 // never specially held back.
 module.exports = {
   name: 'A recruit on the bench is bench, not exile',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; });
 
     // ── Signing a recruit lands them on the bench, nothing more ─────────────────────────

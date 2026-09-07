@@ -10,9 +10,9 @@
 // rather than printing a line about changing it.
 module.exports = {
   name: 'What commanders learned',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => {
       window.__grudge = (id, n) => { grudges = {}; if (n) grudges[id] = n; };
       // A commander built straight from the pool, so the rotation does not choose for us.

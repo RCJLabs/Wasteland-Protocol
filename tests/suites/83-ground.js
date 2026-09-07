@@ -24,9 +24,9 @@
 // ground, and no ground is more than three times rarer than the commonest.
 module.exports = {
   name: 'Ground the newest factions actually stand on',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__reset = () => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; };

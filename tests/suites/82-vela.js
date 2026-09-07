@@ -14,9 +14,9 @@
 // a property the next face cannot regress past, that every face in the cast can.
 module.exports = {
   name: 'Vela, at the table',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__run = () => { currentSlot = 1; confirmNewGame(1.0); castState = {}; firedEvents = [];

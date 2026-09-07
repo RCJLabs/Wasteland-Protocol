@@ -12,9 +12,9 @@
 // substance was right: eviction went by alphabet, not by recency.
 module.exports = {
   name: 'The seed you keep coming back to',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__wipe = () => Store.set(SEED_BEST_KEY, JSON.stringify({}));

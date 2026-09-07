@@ -3,9 +3,9 @@
 // chase a second common. The collector's table gambles a held relic on two blind draws.
 module.exports = {
   name: 'Curses and gambles',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the cursed shelf ----
     const shelf = await page.evaluate(() => {

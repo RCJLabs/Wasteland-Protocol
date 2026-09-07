@@ -3,9 +3,9 @@
 // hard as a boss's opening shell, and a fight happened in silence between them.
 module.exports = {
   name: 'Sound and feedback',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the voice table ----
     const table = await page.evaluate(() => ({

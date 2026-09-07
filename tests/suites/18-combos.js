@@ -4,9 +4,9 @@
 // prompt cannot drift apart.
 module.exports = {
   name: 'Statuses and combos',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // Puts one hero and one indestructible dummy on the field with cooldowns clear, so a single
     // ability can be measured without the rest of the squad or the enemy AI interfering.

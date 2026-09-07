@@ -9,9 +9,9 @@
 // re-walk is not the punishment - it is the levelling curve. See regroupSquad.
 module.exports = {
   name: 'Regroup on defeat',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     const wipe = () => page.evaluate(() => {
       initiateCombat('RAIDERS', false);
       playerRoster.forEach(c => c.hp = 0);

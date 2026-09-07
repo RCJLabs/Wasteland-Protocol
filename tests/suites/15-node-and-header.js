@@ -2,9 +2,9 @@
 // header ran its three numbers together so 'SECTOR 1' beside '1,111 PTS' read as 'SECTOR 11,111'.
 module.exports = {
   name: 'Node coherence and the stat bar',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- a node only fields units that belong there ----
     const HOME = { BEAST: 'BEASTS', MUTANT: 'BEASTS', RAIDER: 'RAIDERS', DRONE: 'MECH', MECH: 'MECH' };

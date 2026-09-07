@@ -4,9 +4,9 @@
 // built from the statuses, reach and formation rules the squad already plays with.
 module.exports = {
   name: 'Hostiles with signatures',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the table, and that every type actually carries one ----
     const table = await page.evaluate(() => {

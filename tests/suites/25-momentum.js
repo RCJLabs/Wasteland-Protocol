@@ -2,9 +2,9 @@
 // a fixed overdrive per class. It is a market now, and the overdrive itself is a choice.
 module.exports = {
   name: 'The momentum market',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__fight = (cls, mom) => {

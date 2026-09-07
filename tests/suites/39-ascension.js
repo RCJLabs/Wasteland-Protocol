@@ -10,9 +10,9 @@
 // question, only the answer to "when" has changed.
 module.exports = {
   name: 'Ascension protocols',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the ladder itself ----
     const ladder = await page.evaluate(() => ({

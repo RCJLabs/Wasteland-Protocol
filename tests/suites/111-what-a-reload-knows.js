@@ -22,9 +22,9 @@
 // live variable that wrote it, and then drives loadGameState to prove the trip back.
 module.exports = {
   name: 'What a reload is allowed to know',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       // What is on disk for the current slot, as a reload would find it.

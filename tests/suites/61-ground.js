@@ -10,9 +10,9 @@
 // had a pool. The Choir and the Carrion borrowed theirs off the Mech and the Beasts.
 module.exports = {
   name: 'Ground',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the table ----
     const table = await page.evaluate(() => {

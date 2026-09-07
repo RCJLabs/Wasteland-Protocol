@@ -3,9 +3,9 @@
 // and there was no way to change any of it once the shooting started.
 module.exports = {
   name: 'Position and enemy behaviour',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // A hero, and four indestructible dummies deep enough to have a back rank of their own.
     await page.evaluate(() => {

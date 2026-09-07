@@ -3,9 +3,9 @@
 // marked-up relic, tempo in a syringe, a quirk do-over, and a prepaid regroup.
 module.exports = {
   name: 'The Armory',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the generator places it, uncommonly and in bounds ----
     const gen = await page.evaluate(() => {
@@ -178,7 +178,7 @@ module.exports = {
       saveGameState();
     });
     await page.reload();
-    await page.waitForTimeout(700);
+    await engineUp(page);
     await page.click('.title-btn.btn-continue');
     await page.waitForTimeout(500);
     const resumed = await page.evaluate(() => ({

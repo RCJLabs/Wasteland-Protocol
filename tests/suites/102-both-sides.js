@@ -21,9 +21,9 @@
 // noteCast and neither has a way back up. What they have is a scene and a price.
 module.exports = {
   name: 'Both sides of every face',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ── Every face has a thread on both sides of zero ────────────────────────────────
     // The durable one: a face added later with only one side fails here.

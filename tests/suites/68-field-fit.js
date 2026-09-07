@@ -23,9 +23,9 @@ const COMPOSITIONS = [
 ];
 module.exports = {
   name: 'A field that fits',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => {
       // Stage a fight of an exact shape, wait for the art to decode, and hand back the span.
       window.__field = async (squadN, foes) => {

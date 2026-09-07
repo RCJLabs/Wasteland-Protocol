@@ -3,9 +3,9 @@
 // chronicle off the title, and the careers add up across every slot.
 module.exports = {
   name: 'The Chronicle',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the epitaph tells the truth ----
     const words = await page.evaluate(() => {

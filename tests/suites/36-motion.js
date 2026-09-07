@@ -4,9 +4,9 @@
 // every effect stilled behind prefers-reduced-motion.
 module.exports = {
   name: 'Combat that moves',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the framework is wired where the blows land ----
     const wired = await page.evaluate(async () => {

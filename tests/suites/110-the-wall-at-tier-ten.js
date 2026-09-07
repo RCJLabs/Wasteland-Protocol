@@ -19,9 +19,9 @@
 // reads, which proves the table rather than the behaviour.
 module.exports = {
   name: 'The wall at tier ten',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // buildNewRun re-rolls bossSalt and so reshuffles the rotation: pin it, then look the
     // sector up under the same pin, or the harness asks for one commander and stages another.

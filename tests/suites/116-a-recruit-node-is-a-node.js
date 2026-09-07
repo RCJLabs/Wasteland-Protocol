@@ -21,9 +21,9 @@
 // taken got the same card and a live SIGN button, which signOnRecruit then refused in silence.
 module.exports = {
   name: 'A recruit node is a node',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       // The recruit node is placed on a 0.55 roll, so deal maps until one carries it.

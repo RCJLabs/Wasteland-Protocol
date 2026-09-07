@@ -13,9 +13,9 @@
 // these would have opened a first-sector run talking about factions nobody had met.
 module.exports = {
   name: 'The faces on the road',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
     await page.evaluate(() => {
       window.__run = (sector = 3) => {
         activeContracts = []; currentSlot = 1; confirmNewGame(1.0);

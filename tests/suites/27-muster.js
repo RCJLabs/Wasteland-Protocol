@@ -3,9 +3,9 @@
 // who rolled what is visible, rerollable, and the line-up is a decision.
 module.exports = {
   name: 'The muster',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- the pool tripled, and half of it plays with systems ----
     const pool = await page.evaluate(() => ({

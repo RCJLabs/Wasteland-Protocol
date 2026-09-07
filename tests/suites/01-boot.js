@@ -2,9 +2,9 @@
 // never defined. This suite plays a whole run through the UI, so any such gap throws.
 module.exports = {
   name: 'Boot and full playthrough',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     ok('title screen renders slot buttons',
       (await page.$$eval('.title-btn', els => els.filter(e => e.offsetParent).length)) >= 3);
@@ -58,7 +58,7 @@ module.exports = {
     ok(`combat reaches a conclusion (${outcome})`, outcome !== 'timeout');
 
     await page.reload();
-    await page.waitForTimeout(600);
+    await engineUp(page);
     const menu = await page.$eval('#title-menu-container', e => e.innerText);
     ok('progress is saved and offered on the title screen', /SLOT 1 \[S\d/.test(menu) || /BEST RUN/.test(menu));
   }

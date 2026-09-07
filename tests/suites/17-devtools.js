@@ -3,9 +3,9 @@
 // behaves like a real run.
 module.exports = {
   name: 'Dev tools and ground placement',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     // ---- reachable, and every control in it is wired ----
     await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; openSettings(); });

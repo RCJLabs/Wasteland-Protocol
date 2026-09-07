@@ -20,9 +20,9 @@
 // screen. The fold is the comfortable case; the cap is what makes the bad case survivable.
 module.exports = {
   name: 'A header that stays a header',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__hand = n => {

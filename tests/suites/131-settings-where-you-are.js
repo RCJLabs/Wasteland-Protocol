@@ -12,9 +12,9 @@
 // run. It goes back to whatever it was opened over now.
 module.exports = {
   name: 'Settings where you are',
-  run: async ({ page, ok, base }) => {
+  run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
-    await page.waitForTimeout(600);
+    await engineUp(page);
 
     await page.evaluate(() => {
       window.__gearOn = s => { switchScreen(s);
