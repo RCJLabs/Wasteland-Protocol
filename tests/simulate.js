@@ -767,6 +767,35 @@
 // measures the policy, not the game. When a phase moves work from the harness into the engine,
 // every counter that lives in the harness has to be checked before its output is read as a
 // finding. This one would have read as "the fix loses a fifth of all consequences".
+//
+// G05: WHAT "COMPLETE SEPARATION AT THREE" IS ACTUALLY WORTH ON THIS ROW.
+//
+// G05 sizes RIOT PLATE after the elite affixes instead of before, so an ARMORED unit's plate is
+// half the bar it fights on rather than a third. Plated units are about 2% of the hostiles on
+// an elite node and none at all in sector 1, so the change touches a thin slice and makes it
+// harder. A paired 3 x 150 came back with one row separating - by this file's own D17 rule,
+// same direction three times and no overlap:
+//
+//   nodes cleared, median   75 / 73 / 70   ->   77 / 77 / 80
+//
+// In the wrong direction, and far too large: ten more nodes cleared from a 2% subset of one
+// node type being given a bigger damage-halving budget is not a mechanism, it is a coincidence.
+// Three more pairs, same arms, same configuration:
+//
+//   pre    75  73  70  83  75  74
+//   post   77  77  80  77  74  71
+//
+// Overlapping, and the direction reverses in the second three. Means 75.0 against 76.0. The
+// separation at three was noise.
+//
+// This is worth keeping as a calibration rather than a footnote. D17's rule - same direction
+// AND complete separation - is necessary, not sufficient, and "nodes cleared, median" is heavy
+// enough in the tail to clear that bar by chance at three samples of 150. When a row separates
+// on a change whose mechanism cannot plausibly produce it, the mechanism is the better witness:
+// double the samples before writing it down. F10 recorded the same lesson from the other side,
+// where "noise" was argued for six samples before the effect turned out to be real. Both
+// mistakes have now been made here; the rule that survives them is that the size of the
+// mechanism and the size of the effect have to agree before either is believed.
 const path = require('path');
 const { serve } = require('./server');
 

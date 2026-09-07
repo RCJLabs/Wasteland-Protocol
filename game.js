@@ -7743,6 +7743,18 @@ function riderOf(ent) { return (ent && !ent.isPlayer && ent.rider) ? (ENEMY_RIDE
 
 function sigOf(ent) { return (ent && !ent.isPlayer && ent.sig) ? (ENEMY_SIGS[ent.sig] || null) : null; }
 function hasSig(ent, id) { return !!(ent && !ent.isPlayer && ent.sig === id); }
+// Riot Plate is a second bar that only soaks, sized off the unit so it scales with the sector
+// without needing a curve of its own. G05: one helper, because the share was written out at
+// three separate build sites and the ordinary generator read it a beat too early - before the
+// elite affixes, one of which is ARMORED, which is half again the health. Measured over 300
+// elite rolls: every plated unit wearing ARMORED carried a plate worth a third of its bar
+// rather than half, 57 of the 183 plated units drawn. The other three affixes leave health
+// alone and read 0.500, which is what says it is the ordering and not the arithmetic.
+const RIOT_PLATE_SHARE = 0.5;
+function sizePlate(u) {
+    if (hasSig(u, 'RIOT_PLATE')) u.plate = Math.floor(u.maxHp * RIOT_PLATE_SHARE);
+    return u;
+}
 
 // The passives that change what an enemy's blow is worth, figured where the raw damage is.
 function enemyDmgMult(enemy) {
@@ -8568,7 +8580,7 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
                 dmgBase: Math.floor(spec.dmg * dmgMult), img: spec.img, scale: spec.scale, hpDrop: 0,
                 stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
                 resistances: { ...spec.resistances }, sig: spec.sig || null, sigCd: 0, ...(extra || {}) };
-            if (u.sig === 'RIOT_PLATE') u.plate = Math.floor(u.maxHp * 0.5);
+            sizePlate(u);
             if (spec.stand) u.stand = spec.stand;
             u.intent = rollIntent(u);
             retinue.push(u);
@@ -8647,10 +8659,7 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
         let t = JSON.parse(JSON.stringify(pick)); 
         let hp = Math.floor(t.maxHp * mult); t.hp = hp; t.maxHp = hp; t.dmgBase = Math.floor(t.dmgBase * dmgMult); t.baseArmor = t.armor || 0;
         t.sigCd = 0;
-        // Riot Plate is a second bar that only soaks: sized off the unit so it scales with the
-        // sector without needing a curve of its own.
-        if (hasSig(t, 'RIOT_PLATE')) t.plate = Math.floor(hp * 0.5);
-        
+
         // One unit on an elite node is the champion and carries two affixes. That is the half
         // of the teeth budget that does not depend on the roll: IRONSIDE still buys the RATE
         // every unit is affixed at, so the protocol keeps its own meaning and stacks with this
@@ -8665,6 +8674,9 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
             t.name = `*${t.eliteTypes.join(' ')}* ${t.name}`;
             worn.forEach(a => a.apply(t, mult, dmgMult));
         }
+        // After the affixes, not before: ARMORED is half again the health, and a plate sized
+        // off the bar the unit had before it was up-armoured is not half of the bar it fights on.
+        sizePlate(t);
         t.intent = rollIntent(t);
         squad.push({ ...t, id: `e${i}_${Date.now()}`, isPlayer: false });
     }
@@ -10849,7 +10861,7 @@ function reRaiseRetinue(enemy, which) {
         resistances: { ...spec.resistances }
     };
     if (spec.sig) unit.sig = spec.sig;
-    if (unit.sig === 'RIOT_PLATE') unit.plate = Math.floor(unit.maxHp * 0.5);
+    sizePlate(unit);
     if (which === 'ward') { enemy.wardId = unit.id; enemy.wardSoak = src.wardSoak || 0.15; }
     else { enemy.escortId = unit.id; enemy.escortArmor = src.escortArmor || 20; }
     unit.intent = rollIntent(unit);
@@ -11666,7 +11678,7 @@ globalThis.WP = {
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
-    clearStaleClocks, loadoutChipsHtml, benchedFor, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
+    clearStaleClocks, loadoutChipsHtml, benchedFor, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
     INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, CURSE_CHANCE, CACHE, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, noteSeedBest, SEED_BEST_KEY, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
