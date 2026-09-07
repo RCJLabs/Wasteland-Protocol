@@ -48,9 +48,12 @@ module.exports = {
       return { ids, reroll, called, lighter, rung1, rung4,
                shaped: REQUISITIONS.every(r => r.id && r.name && r.desc) };
     });
-    ok(`there are three things on it (${shelf.ids.join(', ')})`,
-      shelf.ids.length === 3 && shelf.shaped
-      && ['REROLL', 'GRUDGE', 'RUNG'].every(id => shelf.ids.includes(id)));
+    // Written as `ids.length === 3` and it failed the battery the day H03 put a fourth item on
+    // the shelf - a green suite turning red because somebody added content, which is the same
+    // anti-pattern 132 records about gating on a symbol staying uncovered. What this suite is
+    // for is F04's three: that each is present, and shaped. A fourth is somebody else's suite.
+    ok(`F04's three are all still on it (${shelf.ids.join(', ')})`,
+      shelf.shaped && ['REROLL', 'GRUDGE', 'RUNG'].every(id => shelf.ids.includes(id)));
     ok(`a reroll is a flat price (${shelf.reroll})`, shelf.reroll === 2);
     ok(`calling one in costs what it is carrying (grudge 1 -> ${shelf.lighter}, grudge 2 -> ${shelf.called})`,
       shelf.lighter === 4 && shelf.called === 5);

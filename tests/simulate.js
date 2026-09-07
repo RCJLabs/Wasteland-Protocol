@@ -848,6 +848,78 @@
 // This says commander difficulty cannot simply be relocated: most of what makes a commander
 // dangerous is built during its own fight and does not travel.
 
+// H03: THE SHELF IS FULLY SPENT, AND WHAT IT SELLS CANNOT MOVE DEPTH.
+//
+// F04 built the requisition shelf on the reading that skulls piled up unspent - 1,136 / 1,160 /
+// 1,117 left over across three samples of 150 with every Citadel spot bought. The feature brief
+// then proposed a shelf for the surplus. BOTH READINGS WERE WRONG, and correcting them is most
+// of this entry.
+//
+// THE LEDGER, CORRECTED. Skulls are spent BEFORE a run (the shelf) and DURING it (the Citadel),
+// so the net rise across an expedition understates income by exactly what was spent. Sampling
+// the rise reported 366% of income spent, which is what prompted deriving it instead:
+// earned = (end - start) + spent. Over 150 carried runs:
+//
+//   earned 1,220   Citadel 95 (8%)   shelf 1,086 (89%)   left on hand 39 (3%)
+//
+// The Citadel is not a sink at all past the early career: every building reads at cap by the end
+// of a 150-run sample. The shelf takes essentially the whole income, and depth reads
+// 3.24 / 3.22 / 3.28 across the thirds. A SHELF AT 89% UTILISATION THAT DOES NOT MOVE DEPTH IS
+// NOT UNDERUSED - IT IS SELLING THE WRONG THING. That is a different problem from the one F04
+// solved, and the surplus the brief proposed to absorb does not exist.
+//
+// WHAT IT WAS SELLING. FRESH FACES is variance, A GRUDGE CALLED IN is difficulty asked for, A
+// RUNG ON CREDIT is harder content on tick. Three items, none of which makes the squad stronger.
+// So: add one that plainly is capability and price the question properly. ONE MORE FALLBACK, 6
+// skulls, +1 regroup for one expedition.
+//
+// THE ARM IS `--reqpolicy`, AND IT HOLDS THE SHELF CONSTANT. Comparing builds would confound the
+// item with everything else in the diff. Both arms run one build and differ only in the order the
+// purse is spent: `rerolls` (the default, and what every prior sample ran) buys fresh faces to the
+// cap; `fallback` buys the fallback first and takes what rerolls the remainder affords. At 8.1
+// skulls a run that is a real substitution - roughly two rerolls traded for one fallback - which
+// is the actual design question rather than "does more stuff help".
+//
+//                          rerolls                      fallback
+//   depth, 1st third   3.24 / 3.40 / 3.56           3.84 / 2.78 / 3.54      overlap
+//   depth, 2nd third   3.22 / 2.98 / 3.02           3.32 / 3.44 / 3.28      separated
+//   depth, 3rd third   3.28 / 3.02 / 3.06           3.40 / 3.44 / 3.18      overlap
+//   reached sector 7      3% / 5% / 3%                 9% / 3% / 4%         overlap
+//   runs won              1 / 2 / 2                    3 / 3 / 2            overlap
+//   wipes per run      7.25 / 7.07 / 7.07           8.07 / 7.62 / 7.84      separated
+//   fallbacks carried  4.83 / 4.85 / 4.81           5.57 / 5.35 / 5.54      separated
+//   bought the item          -                     110 / 95 / 105 of 150
+//
+// DEPTH IS A NULL. One third of three separates; D17 asks for complete separation and one row in
+// three is not it. What does separate is the pair that proves the INSTRUMENT rather than the
+// claim - the item is reachable, it arrives, and runs absorb ~8% more wipes before ending. The
+// squad spends the extra fallback and dies in the same place.
+//
+// WHY, FROM THE ROW THAT WAS ALREADY THERE. Wipes by tier, control arm:
+//
+//   t2:2  t3:13  t4:14  t5:12  t6:22  t7:44  t8:54  t9:60  t10:866
+//
+// 80% of every wipe is the tier-ten commander. A fallback buys another attempt at that wall with
+// the same squad at the same strength, so it converts into another wipe rather than another
+// sector - which is exactly what the wipes row shows.
+//
+// AND THE ONE THAT NEARLY GOT AWAY. The first fallback sample read sector 7 at 9% against 3%, and
+// that single separated row was nearly enough to call the feature a win before the other arms
+// landed. It did not survive: 9% / 3% / 4% against 3% / 5% / 3%. A doubling of the win-through
+// rate was never something one extra retry out of five could produce, and G05's rule - the size
+// of the mechanism and the size of the effect have to agree before either is believed - was the
+// better witness than the row. Third time that rule has fired in this batch.
+//
+// SO THE ITEM SHIPS AND THE PREMISE DOES NOT. ONE MORE FALLBACK is a correct, reachable, refundable
+// choice and it is the shelf's first capability item, but it is neutral on depth and it should not
+// be described as a balance change. THE FINDING IS ABOUT WHAT TO SELL NEXT: capability that buys
+// ATTEMPTS cannot move depth, because an attempt does not change the fight. Capability that buys
+// STRENGTH is the untested half, and it is the one the next item on this shelf should be.
+//
+// A NOTE ON WHAT THIS SAMPLE CANNOT READ. Reaching sector 7 happens 5 to 13 times in 150 runs and
+// wins happen 1 to 3 times. Neither resolves at 3x150 - the same limit F10 recorded for runs that
+// ended the road. Any future claim about either needs more arms, not a closer reading of these.
+
 // G02: THE LAST FIGHT, MEASURED FOR THE FIRST TIME - AND THE CHECK THAT EARNED IT.
 //
 // `--stage N` is above. The thing to be careful about with a staged arm is that the person
@@ -1126,6 +1198,22 @@ const META = flag('meta', 'carry');
 // preferring a choice that no longer does what it used to.
 const FACES = flag('faces', 'warm');
 
+// H03. What the shelf is spent on, with the shelf itself held constant. The corrected ledger
+// says a career spends 90% of its skulls (263 earned over forty carried runs: 74 to the Citadel,
+// 162 to the shelf, 27 left on hand) and that depth does not move with them - 3.46 / 3.38 / 3.44
+// across the thirds. Every item on the shelf was variance (a reroll), difficulty asked for (a
+// grudge), or harder content on credit (a rung); none of them made the squad stronger. So the
+// question is not "would a bigger shelf help" but "does a capability item beat what the same
+// skulls buy today", and the only honest way to ask it is two arms against one build, differing
+// in nothing but the order the purse is spent in.
+//
+// `--reqpolicy rerolls` (the default, and what every prior sample ran) buys fresh faces up to the
+// cap, then a grudge with skulls to burn. `--reqpolicy fallback` buys ONE MORE FALLBACK first and
+// takes whatever rerolls the remainder still affords. The purse is the same purse either way,
+// which is the point: at ~6.6 skulls a run the capability is bought instead of the variance, not
+// on top of it.
+const REQPOLICY = flag('reqpolicy', 'rerolls');
+
 // The three games this file can measure, and why the difference is the whole story:
 //
 //                              median sector   mean / p90   commanders felled
@@ -1164,9 +1252,9 @@ const FACES = flag('faces', 'warm');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy }) => {
   const stat = { order: null, fulfilled: false, won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
-                 upgrades: 0, odAimed: 0, bossTopUps: 0, eliteTopUps: 0, reqBought: 0, reqGrudge: null,
+                 upgrades: 0, odAimed: 0, bossTopUps: 0, eliteTopUps: 0, reqBought: 0, reqGrudge: null, reqFallback: 0, regroupsHad: 0,
                  engineKills: 0, killGap: 0,
                  sector: 1, tier: 1, nodes: 0, fights: 0, rounds: 0, kills: 0, deployed: [],
                  wipedInSector: [], wipedAtTier: [], wipedOnElite: [],
@@ -1205,7 +1293,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                               .sort((a, b) => (a.level() - b.level()) || (a.cost - b.cost))[0];
       if (!sp) break;
       const before = bossSkulls;
-      buyMetaUpgrade(sp.kind);
+      { const b4 = bossSkulls; buyMetaUpgrade(sp.kind);
+        const d = Math.max(0, b4 - bossSkulls);
+        if (window.__sk) { window.__sk.meta += d; window.__sk.runSpent += d; } }
       if (bossSkulls === before) break;
     }
     // F04: and the shelf above the cap, which is where a career's skulls go once the hillside
@@ -1221,6 +1311,15 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // under the default --rung 0 it would be skulls thrown at a ladder this policy will not
     // climb. Suite 112 drives that purchase instead.
     if (typeof buyRequisition === 'function') {
+      const reqBefore = bossSkulls;
+      // H03: ONE MORE FALLBACK goes first when this arm is buying it, because a purse that has
+      // already gone on rerolls cannot reach it - three rerolls is six skulls and so is the
+      // fallback. Buying it last would be a policy that never buys it, and would read as a null
+      // about the item rather than about the ordering.
+      if (reqPolicy === 'fallback' && typeof REQ_FALLBACK_COST === 'number'
+          && reqOpen('FALLBACK') && bossSkulls >= reqCost('FALLBACK')) {
+        if (buyRequisition('FALLBACK')) { stat.reqBought++; stat.reqFallback++; }
+      }
       let g = 0;
       while (g++ < 6 && reqOpen('REROLL') && bossSkulls >= reqCost('REROLL')) {
         if (!buyRequisition('REROLL')) break;
@@ -1231,6 +1330,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (owed && reqOpen('GRUDGE', owed.id) && bossSkulls >= reqCost('GRUDGE', owed.id) * 4) {
         if (buyRequisition('GRUDGE', owed.id)) { stat.reqBought++; stat.reqGrudge = owed.id; }
       }
+      const d = Math.max(0, reqBefore - bossSkulls);
+      if (window.__sk) { window.__sk.req += d; window.__sk.runSpent += d; }
     }
   };
 
@@ -1376,6 +1477,19 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // The real deploy button is what applies a doctrine's edge and banks its multiplier, so the
   // sim goes through it rather than around it.
   musterDeploy();
+  // H03: the file reported skulls LEFT and never skulls EARNED, so "42 unspent" had no
+  // denominator and could be read as a surplus or as a rounding error. Counting it needs care:
+  // skulls are spent BEFORE a run (requisitions) and DURING it (the Citadel), so the net rise
+  // across an expedition understates income by exactly what was spent. Income is therefore
+  // derived - (end - start) + spent - rather than sampled, which is what made the first attempt
+  // report 366% of income spent.
+  if (!window.__sk) window.__sk = { earned: 0, meta: 0, req: 0 };
+  window.__sk.runStart = bossSkulls;
+  window.__sk.runSpent = 0;
+  // Read off the engine after the deploy has consumed the shelf, so a fallback that was bought
+  // but did not arrive on the expedition shows up as a flat line here rather than as a null.
+  stat.regroupsHad = typeof totalRegroups === 'function' ? totalRegroups() : 0;
+
 
   // G02: put the squad at the mouth of a deeper sector, carrying what a squad that walked there
   // was measured to carry. Everything here goes through a door the game already has - awardXp
@@ -2454,6 +2568,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.regroupsLeft = regroupsLeft();
   stat.maxBond = Object.values(bonds).length ? Math.max(...Object.values(bonds)) : 0;
   stat.bondSaves = runStats.bondSaves || 0;
+  if (window.__sk) {
+    const k = window.__sk;
+    k.earned += Math.max(0, (bossSkulls - k.runStart) + k.runSpent);
+    stat.skullLedger = { earned: k.earned, meta: k.meta, req: k.req, onHand: bossSkulls };
+  }
   return stat;
 };
 
@@ -2504,7 +2623,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -2645,6 +2764,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('Citadel at the end', await page.evaluate(() => CITADEL_SPOTS.map(sp =>
     `${sp.name.replace(/^THE /, '').split(' ')[0]} ${sp.level()}/${sp.max}`).join(', ')));
   line('skulls left unspent', await page.evaluate(() => bossSkulls));
+  {
+    const led = results.map(r => r.skullLedger).filter(Boolean).pop();
+    if (led && led.earned) {
+      const p = v => `${v} (${Math.round(100 * v / led.earned)}%)`;
+      line('skulls earned across the sample', led.earned);
+      line('  spent at the Citadel', p(led.meta));
+      line('  spent on requisitions', p(led.req));
+      line('  never spent', p(led.onHand));
+    }
+  }
   line('deepest sector, mean, by third', `${depthOf(band(0, third))} / ${depthOf(band(third, 2 * third))} / ${depthOf(band(2 * third, n))}`);
   line('grudge on commanders met, same', `${grudgeOf(band(0, third))} / ${grudgeOf(band(third, 2 * third))} / ${grudgeOf(band(2 * third, n))}`);
 
@@ -2858,6 +2987,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('wipes per run, mean', mean(nums('wipes')).toFixed(2));
   line('withdrawals per run, mean', WITHDRAW_POLICY ? mean(nums('withdrawals')).toFixed(2) : 'policy off');
   line('regroups spent, mean', mean(nums('regroupsSpent')).toFixed(2));
+  line('fallbacks deployed with, mean', mean(nums('regroupsHad')).toFixed(2));
   const wipeSectors = {};
   results.forEach(r => r.wipedInSector.forEach(sx => { wipeSectors[sx] = (wipeSectors[sx] || 0) + 1; }));
   line('wipes by sector', Object.entries(wipeSectors).sort((a, b) => a[0] - b[0]).map(([k, v]) => `s${k}:${v}`).join(' ') || 'none');
@@ -2922,6 +3052,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('stat upgrades bought per run', (results.reduce((a, r) => a + (r.upgrades || 0), 0) / n).toFixed(1));
   // F04: what the shelf above the Citadel's cap absorbed.
   line('requisitions bought per run', (results.reduce((a, r) => a + (r.reqBought || 0), 0) / n).toFixed(1));
+  line('  of them ONE MORE FALLBACK', `${results.reduce((a, r) => a + (r.reqFallback || 0), 0)} of ${n} runs`);
   const called = results.filter(r => r.reqGrudge).length;
   line('grudges called in', `${called} of ${n} expeditions`);
   // F05: bodies on the field against kills the engine banked itself. A positive number here
