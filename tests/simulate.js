@@ -1282,6 +1282,46 @@ const ROOT = path.join(__dirname, '..');
 // The control held by construction: SORTIE with --resign on re-signed 0 of 100, because nothing
 // is shorter than three sectors and the policy only cuts down.
 
+// ── H11: FORMATIONS THAT BELONG TO SOMEBODY — ALREADY DO ──────────────────────────
+// Filed as "Thirteen shapes, and 56% of fights are an unshaped draw... Tie the shape to who is
+// fighting." Both halves are answered by the code as it stands.
+//
+// SHAPES ARE ALREADY FACTION-TIED. FORMATIONS is keyed by faction - five tables, seventeen
+// shapes - and rollFormation(faction, tier) only draws from that faction's own. There is no
+// shared pool to split and no signature to add.
+//
+// AND THE 56% IS A DIAL. Driven through the engine over 300,000 modelled fights: a shape was
+// open on 87% of them, and FORMATION_CHANCE (0.55) declines the rest by design. So the unshaped
+// share is ~45 points of deliberate coin and ~13 of nothing-open-yet. Measured in play at 60
+// runs: 1,227 of 2,764 named, 44% - exactly what the item was filed on and what the dial says.
+//
+// WHAT IS REAL, AND NARROWER THAN THE MODEL SUGGESTED. As a share of their own faction's PLAYED
+// fights, two shapes sit near 3% - ROADBLOCK (RAIDERS) 3.5% and CONVOY (MECH) 3.1% - against
+// 17-32% for the openers. A first model with uniform faction weights called five shapes starved;
+// play says two. The model was worth running and not worth shipping.
+//
+// AND THEY CANNOT BE RETIMED. Twelve of the seventeen sit at exactly the tier their heaviest
+// unit unlocks at, ROADBLOCK and CONVOY among them, so dropping a gate one tier is refused by
+// validateFormations - suite 144 proves that by doing it. This is not D14's defect: RISING_FLIGHT
+// sat at gate 9 against a unit floor of 5 and had four tiers to give back. These have none. They
+// are rare because they field deep units and runs end at sector 3, which is the tier-ten wall
+// again rather than anything about formations.
+//
+// TWO LENSES, AND THEY DISAGREE BY 2-3x. Suite 86 (D14) walks sectors 1-7 UNIFORMLY, which is
+// right for "is this faction's table internally crowded" and wrong for "does a player meet this
+// shape": a uniform walk visits sectors 4-7 about thirty times more often than play does.
+// Measured side by side, uniform overstates every deep shape - ROADBLOCK 2.1x, PRESS_GANG 2.1x,
+// BLOOM 1.9x, CONVOY 3.3x, THE_RITE 3.2x, THE_NEST 2.2x. That reconciles D14's note that THE_NEST
+// "measured fine on its own (13.3%)" with the ~5% a player meets: both are true of different
+// questions. Suite 86 now says which lens it is using, suite 144 holds the distinction, and the
+// readout below prints the played share so the question needs no re-deriving.
+//
+// A BUG THIS PHASE INTRODUCED AND CAUGHT. The faction-fight counter was first inserted BETWEEN
+// `if (currentFormation)` and its `else stat.loose++`, capturing the else: loose fights stopped
+// being counted and the named rate read 79% against a true 44%. Invisible to node --check, and
+// caught only because the new per-faction shares summed to ~50% while the old readout said 79%
+// and two counters in one file disagreeing was worth chasing rather than explaining away.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
@@ -1502,7 +1542,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  promotions: 0, promoEmpty: 0, held: 0, turnsPlayer: 0, sigsTaken: 0, sigsBought: 0, capsTaken: 0, capsBought: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
-                 extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false,
+                 extracted: false, walkedAt: 0, formations: {}, factionFights: {}, loose: 0, doctrine: null, doctrineKept: false,
                  benchHeld: null,
                  booked: 0, bookedKinds: {}, augments: 0,
                  offeredNodes: {}, takenNodes: {}, forks: 0, forksWithChoice: 0, forksAllFights: 0,
@@ -2353,6 +2393,21 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // to one that did, so what walked on is counted rather than assumed.
     if (currentFormation) stat.formations[currentFormation] = (stat.formations[currentFormation] || 0) + 1;
     else stat.loose++;
+    // H11: which faction the fight was, so a shape can be reported as a share of the fights it
+    // could possibly have turned up in. A raw count says a shape is rare; a share says whether
+    // the player who meets that faction ever learns it.
+    //
+    // Placed AFTER the else above, not between it and its if. Inserted between them, this block
+    // captured the `else` - loose fights stopped being counted and the named-shape rate read 79%
+    // against a true ~48%. A dangling else is invisible to `node --check` and to every assertion
+    // that does not compare the two counters, which is why the disagreement between this readout
+    // and the per-faction shares below was worth chasing rather than explaining away.
+    //
+    // currentNodeType, not the loop's `node`: this is inside fight(), where that is not in
+    // scope, and the engine's own global is what the formation was rolled against anyway.
+    if (currentNodeType && FIGHT_NODES.includes(currentNodeType)) {
+      stat.factionFights[currentNodeType] = (stat.factionFights[currentNodeType] || 0) + 1;
+    }
     // Counted at the door rather than at the end: a fight that is run from still happened, and
     // the squad still had to look at whatever was in it.
     activeEntities.filter(e => !e.isPlayer && e.sig).forEach(e => {
@@ -2959,6 +3014,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const page = await context.newPage();
   const errors = [];
   let ALL_FORMATION_IDS = [];
+  let FORMATION_FACTION = {};
   let SCAR_IDS = [];
   let FINAL_SECTOR_N = 7;
   let ORDER_NAME = '', ORDER_SECTORS = 7;
@@ -2971,6 +3027,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // engine still runs every rule; it just stops measuring a screen no one is looking at.
   await page.evaluate(() => { globalSettings.sfx = false; paintOff = true; });
   ALL_FORMATION_IDS = await page.evaluate(() => ALL_FORMATIONS.map(f => f.id));
+  // H11: which faction owns which shape, asked of the engine rather than listed here, so a new
+  // formation or a retimed table needs no edit in this file to be reported.
+  FORMATION_FACTION = await page.evaluate(() =>
+    Object.fromEntries(Object.entries(FORMATIONS).map(([k, v]) => [k, v.map(f => f.id)])));
   SCAR_IDS = await page.evaluate(() => SCAR_POOL.map(sc => sc.id));
   FINAL_SECTOR_N = await page.evaluate(() => FINAL_SECTOR);
   const ordSpec = await page.evaluate(id => { const o = orderById(id); return o ? { name: o.name, sectors: o.sectors } : null; }, ORDER);
@@ -3398,6 +3458,26 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   Object.entries(forms).sort((a, b) => b[1] - a[1]).forEach(([k, v]) => line('  ' + k, v));
   const unseen = ALL_FORMATION_IDS.filter(id => !forms[id]);
   line('never met', unseen.length ? unseen.join(', ') : 'none');
+
+  // H11: AS A SHARE OF THE FACTION'S OWN FIGHTS, WEIGHTED BY WHERE RUNS ACTUALLY END.
+  // Suite 86 answers the neighbouring question by walking sectors 1-7 uniformly, which is the
+  // right lens for "is this faction's table internally crowded" and the wrong one for "does a
+  // player ever meet this shape" - runs end at sector 3, so the deep end of every table is
+  // roughly a third as common in play as a uniform walk makes it look. Both numbers are true of
+  // different questions; this is the played one.
+  const facFights = {};
+  results.forEach(r => Object.entries(r.factionFights || {}).forEach(([k, v]) => { facFights[k] = (facFights[k] || 0) + v; }));
+  if (Object.keys(facFights).length) {
+    console.log('   share of its own faction\u2019s fights (played, not modelled)');
+    Object.entries(FORMATION_FACTION).forEach(([fac, ids]) => {
+      const tot = facFights[fac] || 0;
+      if (!tot) return;
+      ids.forEach(id => {
+        const pc = (forms[id] || 0) / tot * 100;
+        line(`    ${fac} ${id}`, `${pc.toFixed(1)}% of ${tot}` + (pc < 6 ? '   <- under a rate anyone learns from' : ''));
+      });
+    });
+  }
 
   console.log('\n── FIGHTS ' + '─'.repeat(48));
   const roundsPerFight = results.map(r => r.fights ? r.rounds / r.fights : 0).sort((a, b) => a - b);

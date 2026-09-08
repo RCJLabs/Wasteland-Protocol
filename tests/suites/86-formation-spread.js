@@ -24,6 +24,18 @@
 // some of the exposure that bought - 19.5% -> 17.7% and 16.5% -> 14.8% - and THE_NEST, named
 // alongside THE_SWARM in the brief this phase was filed from, measured fine on its own (13.3%,
 // in the pack with CONVOY and THE_RITE) and is untouched.
+//
+// H11, LATER, ON THE LENS THIS FILE USES. Every share above and below is measured by walking
+// sectors 1-7 UNIFORMLY (SECTORS: 7, RUNS: 400). That is the right lens for the question this
+// phase asked - whether CARRION's own table crowds its opener - because it isolates the table
+// from how deep runs get. It is the wrong lens for "how often does a player meet this shape",
+// and the two disagree by 2.0x to 3.4x on the deep end of every table: runs end at sector 3, so
+// a uniform walk visits sectors 4-7 about thirty times more often than play does.
+//
+// So the note above that THE_NEST "measured fine on its own (13.3%)" is true of a uniform walk
+// and not of play, where it is nearer 5%. Nothing here is wrong and nothing here changes - the
+// figures are correct for the question they answer - but they should not be quoted as what a
+// player meets. Suite 144 holds that distinction, and simulate.js prints the played share.
 const BEFORE = { THE_SWARM: 0.056, RISING_FLIGHT: 0.195, UNDERTOW: 0.165, THE_NEST: 0.132 };
 module.exports = {
   name: 'Formations drawn evenly enough to learn',
