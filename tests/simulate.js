@@ -1243,6 +1243,45 @@ const ROOT = path.join(__dirname, '..');
 // booking a DEBT (DEBT is Vela collecting on money you did not earn; clearing a shop means you
 // paid). The brief proposed four sources; one survived contact with what the consequences do.
 
+// ── H09: AN ORDER YOU CAN CHANGE YOUR MIND ABOUT ──────────────────────────────────
+// Filed on "kept 3 of 150, 2%". That measured THE LONG ROAD alone, under a policy that always
+// signs it. Measured across all three at 100 runs each, the keep rate is a ladder:
+//
+//   SORTIE  3 sectors  +20%   kept 34-35%
+//   PATROL  5 sectors  +35%   kept 12%
+//   LONG    7 sectors  +50%   kept 0-2%
+//
+// A CLAIM MADE AND WITHDRAWN, recorded because the withdrawal is the useful part. On one sample
+// per order the medians read 21,265 / 19,648 / 17,666, and this phase was begun on the reading
+// that every step up the ladder LOWERS the expected score - that the menu was a trap and a player
+// who worked it out would sign SORTIE forever. At three samples THE LONG ROAD reads
+// 19,845 / 20,929 / 20,558 against SORTIE's 19,829 / 21,265: completely overlapping, and the
+// 17,666 that anchored the claim was the low of four. The inversion is NOT established. This
+// file's own header says 150+ expeditions before believing a score figure; one of a hundred was
+// believed instead, in the same phase that spent its opening paragraphs correcting the brief for
+// exactly that. The keep-rate ladder replicates and is enough on its own.
+//
+// SHIPPED: the order can be re-signed at any camp. Trading DOWN forfeits RESIGN_CUT of the
+// shorter order's bonus, because otherwise cutting at the last camp before a wipe is free value
+// and the trap simply inverts. Trading UP is free - the risk of not getting there is the price.
+// An order is only signable while its recall is still ahead: the recall fires on an exact sector
+// match, so signing a three-sector order at sector four is signing for a recall that never comes.
+//
+//                   --resign off            --resign on
+//   kept          0% / 2% / 1%           8% / 12% / 13%     separated
+//   wipes    6.78 / 6.97 / 6.89     6.26 / 6.44 / 6.65      separated, DOWN
+//   score  19,845 / 20,929 / 20,558  17,312 / 20,414 / 21,435   overlapping
+//   depth        overlapping             overlapping
+//   re-signed         0%              71-76% of runs, 53-63 of them to SORTIE
+//
+// The longest order produced an outcome about once in fifty runs and now does so about once in
+// nine, without paying more for it - score and depth are unmoved and wipes FALL, because a run
+// that would have been pushed into a wipe is recalled instead. Most re-signings still lapse
+// (7-11 kept of 71-76), so it is not free value either.
+//
+// The control held by construction: SORTIE with --resign on re-signed 0 of 100, because nothing
+// is shorter than three sectors and the policy only cuts down.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
@@ -1406,6 +1445,12 @@ const REQPOLICY = flag('reqpolicy', 'rerolls');
 // afterwards, so the STIM tactic has always had first refusal. `--rescue hands` reverses that
 // order and changes nothing else.
 const RESCUE = flag('rescue', 'bar');
+// H09. The order is signed at the muster and, measured across all three at 100 runs each, every
+// step up the ladder lowers the expected score - SORTIE 35% kept / 21,265, PATROL 12% / 19,648,
+// THE LONG ROAD 0% / 17,666. Signing long is strictly worse, so the menu is a trap rather than a
+// choice. `--resign on` (the default now) lets a worn squad cut the order down at a camp;
+// `--resign off` is the behaviour every prior sample ran under.
+const RESIGN = flag('resign', 'on');
 
 // The three games this file can measure, and why the difference is the whole story:
 //
@@ -1445,7 +1490,7 @@ const RESCUE = flag('rescue', 'bar');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy }) => {
   const stat = { order: null, fulfilled: false, won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
                  upgrades: 0, odAimed: 0, bossTopUps: 0, eliteTopUps: 0, reqBought: 0, reqGrudge: null, reqFallback: 0, regroupsHad: 0,
                  engineKills: 0, killGap: 0,
@@ -2538,6 +2583,20 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       const worn = playerRoster.filter(p => p.gridPos > 0 && p.hp < p.maxHp * 0.5).length >= 2
                 || playerRoster.length <= 4
                 || regroupsLeft() === 0;
+      // H09: the same read, spent on the order rather than on the door. A squad in no shape to
+      // keep going cuts the order down to the shortest road it can still be recalled from, which
+      // is the decision re-signing exists for - and it is the one the walk-out cannot make,
+      // because walking out ends the run and this does not. `--resign off` holds the old
+      // behaviour so the two can be measured against each other with nothing else moved.
+      if (resignPolicy !== 'off' && worn && typeof canResign === 'function' && canResign()) {
+        const shortest = resignable().sort((a, b) => a.sectors - b.sectors)[0];
+        const cur = orderById(runStats.order);
+        if (shortest && cur && shortest.sectors < cur.sectors && resignOrder(shortest.id)) {
+          stat.resigned = (stat.resigned || 0) + 1;
+          stat.resignedTo = shortest.id;
+          stat.resignedAt = currentSector;
+        }
+      }
       if (currentSector >= EXTRACT_AT && worn && canExtract()) {
         stat.extracted = true; stat.walkedAt = currentSector;
         stat.endedBy = 'extracted';
@@ -2924,7 +2983,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -3154,6 +3213,15 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     line('  nodes to keep it, median', `${pct(kn, 0.5)} (p90 ${pct(kn, 0.9)})`);
     line('  fights to keep it, median', `${pct(kf, 0.5)} (p90 ${pct(kf, 0.9)})`);
     line('  score for keeping it, median', pct(ks, 0.5).toLocaleString());
+  }
+  const rs = results.filter(r => r.resigned);
+  line('orders re-signed mid-run', `${rs.length} of ${n} (${(rs.length / n * 100).toFixed(0)}%)`);
+  if (rs.length) {
+    const to = {}; rs.forEach(r => { to[r.resignedTo] = (to[r.resignedTo] || 0) + 1; });
+    line('  cut down to', Object.entries(to).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', '));
+    const at = rs.map(r => r.resignedAt).sort((a, b) => a - b);
+    line('  at sector, median', at[Math.floor(at.length / 2)]);
+    line('  and kept it', `${rs.filter(r => r.fulfilled).length} of ${rs.length}`);
   }
   line('lost before the recall', `${results.filter(r => !r.fulfilled).length} of ${n}`);
 

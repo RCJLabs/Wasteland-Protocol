@@ -90,6 +90,16 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .set-near .set-tag { color: #7ab0d0; }
 .set-note { font-size: 0.5625rem; color: #6a655c; letter-spacing: 0; margin-top: 2px; }
 
+/* H09: re-signing. Down and up are coloured apart because they are opposite bets - one banks
+   what is left, the other spends it for a bigger promise. */
+.camp-resign { display: flex; flex-direction: column; gap: 3px; text-align: left; }
+.camp-resign-open { display: flex; flex-direction: column; gap: 3px; border-color: #7ab0d0; color: #7ab0d0; }
+.resign-name { font-weight: bold; letter-spacing: 1px; }
+.resign-terms { font-size: 0.625rem; color: #8a8578; letter-spacing: 0.5px; }
+.resign-terms em { color: #c1440e; font-style: normal; }
+.resign-down { border-color: #ffaa00; color: #ffaa00; }
+.resign-up { border-color: #6B8E23; color: #6B8E23; }
+
 /* H06: the sealed cache. The two doors are deliberately different colours - the clean one is
    the reason you brought that operator, the forced one is the price of not having. */
 .cache-lock-line { color: #b8b3a8; font-size: 0.75rem; line-height: 1.6; margin-bottom: 4px; }

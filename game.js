@@ -1727,6 +1727,7 @@ function reqById(id) { return REQUISITIONS.find(r => r.id === id) || null; }
 // which also means a reload on the contract board does not eat the purchase.
 let pendingReq = { rerolls: 0, grudge: null, rung: false, fallback: false };
 let pendingCache = null;    // { nodeId, lock } while a sealed cache is open
+let resignArmed = false;    // the camp's re-sign panel is open
 let grudgeCall = null;      // consumed onto the run at buildNewRun
 let rungCredit = false;
 let fallbackCredit = false;
@@ -2840,10 +2841,72 @@ function currentOrder() { return orderById(activeOrder) || orderById(DEFAULT_ORD
 // How far this expedition signed up to go. Read from the run rather than the live setting, so a
 // score already banked is not re-judged by whatever the next expedition signs up for.
 function orderSectors(st) { const o = orderById(((st || runStats || {}).order) || activeOrder); return o ? o.sectors : FINAL_SECTOR; }
-function orderBonus(st) { const o = orderById(((st || runStats || {}).order) || activeOrder); return o ? o.bonus : 0; }
+// H09: what the order pays, after any cut a mid-run re-signing took out of it. The cut is read
+// off the run rather than recomputed, so a score already banked keeps the terms it was banked on.
+function orderBonus(st) {
+    const r = st || runStats || {};
+    const o = orderById(r.order || activeOrder);
+    if (!o) return 0;
+    return o.bonus * (1 - (r.orderCut || 0));
+}
 // The last sector this order sends you to. Past it the run is over its orders and running long,
 // which is allowed and pays nothing extra.
 function isLastOrdered(sector = currentSector) { return sector === orderSectors(); }
+
+// ── Re-signing the order ────────────────────────────────────────────────────────────────
+// H09. The order is signed at the muster, before the player knows anything, and the item was
+// filed on "kept 3 of 150, 2%". That figure measured THE LONG ROAD alone, under a policy that
+// always signs it. Measured across all three at 100 runs each, the keep rate is a gradient -
+// SORTIE 35%, PATROL 12%, THE LONG ROAD 0% - and the real defect is not up there at all:
+//
+//   SORTIE  3 sectors  +20%   kept 35%   median score 21,265
+//   PATROL  5 sectors  +35%   kept 12%   median score 19,648
+//   LONG    7 sectors  +50%   kept  0%   median score 17,666
+//
+// Every step up the ladder LOWERS the expected score. The bigger bonus never arrives, so signing
+// a longer order is strictly worse, and a player who works that out signs SORTIE forever and the
+// other two are dead options. The menu is a trap, not a choice.
+//
+// Re-signing is what makes it a choice: take the long odds, and cut the order down when the road
+// ends early. Trading DOWN forfeits part of the shorter order's bonus, because otherwise
+// re-signing at the last camp before a wipe is free value and the trap simply inverts. Trading
+// UP costs nothing - the risk of not getting there is the price, and it is a real one.
+const RESIGN_CUT = 0.4;    // share of the new bonus forfeited when the order is cut short
+// An order can only be signed for a road the squad has not already run past: its recall fires on
+// the exact sector, so signing a three-sector order at sector four is signing for a recall that
+// can never come.
+function resignable() {
+    if (!runStats) return [];
+    return ORDERS.filter(o => o.id !== runStats.order && o.sectors >= currentSector);
+}
+function canResign() { return !!runStats && !runStats.extracted && !runStats.won && resignable().length > 0; }
+// What the new order actually pays, with the cut applied when it is shorter than the one signed.
+// Read through orderById rather than compared by index, so re-ordering the table cannot silently
+// turn a trade down into a trade up.
+function resignBonus(toId, fromId) {
+    const to = orderById(toId), from = orderById(fromId || (runStats && runStats.order));
+    if (!to) return 0;
+    const down = !!from && to.sectors < from.sectors;
+    return down ? to.bonus * (1 - RESIGN_CUT) : to.bonus;
+}
+function resignOrder(toId) {
+    if (!canResign()) return false;
+    const to = orderById(toId);
+    if (!to || !resignable().some(o => o.id === toId)) return false;
+    const from = orderById(runStats.order);
+    const down = !!from && to.sectors < from.sectors;
+    runStats.order = to.id;
+    // Latched on the run, not the career: the muster's choice for the NEXT expedition is
+    // untouched. `cut` is stored rather than recomputed, because what the bonus is worth was
+    // decided at the moment of the trade and a later trade must not re-price an earlier one.
+    if (down) runStats.resigned = true;
+    runStats.orderCut = runStats.resigned ? RESIGN_CUT : 0;
+    log(down ? `> The order is cut to ${to.name}. The Citadel keeps a share of it.`
+             : `> The order is extended to ${to.name}.`, down ? 'log-dmg' : 'log-heal');
+    playSFX('click');
+    saveGameState();
+    return true;
+}
 
 const CONTRACT_POOL = [
     { id: 'NO_CONSUMABLES', name: "DRY RUN",       bonus: 0.15, desc: "Deploy with an empty bag. Nothing can be carried or crafted into it." },
@@ -3557,6 +3620,8 @@ const ACTIONS = {
     'outpost-tab':      el => setOutpostTab(el.dataset.tab),
     'recruit-sign':     () => signOnRecruit(),
     'recruit-leave':    () => leaveRecruit(),
+    'camp-resign':      () => { resignArmed = !resignArmed; renderCamp(); },
+    'camp-resign-go':   el => { if (resignOrder(el.dataset.id)) { resignArmed = false; renderCamp(); } },
     'cache-clean':      () => openCache(true),
     'cache-force':      () => openCache(false),
     'breakdown':        () => breakdownScrap(),
@@ -7637,7 +7702,7 @@ function initiateCamp() {
     renderCampScreen();
 }
 function renderCampScreen() {
-    extractArmed = false;
+    extractArmed = false; resignArmed = false;
     switchScreen('screen-camp');
     renderCamp();
 }
@@ -7672,6 +7737,28 @@ function renderCamp() {
         document.getElementById('camp-choices').innerHTML = cHtml;
         return;
     }
+    // H09: the order, re-openable. Priced the way the walk-out is - what it is worth now against
+    // what it would be worth kept - because "trade down" means nothing without both numbers.
+    if (resignArmed && canResign()) {
+        const cur = orderById(runStats.order);
+        cHtml += `<div class="camp-extract-panel">`
+            + `<div class="camp-extract-head">RE-SIGN THE ORDER</div>`
+            + `<div class="camp-extract-line">Signed for <b>${cur ? cur.name : runStats.order}</b> \u2014 `
+            + `${orderSectors()} sectors, and you are standing in ${currentSector}.</div>`;
+        resignable().forEach(o => {
+            const down = cur && o.sectors < cur.sectors;
+            const pays = resignBonus(o.id);
+            cHtml += `<button class="event-btn camp-resign ${down ? 'resign-down' : 'resign-up'}" `
+                + `data-action="camp-resign-go" data-id="${o.id}">`
+                + `<span class="resign-name">${down ? 'CUT IT TO' : 'EXTEND TO'} ${o.name}</span>`
+                + `<span class="resign-terms">${o.sectors} sectors \u00B7 pays +${Math.round(pays * 100)}% if kept`
+                + `${down ? ` <em>(${Math.round(o.bonus * 100)}% less the Citadel's ${Math.round(RESIGN_CUT * 100)}%)</em>` : ''}`
+                + `</span></button>`;
+        });
+        cHtml += `<button class="event-btn" data-action="camp-resign">LEAVE THE ORDER AS IT STANDS</button>`;
+        document.getElementById('camp-choices').innerHTML = cHtml;
+        return;
+    }
     cHtml += `<button class="event-btn" data-action="camp-choice" data-kind="TRIAGE">TRIAGE (Heal 35% HP to Deployed Squad)</button>`;
     cHtml += `<button class="event-btn" data-action="camp-choice" data-kind="TUNEUP">WEAPON TUNE-UP (+4 DMG for next 3 Battles)</button>`;
     cHtml += `<button class="event-btn" data-action="camp-choice" data-kind="FORAGE">FORAGE (+1 Parts, +1 Chems, +1 Tech)</button>`;
@@ -7685,6 +7772,15 @@ function renderCamp() {
             + `<span class="cache-cost">\u2026but ${cost || 'it costs you.'}</span>`
             + `<span class="cache-price">Takes the camp \u2014 no triage, no tune-up, no forage`
             + (canExtract() ? `, and no walking out from here.` : `.`) + `</span></button>`;
+    }
+    // Offered beside the walk-out, because they are the two ways a run stops being the run it
+    // was signed for and the player should see them together.
+    if (canResign()) {
+        const cur = orderById(runStats.order);
+        cHtml += `<button class="event-btn camp-resign-open" data-action="camp-resign">`
+            + `RE-SIGN THE ORDER <span class="resign-terms">`
+            + `${cur ? cur.name : runStats.order} \u00B7 ${orderSectors()} sectors, you are in ${currentSector}`
+            + `</span></button>`;
     }
     if (canExtract()) {
         const p = extractPitch();
@@ -12191,7 +12287,7 @@ globalThis.WP = {
     // entry points and pure helpers the suites exercise
     EXTRACT, extractBonus, extractSkulls, canExtract, extractRun, extractPitch, armExtract, renderCamp,
     bossRetinueUp, GRUDGE, RISEN_MARK, grudgeOn, noteGrudge, risenName, risenShort, openGrudgePhase,
-    ORDERS, DEFAULT_ORDER, orderById, currentOrder, orderSectors, orderBonus, isLastOrdered, renderRecall, orderHome,
+    ORDERS, DEFAULT_ORDER, orderById, currentOrder, orderSectors, orderBonus, isLastOrdered, renderRecall, orderHome, RESIGN_CUT, resignable, canResign, resignBonus, resignOrder,
     FINAL_SECTOR, FINAL_BOSS, BOSS_ROTATION, isFinalSector, VICTORY, noteTally, raiseFelled, REVENANT,
     spendTally, noteVictory, renderVictory, victoryWalk, victoryPress, roadWarlords,
     BLEED_OUT, DRAGGED_CLEAR, REACHES_THE_DOWN, isDown, bleedingOut, goDown, tickBleedOut,
