@@ -158,13 +158,23 @@ module.exports = {
       screen.breakdown.includes(String(screen.bdCost)) && screen.bdCost > 25);
 
     // ── The note above the curve says what the curve is ───────────────────────
+    // Two prose notes in game.js quote this curve by value - the one over sectorRewardMult and
+    // the one over the Outpost's till. E09's defect was a note that had gone stale against the
+    // code beside it, so read both back out of the source and check they still agree with the
+    // constants. Asserting the constants themselves (this used to pin 1.25 and 1.28) forbids
+    // retuning the game, which is not what E09 was about and is what H13 tripped over.
     const note = await page.evaluate(async () => {
       const src = await (await fetch('game.js')).text();
+      const num = m => m && m.slice(1, 3).map(Number);
       return { stale: /climb 1\.5x per sector/.test(src), hp: SECTOR_HP_SCALE, dmg: SECTOR_DMG_SCALE,
-               income: sectorRewardMult.toString().includes('1.4') };
+               income: sectorRewardMult.toString().includes('1.4'),
+               till: num(/the wall compounds x([\d.]+) in[\s\S]{0,6}health and x([\d.]+) in damage/.exec(src)),
+               rewards: num(/SECTOR_HP_SCALE is ([\d.]+) and SECTOR_DMG_SCALE is ([\d.]+)/.exec(src)) };
     });
     ok('the note no longer claims the enemy curve is 1.5 a sector', note.stale === false);
-    ok(`because it is ${note.hp} in health and ${note.dmg} in damage, against 1.4 in income`,
-      note.hp === 1.25 && note.dmg === 1.28 && note.income);
+    ok(`because both notes quote the live curve (${note.hp} in health, ${note.dmg} in damage, against 1.4 in income)`,
+      note.income
+      && !!note.till && note.till[0] === note.hp && note.till[1] === note.dmg
+      && !!note.rewards && note.rewards[0] === note.hp && note.rewards[1] === note.dmg);
   }
 };

@@ -1359,6 +1359,56 @@ const ROOT = path.join(__dirname, '..');
 // Nothing shipped to the game. The split above is the deliverable, so the next attempt starts
 // from the decomposition rather than the sum.
 
+// ── H13: THE WALL, MOVED TO WHERE THE ROAD ACTUALLY ENDS ──────────────────────────
+// ── EVERY WIN-RATE, DEPTH AND SCORE FIGURE ABOVE THIS LINE PRE-DATES H13 ──────────
+// The owner asked for a difficult game that is winnable, "maybe like a 25% win rate", against
+// the 1-3% of careers this file had been reporting. SECTOR_HP_SCALE and SECTOR_DMG_SCALE moved
+// from 1.25/1.28 to 1.06/1.08 and the Ossuary from 1.5/0.95 to 2.2/1.15. Figures printed before
+// this are not wrong, but they describe a road nobody could walk to the end of, and none of them
+// are comparable with anything measured after it.
+//
+// WHAT THE SEARCH FOUND. Damage alone cannot reach a quarter. At 100 runs a point with health
+// held at 1.25: dmg 1.28 -> 1% of careers won, 1.22 -> 1%, 1.16 -> 4%, 1.10 -> 7%, 1.05 -> 10%.
+// Even at 1.05 the bottleneck is REACHING the last sector (17% of runs) rather than winning once
+// there (59% of arrivals). Health was the lever - dmg 1.10 against health 1.25 -> 11%, 1.16 ->
+// 15%, 1.08 -> 23% - which is also the reading the game's own comment predicts: enemy health is
+// supposed to track player damage growth so a fight stays ~10 rounds, and at 1.25 it compounded
+// to ~10.6x against roughly 4x.
+//
+// AND EVERY PAIR THAT REACHED A QUARTER BY FLATTENING ALONE MADE THE ENDING A FORMALITY: 86% of
+// the squads that arrived walked through the Ossuary. That is the brief's complaint about tiers
+// 6-9 moved to the last fight. So the two were split - flatten the road until the ending is
+// reachable, raise the ending until it is the wall - and measured as a pair thereafter.
+//
+// 150-expedition careers, Ossuary at 2.2/1.15 throughout:
+//
+//                        careers won                mean    reach   of arrivals
+//   dmg 1.10 / hp 1.08   18%                         18%     29%       61%
+//   dmg 1.09 / hp 1.07   17 / 27 / 21%               22%     28%       76%
+//   dmg 1.08 / hp 1.06   30 / 29 / 25 / 19%          26%     34%       78%   <- shipped
+//   dmg 1.06 / hp 1.04   33%                         33%     39%       85%
+//
+// A SAMPLE IS ONE CARRIED CAREER, NOT 150 INDEPENDENT TRIALS. metaPolicy defaults to carried, so
+// the 150 expeditions in a sample share a Citadel, a skull purse and an escalating set of
+// grudges: a career that opens well buys more and wins more, and the samples above are drawn
+// from the career distribution rather than a binomial one. 1.08/1.06 read 30/29/25/19 on four
+// samples of the same build. Three samples is the floor for a win-rate claim here and the mean
+// is the only figure worth quoting - a single 150 resolves it to about plus or minus five points,
+// which is wide enough to swallow the whole gap between two adjacent rows above.
+//
+// TWO CONSTRAINTS FIXED THE PAIR, and both came from suites rather than from this file.
+// 10-progression-depth asserts lethality outpaces bulk - a run should end because the squad died,
+// not because the fight became an unwinnable slog - so any pair with hp above dmg was out, which
+// ruled out the 1.05/1.10 that first hit 26%. The same suite asserts enemy health stays within
+// reach of a squad growing 1.21x a sector; at hp 1.04 it reads 3.91 against a 3.5 ceiling, so
+// 1.06 is the flattest health the design allows. The shipped pair sits on that floor.
+//
+// WHAT THIS DID NOT DO. The wipe rate barely moved (6.4 -> 5.8-6.2 a career): runs still end in
+// a wipe, they just end later. Income was left at 1.4 a sector, so the purse now outgrows the
+// fight by ~32% a sector rather than ~10%, and player power compounds much harder than it did.
+// That is where most of the reachability came from, and it is the number to reach for first if
+// the win rate ever needs moving again - it is a single constant and it was never swept.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {

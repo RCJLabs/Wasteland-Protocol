@@ -51,17 +51,31 @@ module.exports = {
     await onScreen(page, 'screen-combat');
     ok('combat starts', (await page.$eval('#screen-combat', e => getComputedStyle(e).display)) === 'flex');
 
+    // H13 found this loop reporting `timeout` on two batteries in five, on a fight the retune
+    // cannot reach: sector one is the one depth where both sector curves are exactly 1.0. It is
+    // H12's own regression, and it is the hazard H12's commit message named and then walked into.
+    // The condition it installed - "the command deck says something" - is true from the moment
+    // the fight opens and stays true through every enemy turn, so each pass cost a few
+    // milliseconds instead of the 220ms it replaced and the loop burned all 250 passes in a
+    // couple of seconds while the turn chain was still resolving. A weaker condition than the
+    // sleep it replaced, which is exactly what G06 warned about.
+    //
+    // renderCommandDeck is the engine's own answer to "is it your move": ENEMY TURN... is a
+    // div with no button, an order to give is buttons. So wait for a CONTROL, which is the
+    // thing the next line acts on. The deadline is a second guard - if the deck ever stops
+    // offering one, the suite should fail in a couple of minutes rather than spend 250 waits.
     let outcome = 'timeout';
-    for (let i = 0; i < 250; i++) {
-      // Still a loop, because each pass makes a decision rather than waiting for one thing - but
-      // it waits for the deck to be ready to be read rather than for 220ms to pass.
+    const deadline = Date.now() + 180000;
+    for (let i = 0; i < 250 && Date.now() < deadline; i++) {
       await settled(page, () => {
         const d = document.getElementById('command-deck');
-        return !!d && (d.innerText || '').trim().length > 0;
-      }, 'the command deck to say something').catch(() => {});
+        return !!d && !!d.querySelector('button:not([disabled])');
+      }, 'the deck to offer a control', null, 15000).catch(() => {});
       const deck = await page.$eval('#command-deck', e => e.innerText).catch(() => '');
       if (/LOOT/i.test(deck)) { await page.click('#command-deck button'); outcome = 'victory'; break; }
-      if (/FAILED/i.test(deck)) { await page.click('#command-deck button'); outcome = 'wipe'; break; }
+      // checkWinState writes SQUAD DOWN on a wipe; nothing has ever written FAILED, so the old
+      // test could not see one and the loop went on clicking a dead deck until it ran out.
+      if (/SQUAD DOWN|FAILED/i.test(deck)) { await page.click('#command-deck button'); outcome = 'wipe'; break; }
       const target = await page.$('.targetable-enemy') || await page.$('.targetable-ally');
       if (target) { await target.click().catch(() => {}); continue; }
       for (const b of await page.$$('#command-deck button:not([disabled])')) {

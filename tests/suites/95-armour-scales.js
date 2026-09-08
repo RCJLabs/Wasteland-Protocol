@@ -16,6 +16,13 @@
 // scaling it by this curve would be arithmetic dressed as balance: the Bastion's 30 would become
 // 250 at sector 7 against player hits in the low hundreds, which is the untouchable-champion
 // failure this phase was warned about before it started. It stays flat and wants its own phase.
+//
+// The x14.25 / x12.67 above are the curve E04 measured; H13 retuned it and they are smaller now.
+// Three assertions below used to carry that curve's magnitudes as literals - deep > 8, a plate
+// over 60, a grant worth six times its sector-one value - and all three went red on a retune that
+// did not touch anything this phase shipped. What the phase shipped is an identity, not a
+// magnitude: a grant is the written number times the damage curve of the fight it is subtracting
+// from. That is what they assert now, so they stay honest at any curve.
 module.exports = {
   name: 'A plate worth what it says',
   run: async ({ page, ok, base, engineUp }) => {
@@ -37,10 +44,11 @@ module.exports = {
     });
     ok(`sector one tier one is exactly unscaled (${curve.one})`, curve.one === 1);
     ok(`and depth follows the damage curve (${curve.deep.toFixed(2)})`,
-      Math.abs(curve.deep - curve.want) < 1e-9 && curve.deep > 8);
+      Math.abs(curve.deep - curve.want) < 1e-9 && curve.deep > curve.one);
     ok('difficulty is not handed back to the plate', curve.harder === curve.deep);
     ok(`so a +8 grant is 8 at the door and ${curve.plateDeep} at the end of the road`,
-      curve.plateOne === 8 && curve.plateDeep > 60);
+      curve.plateOne === 8 && curve.plateDeep === Math.round(8 * curve.deep)
+      && curve.plateDeep > curve.plateOne);
 
     // ── Through the real move, not the helper: IRON GUARD grants what it is worth ──────
     // executeSelfAction is the site that was changed, so drive that and read the operator's own
@@ -63,7 +71,7 @@ module.exports = {
     });
     ok(`bracing at sector one grants the written number (${guard.shallow})`, guard.shallow === 15);
     ok(`and bracing at the end of the road grants it in that fight's money (${guard.deep})`,
-      guard.deep === guard.want && guard.deep > guard.shallow * 6);
+      guard.deep === guard.want && guard.deep > guard.shallow);
 
     // ── The same rule on the other side of the field ──────────────────────────────────
     // Driven through executeEnemyAi's DEFEND branch rather than plate() - the hostile grants were
@@ -85,7 +93,7 @@ module.exports = {
     });
     ok(`a hostile bracing at the door is worth its written number (${both.shallow})`, both.shallow === 15);
     ok(`and the same stance deep in is worth that fight's money (${both.shallow} -> ${both.deep})`,
-      both.deep === both.want && both.deep > both.shallow * 6);
+      both.deep === both.want && both.deep > both.shallow);
 
     // ── Base plate is deliberately left alone ────────────────────────────────────────
     // Read it per named unit, not as a pool mean: which hostiles are eligible changes with the

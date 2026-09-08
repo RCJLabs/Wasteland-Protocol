@@ -847,7 +847,11 @@ const BOSS_POOL = [
     {
         id: 'OSSUARY', final: true, threat: 4, name: 'The Ossuary', short: 'OSSUARY',
         img: 'enemy_boss_ossuary.webp', scale: 2.5,
-        range: 'melee', hpMult: 1.5, dmgMult: 0.95, speed: 8, armor: 20,
+        // H13, the other half of the retune. Easing the road eases every commander standing on
+        // it, this one included, and a last fight that 86% of arrivals walked through is not an
+        // ending. Raised until the road is walkable and the wall is here rather than at sector 3:
+        // 78% of arrivals now fell it, so roughly one squad in four dies at the door it came for.
+        range: 'melee', hpMult: 2.2, dmgMult: 1.15, speed: 8, armor: 20,
         resistances: { phys: 12, bio: 15, energy: 8 },
         passive: 'TALLY',
         blurb: 'It has been collecting warlords for longer than you have. What it counts, it eventually spends.',
@@ -2298,8 +2302,49 @@ function plate(n) { return Math.round(n * armourScale()); }
 // turn it is selling. Both fall back to the written line for anything that does not scale.
 function tacticDesc(t) { return t && t.descOf ? t.descOf() : (t ? t.desc : ''); }
 function passiveDesc(bp) { return bp ? (bp.descOf ? bp.descOf() : bp.desc) : ''; }
-const SECTOR_HP_SCALE = 1.25;
-const SECTOR_DMG_SCALE = 1.28;   // eased from 1.32: measured, lethality still wins the long game
+// H13. The owner asked for a difficult game that is winnable - around a quarter of careers
+// ending in a win, against the 1-3% these curves were producing. Both numbers below were
+// calibrated for a road that does not exist. The note beside them said lethality outpaces player
+// health "so a run reliably ends somewhere around sector 10" - FINAL_SECTOR is 7, and runs were
+// ending at 3. The curve was doing exactly what it was built to do, to a game half the length it
+// was built for.
+//
+// Health was the larger error, and this file's own rule says why: 10-progression-depth asserts
+// enemy health stays within reach of a squad growing about 1.21x a sector, so a fight stays
+// roughly ten rounds at any depth. At 1.25 it compounded to 3.8x by sector 7 and, with the 2.8x
+// the tiers add inside a sector, ~10.6x - against a squad growing roughly 4x. Fights got steadily
+// longer the deeper you went, and a longer fight is more incoming damage however softly each blow
+// lands. That is the attrition H04 traced to an empty purse.
+//
+// Damage alone cannot get there. 100 runs a point, health held at 1.25:
+//   1.28 -> 1% of careers won   1.22 -> 1%   1.16 -> 4%   1.10 -> 7%   1.05 -> 10%
+// Even at 1.05 the bottleneck is REACHING the last sector (17% of runs), not winning once there
+// (59% of arrivals). Health is the lever that moved it - dmg 1.10, health 1.25 -> 11%, 1.16 ->
+// 15%, 1.08 -> 23% - and 1.06 is as flat as it can go: at 1.04 enemy health falls so far behind
+// player growth that 10-progression-depth's own reach test fails (3.91 against a 3.5 ceiling).
+//
+// Two constraints shaped the pair that shipped. Lethality must stay above bulk - a run should end
+// because the squad died, not because the fight became an unwinnable slog, which is the wall this
+// game already moved once and 10-progression-depth asserts outright. And every configuration that
+// got there by flattening alone made the last fight a formality: 86% of the squads that arrived
+// walked through it. That is the brief's own complaint about tiers 6-9, moved to the end of the
+// game. So the two are split - the road is eased until the ending is reachable, and the ending's
+// own multipliers carry the wall. See the Ossuary in BOSS_POOL for the other half.
+//
+// Careers won, 150-expedition careers with the Ossuary at its new 2.2/1.15:
+//   dmg 1.10 / hp 1.08   18%                       (1 sample)
+//   dmg 1.09 / hp 1.07   17 / 27 / 21%   mean 22%  (3)
+//   dmg 1.08 / hp 1.06   30 / 29 / 25 / 19%  mean 26%   <- shipped
+//   dmg 1.06 / hp 1.04   33%                       (1, and fails the reach test above)
+// A sample is one carried career of 150 correlated expeditions, not 150 independent trials, so
+// the spread is career-level: read the mean of three, never a single figure. 34% of runs reach
+// the last sector and 78% of those arrivals fell the Ossuary.
+//
+// One consequence worth naming: income still compounds 1.4 a sector, so the purse now outgrows
+// the fight by about 32% a sector against health rather than 12%. Player power compounds much
+// harder than it did, which is most of where the reachability came from.
+const SECTOR_HP_SCALE = 1.06;    // was 1.25 - health back within reach of player damage growth
+const SECTOR_DMG_SCALE = 1.08;   // was 1.28, and 1.32 before that: both tuned for a ten-sector road
 const XP_CURVE = 1.35;         // was 1.5 - levels kept stalling, starving the perk economy
 
 // ── Faces ───────────────────────────────────────────────────────────────────────────────
@@ -7484,8 +7529,8 @@ function traitSummary(char) {
     return (shut.length ? `${held} · closed: ${shut.join(', ')}` : held) + capLine;
 }
 // ── The till ────────────────────────────────────────────────────────────────────────
-// Income compounds x1.4 a sector through sectorRewardMult, while the wall compounds x1.25 in
-// health and x1.28 in damage - so the purse outgrows the fight by about 10% a sector by design,
+// Income compounds x1.4 a sector through sectorRewardMult, while the wall compounds x1.06 in
+// health and x1.08 in damage - so the purse outgrows the fight by about 32% a sector by design,
 // which is what lets player power compound. Four of the Outpost's lines were sector-one
 // constants and did not participate: bringing three operators from a quarter health back to
 // full cost 60 scrap at every depth, which is half of one cleared node's payout at sector 1 and
@@ -8441,9 +8486,9 @@ function rollIntent(enemy) {
 
 // Rewards climb 1.4x a sector so player power can compound and the run ends on a build/skill
 // wall rather than an arithmetic one. The note here used to say enemy stats climb 1.5x per
-// sector; they have not for a long time - SECTOR_HP_SCALE is 1.25 and SECTOR_DMG_SCALE is 1.28,
-// eased there and measured. So the purse deliberately outgrows the fight, by 12% a sector
-// against health and 9.4% against damage, and anything priced off a sector-one constant stops
+// sector; they have not for a long time - SECTOR_HP_SCALE is 1.06 and SECTOR_DMG_SCALE is 1.08,
+// eased there and measured. So the purse deliberately outgrows the fight, by 32% a sector
+// against health and 30% against damage, and anything priced off a sector-one constant stops
 // being a decision about halfway down the road. That is what outpostPrice is for.
 function sectorRewardMult() { return Math.pow(1.4, currentSector - 1); }
 

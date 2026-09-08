@@ -21,6 +21,13 @@
 // one, and at 0.43x and 0.55x in sector seven. The Marshal's whole passive is about whether its
 // hound is standing, and the hound it puts back was less than half the one you had just killed.
 //
+// H13 retuned SECTOR_HP_SCALE, so the fight-mult row above is the curve as E06 measured it. The
+// shape is what the phase was about and the shape did not move: the hand-rolled number is one
+// constant at every depth while the real one climbs, so it is wrong at every sector but at most
+// the one where the two happen to cross. The assertion below says that now, instead of quoting
+// the ratios this curve produced on one balance pass - the old form pinned 0.7 and 2, and went
+// red on a retune that changed nothing it was written to catch.
+//
 // And two enrage cries named a mechanic they did not have: the Marshal "CALLS THE COLUMN IN"
 // and the Stormcaller "OPENS THE SKY", both carrying only dmgScale and speedBonus - the generic
 // pair every other commander's enrage carries in addition to something of its own.
@@ -99,8 +106,10 @@ module.exports = {
       stale.after.mult === stale.own.mult && stale.after.dmg === stale.own.dmg);
     ok(`and not whatever the globals have moved on to (${stale.live.mult.toFixed(2)})`,
       stale.live.mult !== stale.own.mult);
-    ok(`which is not what the hand-rolled expression said at any sector but the middle (${seam.rows.map(r => (r.got / r.hand).toFixed(2)).join(', ')})`,
-      seam.rows[0].got / seam.rows[0].hand < 0.7 && seam.rows[seam.rows.length - 1].got / seam.rows[0].hand > 2);
+    ok(`which is one constant against a curve that climbs, so it can be right at one sector at most (${seam.rows.map(r => (r.got / r.hand).toFixed(2)).join(', ')})`,
+      seam.rows.every(r => r.hand === seam.rows[0].hand)
+      && seam.rows.every((r, i) => i === 0 || r.got > seam.rows[i - 1].got)
+      && seam.rows.filter(r => Math.abs(r.got - r.hand) < 1e-9).length <= 1);
 
     // ── Difficulty reaches the reinforcements now ────────────────────────────────────
     const diff = await page.evaluate(() => {
