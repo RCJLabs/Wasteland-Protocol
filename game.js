@@ -1201,6 +1201,19 @@ const CACHE_LOCKS = [
       forced: 'You reach in anyway. It was awake the whole time.' }
 ];
 const CACHE_FORCE_BITE = 0.18;   // share of a maxHp bar the forced entry takes off one operator
+// H08. Every consequence in the game is booked by picking an option on an event card - 15 sites,
+// 10 in EVENT_POOL and 5 in FOLLOWUPS, and not one anywhere else. The system resolves correctly
+// at every node type (F08, G04) and has exactly one thing feeding it.
+//
+// The rate the brief filed this on - 1.09 a run - turned out to be the harness: `--faces warm`
+// takes the standing-raising choice and the booking choices are mostly the greedy ones, so the
+// measured ceiling is ~2.7 a run against ~0.9 taken. The SOURCE claim is the one that survived.
+//
+// A forced cache is the first road-side source, and AMBUSH was written for it before there was a
+// cache to write it for: "Whoever left that cache was waiting for whoever took it." A chance
+// rather than a certainty, because 2.2 caches a run at ~75% forced would otherwise book 1.6
+// fuses a run on its own and drown every other source in the game.
+const CACHE_AMBUSH_CHANCE = 0.35;
 // The name the game already uses for a class, asked of the roster rather than title-cased off
 // the enum - RECRUIT_POOL is where the three that are not in the starting seven live, and a
 // lock that wants one of those is exactly the case this node exists for.
@@ -7869,6 +7882,15 @@ function signOnRecruit() {
     }
     pendingRecruit.taken = true;
     if (runStats) runStats.recruited = (runStats.recruited || 0) + 1;
+    // H08 tried a second road-side source here - signing books a SURVIVOR - and it was built,
+    // measured and taken out again. Three reasons, in the order they decided it. SURVIVOR carries
+    // cast: 'KESS' and calls noteCast('KESS', 1), so booking it from a generic signing has Kess
+    // repay the squad for something she had nothing to do with; that is a content bug and no
+    // balance reading excuses it. It fired on every signing, ~1.5 a run, which would have made
+    // one new source half of every booking in the game and swamped the screen it was meant to
+    // supplement. And its measured value was partly an artefact: the harness heals to full at
+    // every node it can pay for, so a full-squad heal mostly duplicated what the squad had
+    // already bought, which is why three SURVIVORs a run could not outweigh one AMBUSH.
     playSFX('heal', 1.5);
     finishQuietNode();
 }
@@ -7939,6 +7961,13 @@ function openCache(clean) {
             log(`> ${lock.forced} +${paid} Scrap.`, 'log-dmg');
         }
         playSFX('hit');
+        // Loud work draws somebody. Booked before finishQuietNode so the fuse is counted from
+        // this node rather than the next one - the clock is in nodes cleared, and G04 is the
+        // phase that found what happens when a booking and its node come apart.
+        if (Math.random() < CACHE_AMBUSH_CHANCE) {
+            bookConsequence('AMBUSH', CONSEQUENCE_FUSE.AMBUSH);
+            log('> Somebody heard that.', 'log-dmg');
+        }
     }
     pendingCache = null;
     finishQuietNode();
@@ -12180,7 +12209,7 @@ globalThis.WP = {
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, noteKill, raiseBody, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder,
     REQUISITIONS, reqById, reqCost, reqOpen, buyRequisition, refundRequisitions, renderRequisitions, newPendingReq,
     REQ_REROLL_COST, REQ_REROLL_MAX, REQ_GRUDGE_BASE, REQ_RUNG_STEP, REQ_FALLBACK_COST, MARCH_FRESH, marchRead, marchTone, renderMarchRead,
-    CACHE_LOCKS, CACHE_SCRAP, CACHE_CLEAN_MULT, CACHE_FORCE_BITE, cacheLockById, lockForNode, cacheOpener,
+    CACHE_LOCKS, CACHE_SCRAP, CACHE_CLEAN_MULT, CACHE_FORCE_BITE, CACHE_AMBUSH_CHANCE, cacheLockById, lockForNode, cacheOpener,
     cachePayout, classLabel, initiateCache, renderCache, openCache, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,

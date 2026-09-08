@@ -1194,6 +1194,55 @@ const ROOT = path.join(__dirname, '..');
 // - deployed in 93% and 91% of runs - as keys to nothing. Ten locks, one per class, fixed the
 // coverage; it did NOT raise the clean rate, because more locks is also more locks to miss.
 
+// ── H08: THE ROAD BOOKS ITS OWN ───────────────────────────────────────────────────
+// Filed as "one booked consequence per run, five kinds, and almost all of it comes from choosing
+// an option on an event card". Half of that was the harness and half was true.
+//
+// THE RATE WAS --faces warm. The policy takes the standing-raising option and the choices that
+// book a fuse are mostly the greedy ones, so the ceiling and the take came apart:
+//
+//   event choices offered, total                    1785 / 1672 / 1811
+//     of them, ones that book a consequence          17% / 18% / 17%
+//     events where a consequence was on the table  42% / 45% / 41%
+//     bookings declined by this policy               188 / 163 / 173 per 100 runs
+//
+// ~2.7 a run available against ~0.9 taken. The rate was never evidence about the game.
+//
+// THE SOURCE CLAIM WAS TRUE, and needed no sample: every bookConsequence call site sat inside an
+// event card - 15 of them, 10 in EVENT_POOL and 5 in FOLLOWUPS. The system resolves correctly at
+// every node type (F08, G04) and had exactly one thing feeding it.
+//
+// SHIPPED: a forced cache books an AMBUSH at 35%. The text was written for it long before H06
+// made a cache to write it for - "Whoever left that cache was waiting for whoever took it."
+//
+//                     before (H06)            with the fuse
+//   depth 1st    2.97 / 3.27 / 2.85     3.27 / 3.48 / 3.61
+//   depth 2nd    3.00 / 2.94 / 3.42     3.00 / 3.58 / 3.45
+//   depth 3rd    3.53 / 3.26 / 2.88     3.32 / 3.09 / 3.53
+//   wipes        6.86 / 6.84 / 6.75     6.91 / 7.14 / 7.06     <- separated, +0.2
+//   booked/run             ~0.9         1.32 / 1.57 / 1.42
+//   by source        EVENT 100%         EVENT 59-70%, CACHE 30-41%
+//
+// Depth unmoved, wipes up and separated. That is NOT a regression to tune away, and the
+// difference from H06 is the point: H06 added INCOME, so neutrality was the test. This adds a
+// COST, and a consequence that costs nothing does nothing. The test that matters is whether runs
+// end sooner, and they do not - the extra wipes are absorbed by fallbacks.
+//
+// BUILT, MEASURED AND CUT: signing a recruit booking a SURVIVOR. Three reasons in the order that
+// decided it. SURVIVOR carries cast: 'KESS' and calls noteCast('KESS', 1), so booking it from a
+// generic signing has Kess repay the squad for something she had nothing to do with - a content
+// bug no balance reading excuses. It fired on every signing, ~1.5 a run, which would have made
+// one new source half of every booking in the game. And its measured value was inflated by this
+// file's own policy: the harness heals to full at every node it can pay for, so a full-squad
+// heal mostly refunded what the squad had already bought - which is why three SURVIVORs a run
+// could not outweigh one AMBUSH. A human player heals worse than that, so the same source would
+// be worth more to them than it measured here.
+//
+// DROPPED ON INSPECTION, BEFORE BUILDING: withdrawing booking a PURSUIT (already implemented, and
+// better - withdraw() sets pursuit and the chasers arrive in the next fight), and emptying a shop
+// booking a DEBT (DEBT is Vela collecting on money you did not earn; clearing a shop means you
+// paid). The brief proposed four sources; one survived contact with what the consequences do.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
@@ -1413,6 +1462,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  booked: 0, bookedKinds: {}, augments: 0,
                  offeredNodes: {}, takenNodes: {}, forks: 0, forksWithChoice: 0, forksAllFights: 0,
                  cachesMet: 0, cachesClean: 0, cachesForced: 0, cacheScrap: 0, cacheLocks: {}, cacheOpener: {},
+                 bookedFrom: {},
                  tookNonFight: 0, evOptions: 0, evBookable: 0, evCouldBook: 0,
                  relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0,
                  bossGrudge: [], metGrudge: [], scars: [], recovered: 0, clockLeft: [], downFaced: 0, downReach: 0, downByMove: 0, downByItem: 0, downByBar: 0, barSaves: 0, bagSaves: 0, handSaves: 0 };
@@ -2466,6 +2516,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // uncollected could be a fuse that never lands, or a debt that was never taken on.
       if (pendingConsequences.length > owedBefore) {
         stat.booked += pendingConsequences.length - owedBefore;
+        stat.bookedFrom.EVENT = (stat.bookedFrom.EVENT || 0) + (pendingConsequences.length - owedBefore);
         lastPending = pendingConsequences.length;   // the baseline moves with a booking
         pendingConsequences.slice(owedBefore).forEach(c => { stat.bookedKinds[c.kind] = (stat.bookedKinds[c.kind] || 0) + 1; });
       }
@@ -2528,8 +2579,20 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (who) { stat.cachesClean++; stat.cacheOpener[who.classType] = (stat.cacheOpener[who.classType] || 0) + 1; }
       else stat.cachesForced++;
       const before = scrap;
+      const owedBefore = pendingConsequences.length;
       openCache(!!who);
       stat.cacheScrap += Math.max(0, scrap - before);
+      // H08: bookings from the road rather than from a card. Counted the same way the event
+      // branch counts its own, and attributed, because "one a run from one source" and "two a
+      // run from three" are the two readings this phase exists to tell apart.
+      if (pendingConsequences.length > owedBefore) {
+        const d = pendingConsequences.length - owedBefore;
+        stat.booked += d; lastPending = pendingConsequences.length;
+        pendingConsequences.slice(owedBefore).forEach(c => {
+          stat.bookedKinds[c.kind] = (stat.bookedKinds[c.kind] || 0) + 1;
+          stat.bookedFrom.CACHE = (stat.bookedFrom.CACHE || 0) + 1;
+        });
+      }
       stat.nodes++; noteDepth();
       settleDue();
       spend();
@@ -2542,7 +2605,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       const tpl = recruitById(pendingRecruit && pendingRecruit.id);
       if (tpl) stat.recruitOffers.push({ cost: pendingRecruit.cost, purse: scrap });
       if (tpl && scrap >= pendingRecruit.cost + 80) {
+        const owedBefore = pendingConsequences.length;
         signOnRecruit();
+        if (pendingConsequences.length > owedBefore) {
+          const d = pendingConsequences.length - owedBefore;
+          stat.booked += d; lastPending = pendingConsequences.length;
+          pendingConsequences.slice(owedBefore).forEach(c => {
+            stat.bookedKinds[c.kind] = (stat.bookedKinds[c.kind] || 0) + 1;
+            stat.bookedFrom.RECRUIT = (stat.bookedFrom.RECRUIT || 0) + 1;
+          });
+        }
         applyBench(playerRoster.find(c => c.id === tpl.id));   // F03: same deck rule as the muster
         stat.recruited.push(tpl.classType);
         // Put them in the line if their rank is open, so their verbs get used rather than
@@ -3464,6 +3536,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     const opn = sumMap('cacheOpener');
     line('  who opened them', Object.entries(opn).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ') || 'nobody');
   }
+  const from = sumMap('bookedFrom');
+  const fromTot = Object.values(from).reduce((a, b) => a + b, 0);
+  line('consequences booked, by source', shareOf(from, fromTot) || 'none');
   line('node kinds offered on the road', shareOf(off, offTot) || 'none');
   line('node kinds taken', shareOf(took, tookTot) || 'none');
   const forks = tot('forks'), withChoice = tot('forksWithChoice'), allFights = tot('forksAllFights');
