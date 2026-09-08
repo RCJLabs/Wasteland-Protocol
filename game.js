@@ -1139,6 +1139,100 @@ function announceSets() {
 // every other reward - a flat figure would be worth nothing by the depth it starts appearing at.
 const EMPTY_POOL_SCRAP = 150;
 function emptyPoolScrap() { return Math.floor(EMPTY_POOL_SCRAP * sectorRewardMult()); }
+
+// ── The sealed cache ────────────────────────────────────────────────────────────────────
+// H06. Measured across three samples of 100 runs: 62-64% of every routing decision offered
+// nothing but a fight, and the median run takes 55-58 of them to reach sector 3. The map has
+// camps, events, shops and recruits, but they are 24-26% of the nodes on offer and the other
+// three quarters are somebody to kill. The road is a corridor with furniture.
+//
+// This is a node that is not a fight and is not furniture either: it is solved with the ROSTER
+// rather than the action bar. Every cache is sealed against a specific trade, and the operator
+// who knows that trade opens it clean. Anybody can force one - the wasteland does not lock
+// things people cannot break into - but forcing costs, and what comes out is worse.
+//
+// It also answers something D13 measured and nothing since has moved: three classes never leave
+// the Outpost. A lock that wants a HARPOONER is a reason to field one that is not sentiment.
+const CACHE_LOCKS = [
+    { id: 'WELDED',   name: 'WELDED SHUT',    cls: 'BRUISER',
+      seal: 'The lid is welded at four corners and the seam is thicker than the plate.',
+      clean: 'takes the seam off in four cuts, and the lid lifts.',
+      forced: 'You lever at it until the metal tears. Somebody puts their weight somewhere it should not go.' },
+    { id: 'WIRED',    name: 'WIRED',          cls: 'SCAVENGER',
+      seal: 'A tripwire runs from the handle into the dark, and the dark rattles when you breathe.',
+      clean: 'follows the wire back, finds the can of bolts, and cuts it where it does not matter.',
+      forced: 'You open it and the wire does what wire does.' },
+    { id: 'FOULED',   name: 'FOULED',         cls: 'HAZMAT',
+      seal: 'Whatever leaked in here went to work on everything, and it is still going.',
+      clean: 'seals the breach, works inside it, and comes out with the contents dry.',
+      forced: 'You reach in holding your breath. It is not enough.' },
+    { id: 'BURIED',   name: 'HALF BURIED',    cls: 'TRENCH_FIEND',
+      seal: 'It is under the road rather than on it, and the road does not want to give it up.',
+      clean: 'goes down through the fill and hands it up piece by piece.',
+      forced: 'You dig with what you have. The fill comes down twice.' },
+    { id: 'SNAGGED',  name: 'OUT OF REACH',   cls: 'HARPOONER',
+      seal: 'It is wedged in the wreck above the road, forty feet up and leaning.',
+      clean: 'puts a line through the handle and walks it down.',
+      forced: 'You climb. The wreck shifts while somebody is still on it.' },
+    { id: 'SCORCHED', name: 'STILL BURNING',  cls: 'PYROMANIAC',
+      seal: 'The pallet under it is burning slowly and has been for a while.',
+      clean: 'reads which way it wants to go and starves it from the right side.',
+      forced: 'You kick it clear of the fire. Some of the fire comes with it.' },
+    // One lock per class, all ten. Measured at six: the clean rate ran 21-28%, which is a
+    // workable number, but MEDIC and SHOTGUNNER are the two most-fielded classes in the game -
+    // deployed in 93% and 91% of runs - and neither was the key to anything. A node whose whole
+    // point is that the roster is the answer cannot leave the two operators almost every line
+    // carries with nothing to answer.
+    { id: 'COLD',     name: 'COLD STORE',     cls: 'MEDIC',
+      seal: 'Whatever is inside is keeping only while the cold holds, and the seal is a medical one.',
+      clean: 'reads the seal, breaks it in the order it was made, and nothing inside turns.',
+      forced: 'You crack it open and the cold goes out of it. Most of it is still good. Not all.' },
+    { id: 'SEIZED',   name: 'SEIZED SOLID',   cls: 'SHOTGUNNER',
+      seal: 'The hinges have not turned in years and have no intention of starting.',
+      clean: 'puts a slug through each hinge and the door falls outward on its own.',
+      forced: 'You beat the hinges off. The lid comes down on somebody first.' },
+    { id: 'DISTANT',  name: 'HELD ACROSS THE GAP', cls: 'SNIPER',
+      seal: 'The catch is on the far side of a floor that is no longer there. In plain sight, out of reach.',
+      clean: 'takes the catch off at forty yards without anybody crossing anything.',
+      forced: 'You bridge the gap with what is lying about. It holds for three of the four trips.' },
+    { id: 'TENANTED', name: 'SOMETHING LIVES IN IT', cls: 'HOUND',
+      seal: 'Whatever moved in is still in there, and it can hear you deciding.',
+      clean: 'goes in first, and comes back out with it by the scruff.',
+      forced: 'You reach in anyway. It was awake the whole time.' }
+];
+const CACHE_FORCE_BITE = 0.18;   // share of a maxHp bar the forced entry takes off one operator
+// The name the game already uses for a class, asked of the roster rather than title-cased off
+// the enum - RECRUIT_POOL is where the three that are not in the starting seven live, and a
+// lock that wants one of those is exactly the case this node exists for.
+function classLabel(cls) {
+    const t = ROSTER_TEMPLATE.find(r => r.classType === cls)
+           || (typeof RECRUIT_POOL !== 'undefined' ? RECRUIT_POOL.find(r => r.classType === cls) : null);
+    return t ? t.name : String(cls).split('_').map(w => w[0] + w.slice(1).toLowerCase()).join(' ');
+}
+function cacheLockById(id) { return CACHE_LOCKS.find(l => l.id === id) || null; }
+// Seeded off the node the same way cacheOffer is, so re-entering cannot reroll for a lock the
+// squad happens to hold. A daily protocol gets the same locks as everyone else on that seed.
+function lockForNode(nodeId) {
+    if (!nodeId) return CACHE_LOCKS[0];
+    const salt = 'lock:' + nodeId + ':' + currentSector;
+    return CACHE_LOCKS[seedFromString(salt) % CACHE_LOCKS.length];
+}
+// Who on the LINE can open it - the bench does not reach the road, which is the whole point of
+// it being a roster decision rather than a roster fact.
+function cacheOpener(lock) {
+    if (!lock) return null;
+    // No health check of its own: deployed() is already `gridPos > 0 && hp > 0`, so a body on
+    // the floor is not in the list to be found. A `&& c.hp > 0` stood here until a mutant that
+    // deleted it could not be killed by any assertion - which is what redundant code looks like
+    // from the outside. The behaviour it was guarding is still pinned by suite 141.
+    return deployed().find(c => c.classType === lock.cls) || null;
+}
+const CACHE_SCRAP = 70;          // what a forced cache pays
+const CACHE_CLEAN_MULT = 1.8;    // and what knowing the trade is worth on top
+function cachePayout(clean) {
+    const base = Math.floor(CACHE_SCRAP * sectorRewardMult());
+    return clean ? Math.floor(base * CACHE_CLEAN_MULT) : base;
+}
 const OVERDRIVE_AT = 100;
 const OVERDRIVE_AT_CHARGED = 80;
 
@@ -1619,6 +1713,7 @@ function reqById(id) { return REQUISITIONS.find(r => r.id === id) || null; }
 // file rather than the run save because it is bought with career currency before a run exists -
 // which also means a reload on the contract board does not eat the purchase.
 let pendingReq = { rerolls: 0, grudge: null, rung: false, fallback: false };
+let pendingCache = null;    // { nodeId, lock } while a sealed cache is open
 let grudgeCall = null;      // consumed onto the run at buildNewRun
 let rungCredit = false;
 let fallbackCredit = false;
@@ -1968,7 +2063,7 @@ function generateSectorMap(rng = Math.random) {
     // that can fail outright.
     const swapOne = (type, tierLo, tierHi, prefer) => {
         const pool = nodes.filter(n => !n.elite && n.type !== 'BOSS' && n.type !== 'CAMP' && n.type !== 'EVENT'
-            && n.type !== 'SHOP' && n.type !== 'RECRUIT' && n.tier > 1 && n.tier >= tierLo && n.tier <= tierHi);
+            && n.type !== 'SHOP' && n.type !== 'RECRUIT' && n.type !== 'CACHE' && n.tier > 1 && n.tier >= tierLo && n.tier <= tierHi);
         const narrowed = prefer ? pool.filter(prefer) : pool;
         const from = narrowed.length ? narrowed : pool;
         if (from.length) from[Math.floor(rng() * from.length)].type = type;
@@ -1988,6 +2083,12 @@ function generateSectorMap(rng = Math.random) {
     // The Armory is uncommon on purpose: a shop on most maps but not all, so finding one on
     // the route ahead is a reason to steer, not a fixture to tick off.
     if (rng() < 0.65) swapOne('SHOP', 3, 9);
+    // H06: rarer than the Armory and placed across the middle of the road, so a route that
+    // passes one is a reason to steer rather than a fixture. Two rolls rather than one flat
+    // chance, because a map with two caches on different branches is the case where the lock
+    // actually decides the route instead of merely colouring it.
+    if (rng() < 0.5) swapOne('CACHE', 2, 9);
+    if (rng() < 0.25) swapOne('CACHE', 2, 9);
     // D10: someone worth signing on, if there is anyone left out there to sign - rarer than the
     // Armory, three exist in a whole run, and a route that passes one is worth steering for. It
     // used to land on any plain node in the range with no regard for whether either of the run's
@@ -3405,6 +3506,7 @@ const ACTIONS = {
     'node-camp':        el => { enterNode(el.dataset.node); initiateCamp(); },
     'node-shop':        el => { enterNode(el.dataset.node); initiateShop(); },
     'node-recruit':     el => { enterNode(el.dataset.node); initiateRecruit(); },
+    'node-cache':       el => { enterNode(el.dataset.node); initiateCache(); },
     'shop-buy':         el => buyShopItem(Number(el.dataset.index)),
     'shop-reroll':      el => shopRerollQuirk(el.dataset.id),
     'shop-reroll-cancel': () => { shopRerollPick = false; renderShop(); },
@@ -3442,6 +3544,8 @@ const ACTIONS = {
     'outpost-tab':      el => setOutpostTab(el.dataset.tab),
     'recruit-sign':     () => signOnRecruit(),
     'recruit-leave':    () => leaveRecruit(),
+    'cache-clean':      () => openCache(true),
+    'cache-force':      () => openCache(false),
     'breakdown':        () => breakdownScrap(),
     'craft':            el => craftItem(el.dataset.item),
     'augment':          el => installAugment(el.dataset.id, el.dataset.kind),
@@ -5983,7 +6087,7 @@ function buildNewRun(diff) {
     // Nobody carries over. Every expedition starts with the seven and finds the rest again.
     pendingRecruit = null;
     bossSalt = 'w' + Math.floor(Math.random() * 1e9);
-    pursuit = null; armedExit = null; retreatNode = null; vacatedRanks = []; choirWord = 0; benchJob = null;
+    pursuit = null; armedExit = null; retreatNode = null; vacatedRanks = []; choirWord = 0; benchJob = null; pendingCache = null;
     bonds = {}; bondSavesUsed = new Set();
     playerRoster.forEach(c => { c.weaponMod = null; c.trinket = null; });
     // The Footlocker hands back what it kept. Into the stash rather than onto an operator: which
@@ -6057,6 +6161,7 @@ const RESUME_POINTS = [
     { id: 'CAMP',    at: () => atCamp,                                       go: () => renderCampScreen() },
     { id: 'SHOP',    at: () => !!activeShop,                                 go: () => renderShop() },
     { id: 'RECRUIT', at: () => !!(pendingRecruit && !pendingRecruit.taken),  go: () => renderRecruit() },
+    { id: 'CACHE',   at: () => !!pendingCache,                              go: () => renderCache() },
     { id: 'MUSTER',  at: () => musterPending,                                go: () => renderMuster() },
 ];
 function resumePoint() { return RESUME_POINTS.find(p => p.at()) || null; }
@@ -6143,7 +6248,7 @@ function saveGameState() { Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify
     // F02. `event` is stored as a title rather than the object: an event's desc and choices
     // are functions of the run, so what is worth keeping is which one is open, not the shape
     // it had when it opened. `meta` is the career mirror - see metaBlob.
-    pendingLoot, collectorDue, squadBroken, musterPending, musterRerolls, atCamp, campOutcome, eventOutcome,
+    pendingLoot, collectorDue, squadBroken, musterPending, musterRerolls, atCamp, campOutcome, eventOutcome, pendingCache,
     grudgeCall, rungCredit, fallbackCredit,
     event: activeEvent ? activeEvent.title : null, meta: metaBlob() })); }
 
@@ -6229,6 +6334,13 @@ function loadGameState() { let d = Store.getJSON(BASE_SAVE_KEY + currentSlot); i
         grudgeCall = BOSS_ROTATION.some(b => b.id === d.grudgeCall) ? d.grudgeCall : null;
         rungCredit = !!d.rungCredit;
         fallbackCredit = !!d.fallbackCredit;
+        // H06: restored through cacheLockById rather than trusted, so a hand-edited or stale
+        // save cannot resume onto a lock that no longer exists and leave the screen with no
+        // doors on it. An unknown lock re-derives from the node the same way the map did.
+        pendingCache = (d.pendingCache && d.pendingCache.nodeId)
+            ? { nodeId: d.pendingCache.nodeId,
+                lock: (cacheLockById(d.pendingCache.lock) || lockForNode(d.pendingCache.nodeId)).id }
+            : null;
         campOutcome = (atCamp && d.campOutcome && CAMP_OUTCOMES[d.campOutcome.kind])
             ? { kind: d.campOutcome.kind, name: typeof d.campOutcome.name === 'string' ? d.campOutcome.name : null } : null;
         } }
@@ -6702,13 +6814,17 @@ function renderMap() {
         else if (n.type === 'CAMP') icon = '⛺';
         else if (n.type === 'SHOP') { icon = '◇'; lbl = 'ARMORY'; }
         else if (n.type === 'RECRUIT') { icon = '⛑'; lbl = 'SURVIVOR'; }
+        else if (n.type === 'CACHE') { const lk = lockForNode(n.id); icon = '\u{1F5DD}'; lbl = 'CACHE';
+            hint = `A sealed cache \u2014 ${lk.name}. ${lk.seal} A ${classLabel(lk.cls)} opens it clean; anyone else can force it.`; }
         const status = cleared.has(n.id) ? 'cleared' : avail.has(n.id) ? 'active' : 'locked';
         const cutoff = (status === 'locked' && !reach.has(n.id)) ? 'node-cutoff' : '';
         const eCls = n.elite ? 'elite-node' : n.type === 'EVENT' ? 'event-node' : n.type === 'CAMP' ? 'camp-node'
-                   : n.type === 'SHOP' ? 'shop-node' : n.type === 'RECRUIT' ? 'recruit-node' : '';
+                   : n.type === 'SHOP' ? 'shop-node' : n.type === 'RECRUIT' ? 'recruit-node'
+                   : n.type === 'CACHE' ? 'cache-node' : '';
         const act = n.type === 'EVENT' ? `data-action="node-event"` : n.type === 'CAMP' ? `data-action="node-camp"`
                   : n.type === 'SHOP' ? `data-action="node-shop"`
                   : n.type === 'RECRUIT' ? `data-action="node-recruit"`
+                  : n.type === 'CACHE' ? `data-action="node-cache"`
                   : `data-action="node-combat" data-type="${n.type}" data-elite="${n.elite ? 1 : 0}"`;
         const wx = WEATHER_DOTS[n.weather] || '';
         const gr = (n.terrain && n.terrain !== 'OPEN_ROAD') ? TERRAIN[n.terrain] : null;
@@ -7757,6 +7873,77 @@ function signOnRecruit() {
     finishQuietNode();
 }
 
+// H06. Entered from the map like any other quiet node. The lock is a function of the node id, so
+// it is the same lock every time this node is looked at - including across a reload, which is
+// what stops a player rerolling for a lock their line happens to hold.
+function initiateCache() {
+    pendingCache = { nodeId: currentNodeId, lock: lockForNode(currentNodeId).id };
+    saveGameState();
+    renderCache();
+}
+function renderCache() {
+    if (!pendingCache) { renderMap(); return; }
+    // The first one a player meets teaches what a cache is, the same way the survivor node does.
+    // Added because the battery caught this entry sitting in PROMPTS with nothing able to fire
+    // it - F12's suite holds that every prompt has a trigger, which is exactly the check that
+    // stops an explainer being written and then never shown.
+    firePrompt('CACHE');
+    switchScreen('screen-cache');
+    const lock = cacheLockById(pendingCache.lock) || CACHE_LOCKS[0];
+    const who = cacheOpener(lock);
+    document.getElementById('cache-title').innerText = lock.name;
+    document.getElementById('cache-note').innerText = lock.seal;
+    const clean = document.getElementById('cache-clean');
+    const force = document.getElementById('cache-force');
+    // The clean door names the operator who can take it, because "a Harpooner could open this"
+    // and "Vela can open this" are different sentences and only the second is a reason to have
+    // brought her.
+    if (who) {
+        clean.style.display = '';
+        clean.disabled = false;
+        clean.innerText = `${who.name.toUpperCase()} OPENS IT (+${cachePayout(true)} SCRAP)`;
+    } else {
+        clean.style.display = '';
+        clean.disabled = true;
+        clean.innerText = `NOBODY HERE KNOWS THIS WORK \u2014 ${classLabel(lock.cls).toUpperCase()}`;
+    }
+    force.innerText = `FORCE IT (+${cachePayout(false)} SCRAP, SOMEBODY GETS HURT)`;
+    document.getElementById('cache-body').innerHTML =
+        `<div class="cache-lock-line">Sealed: <b>${lock.name}</b></div>`
+      + `<div class="cache-lock-line">Opens clean for: <b>${classLabel(lock.cls)}</b>`
+      + `${who ? ` \u2014 <span class="cache-have">${who.name} is on the line</span>`
+               : ` \u2014 <span class="cache-lack">nobody on the line</span>`}</div>`;
+}
+// Both doors pay; only one of them costs. Forcing takes a share of one operator's bar off the
+// least hurt of them - a cache should not be the thing that ends a run, and the squad that is
+// already in trouble is the squad that most needs the scrap.
+function openCache(clean) {
+    if (!pendingCache) { renderMap(); return; }
+    const lock = cacheLockById(pendingCache.lock) || CACHE_LOCKS[0];
+    const who = cacheOpener(lock);
+    if (clean && !who) return;                       // the button is disabled; the handler holds too
+    const paid = cachePayout(!!clean);
+    scrap += paid;
+    if (runStats) runStats.scrapEarned += paid;
+    if (clean) {
+        log(`> ${who.name} ${lock.clean} +${paid} Scrap.`, 'log-heal');
+        playSFX('heal');
+    } else {
+        const line = deployed().filter(c => c.hp > 0);
+        const victim = line.sort((a, b) => (b.hp / b.maxHp) - (a.hp / a.maxHp))[0];
+        if (victim) {
+            const bite = Math.max(1, Math.floor(victim.maxHp * CACHE_FORCE_BITE));
+            victim.hp = Math.max(1, victim.hp - bite);
+            log(`> ${lock.forced} ${victim.name} takes ${bite}. +${paid} Scrap.`, 'log-dmg');
+        } else {
+            log(`> ${lock.forced} +${paid} Scrap.`, 'log-dmg');
+        }
+        playSFX('hit');
+    }
+    pendingCache = null;
+    finishQuietNode();
+}
+
 function leaveRecruit() {
     // An empty camp still pays out, the same way an exhausted relic pool does - and F08: at the
     // same price. This paid the flat 150 while the pool it claims to mirror pays it through
@@ -8333,6 +8520,7 @@ const PROMPTS = [
     { id: 'TALLY',     title: 'IT IS COUNTING', body: 'The last warlord writes down every one of its own that falls in front of it: more armour and more damage for each, up to eight, and the count rides its passive chip where you can watch it climb. Halfway down it raises the commanders you already felled, and while any of them stands it takes 30% of what you land on it - so they have to come down, and every one that does is another point on the count. Broken past a quarter it stops counting and spends: the armour comes off and goes into the swing, and everything you cleared off it is in that number.' },
     { id: 'GRUDGE',    title: 'IT REMEMBERS YOU', body: 'You have felled this commander before, and it has come back for it - heavier, faster, better armoured, and holding a move it never needed against you the first time. That move opens under a quarter health, after the enrage you already know about, and the fight log names it at the door so you can plan around it. A warlord is the one fight you cannot walk away from, so it pays for the trouble: felling a risen one banks an extra Skull for every grudge it was carrying.' },
     { id: 'BLEEDOUT',  title: 'THEY ARE BLEEDING OUT', body: 'That operator is on the floor with a clock over them, counted in their own turns. Run it out and they are gone for the rest of the expedition - there is no reviving them at the Outpost any more. Heal them where they lie (Cauterize, a Med-Stim, the STIM tactic), or end the fight: winning it, running from it and being dragged off it all get them clear. Only the clock kills, and picking them up before the end is what skips the scar roll altogether.' },
+    { id: 'CACHE',     title: 'A SEALED CACHE', body: 'Not every node is somebody to kill. A cache is sealed against a particular trade - welded, wired, fouled, buried, out of reach, still burning - and the operator who knows that trade opens it clean for most of half again as much. Anybody can force one, and forcing takes a bite out of whoever is in the best shape to give it. The lock is on the map before you step, so it is a reason to steer and a reason to have brought somebody unusual.' },
     { id: 'RECRUIT',   title: 'SOMEONE WORTH SIGNING', body: 'The seven you start with are not everyone out here. A survivor brings a verb none of them has - a grinder for the front rank, a decontaminator for the middle, or a line that can haul what is hiding at the back of the enemy out where you can reach it. They cost Scrap, they arrive hurt, and there are only three in the whole wasteland. They join the bench: put them in the line at the Outpost.' },
     { id: 'ARMORY',    title: 'THE ARMORY',      body: 'A trader on the route. Gear, a marked-up relic, stims, a quirk do-over, and a bond that prepays your next regroup. Prices climb with the sector, so scrap spent early is worth more.' },
     { id: 'THREAT',    title: 'SOMEONE IS ABOUT TO DIE', body: 'The red figure over that operator is what lands on them this round if nothing changes, and it is more than they have left. Kill the thing aimed at them, brace in front of them, spend a STIM, or move them - but not nothing.' },
@@ -11991,7 +12179,9 @@ globalThis.WP = {
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, noteKill, raiseBody, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder,
     REQUISITIONS, reqById, reqCost, reqOpen, buyRequisition, refundRequisitions, renderRequisitions, newPendingReq,
-    REQ_REROLL_COST, REQ_REROLL_MAX, REQ_GRUDGE_BASE, REQ_RUNG_STEP, REQ_FALLBACK_COST, MARCH_FRESH, marchRead, marchTone, renderMarchRead, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    REQ_REROLL_COST, REQ_REROLL_MAX, REQ_GRUDGE_BASE, REQ_RUNG_STEP, REQ_FALLBACK_COST, MARCH_FRESH, marchRead, marchTone, renderMarchRead,
+    CACHE_LOCKS, CACHE_SCRAP, CACHE_CLEAN_MULT, CACHE_FORCE_BITE, cacheLockById, lockForNode, cacheOpener,
+    cachePayout, classLabel, initiateCache, renderCache, openCache, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
@@ -12060,6 +12250,7 @@ globalThis.WP = {
     get comboKill() { return comboKill; }, set comboKill(v) { comboKill = v; },
     get odKills() { return odKills; }, set odKills(v) { odKills = v; },
     get pendingReq() { return pendingReq; }, set pendingReq(v) { pendingReq = v; },
+    get pendingCache() { return pendingCache; }, set pendingCache(v) { pendingCache = v; },
     get grudgeCall() { return grudgeCall; }, set grudgeCall(v) { grudgeCall = v; },
     get rungCredit() { return rungCredit; }, set rungCredit(v) { rungCredit = v; },
     get fallbackCredit() { return fallbackCredit; }, set fallbackCredit(v) { fallbackCredit = v; },

@@ -1154,6 +1154,46 @@ const ROOT = path.join(__dirname, '..');
 // at the fight's end and 3.13 are lost for good. A rescue mostly buys tempo, not a life, so any
 // future change here should be judged on whether it moves the 3.13.
 
+// ── H06: THE ROAD IS A CORRIDOR, AND ONE NODE DOES NOT WIDEN IT ───────────────────
+// The one premise in this batch that survived measurement intact. Three samples of 100:
+//
+//   routing decisions faced                       7728 / 7664 / 7893
+//     where every option was a fight               62% / 64% / 62%
+//     with something other than a fight on offer   38% / 36% / 38%
+//     and a non-fight actually taken               25% / 24% / 25%
+//
+// Nearly two thirds of the time the player has no choice but a fight, and this file is not
+// routing past the alternatives - it takes ~65% of the non-fight chances it gets. Node kinds on
+// offer: CAMP 10%, EVENT 9-10%, RECRUIT 3%, SHOP 2-3%, everything else somebody to kill.
+//
+// THE CACHE is one node against that, and the one the brief listed that is solved with the
+// roster rather than the action bar. Balance-checked before shipping, because ~2.2 caches a run
+// at ~157 scrap is new income and H04 established scrap is what decides whether a squad arrives
+// at a commander able to fight it:
+//
+//                     no cache                 6 locks                 10 locks
+//   depth 1st    3.24 / 3.06 / 3.15     3.30 / 2.88 / 3.06     2.97 / 3.27 / 2.85
+//   depth 2nd    3.15 / 3.21 / 3.73     3.55 / 3.12 / 2.91     3.00 / 2.94 / 3.42
+//   depth 3rd    3.29 / 2.85 / 3.32     3.00 / 3.29 / 3.12     3.53 / 3.26 / 2.88
+//   sector 7        4% / 5% / 5%           3% / 4% / 1%           3% / 4% / 3%
+//   wipes        6.85 / 6.74 / 7.02     6.85 / 6.83 / 6.77     6.86 / 6.84 / 6.75
+//
+// Overlapping everywhere; sector-7 arrivals if anything slightly down. The node pays without
+// paying for depth, which is what a piece of content rather than a difficulty lever looks like.
+//
+// AND THE HONEST LIMIT: it does NOT widen the road. "Where every option was a fight" reads
+// 63/59/58% against a 62/64/62% baseline - overlapping. 2.2 caches a run is 2.2 more non-fight
+// nodes, and the FRACTION of forks with a choice in them does not move, because a run is far
+// more nodes than that. The brief listed four node types; this is one, and one is not enough to
+// change the shape of the road. That is a measured argument for the other three rather than a
+// reason to call the corridor fixed.
+//
+// TWO THINGS THIS PHASE GOT WRONG FIRST. A 15-run smoke read the clean rate at 9% and nearly
+// bought a design change on 22 observations; at 100 runs it is 21-32%. And the first six locks
+// covered three starting classes plus the three recruit-only ones, leaving MEDIC and SHOTGUNNER
+// - deployed in 93% and 91% of runs - as keys to nothing. Ten locks, one per class, fixed the
+// coverage; it did NOT raise the clean rate, because more locks is also more locks to miss.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
@@ -1371,6 +1411,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  extracted: false, walkedAt: 0, formations: {}, loose: 0, doctrine: null, doctrineKept: false,
                  benchHeld: null,
                  booked: 0, bookedKinds: {}, augments: 0,
+                 offeredNodes: {}, takenNodes: {}, forks: 0, forksWithChoice: 0, forksAllFights: 0,
+                 cachesMet: 0, cachesClean: 0, cachesForced: 0, cacheScrap: 0, cacheLocks: {}, cacheOpener: {},
+                 tookNonFight: 0, evOptions: 0, evBookable: 0, evCouldBook: 0,
                  relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0,
                  bossGrudge: [], metGrudge: [], scars: [], recovered: 0, clockLeft: [], downFaced: 0, downReach: 0, downByMove: 0, downByItem: 0, downByBar: 0, barSaves: 0, bagSaves: 0, handSaves: 0 };
 
@@ -2379,6 +2422,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
               || (recruitables().length && avail.find(n => n.type === 'RECRUIT'))
               || (healthy && avail.find(n => n.elite))
               || avail[Math.floor(Math.random() * avail.length)];
+    // H06: what the road OFFERED against what this policy took. "61 fights a run" is a fact
+    // about the walk only if the walk had somewhere else to go - a map dense with camps that
+    // this file routes past would make the same number and mean the opposite thing.
+    const kindOf = n => n.elite ? 'ELITE' : n.type;
+    const isFight = n => n.type === 'BOSS' || FIGHT_NODES.includes(n.type);
+    avail.forEach(n => { stat.offeredNodes[kindOf(n)] = (stat.offeredNodes[kindOf(n)] || 0) + 1; });
+    stat.forks++;
+    if (avail.some(n => !isFight(n))) stat.forksWithChoice++;
+    if (avail.every(n => isFight(n))) stat.forksAllFights++;
+    stat.takenNodes[kindOf(node)] = (stat.takenNodes[kindOf(node)] || 0) + 1;
+    if (!isFight(node)) stat.tookNonFight++;
     enterNode(node.id);
 
     if (node.type === 'EVENT') {
@@ -2390,6 +2444,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (ev.cast) stat.facesMet[ev.cast] = (stat.facesMet[ev.cast] || 0) + 1;
       if (FOLLOWUPS.some(f => f.title === ev.title)) stat.threads.push(ev.title);
       const owedBefore = pendingConsequences.length;
+      // H08: the CEILING, not just the rate. 1.09 consequences a run is a fact about the game
+      // only if the cards were offering more and this policy declined them - `--faces warm`
+      // takes the standing-raising choice, and the choices that book a fuse are mostly the
+      // greedy ones. Read off each option's own source, the same way the standing swing is.
+      const booksOne = c => /bookConsequence\(/.test(String(c.execute));
+      if (options.length) {
+        stat.evOptions += options.length;
+        stat.evBookable += options.filter(booksOne).length;
+        if (options.some(booksOne)) stat.evCouldBook++;
+      }
       if (options.length) {
         const swing = c => { const m = String(c.execute).match(/noteCast\(\s*'(\w+)'\s*,\s*(-?\d+)/);
                              return m ? Number(m[2]) : 0; };
@@ -2448,6 +2512,27 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       stat.nodes++;
       finishCamp();
       settleDue();
+      continue;
+    }
+    // H06: a sealed cache. Driven through the engine's own doors - initiateCache stages the
+    // lock, openCache pays and finishes the node - so what this measures is the game's payout
+    // and the game's bite rather than a copy of either. The policy is the obvious one: open it
+    // clean when somebody on the line knows the trade, force it otherwise, because a cache the
+    // squad walks away from is a node this file never took.
+    if (node.type === 'CACHE') {
+      initiateCache();
+      const lock = cacheLockById(pendingCache && pendingCache.lock);
+      const who = lock ? cacheOpener(lock) : null;
+      stat.cachesMet++;
+      if (lock) stat.cacheLocks[lock.id] = (stat.cacheLocks[lock.id] || 0) + 1;
+      if (who) { stat.cachesClean++; stat.cacheOpener[who.classType] = (stat.cacheOpener[who.classType] || 0) + 1; }
+      else stat.cachesForced++;
+      const before = scrap;
+      openCache(!!who);
+      stat.cacheScrap += Math.max(0, scrap - before);
+      stat.nodes++; noteDepth();
+      settleDue();
+      spend();
       continue;
     }
     if (node.type === 'RECRUIT') {
@@ -3360,6 +3445,37 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('  of what was booked', bookedN ? `${doneN} of ${bookedN} (${(100 * doneN / bookedN).toFixed(0)}%)` : 'nothing was booked');
   const kinds = {};
   results.forEach(r => Object.entries(r.bookedKinds || {}).forEach(([k, v]) => { kinds[k] = (kinds[k] || 0) + v; }));
+
+  // ── H06/H08: what the road offered against what was taken ───────────────────────
+  const sumMap = key => { const m = {}; results.forEach(r => Object.entries(r[key] || {})
+    .forEach(([k, v]) => { m[k] = (m[k] || 0) + v; })); return m; };
+  const off = sumMap('offeredNodes'), took = sumMap('takenNodes');
+  const offTot = Object.values(off).reduce((a, b) => a + b, 0);
+  const tookTot = Object.values(took).reduce((a, b) => a + b, 0);
+  const shareOf = (m, t) => Object.entries(m).sort((a, b) => b[1] - a[1])
+    .map(([k, v]) => `${k} ${v} (${t ? (v / t * 100).toFixed(0) : 0}%)`).join(', ');
+  const cMet = tot('cachesMet');
+  line('sealed caches met', `${cMet} (${(cMet / n).toFixed(2)} per run)`);
+  if (cMet) {
+    line('  opened clean by somebody on the line', `${tot('cachesClean')} (${(tot('cachesClean') / cMet * 100).toFixed(0)}%)`);
+    line('  forced', `${tot('cachesForced')} (${(tot('cachesForced') / cMet * 100).toFixed(0)}%)`);
+    line('  scrap out of them', `${tot('cacheScrap')} (${Math.round(tot('cacheScrap') / cMet)} a cache)`);
+    line('  which lock they were', shareOf(sumMap('cacheLocks'), cMet));
+    const opn = sumMap('cacheOpener');
+    line('  who opened them', Object.entries(opn).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ') || 'nobody');
+  }
+  line('node kinds offered on the road', shareOf(off, offTot) || 'none');
+  line('node kinds taken', shareOf(took, tookTot) || 'none');
+  const forks = tot('forks'), withChoice = tot('forksWithChoice'), allFights = tot('forksAllFights');
+  line('routing decisions faced', `${forks}`);
+  line('  with something other than a fight on offer', `${withChoice} (${forks ? (withChoice / forks * 100).toFixed(0) : 0}%)`);
+  line('  where every option was a fight', `${allFights} (${forks ? (allFights / forks * 100).toFixed(0) : 0}%)`);
+  line('  and a non-fight was actually taken', `${tot('tookNonFight')} (${forks ? (tot('tookNonFight') / forks * 100).toFixed(0) : 0}%)`);
+  const evOpt = tot('evOptions'), evBk = tot('evBookable'), evCould = tot('evCouldBook');
+  line('event choices offered, total', `${evOpt}`);
+  line('  of them, ones that book a consequence', `${evBk} (${evOpt ? (evBk / evOpt * 100).toFixed(0) : 0}%)`);
+  line('  events where a consequence was on the table', `${evCould} of ${tot('events')} (${tot('events') ? (evCould / tot('events') * 100).toFixed(0) : 0}%)`);
+  line('  and the ceiling this run left on the table', `${evCould - tot('booked')} bookings not taken`);
   line('  by kind', Object.entries(kinds).map(([k, v]) => `${k} ${v}`).join(', ') || 'none');
   line('events seen, mean', mean(nums('events')).toFixed(1));
 

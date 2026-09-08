@@ -90,6 +90,17 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .set-near .set-tag { color: #7ab0d0; }
 .set-note { font-size: 0.5625rem; color: #6a655c; letter-spacing: 0; margin-top: 2px; }
 
+/* H06: the sealed cache. The two doors are deliberately different colours - the clean one is
+   the reason you brought that operator, the forced one is the price of not having. */
+.cache-lock-line { color: #b8b3a8; font-size: 0.75rem; line-height: 1.6; margin-bottom: 4px; }
+.cache-lock-line b { color: #e8e3d8; }
+.cache-have { color: #6B8E23; font-weight: bold; }
+.cache-lack { color: #c1440e; }
+#cache-clean:not(:disabled) { border-color: #6B8E23; color: #6B8E23; }
+#cache-clean:disabled { border-color: #444; color: #666; cursor: not-allowed; }
+#cache-force { border-color: #ffaa00; color: #ffaa00; }
+.map-node.cache-node { border-color: #7ab0d0; }
+
 /* H04: the read on the eve of the commander. Three states because there are three different
    things to do about it - nothing, go and spend, or accept the shape you are taking up there -
    and the border carries the severity so the state is legible before the sentence is read. It
@@ -849,6 +860,7 @@ button.reach-short { border-color: #7a5a20; }
 
 /* A survivor on the route. The portrait carries the screen, so it gets the room to do it. */
 #screen-recruit { display: none; flex-direction: column; padding: 18px 14px; gap: 10px; height: 100%; box-sizing: border-box; }
+#screen-cache { display: none; flex-direction: column; padding: 18px 14px; gap: 10px; height: 100%; box-sizing: border-box; }
 #recruit-body { flex: 1; overflow-y: auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; }
 .recruit-card { display: flex; flex-direction: column; align-items: center; gap: 10px; border: 1px solid #333; background: #0a0a08; padding: 12px; }
 .recruit-portrait { width: auto; max-width: 62%; max-height: 190px; object-fit: contain; filter: drop-shadow(0 6px 10px rgba(0,0,0,0.7)); }
