@@ -1102,6 +1102,58 @@ const ROOT = path.join(__dirname, '..');
 // so where exactly the cliff sits inside it is not settled here. MARCH_FRESH is set at 0.8
 // because that is where the samples separate cleanly, not because 0.79 was measured and rejected.
 
+// ── H05: THE ONE BUTTON IS THE RIGHT BUTTON ───────────────────────────────
+// The brief reads "going down happens 23.7 times a run and is answered by one button - STIM is
+// 72% of every rescue the game has" and proposes more ways to pick somebody up. Two measurements
+// say no, and the first is about this file rather than about the game.
+//
+// THE SPLIT WAS THE ORDERING. This file spends the momentum bar in the tactic block and only
+// consults the bag and the medic's hands afterwards, so the STIM tactic has always had first
+// refusal on every rescue here - the same shape as D05 and D06, both re-scoped when a finding
+// turned out to be this policy reporting itself. `--rescue hands` gives the bag and the deck
+// first refusal and changes nothing else. Three samples of 100 each way:
+//
+//                        bar (default)          hands
+//   by the STIM tactic   87% / 86% / 87%    65% / 65% / 61%
+//   by the bag            7% /  8% /  7%    16% / 16% / 18%
+//   by the medic's hands  6% /  6% /  6%    20% / 19% / 21%
+//
+// Complete separation on all three rows. So 87% is not what the game offers, it is what this
+// policy reaches for first. What the game offers is unchanged between the arms, because it is
+// sampled at the top of the turn before the bar is spent: the bar reaches 71-75% of down-turns,
+// a deck move 16-20%, the bag 13-21%.
+//
+// AND REACHING FOR THE ALTERNATIVES FIRST IS WORSE PLAY. Depth by third:
+//
+//   first third    3.21 / 3.24 / 3.42      2.85 / 2.70 / 2.67
+//   second third   3.52 / 3.55 / 3.58      2.88 / 3.24 / 3.18
+//   third third    3.35 / 3.21 / 3.06      3.38 / 3.24 / 3.21
+//
+// Complete separation in the first two thirds, half a sector, bar-first deeper. The mechanism
+// agrees with the size: the bar is the RENEWABLE tool. Spending it first keeps the bag full and
+// the medic shooting; reaching for the bag first burns ~3 extra MED_STIM a run - the same item
+// H04 showed is what lets a squad arrive at a commander able to fight it - and spends the
+// medic's turns healing instead of firing.
+//
+// The `hands` arm also shows FEWER downs (21.3-22.4 against 22.9-24.4), which reads like better
+// rescuing and is not: shallower runs are fewer fights are fewer downs. That difference is
+// downstream of the depth gap, not upstream of it.
+//
+// So the one button is the correct answer to a resource question, and the other routes are
+// correctly held in reserve rather than neglected. A fourth route would be ignored if it were
+// worse and would have to beat the bar if it were not, which is a difficulty cut wearing a
+// feature's clothes. Nothing shipped to the game.
+//
+// WHAT REMAINS TRUE AND IS WORTH KNOWING: of the four things that reach a downed operator, two
+// are items and two - CAUTERIZE and STIM_DART - both belong to the MEDIC, and STIM_DART needs a
+// rank-III medic who also had it picked among the three deployed. One class of ten can reach the
+// floor from the deck at all, and if the medic is the one lying on it, that half is gone. The
+// depth arms say this is not currently costing anything, so it is recorded rather than fixed.
+//
+// AND THE STAKES ARE SMALLER THAN THE BRIEF IMPLIES: of 23.1 downs a run, 21.5 are dragged clear
+// at the fight's end and 3.13 are lost for good. A rescue mostly buys tempo, not a life, so any
+// future change here should be judged on whether it moves the 3.13.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
@@ -1259,6 +1311,12 @@ const FACES = flag('faces', 'warm');
 // which is the point: at ~6.6 skulls a run the capability is bought instead of the variance, not
 // on top of it.
 const REQPOLICY = flag('reqpolicy', 'rerolls');
+// H05. Going down happens ~23 times a run and the brief reads 87% of every rescue as one button.
+// Before believing that about the game, it has to be ruled out about the robot: this file spends
+// the momentum bar in the tactic block and only consults the bag and the medic's hands
+// afterwards, so the STIM tactic has always had first refusal. `--rescue hands` reverses that
+// order and changes nothing else.
+const RESCUE = flag('rescue', 'bar');
 
 // The three games this file can measure, and why the difference is the whole story:
 //
@@ -1298,7 +1356,7 @@ const REQPOLICY = flag('reqpolicy', 'rerolls');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy }) => {
   const stat = { order: null, fulfilled: false, won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
                  upgrades: 0, odAimed: 0, bossTopUps: 0, eliteTopUps: 0, reqBought: 0, reqGrudge: null, reqFallback: 0, regroupsHad: 0,
                  engineKills: 0, killGap: 0,
@@ -1314,7 +1372,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  benchHeld: null,
                  booked: 0, bookedKinds: {}, augments: 0,
                  relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0,
-                 bossGrudge: [], metGrudge: [], scars: [], recovered: 0, clockLeft: [], downFaced: 0, downReach: 0, downByMove: 0, downByItem: 0, downByBar: 0, barSaves: 0 };
+                 bossGrudge: [], metGrudge: [], scars: [], recovered: 0, clockLeft: [], downFaced: 0, downReach: 0, downByMove: 0, downByItem: 0, downByBar: 0, barSaves: 0, bagSaves: 0, handSaves: 0 };
 
   // Skulls were banked and never spent: buyMetaUpgrade was called nowhere in this file. So the
   // carried sample escalated the commanders permanently - grudges are meta - while switching
@@ -1819,6 +1877,32 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (byBar) stat.downByBar++;
       if (byMove || byItem || byBar) stat.downReach++;
     }
+    // Extracted so the same rescue can be attempted from either side of the tactic block. The
+    // counters inside it are unchanged, so a save is a save wherever it is reached from.
+    const tryRescue = () => {
+      const down = bleedingOut();
+      if (!down.length) return false;
+      const worst = down.sort((a, b) => (a.downTurns || 0) - (b.downTurns || 0))[0];
+      if (inventory.includes('MED_STIM')) {
+        stat.items.MED_STIM = (stat.items.MED_STIM || 0) + 1;
+        stat.saves++; stat.bagSaves = (stat.bagSaves || 0) + 1;
+        pendingAction = 'ITEM_MED'; resolveConsumableItem(worst.id); return true;
+      }
+      // Adrenaline is on the REACHES_THE_DOWN list too, and getting them up at all beats
+      // getting them up well.
+      if (inventory.includes('ADRENALINE')) {
+        stat.items.ADRENALINE = (stat.items.ADRENALINE || 0) + 1;
+        stat.saves++; stat.bagSaves = (stat.bagSaves || 0) + 1;
+        pendingAction = 'ITEM_ADRENALINE'; resolveConsumableItem(worst.id); return true;
+      }
+      const patch = deck.find(a => a.move === 'CAUTERIZE' || a.move === 'STIM_DART');
+      if (patch) {
+        stat.moves[patch.move] = (stat.moves[patch.move] || 0) + 1;
+        stat.saves++; stat.handSaves = (stat.handSaves || 0) + 1;
+        pendingAction = patch.move; resolveAction(worst.id); return true;
+      }
+      return false;
+    };
     // What follows is a competent player, not an optimal one, and deliberately reads only what
     // the game already puts on screen: the health bars, the intent icons, the reach penalty
     // printed on the deck button, and the combo tag. No damage formula is duplicated here - a
@@ -1875,6 +1959,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (onFloor) { stat.saves++; stat.barSaves++; }
       return true;
     };
+    // H05: WHICH HAND REACHES FIRST. The bar is spent in the block below, and the bag and the
+    // medic's hands are only consulted after it - so the STIM tactic has always had first
+    // refusal on every rescue in this file. That ordering, not the game, is most of what "87% of
+    // rescues are one button" was measuring: D05 and D06 were both re-scoped when a finding
+    // turned out to be this policy reporting itself, and this has the same shape.
+    //
+    // `--rescue bar` (the default, and what every prior sample ran) keeps that order.
+    // `--rescue hands` gives the bag and the deck first refusal and leaves the bar as the
+    // fallback it is for a squad with neither. Nothing else differs, so what separates between
+    // the arms is the ordering and only the ordering.
+    if (rescuePolicy === 'hands' && tryRescue()) return true;
     if (tacticPolicy === 'stim') {
       if (momentum >= 30 && stimTarget()) buy('STIM');
     } else if (tacticPolicy === 'focus') {
@@ -1903,28 +1998,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
     // Somebody on the floor is the turn. A Med-Stim, then the medic's hands - anything else
     // is measuring a squad that watches its own people bleed out, which is not a squad.
-    const down = bleedingOut();
-    if (down.length) {
-      const worst = down.sort((a, b) => (a.downTurns || 0) - (b.downTurns || 0))[0];
-      if (inventory.includes('MED_STIM')) {
-        stat.items.MED_STIM = (stat.items.MED_STIM || 0) + 1;
-        stat.saves++;
-        pendingAction = 'ITEM_MED'; resolveConsumableItem(worst.id); return true;
-      }
-      // Adrenaline is on the REACHES_THE_DOWN list too, and getting them up at all beats
-      // getting them up well.
-      if (inventory.includes('ADRENALINE')) {
-        stat.items.ADRENALINE = (stat.items.ADRENALINE || 0) + 1;
-        stat.saves++;
-        pendingAction = 'ITEM_ADRENALINE'; resolveConsumableItem(worst.id); return true;
-      }
-      const patch = deck.find(a => a.move === 'CAUTERIZE' || a.move === 'STIM_DART');
-      if (patch) {
-        stat.moves[patch.move] = (stat.moves[patch.move] || 0) + 1;
-        stat.saves++;
-        pendingAction = patch.move; resolveAction(worst.id); return true;
-      }
-    }
+    if (tryRescue()) return true;
 
     // A ranged operator caught holding the front rank swaps out - the one formation fix
     // that actually changes what enemy melee reaches.
@@ -2693,7 +2767,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -2809,7 +2883,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const recovered = results.reduce((a, r) => a + r.recovered, 0);
   line('operators put on the floor', `${downs} (${(downs / n).toFixed(1)} per run)`);
   const barSaves = results.reduce((a, r) => a + (r.barSaves || 0), 0);
-  line('turns spent saving them', `${saves} (${barSaves} of them the STIM tactic)`);
+  const bagSaves = results.reduce((a, r) => a + (r.bagSaves || 0), 0);
+  const handSaves = results.reduce((a, r) => a + (r.handSaves || 0), 0);
+  const sPc = v => saves ? `${(v / saves * 100).toFixed(0)}%` : '0%';
+  line('turns spent saving them', `${saves}`);
+  line('  by the STIM tactic', `${barSaves} (${sPc(barSaves)})`);
+  line('  by something in the bag', `${bagSaves} (${sPc(bagSaves)})`);
+  line('  by the medic\u2019s hands', `${handSaves} (${sPc(handSaves)})`);
   line('dragged clear at a fight\u2019s end', `${recovered} (${(recovered / n).toFixed(1)} per run)`);
   // The clock as it stood when the fight ended for them, out of BLEED_OUT. Everything at the
   // top of the range fell into a fight that was already finishing.
