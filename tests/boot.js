@@ -46,6 +46,45 @@ async function engineUp(page, timeout = BOOT_TIMEOUT_MS) {
     }
 }
 
+// ── What the other sleeps were waiting for ────────────────────────────────────────────────
+// G12 retired the 157 nav-then-sleep openings and left 93 fixed sleeps behind, deliberately:
+// after a click there IS a real condition to wait on, but it is a different one each time and
+// G06 showed that pulling one blind can change what the assertion was measuring. Read through,
+// the overwhelming majority turn out to be the same shape - press a control, sleep, assert the
+// screen changed - and the game already answers that question itself. switchScreen sets one
+// screen to flex and everything else to none, and currentScreen() reports which, ignoring the
+// settings panel that floats over one and the overlays that float over all of them.
+//
+// So these are not "shorter sleeps". They wait for the thing the next line is about to assert,
+// which means they are both faster on a quiet machine and MORE reliable on a busy one - the
+// 400ms that passes on an idle core is the one that flakes under load, and a wait on the actual
+// condition has neither failure mode.
+
+// The screen the game says is up. Fails with what WAS up instead, because "expected muster, got
+// contracts" is a diagnosis and a timeout is not.
+async function onScreen(page, screenId, timeout = BOOT_TIMEOUT_MS) {
+    try {
+        await page.waitForFunction(
+            id => typeof currentScreen === 'function' && currentScreen() === id,
+            screenId, { polling: 'raf', timeout });
+    } catch (e) {
+        let seen = '(the page could not be read)';
+        try { seen = await page.evaluate(() => (typeof currentScreen === 'function' ? currentScreen() : null) || 'none'); }
+        catch (e2) { /* keep the default */ }
+        throw new Error(`waited ${timeout}ms for ${screenId}; the screen up was ${seen}`);
+    }
+}
+
+// Anything else, with a label so a failure says what was being waited for rather than only how
+// long. The condition runs in the page, so it can read the engine's own state directly.
+async function settled(page, fn, label, arg = null, timeout = BOOT_TIMEOUT_MS) {
+    try {
+        await page.waitForFunction(fn, arg, { polling: 'raf', timeout });
+    } catch (e) {
+        throw new Error(`waited ${timeout}ms for ${label} and it never came true`);
+    }
+}
+
 // ── Keeping the population at zero ────────────────────────────────────────────────────────
 // All 157 of them went at once, which is the easy part. The hard part is that nothing stops
 // the next suite from being written the old way, and a sleep costs nothing visible on the day
@@ -78,4 +117,4 @@ function fixedSleeps(source) {
     return out;
 }
 
-module.exports = { engineUp, enginePublished, BOOT_TIMEOUT_MS, navSleeps, fixedSleeps };
+module.exports = { engineUp, enginePublished, onScreen, settled, BOOT_TIMEOUT_MS, navSleeps, fixedSleeps };

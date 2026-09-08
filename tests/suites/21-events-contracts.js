@@ -2,7 +2,7 @@
 // with occasional flavour. And every run had exactly the same shape.
 module.exports = {
   name: 'Events and contracts',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, onScreen, settled }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
 
@@ -155,7 +155,10 @@ module.exports = {
     await page.reload();
     await engineUp(page);
     await page.click('.title-btn.btn-continue');
-    await page.waitForTimeout(400);
+    // H12: continuing lands wherever the save was, so the condition is "off the title screen"
+    // rather than any one screen id.
+    await settled(page, () => typeof currentScreen === 'function' && currentScreen()
+      && currentScreen() !== 'screen-title', 'the save to be resumed');
     const persisted = await page.evaluate(() => ({
       booked: pendingConsequences.length,
       amount: (pendingConsequences[0] || {}).amount,
@@ -373,10 +376,10 @@ module.exports = {
 
     // ---- the board itself ----
     await page.evaluate(() => { activeContracts = []; renderTitleScreen(); });
+    // The difficulty click waits for its own button; only the board needs waiting for.
     await page.click('.title-btn[data-exists="0"]');
-    await page.waitForTimeout(200);
     await page.click('.title-btn[data-diff="1.3"]');
-    await page.waitForTimeout(300);
+    await onScreen(page, 'screen-contracts');
     const board = await page.evaluate(() => ({
       screen: getComputedStyle(document.getElementById('screen-contracts')).display,
       cards: document.querySelectorAll('#contract-list [data-action="toggle-contract"]').length,
@@ -390,7 +393,8 @@ module.exports = {
     ok('with the chosen difficulty held for the deployment', board.diffHeld === 1.3);
 
     await page.click('[data-id="HARSH_SKIES"]');
-    await page.waitForTimeout(150);
+    await settled(page, () => document.querySelectorAll('.contract-on').length > 0,
+                  'the contract to read as signed');
     const toggled = await page.evaluate(() => ({
       on: document.querySelectorAll('.contract-on').length,
       mult: document.getElementById('contract-mult').innerText,
@@ -401,16 +405,16 @@ module.exports = {
     ok('naming it', /HARSH SKIES/.test(toggled.mult));
 
     await page.click('[data-id="HARSH_SKIES"]');
-    await page.waitForTimeout(150);
+    await settled(page, () => document.querySelectorAll('.contract-on').length === 0,
+                  'the contract to read as unsigned');
     const untoggled = await page.evaluate(() => ({ on: document.querySelectorAll('.contract-on').length, mult: document.getElementById('contract-mult').innerText }));
     ok('and unsigned again', untoggled.on === 0 && /x1\.00/.test(untoggled.mult));
 
     await page.click('[data-id="GLASS"]');
-    await page.waitForTimeout(120);
     await page.click('[data-action="begin-expedition"]');
-    await page.waitForTimeout(300);
+    await onScreen(page, 'screen-muster');
     await page.click('[data-action="muster-deploy"]');
-    await page.waitForTimeout(400);
+    await onScreen(page, 'screen-map');
     const deployed = await page.evaluate(() => ({
       map: getComputedStyle(document.getElementById('screen-map')).display,
       signed: [...activeContracts], banked: runStats.contractMult,

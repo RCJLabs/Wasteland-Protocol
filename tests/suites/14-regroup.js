@@ -9,7 +9,7 @@
 // re-walk is not the punishment - it is the levelling curve. See regroupSquad.
 module.exports = {
   name: 'Regroup on defeat',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, onScreen, settled }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
     const wipe = () => page.evaluate(() => {
@@ -29,12 +29,15 @@ module.exports = {
     ok(`a run starts with regroups banked (${setup.regroups})`, setup.regroups === 2);
 
     await wipe();
-    await page.waitForTimeout(300);
+    // H12: the deck saying it, not 300ms of hoping it has. Every wait in this file is the
+    // condition the assertion under it is about to read.
+    await settled(page, () => /SQUAD DOWN/.test(
+      (document.getElementById('command-deck') || {}).innerText || ''), 'the squad-down prompt');
     const prompt = await page.$eval('#command-deck', e => e.innerText);
     ok('the defeat prompt no longer says restart', /SQUAD DOWN/.test(prompt) && !/RESTART/.test(prompt));
 
     await page.locator('[data-action="squad-down"]:visible').first().click();
-    await page.waitForTimeout(400);
+    await onScreen(page, 'screen-runover');
     const broken = await page.evaluate(() => ({
       screen: getComputedStyle(document.getElementById('screen-runover')).display,
       title: document.getElementById('runover-title').innerText,
@@ -49,7 +52,7 @@ module.exports = {
     ok('the save is still there at this point', broken.slotAlive);
 
     await page.locator('[data-action="regroup"]:visible').first().click();
-    await page.waitForTimeout(500);
+    await onScreen(page, 'screen-map');
     const after = await page.evaluate(() => ({
       onMap: getComputedStyle(document.getElementById('screen-map')).display === 'flex',
       tier: currentTier, sector: currentSector, scrap,
@@ -104,16 +107,18 @@ module.exports = {
       stale.open.every(t => t === stale.tier));
 
     // ---- the last regroup, then the run really ends ----
-    await wipe(); await page.waitForTimeout(200);
+    // The locator clicks below wait for their own targets, so the only wait that earns its
+    // place is the one before the assertion.
+    await wipe();
     await page.locator('[data-action="squad-down"]:visible').first().click();
-    await page.waitForTimeout(300);
     await page.locator('[data-action="regroup"]:visible').first().click();
-    await page.waitForTimeout(400);
+    await settled(page, () => runStats && runStats.regroups === 0, 'the second regroup to be spent');
     ok('the second regroup is spent', await page.evaluate(() => runStats.regroups) === 0);
 
-    await wipe(); await page.waitForTimeout(200);
+    await wipe();
     await page.locator('[data-action="squad-down"]:visible').first().click();
-    await page.waitForTimeout(500);
+    await settled(page, () => /RUN OVER/.test(
+      (document.getElementById('runover-title') || {}).innerText || ''), 'the run to be over');
     const ended = await page.evaluate(() => ({
       title: document.getElementById('runover-title').innerText,
       offersRegroup: !!document.querySelector('[data-action="regroup"]'),

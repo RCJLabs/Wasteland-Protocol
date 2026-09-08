@@ -2,7 +2,7 @@
 // build their markup once.
 module.exports = {
   name: 'Housekeeping',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, settled }) => {
     let sawDialog = false;
     page.on('dialog', async d => { sawDialog = true; await d.dismiss(); });
     await page.goto(`${base}/index.html`);
@@ -22,10 +22,13 @@ module.exports = {
 
     // settings still open and close correctly without the tracking variable
     await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; openSettings(); });
-    await page.waitForTimeout(200);
+    // H12: the panel being up and then down, which is exactly what the two assertions read.
+    await settled(page, () => getComputedStyle(document.getElementById('screen-settings')).display === 'flex',
+                  'the settings panel to open');
     ok('settings still open', await page.$eval('#screen-settings', e => getComputedStyle(e).display) === 'flex');
     await page.evaluate(() => closeSettings());
-    await page.waitForTimeout(200);
+    await settled(page, () => getComputedStyle(document.getElementById('screen-settings')).display === 'none',
+                  'the settings panel to close');
     ok('settings still close over the screen beneath',
       await page.$eval('#screen-settings', e => getComputedStyle(e).display) === 'none' &&
       await page.$eval('#screen-map', e => getComputedStyle(e).display) === 'flex');

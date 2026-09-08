@@ -3,7 +3,7 @@
 // route graphs now: taking a node commits you to the paths it connects to.
 module.exports = {
   name: 'The branching wasteland',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, settled }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
 
@@ -135,7 +135,8 @@ module.exports = {
     await page.reload();
     await engineUp(page);
     await page.click('.title-btn.btn-continue');
-    await page.waitForTimeout(500);
+    await settled(page, () => typeof currentScreen === 'function' && currentScreen()
+      && currentScreen() !== 'screen-title', 'the save to be resumed');
     const reloaded = await page.evaluate((prev) => ({
       sameMap: sectorMap.nodes.map(n => n.id + n.type).join() === prev.shape,
       samePos: currentNodeId === prev.pos,

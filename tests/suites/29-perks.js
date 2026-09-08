@@ -2,7 +2,7 @@
 // perks offered on the spot, and the class signatures among them change what abilities do.
 module.exports = {
   name: 'Field promotions',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, settled }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
 
@@ -239,7 +239,8 @@ module.exports = {
     await page.reload();
     await engineUp(page);
     await page.click('.title-btn.btn-continue');
-    await page.waitForTimeout(500);
+    await settled(page, () => typeof currentScreen === 'function' && currentScreen()
+      && currentScreen() !== 'screen-title', 'the save to be resumed');
     const resumed = await page.evaluate(() => ({
       screen: getComputedStyle(document.getElementById('screen-perk')).display,
       options: pendingPerkOffers[0] ? pendingPerkOffers[0].options.join() : ''

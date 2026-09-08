@@ -3,7 +3,7 @@
 // that no longer exist. These start from saves written by earlier builds.
 module.exports = {
   name: 'Legacy saves',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, settled }) => {
     const notFound = [];
     page.on('response', r => { if (r.status() === 404) notFound.push(r.url().split('/').pop()); });
     await page.goto(`${base}/index.html`);
@@ -20,9 +20,13 @@ module.exports = {
     await engineUp(page);
     notFound.length = 0;
     await page.click('.title-btn.btn-continue');
-    await page.waitForTimeout(400);
+    await settled(page, () => typeof currentScreen === 'function' && currentScreen()
+      && currentScreen() !== 'screen-title', 'the legacy save to be resumed');
     await page.evaluate(() => initiateCombat('RAIDERS', false));
-    await page.waitForTimeout(1000);
+    // H12: the fight being up, not a second of hoping. This suite is about what a stale save
+    // does to a load, so waiting on the load itself is the point rather than an optimisation.
+    await settled(page, () => typeof combatActive !== 'undefined' && combatActive,
+                  'the staged fight to be live');
 
     const sprites = await page.evaluate(() => {
       const imgs = [...document.querySelectorAll('.portrait')];
@@ -55,7 +59,8 @@ module.exports = {
     await engineUp(page);
     notFound.length = 0;
     await page.click('.title-btn.btn-continue');
-    await page.waitForTimeout(1000);
+    await settled(page, () => typeof currentScreen === 'function' && currentScreen()
+      && currentScreen() !== 'screen-title', 'the legacy save to be resumed');
 
     const resumed = await page.evaluate(() => {
       const imgs = [...document.querySelectorAll('.portrait')];

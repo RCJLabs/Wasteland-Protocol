@@ -3,7 +3,7 @@
 // two slots per operator, and every weapon mod changes behaviour, never just arithmetic.
 module.exports = {
   name: 'Gear',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, settled }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
 
@@ -260,7 +260,7 @@ module.exports = {
 
     const bruiserId = await page.evaluate(() => playerRoster.find(c => c.classType === 'BRUISER').id);
     await page.click(`[data-action="gear-menu"][data-id="${bruiserId}"][data-slot="mod"]`);
-    await page.waitForTimeout(200);
+    await settled(page, () => !!document.querySelector('.gear-pick'), 'the gear picker to open');
     const picker = await page.evaluate(() => ({
       options: [...document.querySelectorAll('.gear-pick')].map(b => b.dataset.gear)
     }));
@@ -281,7 +281,8 @@ module.exports = {
     await page.reload();
     await engineUp(page);
     await page.click('.title-btn.btn-continue');
-    await page.waitForTimeout(500);
+    await settled(page, () => typeof currentScreen === 'function' && currentScreen()
+      && currentScreen() !== 'screen-title', 'the save to be resumed');
     const back = await page.evaluate(() => ({
       worn: playerRoster.find(c => c.classType === 'BRUISER').weaponMod,
       stash: gearStash.slice().sort().join(),

@@ -3,7 +3,7 @@
 // nothing. The board could also issue 'defeat 2 elite squads' in a sector containing one.
 module.exports = {
   name: 'Relic economy',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, settled }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
 
@@ -293,7 +293,8 @@ module.exports = {
     await page.reload();
     await engineUp(page);
     await page.click('.title-btn.btn-continue');
-    await page.waitForTimeout(500);
+    await settled(page, () => typeof currentScreen === 'function' && currentScreen()
+      && currentScreen() !== 'screen-title', 'the save to be resumed');
     const resumed = await page.evaluate(() => ({
       screen: getComputedStyle(document.getElementById('screen-relic')).display,
       offered: (pendingRelicOffer || []).map(r => r.id),
