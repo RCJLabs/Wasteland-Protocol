@@ -1322,6 +1322,43 @@ const ROOT = path.join(__dirname, '..');
 // caught only because the new per-faction shares summed to ~50% while the old readout said 79%
 // and two counters in one file disagreeing was worth chasing rather than explaining away.
 
+// ── H10: THE RECRUIT WALKED PAST — THE PRICE IS THE WHOLE BARRIER ─────────────────
+// Filed as "offers seen 473, affordable at the time 277, signed on the spot 192, reached and
+// walked past 281 (59%)" and concluded: "a player walks past nearly six offers in ten WHILE
+// CARRYING ENOUGH TO SIGN. The price is not the barrier - the offer is not compelling."
+//
+// The item's own numbers say otherwise. 473 offers against 277 affordable means 196 could not be
+// paid for at all, and 192 of the 277 affordable ones were signed - 69%. The 59% is a sum of
+// three different things and the sentence attributes all of it to the third.
+//
+// Split properly, at 100 runs:
+//
+//   offers seen in total                        337
+//     could not pay at all                      147 (44%)
+//     could pay but not keep the reserve         67 (20%)   <- this file's own +80 rule
+//     could pay and keep it                     123 (36%)
+//     signed as a share of what was affordable  123 of 190 (65%)
+//     and as a share of what the reserve allowed 123 of 123 (100%)
+//
+// THE POLICY SIGNS EVERY OFFER IT CAN AFFORD. 123 of 123. It has never once walked past a
+// recruit on merit, because the rule is `scrap >= cost + 80` and nothing else - there is no
+// judgement about the card in this file to measure. So "the offer is not compelling" is not a
+// finding this instrument is capable of producing, in either direction.
+//
+// Median price 180 against a median purse of 198: recruits are priced right at the margin, and
+// H04 established that scrap is what decides whether a squad reaches a commander able to fight.
+// Signing is a direct trade against arriving healthy, which is a real tension and arguably the
+// point.
+//
+// WHAT WOULD BE NEEDED TO ASK THE ITEM'S QUESTION. A policy that VALUES a recruit - weighs the
+// class, the rank, what the line is missing - and therefore sometimes declines one it can afford.
+// Until that exists, every walk-past this file reports is an empty purse or an accounting rule,
+// and no card rewritten in the game would move the number by a single offer. Building that
+// policy is the prerequisite for the feature, not a refinement of it.
+//
+// Nothing shipped to the game. The split above is the deliverable, so the next attempt starts
+// from the decomposition rather than the sum.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
@@ -3228,6 +3265,25 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   }
   line('  signed on the spot', `${totalSigned} of ${offers.length}`);
   line('  reached and still walked past', `${offers.length - totalSigned} of ${offers.length}`);
+  // H10: the walk-past rate is three different things added together, and the item was filed on
+  // the sum. An offer the squad could not pay for is not an offer it declined; an offer inside
+  // this file's own 80-scrap reserve is a fact about the reserve. Split, so "the price is not
+  // the barrier" can be checked rather than asserted.
+  if (offers.length) {
+    const RESERVE = 80;
+    const broke = offers.filter(o => o.purse < o.cost).length;
+    const tight = offers.filter(o => o.purse >= o.cost && o.purse < o.cost + RESERVE).length;
+    const rich = offers.filter(o => o.purse >= o.cost + RESERVE).length;
+    const pc = v => `${(v / offers.length * 100).toFixed(0)}%`;
+    line('  of the offers seen, could not pay at all', `${broke} (${pc(broke)})`);
+    line('  could pay but not keep the reserve', `${tight} (${pc(tight)}) \u2014 this policy, not the game`);
+    line('  could pay and keep it', `${rich} (${pc(rich)})`);
+    const affordN = offers.filter(o => o.purse >= o.cost).length;
+    line('  signed as a share of what was affordable',
+      affordN ? `${totalSigned} of ${affordN} (${(totalSigned / affordN * 100).toFixed(0)}%)` : 'nothing affordable');
+    line('  and as a share of what the reserve allowed',
+      rich ? `${totalSigned} of ${rich} (${(totalSigned / rich * 100).toFixed(0)}%)` : 'none allowed');
+  }
   line('runs that signed anyone', `${withRecruits} of ${n}`);
   Object.entries(signed).sort((a, b) => b[1] - a[1]).forEach(([k, v]) => line('  ' + k, `${v} runs`));
   if (!Object.keys(signed).length) line('  none', 'nobody was ever signed on');
