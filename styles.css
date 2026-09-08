@@ -90,6 +90,23 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .set-near .set-tag { color: #7ab0d0; }
 .set-note { font-size: 0.5625rem; color: #6a655c; letter-spacing: 0; margin-top: 2px; }
 
+/* H04: the read on the eve of the commander. Three states because there are three different
+   things to do about it - nothing, go and spend, or accept the shape you are taking up there -
+   and the border carries the severity so the state is legible before the sentence is read. It
+   sits in the map column's normal flow rather than over the graph: this is information the
+   player is routing on, not an alert to dismiss. */
+.march-read { border: 1px solid #4488ff; border-left-width: 4px; background: #0a0a0a; padding: 9px 11px; margin-bottom: 15px; font-size: 0.6875rem; line-height: 1.5; flex-shrink: 0; border-radius: 3px; }
+.march-head { font-weight: bold; letter-spacing: 1px; font-size: 0.625rem; margin-bottom: 4px; }
+.march-body { color: #b8b3a8; }
+.march-body b { color: #e8e3d8; }
+.march-ready { border-color: #6B8E23; }
+.march-ready .march-head { color: #6B8E23; }
+.march-patch { border-color: #ffaa00; }
+.march-patch .march-head { color: #ffaa00; }
+.march-grim { border-color: #8B0000; background: #120707; }
+.march-grim .march-head { color: #c1440e; }
+.march-grim .march-body b { color: #ff8a5c; }
+
 /* F13: and the graph keeps a floor whatever the panel above it is doing. */
 .map-viewport { flex-grow: 1; min-height: 45%; border: 1px solid #222; background: linear-gradient(rgba(15,15,15,0.9), rgba(5,5,5,0.9)), repeating-linear-gradient(0deg, transparent, transparent 19px, #1a1a1a 19px, #1a1a1a 20px), repeating-linear-gradient(90deg, transparent, transparent 19px, #1a1a1a 19px, #1a1a1a 20px); overflow-y: auto; display: flex; flex-direction: column; align-items: center; padding: 30px 0; position: relative; }
 /* The route graph: nodes positioned absolutely on a tall canvas, edges drawn under them.

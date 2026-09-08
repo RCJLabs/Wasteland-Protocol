@@ -4579,6 +4579,76 @@ function regroupsLeft() {
 // commander, and availableNodeIds needs no telling because with no node entered yet it simply
 // offers whatever tier the squad is standing on.
 function openingTier() { return metaUpgrades.roadCrew ? 2 : 1; }
+
+// H04. The map forecasts the weather and names the ground - both facts about the enemy - and
+// said nothing at all about the squad. Measured across 60 carried runs, the squad is the number
+// that predicts the ending: a line that reaches the commander below MARCH_FRESH of its bars
+// fells it 0-2% of the time against 32-34% for one that arrives whole, and the gap holds inside
+// every sector taken separately, so it is not sector depth wearing a health costume. Nor is it
+// the robot declining the fight - no commander fight in the sample ended in a retreat; the hurt
+// arrivals were fought and lost, 54 of 54 in one sample and 44 of 45 in another.
+//
+// The cause is the purse rather than the fight. 51 of 54 hurt arrivals could not have paid to
+// patch up if they had wanted to: 24 scrap in hand against a 127 bill, where a fresh arrival
+// carried 450 and owed 3. So the run is decided on the road, by whether the squad can afford to
+// arrive in one piece, and the game used to report that at the top of the sector as though the
+// commander had done it.
+//
+// This is a read, not a rule. It changes no number in any fight - it says what the numbers
+// already are, at the one moment the player can still act on them: before the last node of the
+// sector, while the Outpost is still behind them and extraction is still on the table.
+const MARCH_FRESH = 0.8;
+function marchRead() {
+    if (!runStats) return null;
+    // Only on the eve of the commander. It is the one fight that cannot be walked out of once it
+    // starts, and the only one where arriving hurt is close to fatal. A missing map needs no
+    // guard of its own: availableNodeIds returns nothing without one, so the line below already
+    // answers it. A `!sectorMap` check stood here until a mutant that deleted it could not be
+    // killed by any assertion - which is what unreachable code looks like from the outside.
+    if (!availableNodeIds().some(id => { const n = nodeById(id); return n && n.type === 'BOSS'; })) return null;
+    const line = deployed();
+    if (!line.length) return null;
+    const hp = line.reduce((a, u) => a + Math.max(0, u.hp), 0);
+    const max = line.reduce((a, u) => a + u.maxHp, 0);
+    const hurt = line.filter(u => u.hp > 0 && u.hp < u.maxHp);
+    // The engine's own price for the job, asked of the engine rather than reckoned here - it is
+    // the number the Outpost will actually charge, and a read that quotes a different one is
+    // worse than no read at all.
+    const cost = hurt.reduce((a, u) => a + patchUpCost(u), 0);
+    return { share: max ? hp / max : 0, line: line.length,
+             standing: line.filter(u => u.hp > 0).length, hurt: hurt.length,
+             cost, purse: scrap, canPay: scrap >= cost, fresh: max ? hp / max >= MARCH_FRESH : false };
+}
+// Three states, because there are three different things to do about it: nothing, go and spend,
+// or accept that this is the shape you are taking up there.
+function marchTone(r) { return !r ? null : r.fresh ? 'ready' : r.canPay ? 'patch' : 'grim'; }
+// Every number here is the engine's own - the bars as they stand and the price the Outpost will
+// actually charge - because a read that quotes a figure the game does not honour is worse than
+// showing nothing. The wording says what is true and what it costs, and stops there: the choice
+// between going up, going back to spend, and walking out is the player's.
+function renderMarchRead() {
+    const el = document.getElementById('march-read');
+    if (!el) return;
+    const r = marchRead();
+    if (!r) { el.style.display = 'none'; el.innerHTML = ''; return; }
+    const tone = marchTone(r);
+    const pct = Math.round(r.share * 100);
+    const b = bossForSector();
+    let body;
+    if (tone === 'ready') {
+        body = `The squad is at <b>${pct}%</b>. As ready as they are going to get.`;
+    } else if (tone === 'patch') {
+        body = `${r.hurt} of ${r.line} are hurt \u2014 the squad is at <b>${pct}%</b>. `
+             + `Patching them up costs <b>${r.cost}</b> of your ${r.purse}. The Outpost is still behind you.`;
+    } else {
+        body = `The squad is at <b>${pct}%</b>. Putting them right costs <b>${r.cost}</b> and you have ${r.purse}. `
+             + `Squads that go up like this do not come back down.`;
+    }
+    el.style.display = '';
+    el.className = `march-read march-${tone}`;
+    el.innerHTML = `<div class="march-head">${b.name.toUpperCase()} IS AT THE TOP OF THIS SECTOR</div>`
+                 + `<div class="march-body">${body}</div>`;
+}
 // The credit is a parameter rather than a read so the requisition shelf can price both sides of
 // the purchase - what the next expedition deploys with, and what it would deploy with once the
 // fallback is on order - through this function instead of hand-copying the sum beside it. Every
@@ -6581,6 +6651,8 @@ function renderMap() {
             + (sets.length ? '' : `<div class="set-note">Nothing you are carrying is half of a pair.</div>`);
     }
     document.getElementById('set-list').innerHTML = sHtml;
+
+    renderMarchRead();
 
     const mapC = document.getElementById('map-nodes');
     if (currentTier > TOTAL_TIERS) {
@@ -11919,7 +11991,7 @@ globalThis.WP = {
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, noteKill, raiseBody, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder,
     REQUISITIONS, reqById, reqCost, reqOpen, buyRequisition, refundRequisitions, renderRequisitions, newPendingReq,
-    REQ_REROLL_COST, REQ_REROLL_MAX, REQ_GRUDGE_BASE, REQ_RUNG_STEP, REQ_FALLBACK_COST, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    REQ_REROLL_COST, REQ_REROLL_MAX, REQ_GRUDGE_BASE, REQ_RUNG_STEP, REQ_FALLBACK_COST, MARCH_FRESH, marchRead, marchTone, renderMarchRead, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants

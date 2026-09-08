@@ -1056,6 +1056,52 @@ catch (e) { ({ chromium } = require('playwright-core')); }
 
 const ROOT = path.join(__dirname, '..');
 
+// ── H04: WHAT THE WALK IS WORTH ───────────────────────────────────────────────────
+// The brief read "80% of wipes at tier ten" and concluded the nine tiers below were attrition
+// without jeopardy - a long walk to one dice roll - and proposed putting danger down there.
+// Measured against the fight rather than against where the loss is recorded, that is backwards.
+// The walk is what decides the dice roll.
+//
+// Three samples of 60 carried runs, arrival state paired with the outcome:
+//
+//   arrived under 40%      22-42 fights      0% felled
+//   arrived 40-60%         11-14 fights      0% felled
+//   arrived 60-80%         11-12 fights    0-8% felled
+//   arrived over 80%     392-455 fights   32-34% felled
+//
+// SECTOR IS THE OBVIOUS CONFOUND and it does not explain it. A deeper sector means a longer
+// road, a harder commander, more levels and more relics at once, so depth could produce this
+// table with the road doing nothing. Split inside each sector separately, the gap held in every
+// one: s1 0% vs 64%, s2 0% vs 21%, s3 0% vs 19%, s4 0% vs 38%, s5 0% vs 27%, s7 0% vs 38%.
+// In the first sample the losing squads were also HIGHER level (7.8 vs 7.2) and carrying MORE
+// relics (6.2 vs 5.5), which is depth's signature rather than weakness - and both gaps closed to
+// nothing at the larger sample (7.7/7.9, 7.4/7.3) while the health gap stayed. Health is the
+// discriminator; the level and relic readings were noise that happened to point somewhere.
+//
+// NOR IS IT THE ROBOT DECLINING THE FIGHT, which is the reading the buckets would otherwise be
+// making: `won` folds a fight that was fought and lost together with one this policy walked away
+// from. Recorded by kind, no commander fight in any sample ended in a retreat - hurt arrivals
+// went lost 54 of 54 in one and lost 44 / won 1 in another.
+//
+// THE CAUSE IS THE PURSE, NOT THE FIGHT. This file's own policy heals every operator to full
+// after every node it can pay for, so a squad that walks in hurt is one that could not pay:
+//
+//   scrap in hand on arrival          24 hurt, 450 fresh
+//   what topping up would have cost  127 hurt,   3 fresh
+//   hurt arrivals that could not pay   51 of 54
+//
+// So the run is decided on the road, by whether the squad can afford to arrive whole, and the
+// game reported it at the top of the sector as though the commander had done it. Adding danger
+// to tiers 6-9 would make an already-decisive stretch more decisive - the opposite of the fix.
+// What shipped instead is the read the map never offered (marchRead): the weather was forecast
+// and the ground was named, both facts about the enemy, and the one number that predicts the
+// ending was the one nobody was shown. It changes no number in any fight, which is the point,
+// and it is why no paired arm accompanies it - there is nothing here for an arm to separate.
+//
+// WHAT THIS SAMPLE STILL CANNOT READ: the 60-80% band is 11-12 fights an arm and swings 0-8%,
+// so where exactly the cliff sits inside it is not settled here. MARCH_FRESH is set at 0.8
+// because that is where the samples separate cleanly, not because 0.79 was measured and rejected.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
@@ -2373,7 +2419,27 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
     if (node.type === 'BOSS') {
       const b = bossForSector();
-      stat.bossMet.push({ id: b.id, grudge: grudgeOn(b.id) });
+      // H04. The brief calls tiers 6-9 "attrition without jeopardy" on the strength of where
+      // wipes are RECORDED - 80% at tier ten. That reading is only sound if what the road takes
+      // out of a squad does not decide the fight at the top of it. So the arrival is recorded
+      // with the outcome: a squad that walks in at half strength and one that walks in fresh are
+      // the two halves of the question, and the engine's own line is what is read.
+      const line = deployed();
+      const hp = line.reduce((a, u) => a + Math.max(0, u.hp), 0);
+      const max = line.reduce((a, u) => a + u.maxHp, 0);
+      stat.bossMet.push({ id: b.id, grudge: grudgeOn(b.id), sector: currentSector,
+                          share: max ? +(hp / max).toFixed(3) : 0,
+                          line: line.length, standing: line.filter(u => u.hp > 0).length,
+                          lvl: line.length ? +(line.reduce((a, u) => a + (u.level || 1), 0) / line.length).toFixed(2) : 0,
+                          relics: activeRelics.length, regroups: regroupsLeft(),
+                          bag: inventory.length, roster: playerRoster.length,
+                          // The policy above heals every operator to full after EVERY node while
+                          // the scrap lasts, so a squad that walks in hurt is one that could not
+                          // pay - not one that chose not to. Recorded with the purse and with
+                          // what the engine would have charged to finish the job, so "could not
+                          // afford it" is read off the game's own price rather than asserted.
+                          scrap, toHeal: deployed().reduce((a, u) => a + (u.hp > 0 && u.hp < u.maxHp
+                            && typeof patchUpCost === 'function' ? patchUpCost(u) : 0), 0) });
     }
     currentNodeType = node.type; isCurrentNodeElite = !!node.elite;
     // What the fight is standing under and on, recorded as the pair rather than two tallies:
@@ -2384,7 +2450,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     const outcome = fight(node.type, !!node.elite);
     if (node.type === 'BOSS') {
       const met = stat.bossMet[stat.bossMet.length - 1];
-      if (met) met.won = outcome === 'won';
+      // H04: the KIND of ending, not just whether it was a kill. `won` folds a fight that was
+      // fought and lost together with one this policy declined, and a hurt squad declining is a
+      // fact about the robot rather than about the road - which is exactly the reading the
+      // arrival buckets would otherwise be making.
+      if (met) { met.won = outcome === 'won'; met.outcome = outcome; }
     }
     stat.nodes++;
 
@@ -2672,6 +2742,64 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('met again, carrying a grudge', `${risen.length} fought, ${rate(risen)} won`);
   [1, 2, 3].forEach(g => { const a = met.filter(m => m.grudge === g);
     if (a.length) line(`  risen ×${g}`, `${a.length} fought, ${rate(a)} won`); });
+
+  // H04: WHAT THE WALK IS WORTH. The brief reads 80% of wipes at tier ten and concludes the
+  // nine tiers below are attrition without jeopardy. That follows only if the attrition does
+  // not decide the fight it delivers the squad into. Bucketed by the state the squad arrived
+  // in, against whether the commander fell - so the road is judged on what it changes rather
+  // than on where the loss happens to be recorded.
+  const arrived = met.filter(m => typeof m.share === 'number');
+  if (arrived.length) {
+    const bucket = [[0, 0.4, 'under 40%'], [0.4, 0.6, '40-60%'], [0.6, 0.8, '60-80%'], [0.8, 1.01, 'over 80%']];
+    bucket.forEach(([lo, hi, name]) => {
+      const a = arrived.filter(m => m.share >= lo && m.share < hi);
+      if (a.length) line(`  arrived ${name}`, `${a.length} fights, ${rate(a)} felled`);
+    });
+    const full = arrived.filter(m => m.standing === m.line);
+    const down = arrived.filter(m => m.standing < m.line);
+    line('  arrived with everyone up', `${full.length} fights, ${rate(full)} felled`);
+    if (down.length) line('  arrived a body short', `${down.length} fights, ${rate(down)} felled`);
+    const mean = a => a.length ? (a.reduce((x, m) => x + m.share, 0) / a.length) : 0;
+    const wonA = arrived.filter(m => m.won), lostA = arrived.filter(m => !m.won);
+    line('  mean arrival health', `${(mean(wonA) * 100).toFixed(0)}% when it fell, ${(mean(lostA) * 100).toFixed(0)}% when it did not`);
+    const lvl = a => a.length ? (a.reduce((x, m) => x + m.lvl, 0) / a.length) : 0;
+    line('  mean arrival level', `${lvl(wonA).toFixed(1)} when it fell, ${lvl(lostA).toFixed(1)} when it did not`);
+    const rel = a => a.length ? (a.reduce((x, m) => x + m.relics, 0) / a.length) : 0;
+    line('  mean relics carried', `${rel(wonA).toFixed(1)} when it fell, ${rel(lostA).toFixed(1)} when it did not`);
+    // THE CONFOUND, CONTROLLED. Read flat, the buckets above say a hurt squad never fells a
+    // commander - and the same table says the squads that LOST were higher level and carrying
+    // MORE relics, which is the signature of sector depth rather than of weakness. A deeper
+    // sector means a longer road, a harder commander, more levels and more relics all at once,
+    // so sector is a common cause of arriving hurt and of losing, and the flat bucketing cannot
+    // tell that apart from the road mattering. Split within sector: if the road is what decides
+    // the fight, hurt still loses to healthy at the SAME depth against the SAME commander.
+    const sectors = [...new Set(arrived.map(m => m.sector))].sort((a, b) => a - b);
+    console.log('   within a sector, arriving hurt against arriving fresh');
+    sectors.forEach(sec => {
+      const a = arrived.filter(m => m.sector === sec);
+      if (a.length < 8) return;
+      const hurt = a.filter(m => m.share < 0.8), fresh = a.filter(m => m.share >= 0.8);
+      if (!hurt.length || !fresh.length) {
+        line(`    sector ${sec}`, `${a.length} fights, all arrived ${hurt.length ? 'hurt' : 'fresh'} - nothing to compare`);
+        return;
+      }
+      line(`    sector ${sec}`, `hurt ${hurt.length} fights ${rate(hurt)} felled  |  fresh ${fresh.length} fights ${rate(fresh)} felled`);
+    });
+    // And how those fights ended, which is what says whether 0% is the road or the robot.
+    const kinds = a => { const k = {}; a.forEach(m => { k[m.outcome || '?'] = (k[m.outcome || '?'] || 0) + 1; });
+                         return Object.entries(k).sort((x, y) => y[1] - x[1]).map(([n, c]) => `${n} ${c}`).join(', '); };
+    const hurtAll = arrived.filter(m => m.share < 0.8), freshAll = arrived.filter(m => m.share >= 0.8);
+    line('  how the hurt arrivals ended', kinds(hurtAll) || 'none');
+    line('  how the fresh arrivals ended', kinds(freshAll) || 'none');
+    // WHY THEY WALKED IN HURT. The sim's own policy heals to full at every node it can pay for,
+    // so this separates "did not heal" from "could not".
+    const purse = a => a.length ? Math.round(a.reduce((x, m) => x + (m.scrap || 0), 0) / a.length) : 0;
+    const owed = a => a.length ? Math.round(a.reduce((x, m) => x + (m.toHeal || 0), 0) / a.length) : 0;
+    line('  scrap in hand on arrival', `${purse(hurtAll)} hurt, ${purse(freshAll)} fresh`);
+    line('  what topping up would have cost', `${owed(hurtAll)} hurt, ${owed(freshAll)} fresh`);
+    const broke = hurtAll.filter(m => (m.scrap || 0) < (m.toHeal || 0));
+    line('  hurt arrivals that could not pay', `${broke.length} of ${hurtAll.length}`);
+  }
 
   console.log('\n── THE DEAD ' + '─'.repeat(48));
   const downs = results.reduce((a, r) => a + r.downs, 0);
