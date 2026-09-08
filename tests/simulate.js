@@ -1404,10 +1404,71 @@ const ROOT = path.join(__dirname, '..');
 // 1.06 is the flattest health the design allows. The shipped pair sits on that floor.
 //
 // WHAT THIS DID NOT DO. The wipe rate barely moved (6.4 -> 5.8-6.2 a career): runs still end in
-// a wipe, they just end later. Income was left at 1.4 a sector, so the purse now outgrows the
-// fight by ~32% a sector rather than ~10%, and player power compounds much harder than it did.
-// That is where most of the reachability came from, and it is the number to reach for first if
-// the win rate ever needs moving again - it is a single constant and it was never swept.
+// a wipe, they just end later. Income was left at 1.4 a sector.
+//
+// AND ONE CLAIM HERE WAS WRONG, corrected by H14 below rather than quietly edited out: this
+// paragraph said the purse now outgrows the fight by ~32% a sector "and player power compounds
+// much harder than it did", and called that the source of the reachability. It is not. Income
+// and every Outpost price ride the same curve and cancel; upgrades bought per run does not move
+// with the constant. The reachability came from the enemy curves this phase actually changed.
+
+// ── H14: WHAT THE INCOME CONSTANT IS FOR ──────────────────────────────────────────
+// sectorRewardMult() returns 1.4^(sector-1) and had never been swept. Two notes in game.js and
+// the H13 record above all said the same thing about it - the purse outgrows the fight, which is
+// what lets player power compound - and all three were wrong in the same way. The constant is on
+// BOTH sides of the ledger: four income sources ride it, and so does every price the Outpost and
+// the Armory quote. An upgrade costs the same in cleared nodes at sector 7 as at sector 1.
+//
+// Careers won, three careers of 150 an arm, everything else at the H13 build:
+//
+//   income          1.0              1.4              1.7
+//   careers won     19 / 17 / 22%    29 / 25 / 29%    33 / 39 / 23%
+//   mean            19.3%            27.7%            31.7%
+//   reached s7      27 / 25 / 31%    33 / 32 / 35%    37 / 41 / 28%
+//   upgrades/run    51.4/55.0/55.9   49.1/52.6/52.3   51.4/51.3/47.0
+//
+// Dropping below 1.4 separates completely - 17-22% against 25-29% - and costs about eight
+// points. Raising above it does not separate at all: 1.7 spans 23-39% and swallows 1.4's whole
+// range. The purse meanwhile grows 5.7x in nominal terms across that sweep and buys the same
+// fifty upgrades. So 1.4 sits at saturation and stays there; the game is already at the quarter
+// the owner asked for, and there is nothing to buy by moving it.
+//
+// WHICH MEANS IT LANDS SOMEWHERE ELSE, and finding out where took two instruments and refuted
+// the first guess. Three price curves live in this economy - the multiplicative one above, a
+// linear one, and a flat set that never moves - and only the two that are NOT sectorRewardMult
+// can feel it. 145-three-prices pins them apart and this file now measures both.
+//
+//   the flat set     the scar clinic at 120, the collector at 500, and ten choices in the events
+//                    and the faces totalling 1,690. A sector-one price costs 2.3 cleared nodes
+//                    at the door and 0.3 at the end of the road, which is E09's own complaint in
+//                    a subsystem E09 never reached - and it is NOT the lever. Measured with the
+//                    new counter above: 69-78% affordable at every income level tested, no
+//                    separation anywhere, and only ~7% of the choices a card offers.
+//
+//   the recruit      recruitCost() is 90 + 6 a tier, linear in depth, reaching 504 by sector 7
+//                    against income that compounds past it. Two careers of 100 an arm:
+//
+//                      income         1.0        1.4        1.7
+//                      affordable     43 / 43%   71 / 70%   79 / 69%
+//                      signed         19 / 21%   53 / 51%   63 / 54%
+//
+//                    Complete separation from 1.0 to 1.4 on both rows, and saturation above it -
+//                    the same shape the win rate has. H10 had already found recruits priced
+//                    right at the margin, median 180 against a median purse of 198. A squad that
+//                    cannot replace its dead cannot finish a road, and this constant is what
+//                    decides whether it can.
+//
+// A NOTE ON THE FIRST GUESS, kept because it is the useful part. The flat set was the obvious
+// mechanism - it is visibly E09's defect, it is easy to enumerate, and the counter for it was
+// written first. It moved 69 -> 79% while the win rate moved 19 -> 32%, on 7% of the choices,
+// which is far too small a lever for the swing. Attributing the number to it would have been
+// H10's mistake exactly: a mechanism that sounded right, measured on the wrong arm. The recruit
+// counter is what settled it, and both counters stay - the flat one earned its place by ruling
+// its own hypothesis out.
+//
+// WHAT IS LEFT. Putting the flat set on outpostPrice is still a legible-design item - a choice
+// that costs a third of a node is not a decision - but it is not a balance one, and this file
+// now says so with numbers rather than by inference.
 
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
@@ -1636,6 +1697,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  cachesMet: 0, cachesClean: 0, cachesForced: 0, cacheScrap: 0, cacheLocks: {}, cacheOpener: {},
                  bookedFrom: {},
                  tookNonFight: 0, evOptions: 0, evBookable: 0, evCouldBook: 0,
+                 evShown: 0, evPriced: 0, evPricedTook: 0, pricedBySector: {},
                  relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0,
                  bossGrudge: [], metGrudge: [], scars: [], recovered: 0, clockLeft: [], downFaced: 0, downReach: 0, downByMove: 0, downByItem: 0, downByBar: 0, barSaves: 0, bagSaves: 0, handSaves: 0 };
 
@@ -2677,7 +2739,30 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       const ev = pickEvent();
       // An event's choice list can depend on standing now, so it is asked for rather than read.
       if (ev.cast) meetCast(ev.cast);
-      const options = choicesFor(ev).filter(c => c.canAfford());
+      // H14: this line is the whole instrument for the flat-price question, and until now it
+      // threw the answer away. choicesFor(ev) is what the card OFFERS; filtering by canAfford
+      // leaves what this purse could pay for, and the ones dropped in between are exactly the
+      // choices priced out - which is the thing the income constant moves. Ten choices in the
+      // events and the faces charge sector-one constants that never move while income compounds
+      // 1.4 a sector, so what they cost in real terms falls away as the road goes on.
+      //
+      // `priced` reads the choice's own gate rather than a list kept here, so a card added later
+      // joins the count by existing rather than by somebody remembering to add it. It matches
+      // the literal form only - a gate written against a variable is one that rides a curve,
+      // which is the shape this is measuring the absence of.
+      const shown = choicesFor(ev);
+      const options = shown.filter(c => c.canAfford());
+      const priced = c => /scrap\s*>=\s*\d+/.test(String(c.canAfford));
+      const pricedShown = shown.filter(priced);
+      stat.evShown += shown.length;
+      stat.evPriced += pricedShown.length;
+      stat.evPricedTook += pricedShown.filter(c => c.canAfford()).length;
+      if (pricedShown.length) {
+        const key = 's' + currentSector;
+        const row = stat.pricedBySector[key] || (stat.pricedBySector[key] = { offered: 0, afford: 0 });
+        row.offered += pricedShown.length;
+        row.afford += pricedShown.filter(c => c.canAfford()).length;
+      }
       if (ev.cast) stat.facesMet[ev.cast] = (stat.facesMet[ev.cast] || 0) + 1;
       if (FOLLOWUPS.some(f => f.title === ev.title)) stat.threads.push(ev.title);
       const owedBefore = pendingConsequences.length;
@@ -3802,6 +3887,24 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('  and a non-fight was actually taken', `${tot('tookNonFight')} (${forks ? (tot('tookNonFight') / forks * 100).toFixed(0) : 0}%)`);
   const evOpt = tot('evOptions'), evBk = tot('evBookable'), evCould = tot('evCouldBook');
   line('event choices offered, total', `${evOpt}`);
+  // H14: what the income constant actually buys. A choice priced at a sector-one constant costs
+  // a falling fraction of a node as income compounds, so this rate is the exchange rate between
+  // the two economies - not a fact about the cards.
+  const evShown = tot('evShown'), evPriced = tot('evPriced'), evTook = tot('evPricedTook');
+  line('  of those, priced at a sector-one constant',
+    `${evPriced} of ${evShown} (${evShown ? (evPriced / evShown * 100).toFixed(0) : 0}%)`);
+  line('  and affordable when offered',
+    `${evTook} of ${evPriced} (${evPriced ? (evTook / evPriced * 100).toFixed(0) : 0}%)`);
+  {
+    const by = {};
+    results.forEach(r => Object.entries(r.pricedBySector || {}).forEach(([k, v]) => {
+      const row = by[k] || (by[k] = { offered: 0, afford: 0 });
+      row.offered += v.offered; row.afford += v.afford;
+    }));
+    const cols = Object.keys(by).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+    line('  affordable by sector',
+      cols.map(k => `${k.slice(1)}: ${by[k].offered ? Math.round(by[k].afford / by[k].offered * 100) : 0}%`).join('  '));
+  }
   line('  of them, ones that book a consequence', `${evBk} (${evOpt ? (evBk / evOpt * 100).toFixed(0) : 0}%)`);
   line('  events where a consequence was on the table', `${evCould} of ${tot('events')} (${tot('events') ? (evCould / tot('events') * 100).toFixed(0) : 0}%)`);
   line('  and the ceiling this run left on the table', `${evCould - tot('booked')} bookings not taken`);

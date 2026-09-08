@@ -7529,9 +7529,14 @@ function traitSummary(char) {
     return (shut.length ? `${held} · closed: ${shut.join(', ')}` : held) + capLine;
 }
 // ── The till ────────────────────────────────────────────────────────────────────────
-// Income compounds x1.4 a sector through sectorRewardMult, while the wall compounds x1.06 in
-// health and x1.08 in damage - so the purse outgrows the fight by about 32% a sector by design,
-// which is what lets player power compound. Four of the Outpost's lines were sector-one
+// Income compounds x1.4 a sector through sectorRewardMult while the wall compounds x1.06 in
+// health and x1.08 in damage - but so does every price below, which is the part this note used
+// to get wrong. It said the purse outgrows the fight by about 32% a
+// sector "which is what lets player power compound". H14 measured that and it is not so:
+// sectorRewardMult is on BOTH sides of the ledger, so an upgrade costs the same in cleared nodes
+// at sector 7 as at sector 1, and stat upgrades bought per run barely moves across a 1.0-to-1.7
+// sweep of the constant. What the curve outgrows is anything priced on a DIFFERENT curve, of
+// which the recruit is the one that decides runs. See sectorRewardMult for the measurement. Four of the Outpost's lines were sector-one
 // constants and did not participate: bringing three operators from a quarter health back to
 // full cost 60 scrap at every depth, which is half of one cleared node's payout at sector 1 and
 // 6.6% of it at sector 7. Attrition had an off switch, and the switch got cheaper the longer
@@ -8484,12 +8489,46 @@ function rollIntent(enemy) {
     return intentFor(gateIntent(branch, enemy), enemy);
 }
 
-// Rewards climb 1.4x a sector so player power can compound and the run ends on a build/skill
-// wall rather than an arithmetic one. The note here used to say enemy stats climb 1.5x per
-// sector; they have not for a long time - SECTOR_HP_SCALE is 1.06 and SECTOR_DMG_SCALE is 1.08,
-// eased there and measured. So the purse deliberately outgrows the fight, by 32% a sector
-// against health and 30% against damage, and anything priced off a sector-one constant stops
-// being a decision about halfway down the road. That is what outpostPrice is for.
+// H14: what this constant is actually for, measured rather than assumed.
+//
+// It is on both sides of the ledger. Four income sources ride it - the node payout, the fight
+// payout, the empty pool and the cache - and so does every price the Outpost and the Armory
+// quote, through outpostPrice and shopPrice. So it cancels: an upgrade grants a flat +10 HP or
+// +3 DMG at (30 + 25n) x this, paid out of income that is also x this, and what it costs
+// measured in cleared nodes is identical at either end of the road. 145-three-prices asserts
+// that outright. Stat upgrades bought per run across a 1.0/1.4/1.7 sweep, three careers of 150
+// an arm: 54.1 / 51.3 / 49.9 - directional at best, and nowhere near the 7.5x the purse moved.
+//
+// So the note that used to sit here - the purse outgrows the fight, "which is what lets player
+// power compound" - was comparing this curve to the enemy curve while ignoring that prices ride
+// it too. Player power does not compound through this constant.
+//
+// WHAT IT DOES DECIDE is everything priced on a curve that is NOT this one, and there are two.
+// The flat set - the scar clinic at 120, the collector at 500, and ten choices in the events and
+// the faces totalling 1,690 - is E09's finding alive in a subsystem E09 never reached: a
+// sector-one price costs 2.3 cleared nodes at the door and 0.3 at the end of the road. Measured,
+// though, it is NOT the lever: those choices run 69-78% affordable at every income level tested,
+// and they are only about 7% of the choices a card offers.
+//
+// The lever is the recruit. recruitCost() is 90 + 6 a tier - linear in depth, reaching 504 by
+// sector 7 - against income that compounds past it. Recruits signed as a share of offers seen,
+// two careers of 100 an arm:
+//
+//   income   1.0        1.4        1.7
+//   affordable  43 / 43%   71 / 70%   79 / 69%
+//   signed      19 / 21%   53 / 51%   63 / 54%
+//
+// A squad that cannot replace its dead cannot finish a road, and H10 had already found recruits
+// priced right at the margin. That is where this constant lands.
+//
+// AND 1.4 IS AT SATURATION, which is why it stays. Careers won over three careers of 150 an arm:
+// 1.0 reads 19 / 17 / 22%, 1.4 reads 29 / 25 / 29%, 1.7 reads 33 / 39 / 23%. Dropping below 1.4
+// separates completely and costs about eight points; raising above it does not separate at all,
+// on the win rate or on the recruit rate. Rewards still climb so the run ends on a build wall
+// rather than an arithmetic one - that half of the old note was right - and the wall they climb
+// against is eased and measured: SECTOR_HP_SCALE is 1.06 and SECTOR_DMG_SCALE is 1.08, set in
+// H13. Anything priced off a sector-one constant still stops being a decision about halfway
+// down the road, which is what outpostPrice is for and what the flat set above still is not.
 function sectorRewardMult() { return Math.pow(1.4, currentSector - 1); }
 
 // Scores run to six figures late in a run and the header is 400px wide on a phone, so keep
