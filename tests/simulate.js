@@ -1999,6 +1999,59 @@ const ROOT = path.join(__dirname, '..');
 // balance target behind it, and the target is the owner's to set - the same reason I05 left
 // H13's wall alone until it was asked for.
 
+// ── J01: WHAT THE SKY TAKES — THE SAWTOOTH IS REAL AND IT IS SYMMETRIC ────────────
+// E06 pulled `1 + (currentTier - 1) * 0.4` out of five spawn sites and left it at two: the
+// SMOG chip and the SHRAPNEL roll. Suite 97 pins that both still use it and calls it a phase of
+// its own. Nobody had costed it, and the reason is that THE SKY WAS THE ONE DAMAGE SOURCE IN
+// THE GAME WITH NO LEDGER - this file could say which sky a fight was fought under and nothing
+// at all about what it did there, so the only way to ask was to re-derive the formula somewhere
+// else, which is exactly the hand-copy defect F03 catalogued nine of.
+//
+// So the engine books it now, on the same lazy runStats idiom bondSaves uses: what LANDED
+// rather than what was rolled, per side, per sector, per cause, with exposure alongside so the
+// by-sector totals can be read per turn. Raw totals by sector describe where runs end, not what
+// the sky does once you are there.
+//
+// THE SAWTOOTH IS REAL. currentTier resets to openingTier() at every sector boundary and the
+// expression has no sector term, so weather ramps 1.0x to 4.6x across a sector and starts over,
+// while the fight beside it rides SECTOR_HP_SCALE and never restarts. Three careers of 150:
+//
+//   damage per weather turn   s1    s2    s3    s4    s5    s6    s7
+//     career 1               6.4   6.8   7.1   7.2   7.4   7.1   7.1
+//     career 2               6.3   7.3   7.2   6.3   7.0   6.6   6.6
+//     career 3               6.3   6.9   7.2   7.3   6.7   7.0   6.9
+//
+// Flat at every depth, to within a point, exactly as the shape predicts.
+//
+// BUT THE EFFECT IS MILD AND IT IS SYMMETRIC, which is the finding and was not the prediction.
+// Read as the share of the bar each tick actually took:
+//
+//   share of the squad bar    8.3  7.3  6.2  6.0  4.9  4.1  4.5
+//                             8.3  7.0  6.1  5.3  5.7  4.3  4.3
+//                             8.3  6.4  6.7  5.5  5.0  4.5  4.3
+//   share of the hostile bar  9.2  8.3  6.6  5.5  3.8  3.8  4.6
+//                             9.6  7.8  6.1  5.3  5.1  4.6  4.1
+//                             9.2  7.4  6.7  5.7  5.5  4.1  4.0
+//
+// The squad decays 8.3% to about 4.4%, the hostiles 9.3% to about 4.2% - a factor of 1.9 and
+// 2.2, tracking each other within a point at every sector. The sky does not become one-sided at
+// depth, and 4% of a bar a tick in sector seven is not nothing. The premise this item opened
+// with - that a resetting curve makes the weather stop mattering the way E04's armour did - IS
+// NOT SUPPORTED. THE CURVE IS LEFT ALONE: changing it would be an unforced balance move against
+// no measured problem, and it would shift the wall I06 has just cut to a 30% target.
+//
+// WHY THE SQUAD STILL EATS MORE OF IT IN TOTAL - 222k / 205k / 198k against 134k / 126k / 124k,
+// a ratio near 1.6 in all three careers - is exposure and not rate. The per-tick shares above
+// are within a point of each other, so it is not that the sky hits the squad harder; it is that
+// three bodies stand there continuously while hostile groups are killed and replaced.
+//
+// TWO THINGS CHECKED AND DELIBERATELY NOT CLAIMED. difficultyMult does not reach the weather.
+// E06 found the same omission at the spawn sites and repaired it there, but a spawn is an enemy
+// and the sky is not: it damages whoever is standing, so scaling it by the enemy knob would be
+// wrong in a way the spawn sites were not. And SMOG carries the load five to one over SHRAPNEL
+// (297k / 269k / 267k against 59k / 62k / 55k), which is chance-versus-certainty rather than a
+// balance gap - SMOG chips every turn and SHRAPNEL rolls.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
