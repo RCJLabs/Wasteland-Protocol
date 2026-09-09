@@ -1586,14 +1586,17 @@ const ROOT = path.join(__dirname, '..');
 //
 //                        price                  value
 //   careers won          34 / 42 / 39           49 / 39 / 56        overlapping
-//   wipes a career       6.13 / 5.73 / 6.02     5.04 / 5.39 / 4.69  SEPARATED
+//   squad wipes a run    6.13 / 5.73 / 6.02     5.04 / 5.39 / 4.69  SEPARATED
 //   score, median        26.9k / 29.6k / 29.6k  30.7k / 27.8k / 35.0k  overlapping
 //   reached sector 7     26 / 37 / 29%          37 / 29 / 39%       overlapping
 //   signed of affordable 269/380, 278/375, 263/351   29/399, 35/352, 36/353
 //                        71%                    9%
 //
-// WIPES SEPARATE COMPLETELY - 5.73-6.13 against 4.69-5.39, about 15% fewer wiped careers - and
-// they are the only row that does. The win rate moves hard the same way, 25.6% to 32% on the
+// WIPES SEPARATE COMPLETELY - 5.73-6.13 against 4.69-5.39, about 15% fewer - and they are the
+// only row that does. I03 called these "wiped careers" and I04 corrects it: stat.wipes counts
+// SQUAD WIPES PER EXPEDITION, and a run continues past one while a regroup is left, so this is
+// how often the squad goes down in a fight rather than how often a career ends. The measurement,
+// the direction and the separation are untouched; only the label was wrong. The win rate moves hard the same way, 25.6% to 32% on the
 // mean, and does NOT separate: value's 39 sits inside price's 34-42. So the claim is the wipe
 // rate, and the win rate is a direction, not a result.
 //
@@ -1622,6 +1625,54 @@ const ROOT = path.join(__dirname, '..');
 // this item's invention, only one row separated, and moving the default would re-baseline every
 // figure in this file on one item's evidence. Sharpening the rating and then deciding the default
 // is the follow-up, and it should be decided on the wipe rate, which is the row that answered.
+
+// ── I04: WHICH HALF OF DECLINING IS DOING THE WORK ────────────────────────────────
+// I03 found a policy with taste beats a greedy one and could not say why. Two channels were
+// confounded in it: a recruit arrives at 60% of their bar carrying none of the squad's bought
+// upgrades, AND the ~200 scrap not spent stays in a purse H14 showed the Outpost is the best use
+// of. `--recruit burn` separates them - it declines exactly what `value` declines and then takes
+// the money anyway, only where `price` would have signed, so the counterfactual is exact.
+//
+// Squad wipes a run, three careers of 150 an arm (price has a fourth from this item):
+//
+//   price   5.73 / 6.02 / 6.13 / 6.53
+//   burn    5.14 / 5.25 / 5.29          separated from price, overlaps value
+//   value   4.69 / 5.04 / 5.39
+//
+// BURN SEPARATES COMPLETELY FROM PRICE and sits inside value. Taking the money away does not
+// give the wipe rate back, so the body is the drag and the price is not. That the subtraction
+// actually bites is checked rather than assumed: removing it lifts upgrades bought a run from
+// 39.8 to 43.1 on a matched pair, which is the purse the arm is supposed to be emptying.
+//
+// SO THE OBVIOUS FIX WAS TRIED AND DOES NOT HOLD UP. A recruit is levelled to squad par by
+// design - "a fresh recruit six sectors deep would be a body, not a hand" - but the upgrades
+// bought on top of those levels are not matched. Granting the roster's mean upgradeCount at
+// signing, measured at three careers of 150 on the price arm:
+//
+//                  careers won            squad wipes a run
+//   price          32 / 34 / 39 / 42      5.73 / 6.02 / 6.13 / 6.53
+//   with parity    47 / 49 / 39           5.99 / 5.81 / 5.92
+//
+// Wins run 30% against 24.5% on the means and DO NOT SEPARATE - parity's 39 sits inside price's
+// 32-42 - and the wipe rate does not move at all. Two samples looked like a clear win and the
+// third took it away, which is the whole reason three is the floor here. Nothing shipped to the
+// game: a directional read on one arm is not a licence to buff a class, and it would push the
+// win rate past the quarter the owner asked H13 to hit.
+//
+// AND THE SAME MISTAKE AGAIN, in the same suite, caught by the same batteries. I03 recorded that
+// 148 had asserted a recruit's damage still equalled the card's, which a random quirk breaks. It
+// was fixed there - and the health assertion one line above it had exactly the same exposure and
+// was left alone. signOnRecruit takes RECRUIT_HEALTH off maxHp and only THEN rolls the quirk that
+// moves maxHp, so "hp is the share of maxHp" is false whenever the quirk is not health-neutral;
+// it failed a battery on 43/62. It reads the share off the CARD's bar now, with the clamp the
+// engine applies. Fixing one instance of a class of bug is not fixing the class, and the note in
+// I03 should have sent me looking for the others.
+//
+// WHAT IS STILL UNEXPLAINED. Parity fixes the stats and changes neither row, so the drag is not
+// the recruit being weak on paper. The next candidate is the one thing parity does not touch:
+// RECRUIT_HEALTH puts them on the field at 60% of a bar, and this file fields them immediately.
+// A body at 60% in a four-slot line may simply be a wipe waiting to happen whatever its numbers.
+// That is one arm away - sign, but bench until healed - and it is the next thing to try.
 
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
@@ -1797,6 +1848,12 @@ const RESIGN = flag('resign', 'on');
 // printed before this stays comparable. `value` weighs the card against the line and can
 // therefore decline one it could afford, which is the thing H10 said had to exist before "the
 // offer is not compelling" could be asked in either direction.
+// `burn` is a diagnostic arm rather than a player: it declines exactly what `value` declines and
+// then takes the money anyway. I03 found declining wipes less and could not say why - a recruit
+// arrives at 60% of their bar carrying none of the squad's bought upgrades, AND the ~200 scrap
+// stays in a purse H14 showed the Outpost is the best use of. Those two channels are confounded
+// in `value`; this separates them. If burn keeps value's wipe rate, the body was the drag. If it
+// falls back to price's, the money was the gain.
 const RECRUIT = flag('recruit', 'price');
 
 // The three games this file can measure, and why the difference is the whole story:
@@ -1858,7 +1915,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  tookNonFight: 0, evOptions: 0, evBookable: 0, evCouldBook: 0,
                  evShown: 0, evPriced: 0, evPricedTook: 0, pricedBySector: {},
                  retreatOpen: 0, retreatAfford: 0, retreatAsked: [], retreatPurse: [], retreatBySector: {},
-                 recruitWhy: {},
+                 recruitWhy: {}, recruitBurned: 0,
                  relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0,
                  bossGrudge: [], metGrudge: [], scars: [], recovered: 0, clockLeft: [], downFaced: 0, downReach: 0, downByMove: 0, downByItem: 0, downByBar: 0, barSaves: 0, bagSaves: 0, handSaves: 0 };
 
@@ -3146,7 +3203,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // the arm can conclude.
       const rate = c => c.dmgBase + c.maxHp / 4;
       let wants = true, why = 'price';
-      if (recruitPolicy === 'value' && tpl) {
+      if ((recruitPolicy === 'value' || recruitPolicy === 'burn') && tpl) {
         const line = deployed();
         const bench = playerRoster.filter(c => c.gridPos === 0 && c.hp > 0);
         const hole = Math.max(0, boardSlots() - line.length - bench.length);
@@ -3155,6 +3212,14 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         else if (!worst || rate(tpl) > rate(worst)) { wants = true; why = 'better'; }
         else { wants = false; why = 'declined'; }
         stat.recruitWhy[why] = (stat.recruitWhy[why] || 0) + 1;
+        // The counterfactual has to be exact: burn takes the money only where PRICE would have
+        // signed - a declined offer this purse could have paid for while keeping the reserve.
+        // Burning on one price could not have afforded either would invent a cost the arm it is
+        // compared against never bore.
+        if (recruitPolicy === 'burn' && !wants && scrap >= pendingRecruit.cost + 80) {
+          scrap = Math.max(0, scrap - pendingRecruit.cost);
+          stat.recruitBurned = (stat.recruitBurned || 0) + 1;
+        }
       }
       if (tpl && wants && scrap >= pendingRecruit.cost + 80) {
         const owedBefore = pendingConsequences.length;
@@ -3707,6 +3772,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       line('  the policy wanted it because there was a hole', `${why.hole || 0} (${pc(why.hole)})`);
       line('  or because it beat the worst hand on the field', `${why.better || 0} (${pc(why.better)})`);
       line('  and turned it down on merit', `${why.declined || 0} (${pc(why.declined)}) — affordable or not`);
+      const burned = results.reduce((a, r) => a + (r.recruitBurned || 0), 0);
+      if (burned) line('  of which the burn arm paid for and left standing', `${burned}`);
     }
   }
   line('  signed as a share of what was affordable',

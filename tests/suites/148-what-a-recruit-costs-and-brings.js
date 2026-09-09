@@ -77,8 +77,16 @@ module.exports = {
                boughtBySquad: buyer.upgradeCount, boughtByRecruit: hired.upgradeCount };
     });
     ok(`signing charges the asking price (${got.spent})`, got.spent > 0);
-    ok(`and they walk in hurt, at the written share of their bar (${got.hp}/${got.maxHp})`,
-      got.hp === Math.max(1, Math.floor(got.maxHp * got.share)) && got.hp < got.maxHp);
+    // Against the CARD's bar, not the one they end up with. signOnRecruit takes the share off
+    // maxHp and only then rolls a quirk that moves maxHp - RECKLESS is -15, STURDY is +20 - so
+    // "hp is the share of maxHp" is false whenever the quirk is not health-neutral, and the
+    // clamp that follows is min(that share, the new maxHp). This assertion read the post-quirk
+    // bar first and failed a battery on 43/62, which is the same mistake the upgrade assertion
+    // below made and had already been fixed for: a stat read through a random modifier is not
+    // the stat, and fixing one instance of it is not fixing it.
+    ok(`and they walk in hurt, at the written share of their bar (${got.hp}/${got.maxHp}, off a card bar of ${got.card.hp})`,
+      got.share < 1
+      && got.hp === Math.min(Math.max(1, Math.floor(got.card.hp * got.share)), got.maxHp));
     ok(`levelled to the squad they are joining (level ${got.level}, par ${got.par})`,
       got.level === got.par);
     ok(`with a point banked for each level they were given (${got.points})`, got.points > 0);
