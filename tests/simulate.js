@@ -1562,6 +1562,67 @@ const ROOT = path.join(__dirname, '..');
 // it is still the reason there is no --retreat arm. What this item found is that the general
 // refactor is not needed for anything else.
 
+// ── I03: THE RECRUIT YOU WALK PAST, ASKED PROPERLY ────────────────────────────────
+// H10 filed it and could not answer it: this file signed 123 of 123 offers it could afford,
+// because the rule was `scrap >= cost + 80` and nothing else, so "the offer is not compelling"
+// was not a finding the instrument could produce in either direction. It said what was needed -
+// a policy that weighs the card and therefore sometimes declines one it can pay for - and called
+// that the prerequisite for the feature rather than a refinement of it. This is that policy.
+//
+// FIRST, WHETHER TASTE WOULD HAVE ANYWHERE TO GO. If a squad nearly always has a hole, taste
+// signs everything anyway and the arm is a null by construction, which is how H05, H07 and H10
+// each dissolved. Measured before the policy was written: 96% of offers arrive at a line that is
+// already full, and the card out-hits the worst hand on the field 14% of the time. There was
+// room.
+//
+// --recruit value rates a card as dmgBase + maxHp/4 and signs on one of two grounds: a hole in
+// the line, or beating the worst hand already on it. Otherwise it declines, affordable or not.
+// The rating is a stated policy and not a truth - the point is that a policy with ANY taste can
+// say no. It also UNDERSTATES a recruit, because a signature banks a perk point for every level
+// to squad par and no stat comparison sees those. `price` is still the default, so every figure
+// this file has printed stays comparable.
+//
+// PAIRED, three careers of 150 an arm:
+//
+//                        price                  value
+//   careers won          34 / 42 / 39           49 / 39 / 56        overlapping
+//   wipes a career       6.13 / 5.73 / 6.02     5.04 / 5.39 / 4.69  SEPARATED
+//   score, median        26.9k / 29.6k / 29.6k  30.7k / 27.8k / 35.0k  overlapping
+//   reached sector 7     26 / 37 / 29%          37 / 29 / 39%       overlapping
+//   signed of affordable 269/380, 278/375, 263/351   29/399, 35/352, 36/353
+//                        71%                    9%
+//
+// WIPES SEPARATE COMPLETELY - 5.73-6.13 against 4.69-5.39, about 15% fewer wiped careers - and
+// they are the only row that does. The win rate moves hard the same way, 25.6% to 32% on the
+// mean, and does NOT separate: value's 39 sits inside price's 34-42. So the claim is the wipe
+// rate, and the win rate is a direction, not a result.
+//
+// WHICH ANSWERS H10 AND CORRECTS THE READING OF H14. H14 found recruit signings co-moving with
+// the win rate across the income sweep and named recruits the lever the income constant lands
+// on. The co-movement is real; the causation is not this way round. Decoupled here - same money,
+// different taste - signing MORE is worse. Money was moving both, and buying fewer recruits with
+// it is better than buying more.
+//
+// WHY, NOT MEASURED, so it is named as candidates rather than a conclusion: a recruit arrives at
+// 60% of their bar carrying none of the stat upgrades the squad has bought (148 asserts exactly
+// that), and the ~200 scrap not spent goes to an Outpost H14 showed is where power actually
+// compounds. Which of those two does the work is a separate item; this file cannot tell them
+// apart as it stands.
+//
+// ONE THING THE BATTERY CAUGHT, kept because it is the same mistake in miniature. 148 first
+// asserted a recruit arrives without the squad's upgrades by checking their damage still equalled
+// the card's. Signing rolls a random quirk that moves dmgBase, so that assertion was true only
+// when the quirk happened to be damage-neutral: it passed two batteries and failed the third. It
+// counts upgradeCount now, which is what buyUpgrade actually increments and what the claim was
+// always about. A stat read through a random modifier is not the stat.
+//
+// WHAT THIS DOES NOT SETTLE. One taste is not all tastes: a rating that valued the banked perk
+// points, or the reach a line is missing, might sign more and do better still. And the default
+// is deliberately left at `price` rather than switched to the better player - the value rating is
+// this item's invention, only one row separated, and moving the default would re-baseline every
+// figure in this file on one item's evidence. Sharpening the rating and then deciding the default
+// is the follow-up, and it should be decided on the wipe rate, which is the row that answered.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
@@ -1731,6 +1792,12 @@ const RESCUE = flag('rescue', 'bar');
 // choice. `--resign on` (the default now) lets a worn squad cut the order down at a camp;
 // `--resign off` is the behaviour every prior sample ran under.
 const RESIGN = flag('resign', 'on');
+// I03: whether the recruit policy has any taste. `price` is the rule this file has always used -
+// sign anything the purse can reach and keep the reserve - and is the default, so every figure
+// printed before this stays comparable. `value` weighs the card against the line and can
+// therefore decline one it could afford, which is the thing H10 said had to exist before "the
+// offer is not compelling" could be asked in either direction.
+const RECRUIT = flag('recruit', 'price');
 
 // The three games this file can measure, and why the difference is the whole story:
 //
@@ -1770,7 +1837,7 @@ const RESIGN = flag('resign', 'on');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy }) => {
   const stat = { order: null, fulfilled: false, won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
                  upgrades: 0, odAimed: 0, bossTopUps: 0, eliteTopUps: 0, reqBought: 0, reqGrudge: null, reqFallback: 0, regroupsHad: 0,
                  engineKills: 0, killGap: 0,
@@ -1791,6 +1858,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  tookNonFight: 0, evOptions: 0, evBookable: 0, evCouldBook: 0,
                  evShown: 0, evPriced: 0, evPricedTook: 0, pricedBySector: {},
                  retreatOpen: 0, retreatAfford: 0, retreatAsked: [], retreatPurse: [], retreatBySector: {},
+                 recruitWhy: {},
                  relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0,
                  bossGrudge: [], metGrudge: [], scars: [], recovered: 0, clockLeft: [], downFaced: 0, downReach: 0, downByMove: 0, downByItem: 0, downByBar: 0, barSaves: 0, bagSaves: 0, handSaves: 0 };
 
@@ -3041,8 +3109,54 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // fields them - a recruit measured only as a purchase is a recruit nobody ever swung.
       initiateRecruit();
       const tpl = recruitById(pendingRecruit && pendingRecruit.id);
-      if (tpl) stat.recruitOffers.push({ cost: pendingRecruit.cost, purse: scrap });
-      if (tpl && scrap >= pendingRecruit.cost + 80) {
+      // I03: what the LINE looked like at the moment of the offer, not just what the purse did.
+      // H10 established this policy signs everything it can afford and therefore cannot produce a
+      // finding about the card. Before writing one that can decline, the question is whether a
+      // policy with taste would ever get to USE it: if the squad nearly always has a hole, taste
+      // signs everything anyway and the arm is a null by construction. That is how H05, H07 and
+      // H10 each dissolved, so it is measured first and the policy is written after.
+      if (tpl) {
+        const line = deployed();
+        const bench = playerRoster.filter(c => c.gridPos === 0 && c.hp > 0);
+        const weakest = line.length
+          ? line.reduce((a, c) => (c.dmgBase < a.dmgBase ? c : a))
+          : null;
+        stat.recruitOffers.push({ cost: pendingRecruit.cost, purse: scrap,
+          who: tpl.classType, rank: tpl.rank,
+          // A hole is a slot the squad cannot fill: fewer bodies on the field than the board
+          // seats, with nobody on the bench to bring up.
+          seats: boardSlots(), fielded: line.length, benched: bench.length,
+          hole: Math.max(0, boardSlots() - line.length - bench.length),
+          lost: (runStats.fallen || []).length,
+          // What it would be replacing, so "better than the worst hand I have" can be asked.
+          weakDmg: weakest ? weakest.dmgBase : null,
+          weakHp: weakest ? weakest.maxHp : null,
+          cardDmg: tpl.dmgBase, cardHp: tpl.maxHp, cardSpd: tpl.speed });
+      }
+      // I03: the taste, kept strictly separate from the money. Both arms use the same
+      // affordability gate below, so the ONLY difference between them is whether a full line
+      // with nothing to gain is allowed to say no.
+      //
+      // The rating is dmgBase + maxHp / 4: damage is what an operator does every turn, health is
+      // how many turns they get, and at these magnitudes a point of damage is worth roughly four
+      // of health. It is a stated policy, not a truth - the point of the arm is that a policy
+      // with ANY taste can decline, not that this is the best taste available. A recruit also
+      // arrives with perk points banked to squad par, which no stat comparison sees, so this
+      // rating understates them; that is named here rather than buried, because it bounds what
+      // the arm can conclude.
+      const rate = c => c.dmgBase + c.maxHp / 4;
+      let wants = true, why = 'price';
+      if (recruitPolicy === 'value' && tpl) {
+        const line = deployed();
+        const bench = playerRoster.filter(c => c.gridPos === 0 && c.hp > 0);
+        const hole = Math.max(0, boardSlots() - line.length - bench.length);
+        const worst = line.length ? line.reduce((a, c) => (rate(c) < rate(a) ? c : a)) : null;
+        if (hole > 0) { wants = true; why = 'hole'; }
+        else if (!worst || rate(tpl) > rate(worst)) { wants = true; why = 'better'; }
+        else { wants = false; why = 'declined'; }
+        stat.recruitWhy[why] = (stat.recruitWhy[why] || 0) + 1;
+      }
+      if (tpl && wants && scrap >= pendingRecruit.cost + 80) {
         const owedBefore = pendingConsequences.length;
         signOnRecruit();
         if (pendingConsequences.length > owedBefore) {
@@ -3367,7 +3481,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -3566,7 +3680,36 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     line('  could pay but not keep the reserve', `${tight} (${pc(tight)}) \u2014 this policy, not the game`);
     line('  could pay and keep it', `${rich} (${pc(rich)})`);
     const affordN = offers.filter(o => o.purse >= o.cost).length;
-    line('  signed as a share of what was affordable',
+    // I03: whether a policy with taste would have room to use it. A hole is a seat with nobody to
+  // put in it; an offer against a full line is one a player could genuinely decline.
+  {
+    const withLine = offers.filter(o => o.seats !== undefined);
+    if (withLine.length) {
+      const holes = withLine.filter(o => o.hole > 0).length;
+      const full = withLine.filter(o => o.hole === 0).length;
+      const pc = v => `${(v / withLine.length * 100).toFixed(0)}%`;
+      line('  offered while the squad had a hole to fill', `${holes} (${pc(holes)})`);
+      line('  offered to a line that was already full', `${full} (${pc(full)}) — where taste could decline`);
+      const better = withLine.filter(o => o.weakDmg !== null && o.cardDmg > o.weakDmg).length;
+      line('  and the card out-hit the worst hand on the field', `${better} of ${withLine.length} (${pc(better)})`);
+      const seen = {};
+      withLine.forEach(o => { seen[o.who] = (seen[o.who] || 0) + 1; });
+      line('  which card was on the table', Object.entries(seen).map(([k, v]) => `${k} ${v}`).join(', '));
+    }
+  }
+  // I03: what the taste did, when there was any. Only the value arm fills this.
+  {
+    const why = {};
+    results.forEach(r => Object.entries(r.recruitWhy || {}).forEach(([k, v]) => { why[k] = (why[k] || 0) + v; }));
+    const total = Object.values(why).reduce((a, c) => a + c, 0);
+    if (total) {
+      const pc = v => `${Math.round((v || 0) / total * 100)}%`;
+      line('  the policy wanted it because there was a hole', `${why.hole || 0} (${pc(why.hole)})`);
+      line('  or because it beat the worst hand on the field', `${why.better || 0} (${pc(why.better)})`);
+      line('  and turned it down on merit', `${why.declined || 0} (${pc(why.declined)}) — affordable or not`);
+    }
+  }
+  line('  signed as a share of what was affordable',
       affordN ? `${totalSigned} of ${affordN} (${(totalSigned / affordN * 100).toFixed(0)}%)` : 'nothing affordable');
     line('  and as a share of what the reserve allowed',
       rich ? `${totalSigned} of ${rich} (${(totalSigned / rich * 100).toFixed(0)}%)` : 'none allowed');
