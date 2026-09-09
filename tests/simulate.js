@@ -1514,6 +1514,54 @@ const ROOT = path.join(__dirname, '..');
 // change than a policy flag and is its own item. Until then the shipped question - "is the door
 // open?" - is answered, and "does walking through it change anything?" is not.
 
+// ── I02: THE TURN EVERY FIGHT WAS OPENING TWICE ───────────────────────────────────
+// ── BOUNTY FIGURES ABOVE THIS LINE ARE UNDERSTATED BY ABOUT A TENTH ───────────────
+// Filed after I01 as "hand the fight loop's turn walk back to the engine", on the assumption
+// that the loop's re-implementation was broadly unsafe. The audit says otherwise and the item
+// shrank to one line. processTurn() has exactly three callers - nextTurn(), resumeCombat() and
+// the last statement of initiateCombat() - and nextTurn() has exactly two: processTurn's own
+// skip past a downed actor, and retreat()'s failure path. This loop touches neither, so nothing
+// here was ever at risk from the walk in general.
+//
+// What it WAS at risk from is the third one. initiateCombat ends in processTurn(), so a fight
+// does not open with nobody's turn - it opens with the first actor's turn already open: their
+// turn-start effects applied, and the turn counted in fightLog if they are a player. This loop
+// then did both again on its first pass.
+//
+// Measured over 210 fights across seven depths and three factions: 49 of them (23%) open on a
+// player - the Scavenger 46 times, the Medic 3, the two fastest operators - and in every one of
+// those 49 the lead's cooldown had already stepped 3 -> 2 and fightLog.turns already read 1
+// before this loop ran a single pass. One fight in four handed the fastest operator a free
+// cooldown step and read a turn longer than it was.
+//
+// PAIRED, three careers of 150 an arm, the same build either side:
+//
+//                      doubled                fixed
+//   bounties a run     7.37 / 8.07 / 8.07     8.20 / 9.06 / 8.56     separated, +10%
+//   careers won        46 / 47 / 37           46 / 41 / 34           overlapping
+//   wipes a run        5.76 / 5.71 / 5.77     5.61 / 6.23 / 6.16     overlapping
+//   score, median      29.6k / 32.8k / 27.0k  28.0k / 38.1k / 32.2k  overlapping
+//
+// Bounties is the row the mechanism predicts and the only row that separates - completely, max
+// 8.07 against min 8.20. fightLog.turns feeds exactly one consumer, `f.turns < BLITZ_TURNS`,
+// and BLITZ wants a fight finished quickly, so an inflated count was refusing it. Every other
+// row moves in the direction the free cooldown step would predict and none of them separate, so
+// there is no claim there: win rate, depth and score figures printed before this remain
+// comparable, and bounty figures do not.
+//
+// THE SETTIMEOUT IS INERT, checked rather than assumed. processTurn hands an opening hostile to
+// setTimeout, and this file has been leaving one of those behind at every fight. EXPEDITION is a
+// non-async arrow and every await in this file is in the Node-side driver outside it, so an
+// expedition runs to completion inside one synchronous page.evaluate and no timer can fire while
+// a fight is live. They fire after it returns, when combatActive is false, and executeEnemyAi
+// returns on its first line. Nothing was changed for it; 147 asserts the opening hostile has not
+// swung, which is the assertion that would catch it if that ever stopped being true.
+//
+// AND THE RETREAT PATH STANDS AS I01 LEFT IT. retreat()'s failure calls nextTurn(), so a taking
+// policy would still double-tick - that one really does need the loop to give the walk back, and
+// it is still the reason there is no --retreat arm. What this item found is that the general
+// refactor is not needed for anything else.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
@@ -2543,6 +2591,25 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const fight = (nodeType, elite) => {
     initiateCombat(nodeType, elite);
+    // I02: initiateCombat ends in processTurn(), so the engine has ALREADY opened the first
+    // actor's turn before this loop sees the field - applied its turn-start effects, and counted
+    // it in fightLog if it is a player. The loop below does both of those itself, for every
+    // actor, so the opening one was getting them twice.
+    //
+    // Measured over 210 fights across seven depths and three factions: 49 of them (23%) open on
+    // a player - the Scavenger 46 times, the Medic 3 - and in every one of those 49 the lead's
+    // cooldown had already stepped 3 -> 2 and fightLog.turns already read 1 before this loop ran
+    // a single pass. So in one fight in four the fastest operator was getting a free cooldown
+    // step, and the fight read one turn longer than it was. turns feeds exactly one thing, the
+    // BLITZ bounty, which wants a fight finished quickly - so it was under-credited on those
+    // fights for as long as this file has existed.
+    //
+    // Held as the ENTITY rather than as an index or a first-pass flag: the loop has three
+    // `continue` paths above the effects, so "skip the first pass" would drop the guard onto
+    // whichever actor happened to survive them. Read after initiateCombat returns, which is
+    // after processTurn's own bounce past a downed opener, so it names whoever actually got the
+    // opening turn.
+    let engineOpened = combatActive ? turnQueue[activeIndex] : null;
     // H02: the reckoning arm, opened at the bell rather than at a quarter health.
     if (reckoning && nodeType === 'BOSS') {
       const boss = activeEntities.find(e => !e.isPlayer && e.bossId);
@@ -2613,6 +2680,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     while (combatActive && rounds < 400) {
       rounds++;
       const actor = turnQueue[activeIndex];
+      // Cleared here rather than at the effects line below, because this actor's turn is spent
+      // whichever of the paths above it leaves by - and because the fightLog count further down
+      // needs to know too, long after the flag itself would have been stood down.
+      const engineDidOpen = actor === engineOpened;
+      if (engineDidOpen) engineOpened = null;
       // The real loop ticks the bleed-out clock as the queue passes a downed operator; this
       // loop walks the queue itself, so it has to do the same. It has to come before the hp
       // check below, which is where the first version of this sat - and measured zero deaths
@@ -2620,7 +2692,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (isDown(actor)) { tickBleedOut(actor); activeIndex = (activeIndex + 1) % turnQueue.length; continue; }
       if (!actor || actor.hp <= 0) { activeIndex = (activeIndex + 1) % turnQueue.length; continue; }
       if (actor.stunnedTurns > 0) { actor.stunnedTurns--; activeIndex = (activeIndex + 1) % turnQueue.length; continue; }
-      applyTurnStartEffects(actor);
+      // I02: everyone gets exactly one turn-start, the way the engine's own walk gives it.
+      if (!engineDidOpen) applyTurnStartEffects(actor);
       if (!activeEntities.some(e => e.isPlayer && e.hp > 0)) break;
       if (!activeEntities.some(e => !e.isPlayer && e.hp > 0)) break;
       // I01: the price of a second chance, counted at the moment it would be taken. retreatCost
@@ -2669,7 +2742,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       }
       // Count a fall the first time it happens to each operator in this fight.
       activeEntities.forEach(e => { if (isDown(e) && !e.__counted) { e.__counted = true; stat.downs++; } });
-      if (actor.isPlayer && fightLog) fightLog.turns++;   // processTurn does this in the real loop
+      // processTurn does this in the real loop - including for the actor initiateCombat opened,
+      // which is why that one is not counted twice. See the note at the top of fight().
+      if (actor.isPlayer && fightLog && !engineDidOpen) fightLog.turns++;
       if (actor.isPlayer) { if (!takeTurn()) { activeIndex = (activeIndex + 1) % turnQueue.length; continue; } }
       // F03: this used to be `actor.intent = rollIntent(actor); executeEnemyAi(actor)`, which
       // threw away the intent the player's whole turn had just been spent reading. The engine
