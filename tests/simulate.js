@@ -3906,6 +3906,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.regroupsLeft = regroupsLeft();
   stat.maxBond = Object.values(bonds).length ? Math.max(...Object.values(bonds)) : 0;
   stat.bondSaves = runStats.bondSaves || 0;
+  // J01: what the sky took, asked of the engine's own ledger rather than recomputed here. The
+  // question is whether the weather curve fits the fight it happens in: the two sites scale on
+  // `1 + (currentTier - 1) * 0.4`, which resets to 1.0 at every sector boundary, while the
+  // enemies beside them ride SECTOR_HP_SCALE per sector and never reset.
+  stat.wxTookPlayer = runStats.wxTookPlayer || 0;
+  stat.wxTookFoe = runStats.wxTookFoe || 0;
+  stat.wxTurns = runStats.wxTurns || 0;
+  stat.wxBySector = runStats.wxBySector || {};
+  stat.wxTurnsBySector = runStats.wxTurnsBySector || {};
+  stat.wxShrPlayer = runStats.wxShrPlayer || {};
+  stat.wxShrFoe = runStats.wxShrFoe || {};
+  stat.wxByCause = runStats.wxByCause || {};
   if (window.__sk) {
     const k = window.__sk;
     k.earned += Math.max(0, (bossSkulls - k.runStart) + k.runSpent);
@@ -4606,6 +4618,42 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     conf: CONFLUENCE.map(c => ({ faction: c.faction, cell: `${c.sky}|${c.ground}` })) }));
   line('ground fought on', spread(tables.grounds, marginal(p => p[1])));
   line('sky fought under', spread(tables.skies, marginal(p => p[0])));
+  // J01: and what it took while it was up. Both sides, because the two weather sites damage
+  // whatever is standing, and by sector, because the curve they use resets at every sector
+  // boundary while the bodies they land on do not.
+  {
+    const pl = results.reduce((a, r) => a + (r.wxTookPlayer || 0), 0);
+    const fo = results.reduce((a, r) => a + (r.wxTookFoe || 0), 0);
+    const tn = results.reduce((a, r) => a + (r.wxTurns || 0), 0);
+    if (pl + fo > 0) {
+      line('  the sky took, squad / hostile', `${pl} / ${fo}`);
+      line('  turns with weather up', `${tn} (${((pl + fo) / Math.max(1, tn)).toFixed(2)} damage a turn, both sides)`);
+      const cause = {};
+      results.forEach(r => Object.entries(r.wxByCause || {}).forEach(([k, v]) => { cause[k] = (cause[k] || 0) + v; }));
+      line('  by cause', Object.entries(cause).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ') || 'none');
+      const bys = {};
+      results.forEach(r => Object.entries(r.wxBySector || {}).forEach(([k, v]) => { bys[k] = (bys[k] || 0) + v; }));
+      const byt = {};
+      results.forEach(r => Object.entries(r.wxTurnsBySector || {}).forEach(([k, v]) => { byt[k] = (byt[k] || 0) + v; }));
+      // Per turn under weather, which is the only form of this row that compares sectors: the
+      // raw totals track where runs end, not what the sky does once you are there.
+      line('  per weather turn, by sector', Object.keys(bys).sort((a, b) => a - b)
+        .map(k => `s${k} ${(bys[k] / Math.max(1, byt[k] || 0)).toFixed(1)}`).join('  ') || 'none');
+      line('  weather turns, by sector', Object.keys(byt).sort((a, b) => a - b).map(k => `s${k} ${byt[k]}`).join('  ') || 'none');
+      // And what a tick was worth against the bar it hit. This is the row the item turns on:
+      // a flat number stays flat while the bodies on the other side of it do not.
+      const shr = who => {
+        const acc = {};
+        results.forEach(r => Object.entries(r[who] || {}).forEach(([k, v]) => {
+          acc[k] = acc[k] || [0, 0]; acc[k][0] += v[0]; acc[k][1] += v[1];
+        }));
+        return Object.keys(acc).sort((a, b) => a - b)
+          .map(k => `s${k} ${(acc[k][0] / Math.max(1, acc[k][1]) * 100).toFixed(1)}%`).join('  ') || 'none';
+      };
+      line('  a tick as a share of the squad bar', shr('wxShrPlayer'));
+      line('  and of the hostile bar', shr('wxShrFoe'));
+    } else line('  the sky took', 'nothing — no weather ledger reached this report');
+  }
   // A faction's own sky over its own ground - the rarest thing the weather system makes, since
   // it needs the faction, then the right one of its two grounds, then the weather roll.
   const confTotal = tables.conf.reduce((a, c) => a + (field[c.cell] || 0), 0);

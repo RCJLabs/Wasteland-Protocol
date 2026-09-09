@@ -10381,8 +10381,41 @@ function applyTurnStartEffects(ent) {
         else noteKill(ent, { cause });
     };
     const wx = sky();
-    if (wx.chip) { let sDmg = Math.floor(wx.chip * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - sDmg); log(`> ${ent.name} choked by Smog for ${sDmg} DMG.`, "log-dmg"); spawnFCT(ent.id, `-${sDmg}`, "fct-status"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SMOG'); }
-    if (wx.shrapnel && Math.random() < wx.shrapnel.chance) { let shrapDmg = Math.floor(wx.shrapnel.dmg * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - shrapDmg); log(`> Shrapnel struck ${ent.name} for ${shrapDmg} DMG!`, "log-dmg"); spawnFCT(ent.id, `-${shrapDmg}`, "fct-dmg"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SHRAPNEL'); }
+    // J01: the sky is the only damage source in the game with no ledger. The report could say
+    // which sky a fight was fought under and nothing whatever about what it did there, so a
+    // phase asking whether the weather curve fits the fight's had no way to find out except to
+    // hand-roll the formula somewhere else - the F03 defect this repo has already catalogued
+    // nine of. Recorded lazily, on the same runStats idiom bondSaves uses, so no save shape
+    // changes and an old save reads back the same. Counts what actually landed, not what was
+    // rolled: a 9-damage tick into 4 remaining health took 4.
+    const noteWeather = (before, cause) => {
+        const took = Math.max(0, before - ent.hp);
+        if (!runStats || took <= 0) return;
+        const side = ent.isPlayer ? 'wxTookPlayer' : 'wxTookFoe';
+        runStats[side] = (runStats[side] || 0) + took;
+        runStats.wxBySector = runStats.wxBySector || {};
+        runStats.wxBySector[currentSector] = (runStats.wxBySector[currentSector] || 0) + took;
+        runStats.wxByCause = runStats.wxByCause || {};
+        runStats.wxByCause[cause] = (runStats.wxByCause[cause] || 0) + took;
+        // The number the question actually turns on: what the tick was WORTH against the bar it
+        // landed on. A flat 9 is a fifth of a starting Hound and a fiftieth of a sector-7 line
+        // trooper, and only this ratio says which of those the sky is doing at depth.
+        const share = ent.maxHp > 0 ? took / ent.maxHp : 0;
+        const bag = ent.isPlayer ? 'wxShrPlayer' : 'wxShrFoe';
+        runStats[bag] = runStats[bag] || {};
+        runStats[bag][currentSector] = runStats[bag][currentSector] || [0, 0];
+        runStats[bag][currentSector][0] += share;
+        runStats[bag][currentSector][1] += 1;
+    };
+    if ((wx.chip || wx.shrapnel) && runStats) {
+        runStats.wxTurns = (runStats.wxTurns || 0) + 1;
+        // Exposure, so the by-sector damage above can be read per turn. Raw totals by sector
+        // say more about where runs end than about what the sky does there.
+        runStats.wxTurnsBySector = runStats.wxTurnsBySector || {};
+        runStats.wxTurnsBySector[currentSector] = (runStats.wxTurnsBySector[currentSector] || 0) + 1;
+    }
+    if (wx.chip) { const _b = ent.hp; let sDmg = Math.floor(wx.chip * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - sDmg); noteWeather(_b, 'SMOG'); log(`> ${ent.name} choked by Smog for ${sDmg} DMG.`, "log-dmg"); spawnFCT(ent.id, `-${sDmg}`, "fct-status"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SMOG'); }
+    if (wx.shrapnel && Math.random() < wx.shrapnel.chance) { const _b = ent.hp; let shrapDmg = Math.floor(wx.shrapnel.dmg * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - shrapDmg); noteWeather(_b, 'SHRAPNEL'); log(`> Shrapnel struck ${ent.name} for ${shrapDmg} DMG!`, "log-dmg"); spawnFCT(ent.id, `-${shrapDmg}`, "fct-dmg"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SHRAPNEL'); }
 
     // Over The Top runs on the Fiend's own turns, so it is spent here rather than on the clock.
     if ((ent.chargeTurns || 0) > 0) { ent.chargeTurns--; chg = true; if (ent.chargeTurns > 0) spawnFCT(ent.id, "OVER THE TOP", "fct-combo"); }
