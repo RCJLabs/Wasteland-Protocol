@@ -3588,6 +3588,37 @@ function recruitCost() { return RECRUIT_COST.base + RECRUIT_COST.perDepth * dept
 const RECRUIT_HEALTH = 0.6;
 let pendingRecruit = null;      // { id, cost, taken } for the node currently being stood in
 
+// K01: WHAT WALKS IN, in one place, because the card and the signing were describing two
+// different bodies. The card quoted the template line - HP 72 · DMG 21 - while signOnRecruit
+// levelled them to squad par and handed them none of what the squad had bought. Measured at
+// sector five against a line seven upgrades deep: quoted 72/21, arrived rated 39 against a
+// line whose WORST hand rated 69. Nobody could read that off the card and nobody should have
+// signed it.
+//
+// The level par the engine has always granted, and the upgrade par it now does. Median of the
+// LINE rather than its best, so a hire is a peer of the squad rather than a copy of its
+// strongest hand - and median rather than mean so one heavily-bought veteran cannot drag it.
+function recruitLevelPar() {
+    const alive = playerRoster.filter(c => c.hp > 0);
+    if (!alive.length) return 1;
+    return Math.max(1, Math.round(alive.reduce((a, c) => a + c.level, 0) / alive.length));
+}
+function recruitUpgradePar() {
+    const line = playerRoster.filter(c => c.gridPos > 0 && c.hp > 0);
+    const pool = line.length ? line : playerRoster.filter(c => c.hp > 0);
+    if (!pool.length) return 0;
+    const counts = pool.map(c => c.upgradeCount || 0).sort((a, b) => a - b);
+    return counts[Math.floor(counts.length / 2)];
+}
+// The body the card should be quoting. The quirk is deliberately NOT predicted - it is rolled
+// at signing and moves the bar, so the card says a quirk is coming rather than inventing one.
+function recruitArrival(tpl) {
+    const ups = recruitUpgradePar();
+    let hp = tpl.maxHp, dmg = tpl.dmgBase;
+    for (let i = 0; i < ups; i++) { if (i % 2 === 0) hp += 10; else dmg += 3; }
+    return { level: recruitLevelPar(), upgrades: ups, maxHp: hp, dmgBase: dmg,
+             speed: tpl.speed, hp: Math.max(1, Math.floor(hp * RECRUIT_HEALTH)) };
+}
 function recruitables() { return RECRUIT_POOL.filter(r => !playerRoster.some(c => c.id === r.id)); }
 function recruitById(id) { return RECRUIT_POOL.find(r => r.id === id) || null; }
 
@@ -7588,7 +7619,27 @@ function breakdownCost() { return outpostPrice(BREAKDOWN_BASE); }
 function sellValue() { return outpostPrice(SELL_BASE); }
 
 function useOutpostItem(index) { inventory.splice(index, 1); scrap += sellValue(); saveGameState(); renderOutpost(); }
-function buyUpgrade(charId, type, cost) { if (scrap < cost) return; scrap -= cost; let c = playerRoster.find(c => c.id === charId); if (c.hp <= 0) return; if (type === 'HP') { c.maxHp += 10; c.hp += 10; } else if (type === 'DMG') { c.dmgBase += 3; } c.upgradeCount++; saveGameState(); renderOutpost(); }
+// K01: the stat grant, separated from paying for it. The Outpost buys one; a signing now hands
+// several over at the squad's median, and neither wants a second copy of what +10 HP means.
+// The dead check moved ABOVE the charge on the way past: it used to take the scrap and then
+// return, so buying for a body at zero cost the money and gave nothing. The button is disabled
+// there, so nobody has been billed for it, but the order was wrong.
+function grantUpgrade(c, type) {
+    if (!c || c.hp <= 0) return false;
+    if (type === 'HP') { c.maxHp += 10; c.hp += 10; }
+    else if (type === 'DMG') { c.dmgBase += 3; }
+    else return false;
+    c.upgradeCount = (c.upgradeCount || 0) + 1;
+    return true;
+}
+function buyUpgrade(charId, type, cost) {
+    if (scrap < cost) return;
+    const c = playerRoster.find(x => x.id === charId);
+    if (!c || c.hp <= 0) return;
+    scrap -= cost;
+    grantUpgrade(c, type);
+    saveGameState(); renderOutpost();
+}
 function medBay(charId, action) {
     let c = playerRoster.find(c => c.id === charId);
     if (!c || c.hp <= 0 || c.hp >= c.maxHp) { saveGameState(); renderOutpost(); return; }
@@ -7967,7 +8018,32 @@ function recruitReach(tpl) {
          : reaches.every(r => r === 'ranged') ? 'RANGED' : 'MIXED';
 }
 
+// K01: what this body is FOR, against the line standing behind you and the road you are on.
+// Elemental matching would have been the obvious hook and it is not available: enemyStrike
+// reads `enemy.dmgType || 'phys'` and exactly three templates in the game set it, all of them
+// commanders - so a bio resist answers two fights in a career and nothing you can plan a
+// signing around (filed as K02). What DOES decide it is the shape of the line: a hole in it,
+// a reach it has none of, and whether this hand beats the weakest one already standing.
+function recruitAnswer(tpl) {
+    const line = playerRoster.filter(c => c.gridPos > 0 && c.hp > 0);
+    const notes = [];
+    if (line.length < DEPLOYED) notes.push(`your line is ${DEPLOYED - line.length} short`);
+    const reach = recruitReach(tpl);
+    if (reach && !line.some(c => recruitReach(c) === reach)) notes.push(`nobody on the line fights at ${reach}`);
+    // The same rating the muster and the road use to compare two hands: damage is what an
+    // operator does every turn, health is how many turns they get.
+    const rate = c => c.dmgBase + c.maxHp / 4;
+    const arr = recruitArrival(tpl);
+    const worst = line.length ? line.reduce((a, c) => (rate(c) < rate(a) ? c : a)) : null;
+    if (worst && (arr.dmgBase + arr.maxHp / 4) > rate(worst)) notes.push(`out-hits ${worst.name} on your line`);
+    const front = currentFront();
+    if (front) notes.push(`the sector is under ${front.name}`);
+    return notes.length ? notes.join(' · ') : 'nothing your line is short of';
+}
+
 function recruitCardHtml(tpl) {
+    const a = recruitArrival(tpl);
+    const why = recruitAnswer(tpl);
     const deck = [...(ABILITIES[tpl.classType] || [])];
     const verbs = deck.map(a => `<li><b>${a.label}</b> — ${a.reach === 'self' ? 'self' : a.reach}</li>`).join('');
     const res = Object.entries(tpl.resistances).filter(([, v]) => v !== 0)
@@ -7978,8 +8054,12 @@ function recruitCardHtml(tpl) {
             <div class="recruit-name">${tpl.name}</div>
             <div class="recruit-class">${RANK_LABELS[tpl.rank]} RANK · ${recruitReach(tpl)}</div>
             <div class="recruit-pitch">${tpl.pitch}</div>
-            <div class="recruit-stats">HP ${tpl.maxHp} · DMG ${tpl.dmgBase} · SPD ${tpl.speed}</div>
+            <div class="recruit-stats">HP ${a.maxHp} · DMG ${a.dmgBase} · SPD ${a.speed}</div>
+            <div class="recruit-arrival">walks in at LVL ${a.level} · ${a.hp}/${a.maxHp} HP${
+                a.upgrades ? ` · ${a.upgrades} upgrade${a.upgrades === 1 ? '' : 's'} to match the line` : ''
+            } · a quirk is rolled on signing</div>
             ${res ? `<div class="recruit-res">${res}</div>` : ''}
+            ${why ? `<div class="recruit-why">${why}</div>` : ''}
             <ul class="recruit-verbs">${verbs}</ul>
             ${loadoutChipsHtml(tpl.classType, pendingRecruit && pendingRecruit.benchedMove, tpl.id, 'recruit')}
         </div>
@@ -8027,13 +8107,21 @@ function signOnRecruit() {
     delete ch.rank; delete ch.pitch;
     // F10: whatever was chosen on the card, before they were anybody's to edit.
     if (pendingRecruit.benchedMove) ch.benchedMove = pendingRecruit.benchedMove;
+    // K01: and the same thought carried to what the squad has BOUGHT. The levels below close
+    // the experience gap for exactly the reason this comment gives; the purchased-stat gap is
+    // the larger half of the same problem and was left wide open. I08 measured it at 19-20
+    // points of a 31-33 point rating gap, and closing it trebles the number of signings worth
+    // fielding. Granted before health is taken, so arriving at RECRUIT_HEALTH means 60% of
+    // THEIR bar rather than 60% of the bar they would have had without it.
+    { const ups = recruitUpgradePar();
+      for (let i = 0; i < ups; i++) grantUpgrade(ch, i % 2 === 0 ? 'HP' : 'DMG'); }
     // They arrive hurt, carrying a quirk like anyone the muster rolls, and levelled to the
     // squad they are joining - a fresh recruit six sectors deep would be a body, not a hand.
     ch.hp = Math.max(1, Math.floor(ch.maxHp * RECRUIT_HEALTH));
     const pool = quirkPoolFor(ch.classType);
     ch.quirk = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
     if (ch.quirk) { ch.maxHp += ch.quirk.hp; ch.dmgBase += ch.quirk.dmg; ch.speed += ch.quirk.spd; ch.hp = Math.min(ch.hp, ch.maxHp); }
-    const par = Math.max(1, Math.round(playerRoster.reduce((a, c) => a + c.level, 0) / Math.max(1, playerRoster.length)));
+    const par = recruitLevelPar();
     // The 1.5 that used to be here is the curve XP_CURVE replaced, and its own comment says why:
     // "levels kept stalling, starving the perk economy". Levelling a recruit up to par on it left
     // them needing 1702 XP for level 9 where the squad they joined needs 810 - 2.1x, and 3.2x by
@@ -12490,6 +12578,7 @@ globalThis.WP = {
     applyScarStats, removeScarStats, giveScar, markScars, healScar,
     loseOperator, recoverDowned, closeRanks,
     RECRUIT_POOL, RECRUIT_COST, RECRUIT_HEALTH, recruitCost, recruitables, recruitById, recruitReach,
+    recruitArrival, recruitLevelPar, recruitUpgradePar, recruitAnswer, grantUpgrade,
     initiateRecruit, renderRecruit, recruitCardHtml, signOnRecruit, leaveRecruit,
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,

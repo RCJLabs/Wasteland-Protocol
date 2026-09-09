@@ -880,6 +880,12 @@ button.reach-short { border-color: #7a5a20; }
 .recruit-pitch { font-size: 0.6875rem; color: #8a8578; line-height: 1.5; font-style: italic; text-align: center; margin: 4px 0; }
 .recruit-stats { font-size: 0.6875rem; color: #d5cfc0; text-align: center; letter-spacing: 1px; }
 .recruit-res { font-size: 0.625rem; color: #6B8E23; text-align: center; text-transform: uppercase; letter-spacing: 1px; }
+/* K01: what walks in, and what it is for. The arrival line is the quieter of the two - it
+   corrects the stat line above it rather than competing with it - and the answer line is the
+   one the decision turns on, so it carries the card's accent. */
+.recruit-arrival { font-size: 0.625rem; color: #8a8272; text-align: center; letter-spacing: 0.5px; margin-top: 2px; }
+.recruit-why { font-size: 0.625rem; color: #c9a227; text-align: center; letter-spacing: 0.5px;
+               margin-top: 4px; padding-top: 4px; border-top: 1px solid #3a3730; line-height: 1.5; }
 .recruit-verbs { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
 .recruit-verbs li { font-size: 0.625rem; color: #8a8578; border-left: 2px solid #333; padding-left: 7px; }
 .recruit-verbs b { color: #d5cfc0; font-weight: bold; }
