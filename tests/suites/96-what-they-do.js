@@ -19,6 +19,13 @@
 // turn of each intent off enemyStrike, and every table has to land within 10% of the expected
 // damage of the fallback it replaced. All three fallback branches come out near 1.00, so the
 // tables change what a unit does on its turn without changing what the turn is worth.
+//
+// J05: I07 listed this phase among those whose numbers were read through the harness bug that
+// benched the squad's best operator at every recruit node, and that was wrong. Every figure
+// above comes from rolling rollIntent 40,000 times per type - a property of the enemy's own
+// table, measured with no fight running at all - so who was standing on the player's line could
+// not reach it. Nothing here needs re-measuring. Recorded in this file as well as in
+// simulate.js, because this is where somebody checking the claim would look first.
 module.exports = {
   name: 'What they do the other turns',
   run: async ({ page, ok, base, engineUp }) => {

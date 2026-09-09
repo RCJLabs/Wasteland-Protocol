@@ -227,6 +227,14 @@
 // player sees the bench control every time they muster, and the difficulty measurement says the
 // choice does not move the wall either way. The gap was the harness never making the choice, not
 // the choice the game makes for you.
+//
+// J05 RE-READ. BOTH HOLD. E12b's ten never-fired moves all fire on the fixed harness - per
+// career, STIM_DART 6,464, SHIELD_SLAM 6,107, HARRY 4,592, HEAT_WAVE 4,204, PIERCING_VOLLEY
+// 2,966, SHIV 2,368, RIOT_BUTT 2,368, TRENCH_SWEEP 701, WHALE_LINE 566, TANK_RUPTURE 234. The
+// 13-15% quoted above for SHIELD_SLAM belongs to the policy E12c REJECTED and was never the
+// shipped number; under the rule that ships it sits at 3.4% of all moves. E12c's own conclusion
+// is a comparison between two arms measured through the same lens, which is the one shape I07
+// leaves standing, so the overlap it found is unaffected. Neither is retracted.
 
 // ── F01: what the commander fight is worth once the screen stops lying ──────────────────
 // The wall at tier ten, measured 3 x 60 an arm against the same build without it. F01 fixed
@@ -416,6 +424,14 @@
 // 30), and SCAVENGER goes 8 -> 17 - it was being fielded off the bench all along and the line
 // could not see it. Any reading about classes that never leave the Outpost has to start again
 // from the second number.
+//
+// J05 RE-READ, against three careers of 150 on the I05-fixed harness. THE REPAIR HOLDS: all
+// four moves this phase made reachable do fire, and not marginally - per career, IRON_GUARD
+// 12,140, RAD_SHOT 7,244, OVER_THE_TOP 457, PURGE_VALVE 240. The finding was that a branch
+// could not be reached at all, and a count that large is not a lens artefact. What does not
+// survive is any SHARE quoted here, for the reason I07 gives; and the thirty-run table above
+// already says to treat it as consistent rather than measured, which was the right call twice
+// over.
 
 // ══ EVERY TABLE ABOVE THIS LINE WAS TAKEN THROUGH A BROKEN INSTRUMENT ══════════════════
 // F03. Nine defects were found in this file by an audit of the whole repository, and together
@@ -1865,9 +1881,14 @@ const ROOT = path.join(__dirname, '..');
 // recruit on it multiplies that recruit's share several times over while diluting each of the
 // seven by a fraction. Fourteen further ability rows held, and every one of them is a
 // starting-seven move. ANY PHASE THAT READ AN ABILITY RATE OFF THIS FILE READ IT THROUGH THAT -
-// D06, D07, E05, E12b and E12c all did. Their qualitative findings survive (a move that never
-// fired at all still never fired); their shares and counts do not, and want re-measuring before
-// they are quoted again.
+// D06, D07, E12b and E12c all did. Their qualitative findings survive (a move that never fired
+// at all still never fired); their shares and counts do not, and want re-measuring before they
+// are quoted again.
+//
+// J05 CORRECTION: this list named E05 as well, and E05 does not belong on it. E05 is about
+// ENEMY intent tables - it rolled rollIntent 40,000 times per type to show eighteen units
+// shared four behaviours - and rollIntent does not care who is standing on the player's line.
+// Nothing in it was ever read through this lens. Four phases, not five.
 //
 // 2. THE SQUAD SURVIVED WORSE, which is the same fact seen from the other side.
 //   wipes per run 5.4 → 6.3      withdrawals per run 3.3 → 4.6      regroups 4.9 → 5.7
