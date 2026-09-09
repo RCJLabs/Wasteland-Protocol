@@ -68,10 +68,22 @@ module.exports = {
       scrap = 100000;
       pendingRecruit = { id: tpl.id, cost: recruitCost(), taken: false };
       const par = Math.round(playerRoster.reduce((a, c) => a + c.level, 0) / playerRoster.length);
+      // Only three of the quirks move HP at all, so a random roll leaves the arrival arithmetic
+      // below untested more often than not - which is how a mutant that applies RECRUIT_HEALTH
+      // to the QUIRKED bar survived a first pass here. Pin one that moves it, and put the pool
+      // back, so the ordering claim is decided every run rather than most runs.
+      const pool = QUIRK_POOL.slice();
+      const sturdy = pool.find(q => q.hp > 0) || pool[0];
+      QUIRK_POOL.length = 0; QUIRK_POOL.push(sturdy);
       signOnRecruit();
+      QUIRK_POOL.length = 0; pool.forEach(q => QUIRK_POOL.push(q));
       const me = playerRoster.find(c => c.id === tpl.id);
       return { par, level: me.level, points: me.perkPoints, ups: me.upgradeCount,
-               slot: me.gridPos, share: me.hp / me.maxHp, health: RECRUIT_HEALTH };
+               slot: me.gridPos, hp: me.hp, maxHp: me.maxHp,
+               // The CARD's bar, before the quirk moved it - see the note at the assertion.
+               cardHp: tpl.maxHp, health: RECRUIT_HEALTH, quirkHp: sturdy.hp,
+               poolBack: QUIRK_POOL.length === pool.length,
+               want: Math.min(Math.max(1, Math.floor(tpl.maxHp * RECRUIT_HEALTH)), me.maxHp) };
     });
     // The engine closes the level gap on purpose - its own comment says a fresh recruit six
     // sectors deep would be a body, not a hand - and this asserts the shape of that, not a
@@ -83,8 +95,24 @@ module.exports = {
     // And these are the two it does not close, which is what the fielding decision turns on.
     ok(`it does NOT close the bought-upgrade gap (upgradeCount ${signed.ups})`, signed.ups === 0);
     ok(`and leaves them off the line for the player to place (gridPos ${signed.slot})`, signed.slot === 0);
-    ok(`they arrive hurt, at the engine's own share (${(signed.share * 100).toFixed(0)}% of a bar, RECRUIT_HEALTH ${signed.health})`,
-      Math.abs(signed.share - signed.health) < 0.05);
+    // MEASURE THIS AGAINST THE CARD'S BAR, NOT THE ARRIVING ONE. signOnRecruit sets hp from
+    // the pre-quirk maxHp and THEN rolls a quirk that moves maxHp, so hp/maxHp is not
+    // RECRUIT_HEALTH and drifts with whatever the quirk rolled - a +20 HP quirk on the Fiend
+    // reads 43/92, or 47%. Suite 148 was corrected for this bug twice; this is its third
+    // appearance and the first to reach a battery, which is what the third battery is for.
+    //
+    // Two claims, because either alone is vacuous. Reading the share back against
+    // RECRUIT_HEALTH only says the engine agrees with itself - set the constant to 1.0 and the
+    // arrival moves with it and the check still passes - so the hurt-at-all claim is made
+    // against the CARD's bar, which the constant cannot move. The second pins the arithmetic
+    // including the quirk clamp, so reordering the two would land here.
+    ok(`they arrive hurt rather than fresh (${signed.hp} of the card's ${signed.cardHp})`,
+      signed.hp < signed.cardHp);
+    ok(`at exactly the engine's own share of that bar (RECRUIT_HEALTH ${signed.health}, wanted ${signed.want}, got ${signed.hp} against a quirked ${signed.maxHp})`,
+      signed.hp === signed.want);
+    // The claim above only bites while the quirk actually moved the bar it is measured against.
+    ok(`and the pinned quirk did move that bar (+${signed.quirkHp} HP), pool restored`,
+      signed.quirkHp > 0 && signed.poolBack === true);
 
     // ── And a signature lasts exactly one expedition ─────────────────────────────────
     const kept = await page.evaluate(() => {

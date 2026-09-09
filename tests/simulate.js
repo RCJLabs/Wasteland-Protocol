@@ -1912,6 +1912,93 @@ const ROOT = path.join(__dirname, '..');
 // front of them. Anything this file measures about the world survived; most of what it measures
 // about the squad did not.
 
+// ── I08: THE RECRUIT IS NOT BENCHED BY THIS FILE. THE BODY IS BEHIND. ─────────────
+// I07 left the recruit rows reading like content nobody reaches: 242 of 456 offers signed and
+// 19 put on the line, N08's three classes standing in 18-27 careers of 150 against the Medic's
+// 138. This item went looking for the instrument defect behind that, on the reasonable prior
+// that I05 had just found one in the same block. It did not find one. Two premises died on the
+// way and both are recorded, because the negative results are the item.
+//
+// WHAT IS TRUE ABOUT THE INSTRUMENT. Every way a body improves here is gated on gridPos > 0 -
+// stat upgrades, gear out of the stash, and augments, all three. The game gates NONE of them:
+// canUpg is `scrap >= cost`, canAugment asks slots and materials, equipGear asks fit, and
+// renderOutpost walks playerRoster unfiltered. Perk points were already roster-wide in both,
+// which is what made the other three easy to miss. Suite 149 pins all of it.
+//
+// That is a real divergence, and next to this file's own fielding rule it looks like a deadlock:
+// benched for want of accumulation, unable to accumulate for want of a slot. So it was opened.
+// `--invest roster` spends on any living operator and re-reads the line at each Outpost, since
+// paying to improve a benched body without a way for it to earn the slot is incoherent. Three
+// careers of 150 an arm, everything else identical:
+//
+//                        line (default)          roster
+//   wipes per run        5.23 / 5.51 / 5.57      5.77 / 5.87 / 5.89     SEPARATES, roster worse
+//   regroups spent       4.72 / 5.00 / 5.01      5.21 / 5.33 / 5.36     SEPARATES, roster worse
+//   upgrades bought/run  45.8 / 48.7 / 49.2      60.9 / 60.9 / 61.5     SEPARATES, roster higher
+//   gear equipped/run     5.2 /  5.4 /  5.6       6.4 /  6.5 /  6.7     SEPARATES, roster higher
+//   careers won of 150     34 /   49 /   53        33 /   35 /   38     overlaps
+//   score, median       28.1k / 31.9k / 35.1k   29.5k / 29.5k / 31.5k   overlaps
+//   lost for good         484 /  513 /  554       552 /  599 /  600     overlaps (by two)
+//   bosses felled, mean  3.51 / 3.68 / 3.90      3.43 / 3.43 / 3.51     overlaps (touching)
+//
+// SO THE GATE IS A DIVERGENCE AND LINE-ONLY IS STILL THE BETTER POLICY. Opening it buys MORE
+// upgrades for the same purse - upgradeCost rides each operator's OWN count, so ten shallow
+// bodies are cheaper per purchase than three deep ones - and more gear, and then wipes more and
+// regroups more for it. Nothing it bought reached a win rate or a depth. `line` therefore stays
+// the default: it is not a fidelity bug being preserved, it is a policy this file can now show
+// is the better one. `roster` stays as the arm that showed it.
+//
+// ONE CAVEAT ON THAT ARM, STATED BECAUSE IT BOUNDS THE CONCLUSION. Its re-slot rule maximises
+// rate(), which knows nothing about role, so the obvious worry is that it benched the healer.
+// It did not: MEDIC stood in 144-146 careers of 150 under `roster` against 131-142 under `line`.
+// Every class rose, which is rotation rather than a better squad - re-slotting means more faces
+// touch the line during a run, so "classes deployed" counts more of them.
+//
+// AND THE RECRUIT STAYS ON THE BENCH IN BOTH ARMS, which is the actual answer:
+//
+//                        line                    roster
+//   contested placements  210 / 230 / 239         167 / 183 / 195
+//   mean rate gap        31.3 / 31.3 / 33.3      36.8 / 38.6 / 38.6
+//   incumbent upgrades    7.0 / 7.3 / 7.3         6.6 / 6.8 / 6.9
+//   recruit upgrades      0.0 in every career, in BOTH arms
+//   would win at parity  15% / 15% / 17%          7% /  9% /  9%
+//
+// The recruit's upgradeCount is zero under `roster` too, and that is not a bug in the arm: the
+// placement is decided the instant the signature lands, on the road, before any Outpost exists
+// to spend at. So opening the gates cannot reach this decision at all, whatever it does for the
+// rest of the squad. THE OPENING PREMISE OF THIS ITEM - that a harness gate is what benches the
+// recruit - IS REFUTED. The body is behind, and it is behind at the one moment anybody asks.
+//
+// HOW A RECRUIT ACTUALLY REACHES THE LINE, decomposed, because "19 of 242" hides two different
+// stories and an earlier draft of this note got it wrong by calling them all deaths:
+//
+//                        line                    roster
+//   signed                247 / 236 / 227         170 / 211 / 203
+//   a slot was free         8 /   6 /  17           3 /  16 /  20    somebody had died
+//   won a full line        12 /   9 /   7           8 /  10 /   6    out-rated the worst hand
+//   fielded                20 /  15 /  24          11 /  26 /  26
+//
+// So it is about half and half, not all deaths. And the counterfactual is the sharpest number
+// this item produced: at upgrade parity the merit wins would be 40 / 34 / 32 rather than
+// 12 / 9 / 7 - THREE TO FOUR TIMES AS MANY. Purchased upgrades are 19-20 points of a 31-33 point
+// gap, so closing them is far and away the largest single lever on whether a recruit ever
+// stands. It is still not enough to make fielding usual: 32-40 of 210-239 contested placements
+// is 15%, so five in six would stay on the bench. Both halves of that are the finding.
+//
+// WHAT RESHAPES THE QUESTION FOR WHOEVER TAKES IT NEXT. confirmNewGame does
+// `playerRoster = ROSTER_TEMPLATE`, so A SIGNATURE LASTS EXACTLY ONE EXPEDITION. The 456 offers
+// splitting evenly three ways across 150 runs is the same fact read off the data - the shelf
+// refills every run. At ~186 scrap a recruit is not a roster addition, it is a within-run
+// replacement for somebody already lost, and the 19 of 242 that reached the line got there
+// through a free slot, which is to say through a death. That is a coherent design. It is not
+// what the price curve, the pitch or "SIGN THEM ON" imply, and it is why N08's three classes
+// read as unreachable content on a healthy run.
+//
+// Nothing was tuned here. Whether a recruit should arrive at purchased-stat parity, or carry
+// between expeditions, or cost less because it is a consumable, is a design question with a
+// balance target behind it, and the target is the owner's to set - the same reason I05 left
+// H13's wall alone until it was asked for.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
