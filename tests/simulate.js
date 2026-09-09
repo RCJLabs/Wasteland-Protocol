@@ -1562,6 +1562,11 @@ const ROOT = path.join(__dirname, '..');
 // it is still the reason there is no --retreat arm. What this item found is that the general
 // refactor is not needed for anything else.
 
+// ── I03 AND I04 ARE RETRACTED BY I05 BELOW. READ THAT FIRST. ─────────────────────
+// Both were measured through a fielding bug in this file that made signing a recruit cost the
+// squad its best body. Their measurements are real and their reasoning holds for the harness
+// they ran on; their CONCLUSIONS about the game do not.
+//
 // ── I03: THE RECRUIT YOU WALK PAST, ASKED PROPERLY ────────────────────────────────
 // H10 filed it and could not answer it: this file signed 123 of 123 offers it could afford,
 // because the rule was `scrap >= cost + 80` and nothing else, so "the offer is not compelling"
@@ -1673,6 +1678,61 @@ const ROOT = path.join(__dirname, '..');
 // RECRUIT_HEALTH puts them on the field at 60% of a bar, and this file fields them immediately.
 // A body at 60% in a four-slot line may simply be a wipe waiting to happen whatever its numbers.
 // That is one arm away - sign, but bench until healed - and it is the next thing to try.
+
+// ── I05: THE SLOT THAT WAS A LABEL, AND WHAT IT COST TWO ITEMS ────────────────────
+// ── EVERY WIN-RATE AND WIPE FIGURE ABOVE THIS LINE IS MEASURED THROUGH THE BUG ────
+// I04 ended pointing at RECRUIT_HEALTH: a recruit walks in at 60% of their bar and this file
+// fielded them at once, so perhaps a hurt body in a three-slot line is a wipe waiting to happen.
+// The first thing to check was whether the GAME fields them, and it does not. All three recruit
+// templates carry gridPos 0 and signOnRecruit never sets it: the engine puts a signature on the
+// bench for the player to place. The immediate fielding was this file's, and so was the rest.
+//
+//   const sitting = playerRoster.find(c => c.gridPos === tpl.rank && c.id !== tpl.id);
+//   if (me) { if (sitting) sitting.gridPos = 0; me.gridPos = tpl.rank; }
+//
+// tpl.rank IS THE LABEL PRINTED ON THE CARD. I04 established the engine deletes it on signing -
+// it is "VETERAN RANK" on a shelf, not a position - and the pool happens to run rank 1, 2, 3 over
+// three faces, so it landed on a real slot every time and never once looked wrong. The line is
+// DEPLOYED = 3 and the roster opens with all three held, so there was never a free slot: EVERY
+// signature threw a healthy, fully-levelled, fully-upgraded operator onto the bench to field a
+// recruit at 60% of their bar carrying no upgrades at all. It also went round assignSlot, which
+// is the engine's own door, so SHORT_HANDED's ban on slot 3 and checkDoctrine were both skipped -
+// the tenth hand copy of the kind F03 catalogued nine of.
+//
+// THROUGH assignSlot NOW, and placed on merit: a free slot if the line has lost somebody,
+// otherwise over the weakest hand if the recruit rates above it, otherwise the bench. Three
+// careers of 150 an arm, everything else identical:
+//
+//                      careers won              squad wipes a run
+//   price, as it was   32 / 34 / 39 / 42        5.73 / 6.02 / 6.13 / 6.53
+//   price, fixed       51 / 52 / 55             4.99 / 5.14 / 5.21
+//   value, fixed       41 / 58                  4.93 / 5.32
+//
+// BOTH ROWS SEPARATE COMPLETELY from the arm they replace. And price and value now OVERLAP on
+// both, where I03 had them cleanly apart - so taste does not matter once a recruit is placed
+// sensibly, and I03's finding was the bug the whole way down.
+//
+// WHAT THAT DOES TO I03 AND I04. I03 concluded "declining beats signing" and called H10's
+// question answered. RETRACTED: declining beat signing because signing meant losing the best
+// body on the line, and with that fixed the greedy policy is as good as the choosy one. I04
+// concluded "the body is the drag, not the price", which is right about the mechanism and wrong
+// about whose body - the drag was the operator being DISPLACED, not the recruit arriving. Its
+// burn arm result stands and now explains itself: burn declined, so it never made the swap.
+// I04's upgrade-parity null also stands, and for the same reason - parity made the arriving body
+// better while the swap was still throwing a better one away.
+//
+// AND IT REACHES FURTHER THAN THIS FILE. H13 tuned SECTOR_HP_SCALE and SECTOR_DMG_SCALE to put
+// the win rate near the quarter the owner asked for, and read ~26% off this harness. The same
+// build reads 34-37% now. The wall was set through a lens that was quietly costing the squad its
+// strongest operator at every recruit node, so the game is easier than what was asked for.
+// Nothing has been re-tuned here: the target is the owner's to set, and re-cutting H13 on one
+// item's evidence without being asked would be the same mistake in the other direction.
+//
+// The offer instrument's own "hole" reading was wrong too, in a way that had not bitten yet: it
+// measured the line against boardSlots(), which is BOARD_SLOTS - the number of CONTRACTS on the
+// bounty board. Both are 3, so every figure it printed was right by coincidence and would have
+// drifted the first time a career bought the War Room, which adds one to the board and nothing to
+// the line. It reads DEPLOYED now.
 
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
@@ -1915,7 +1975,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  tookNonFight: 0, evOptions: 0, evBookable: 0, evCouldBook: 0,
                  evShown: 0, evPriced: 0, evPricedTook: 0, pricedBySector: {},
                  retreatOpen: 0, retreatAfford: 0, retreatAsked: [], retreatPurse: [], retreatBySector: {},
-                 recruitWhy: {}, recruitBurned: 0,
+                 recruitWhy: {}, recruitBurned: 0, recruitFielded: 0, recruitBenched: 0,
                  relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0,
                  bossGrudge: [], metGrudge: [], scars: [], recovered: 0, clockLeft: [], downFaced: 0, downReach: 0, downByMove: 0, downByItem: 0, downByBar: 0, barSaves: 0, bagSaves: 0, handSaves: 0 };
 
@@ -3180,10 +3240,15 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
           : null;
         stat.recruitOffers.push({ cost: pendingRecruit.cost, purse: scrap,
           who: tpl.classType, rank: tpl.rank,
-          // A hole is a slot the squad cannot fill: fewer bodies on the field than the board
+          // A hole is a slot the squad cannot fill: fewer bodies on the field than the line
           // seats, with nobody on the bench to bring up.
-          seats: boardSlots(), fielded: line.length, benched: bench.length,
-          hole: Math.max(0, boardSlots() - line.length - bench.length),
+          //
+          // I05: this read boardSlots(), which is BOARD_SLOTS - the number of CONTRACTS on the
+          // bounty board - and not the squad line, which is DEPLOYED. Both are 3, so what it
+          // printed was right by coincidence, and would have drifted the moment a career bought
+          // the War Room, which adds one to the board and nothing to the line.
+          seats: DEPLOYED, fielded: line.length, benched: bench.length,
+          hole: Math.max(0, DEPLOYED - line.length - bench.length),
           lost: (runStats.fallen || []).length,
           // What it would be replacing, so "better than the worst hand I have" can be asked.
           weakDmg: weakest ? weakest.dmgBase : null,
@@ -3206,7 +3271,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if ((recruitPolicy === 'value' || recruitPolicy === 'burn') && tpl) {
         const line = deployed();
         const bench = playerRoster.filter(c => c.gridPos === 0 && c.hp > 0);
-        const hole = Math.max(0, boardSlots() - line.length - bench.length);
+        const hole = Math.max(0, DEPLOYED - line.length - bench.length);
         const worst = line.length ? line.reduce((a, c) => (rate(c) < rate(a) ? c : a)) : null;
         if (hole > 0) { wants = true; why = 'hole'; }
         else if (!worst || rate(tpl) > rate(worst)) { wants = true; why = 'better'; }
@@ -3234,11 +3299,33 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         }
         applyBench(playerRoster.find(c => c.id === tpl.id));   // F03: same deck rule as the muster
         stat.recruited.push(tpl.classType);
-        // Put them in the line if their rank is open, so their verbs get used rather than
-        // sitting on the bench for the rest of the run.
-        const sitting = playerRoster.find(c => c.gridPos === tpl.rank && c.id !== tpl.id);
+        // I05: this used tpl.rank as a BOARD SLOT. rank is the label printed on the card -
+        // I04 established the engine deletes it on signing - and it happens to run 1, 2, 3 over
+        // a pool of three, so it landed on a real slot every time and never looked wrong. The
+        // line is DEPLOYED = 3 and the roster opens with all three held, so there was never a
+        // free slot: every signature threw a healthy, fully-upgraded, fully-levelled operator
+        // onto the bench to field a recruit at 60% of their bar carrying no upgrades at all. The
+        // game does not do this - signOnRecruit leaves them at gridPos 0 for the player to place.
+        //
+        // Through assignSlot now, which is the engine's own door: it keeps SHORT_HANDED's ban on
+        // slot 3 and calls checkDoctrine, neither of which the hand copy did. And placed on
+        // merit rather than on a label - a free slot if the line has lost somebody, otherwise
+        // over the weakest hand on it, otherwise not at all.
         const me = playerRoster.find(c => c.id === tpl.id);
-        if (me) { if (sitting) sitting.gridPos = 0; me.gridPos = tpl.rank; }
+        if (me) {
+          const line = playerRoster.filter(c => c.gridPos > 0);
+          const held = new Set(line.map(c => c.gridPos));
+          let free = 0;
+          for (let sl = 1; sl <= DEPLOYED; sl++) if (!held.has(sl)) { free = sl; break; }
+          if (free) { assignSlot(me.id, free); stat.recruitFielded = (stat.recruitFielded || 0) + 1; }
+          else {
+            const worst = line.length ? line.reduce((a, c) => (rate(c) < rate(a) ? c : a)) : null;
+            if (worst && rate(me) > rate(worst)) {
+              assignSlot(me.id, worst.gridPos);
+              stat.recruitFielded = (stat.recruitFielded || 0) + 1;
+            } else stat.recruitBenched = (stat.recruitBenched || 0) + 1;
+          }
+        }
       } else {
         leaveRecruit();
       }
@@ -3775,6 +3862,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       const burned = results.reduce((a, r) => a + (r.recruitBurned || 0), 0);
       if (burned) line('  of which the burn arm paid for and left standing', `${burned}`);
     }
+  }
+  {
+    const f = results.reduce((a, r) => a + (r.recruitFielded || 0), 0);
+    const b = results.reduce((a, r) => a + (r.recruitBenched || 0), 0);
+    if (f + b) line('  of those signed, put on the line', `${f} fielded, ${b} left on the bench`);
   }
   line('  signed as a share of what was affordable',
       affordN ? `${totalSigned} of ${affordN} (${(totalSigned / affordN * 100).toFixed(0)}%)` : 'nothing affordable');
