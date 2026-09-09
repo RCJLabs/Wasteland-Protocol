@@ -2343,8 +2343,29 @@ function passiveDesc(bp) { return bp ? (bp.descOf ? bp.descOf() : bp.desc) : '';
 // One consequence worth naming: income still compounds 1.4 a sector, so the purse now outgrows
 // the fight by about 32% a sector against health rather than 12%. Player power compounds much
 // harder than it did, which is most of where the reachability came from.
-const SECTOR_HP_SCALE = 1.06;    // was 1.25 - health back within reach of player damage growth
-const SECTOR_DMG_SCALE = 1.08;   // was 1.28, and 1.32 before that: both tuned for a ten-sector road
+// I06. The table above was read through a fielding bug: simulate.js placed every signed recruit
+// at a board slot taken from the card's RANK LABEL, and since the line is always full it benched
+// a healthy, fully-upgraded operator to do it. H13 therefore tuned this pair against a squad that
+// was quietly losing its best hand at every recruit node, and read 26% where the same build
+// actually delivers 37% (51/52/55/62 of 150, four careers). I05 fixed the harness; this re-cuts
+// the wall against it, to a target the owner reset to 30%.
+//
+// Four careers of 150 an arm on the fixed harness:
+//   dmg 1.08 / hp 1.06   34 / 35 / 37 / 41%   mean 37%   (what H13 left)
+//   dmg 1.10 / hp 1.08   29 / 32 / 32 / 35%   mean 32%   <- shipped
+//
+// The ranges overlap by one sample, so this does NOT meet the separation rule the rest of this
+// project holds effects to - and that rule is the wrong tool here. D17 exists to establish that
+// an effect is REAL; a steeper curve being harder is not in question, only where it lands, and
+// for a target the mean of four careers is the estimator. 32% against a 30% target, plus or minus
+// about a point.
+//
+// The Ossuary was swept too and left alone: at 2.8/1.25 it read 29/36/40% against 2.2/1.15's
+// 34/35/37/41, no separation and no direction, and the share of arrivals that fell it barely
+// moved (80-87% against 87-91%). Most of a run is lost on the road, not at the door, so the
+// ending is not the knob - which is worth knowing, because H13 assumed it was half the answer.
+const SECTOR_HP_SCALE = 1.08;    // was 1.06 (H13), 1.25 before that
+const SECTOR_DMG_SCALE = 1.10;   // was 1.08 (H13), 1.28 and 1.32 before that
 const XP_CURVE = 1.35;         // was 1.5 - levels kept stalling, starving the perk economy
 
 // ── Faces ───────────────────────────────────────────────────────────────────────────────
@@ -7529,14 +7550,16 @@ function traitSummary(char) {
     return (shut.length ? `${held} · closed: ${shut.join(', ')}` : held) + capLine;
 }
 // ── The till ────────────────────────────────────────────────────────────────────────
-// Income compounds x1.4 a sector through sectorRewardMult while the wall compounds x1.06 in
-// health and x1.08 in damage - but so does every price below, which is the part this note used
-// to get wrong. It said the purse outgrows the fight by about 32% a
-// sector "which is what lets player power compound". H14 measured that and it is not so:
-// sectorRewardMult is on BOTH sides of the ledger, so an upgrade costs the same in cleared nodes
-// at sector 7 as at sector 1, and stat upgrades bought per run barely moves across a 1.0-to-1.7
-// sweep of the constant. What the curve outgrows is anything priced on a DIFFERENT curve, of
-// which the recruit is the one that decides runs. See sectorRewardMult for the measurement. Four of the Outpost's lines were sector-one
+// Income compounds x1.4 a sector through sectorRewardMult while the wall compounds x1.08 in
+// health and x1.10 in damage - but so does every price below, which is the part this note used
+// to get wrong. It said the purse outgrows the fight "which is what lets player power compound".
+// H14 measured that and it is not so: sectorRewardMult is on BOTH sides of the ledger, so an
+// upgrade costs the same in cleared nodes at sector 7 as at sector 1, and stat upgrades bought
+// per run barely moves across a 1.0-to-1.7 sweep of the constant. What the curve outgrows is
+// anything priced on a DIFFERENT curve, of which the recruit is the one that decides runs. See
+// sectorRewardMult for the measurement.
+//
+// Four of the Outpost's lines were sector-one
 // constants and did not participate: bringing three operators from a quarter health back to
 // full cost 60 scrap at every depth, which is half of one cleared node's payout at sector 1 and
 // 6.6% of it at sector 7. Attrition had an off switch, and the switch got cheaper the longer
@@ -8526,8 +8549,8 @@ function rollIntent(enemy) {
 // separates completely and costs about eight points; raising above it does not separate at all,
 // on the win rate or on the recruit rate. Rewards still climb so the run ends on a build wall
 // rather than an arithmetic one - that half of the old note was right - and the wall they climb
-// against is eased and measured: SECTOR_HP_SCALE is 1.06 and SECTOR_DMG_SCALE is 1.08, set in
-// H13. Anything priced off a sector-one constant still stops being a decision about halfway
+// against is eased and measured: SECTOR_HP_SCALE is 1.08 and SECTOR_DMG_SCALE is 1.10, set in
+// H13 and re-cut in I06 once the harness that tuned them was fixed. Anything priced off a sector-one constant still stops being a decision about halfway
 // down the road, which is what outpostPrice is for and what the flat set above still is not.
 function sectorRewardMult() { return Math.pow(1.4, currentSector - 1); }
 

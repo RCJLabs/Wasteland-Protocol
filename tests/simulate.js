@@ -1734,6 +1734,36 @@ const ROOT = path.join(__dirname, '..');
 // drifted the first time a career bought the War Room, which adds one to the board and nothing to
 // the line. It reads DEPLOYED now.
 
+// ── I06: THE WALL, RE-CUT AGAINST A HARNESS THAT WORKS ────────────────────────────
+// ── EVERY WIN-RATE FIGURE ABOVE THIS LINE PRE-DATES BOTH I05 AND THIS RE-CUT ──────
+// H13 tuned SECTOR_HP_SCALE and SECTOR_DMG_SCALE to the ~25% the owner asked for and read 26%
+// off a harness that was benching the squad's best operator at every recruit node. I05 fixed
+// that; the same build then read 37% (51 / 52 / 55 / 62 of 150). The owner reset the target to
+// 30% rather than inherit a number chosen against a bad reading, and this is the re-cut.
+//
+// Four careers of 150 an arm, fixed harness:
+//   dmg 1.08 / hp 1.06   34 / 35 / 37 / 41%   mean 37%   (what H13 left)
+//   dmg 1.10 / hp 1.08   29 / 32 / 32 / 35%   mean 32%   <- shipped
+//
+// THE RANGES OVERLAP BY ONE SAMPLE, so this does not meet the separation rule the rest of this
+// file holds effects to, and that rule is the wrong tool here. D17 exists to establish that an
+// effect is REAL. A steeper curve being harder is not in question; only where it lands is, and
+// for a target the mean of four careers is the estimator. 32% against 30%, plus or minus about
+// a point.
+//
+// THE OSSUARY IS NOT THE KNOB, which is worth recording because H13 assumed it was half the
+// answer. Swept with the road held: 2.8/1.25 read 29 / 36 / 40% against 2.2/1.15's 34 / 35 / 37
+// / 41 - no separation, no direction - and the share of arrivals that fell it moved only from
+// 87-91% to 80-87%. Reach runs 33-47% while ofArr runs 80-96%, so a run is lost on the road and
+// not at the door. Left at 2.2/1.15.
+//
+// AND A METHOD NOTE PAID FOR IN WASTED SAMPLES. The first pass at both sweeps ran ONE career a
+// point and produced a table that ranked 3.4/1.35 as EASIER than 2.8/1.25 - a harder boss with a
+// higher win rate, which cannot happen. Career spread at 150 is five to seven points, so a single
+// sample cannot rank two points that differ by less than that, and every ordering in that first
+// table was noise. Three careers minimum for a direction, four before quoting a mean; anything
+// that wants to separate two nearby points needs more runs, not more points.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
