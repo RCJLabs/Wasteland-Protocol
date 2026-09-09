@@ -64,6 +64,22 @@
 // shipping should show up in the same direction in three separate samples, and if it only
 // shows up in one statistic, bisect it before believing it.
 //
+// ── And that rule does not survive being pointed at a whole report ──────────────────────
+// Three samples an arm separating completely is strong evidence about ONE row. It is weak
+// evidence about a row picked out of hundreds, and this file prints 251 numbers. Under the null
+// - two arms drawn from the same distribution - three against three separate one way or the
+// other with probability 2·(3!·3!)/6! = 10%, so a whole-report diff at n=3 hands back about 25
+// spurious movers before it has found a single real one.
+//
+// I07 ran exactly that diff and got 76. The 51-row excess is the finding; which 76 they are is
+// not. What sorts them is the SIZE of the gap, and there the answer was unambiguous: the rows
+// it concluded from run ×0.57 to ×7.3, while the seventeen that landed inside ±10% sit squarely
+// in the noise band and were recorded as unresolved rather than moved.
+//
+// So when the question is a whole report rather than a dial: read the ratio, not the verdict,
+// and give a row near 1.0 no weight at all unless a companion row moves hard in the same
+// direction. When the question is one dial, the rule above still holds as written.
+//
 // ── On the depth figures printed before C02 ─────────────────────────────────────────────
 // Every one of them is void, and by a wide margin. This file never called recoverDowned on a
 // won or a lost fight - only withdraw() reached it, because withdraw() does it for itself - so
@@ -1153,6 +1169,11 @@ const ROOT = path.join(__dirname, '..');
 // AND THE STAKES ARE SMALLER THAN THE BRIEF IMPLIES: of 23.1 downs a run, 21.5 are dragged clear
 // at the fight's end and 3.13 are lost for good. A rescue mostly buys tempo, not a life, so any
 // future change here should be judged on whether it moves the 3.13.
+//
+// I07 SPLIT THAT PAIR. `dragged clear at a fight's end` is a bug figure - it moved ×1.26 when
+// the harness stopped benching the best body, because a worse line goes down more. `lost for
+// good` HELD across both arms. So the 21.5 wants re-reading and the 3.13 - the number this note
+// asks future work to move - stands as written.
 
 // ── H06: THE ROAD IS A CORRIDOR, AND ONE NODE DOES NOT WIDEN IT ───────────────────
 // The one premise in this batch that survived measurement intact. Three samples of 100:
@@ -1491,6 +1512,11 @@ const ROOT = path.join(__dirname, '..');
 // treatment. Swept the same way and shipped at perDepth 6, the recruit's own slope: 56 / 60 /
 // 62% affordable, median ask 183 against a purse of 176 / 194 / 201.
 //
+// I07 CHECKED THIS ROW AGAINST THE I05 FIX AND IT SURVIVES. Both of its terms moved - the
+// door was offered ×1.42 more often under the bug and was affordable ×1.32 more often - so the
+// SHARE they make barely moves: 62% on the fixed harness against 58% on the buggy one, inside
+// the 56-62% quoted above. The counts here are the bug's; the finding is not.
+//
 // THE COUNTER IS THE POINT, and it is easy to get wrong. canRetreat() ends in
 // `scrap >= retreatCost()`, so asking it directly counts only the moments the money was already
 // there and reports 100% affordable every time - which is H10's sum-of-three-things exactly. It
@@ -1764,6 +1790,128 @@ const ROOT = path.join(__dirname, '..');
 // table was noise. Three careers minimum for a direction, four before quoting a mean; anything
 // that wants to separate two nearby points needs more runs, not more points.
 
+// ── I07: WHAT THE BENCHED-BEST BUG DID TO EVERY TABLE IN THIS FILE ────────────────
+// ── EVERY ABILITY-USAGE FIGURE ABOVE THIS LINE IS MEASURED THROUGH THE BUG ────────
+// I05 fixed one line of this harness and re-measured four rows. It invalidated far more than
+// four: every number above it was read through a lens that threw the squad's best operator onto
+// the bench at every recruit node, and no phase since has known which of its inherited figures
+// still stand. This is that audit. The harness was varied ALONE - game.js untouched, I05's
+// fielding block swapped back to `me.gridPos = tpl.rank` and then restored - three careers of
+// 150 expeditions an arm, and every row this file prints diffed between the two.
+//
+// A row counts as MOVED only when the three fixed careers and the three buggy careers do not
+// overlap at all, which is D17's rule applied per row. Of the rows carrying a number:
+//
+//     MOVED  76        HELD  175        no number to compare  8
+//
+// WHAT THAT DID AND DID NOT COVER, because a coverage claim is worth as much as its holes.
+// The report prints 282 labelled rows; 274 are printed once and so mean one thing; 259 of those
+// carry the same label in all six careers; 251 of THOSE carry a number. The 23 that fall out:
+// eight print no number at all (`never used`, `never met`, `never dropped` and the like), and
+// fifteen bury a varying count inside the label itself, so the label differs between careers
+// and no pair can be formed - among them four low-count moves (FLARE_GUN, SNAP, SPRAY_GUN,
+// QUICK_SHOT) and three follow-up threads. THE ABILITY TABLE BELOW IS THEREFORE 34 MOVES OF 38.
+//
+// Two more limits on the 251, and the second one is the sharp one. First: 16 of the 175 held
+// rows are the SAME value in all six careers - `camp caches taken 0`, `thread: WHAT ORRIN
+// WELDED 0`, `promotions that bought nothing 0` and a dozen like them - which held because they
+// cannot move, not because the bug spared them.
+//
+// SECOND, AND IT COSTS A HEADLINE: the comparison reads the FIRST number a row prints, and 46
+// of the 175 held rows are DISTRIBUTIONS. For many that is harmless - `score, median 28,611
+// [90% ...]` and `orders re-signed mid-run 77 of 150` lead with the number that matters. For a
+// row that leads with the largest of a dozen terms it is not, and `classes deployed` is the
+// proof: its leading term is MEDIC, 138 against 142, which held - while its TAIL, the three
+// classes this whole audit is about, moved as hard as anything in the file.
+//
+//   runs of 150 that fielded    fixed                  buggy
+//     HARPOONER                 24 / 23 / 18           70 / 76 / 76
+//     HAZMAT                    21 / 27 / 19           63 / 85 / 77
+//     TRENCH_FIEND              21 / 20 / 27           56 / 82 / 74
+//
+// A recruit stood in the line in about 14% of careers with the fix and about 45% without it, and
+// in two of the three buggy careers the recruits outranked SNIPER and HOUND. That is the whole
+// mechanism in one table, and the row it lives in is filed under HELD. So: A HELD VERDICT ON A
+// DISTRIBUTION ROW MEANS ITS LEADING TERM HELD, nothing more. 116 of the 175 held as plain
+// scalars and are not constants - those are the 116 that held on real evidence. 43 more held
+// only at the head, 13 are constants that could not have moved, and 3 are both.
+//
+// READ THAT SEPARATION HONESTLY BEFORE LEANING ON IT. Three against three separate by chance
+// with probability 2·(3!·3!)/6! = 10%, so about 25 of 251 rows are expected to "move" with
+// nothing behind them. What decides a row is therefore the SIZE of the gap, not the fact of one.
+// The seventeen moved rows sitting inside ±10% - score on a won run ×1.04, risen ×3 ×1.03, relic
+// offers seen ×0.91, gear equipped ×1.08 and the rest - are exactly where that noise lives and
+// should be read as UNRESOLVED, not as moved. Everything quoted below is outside that band or is
+// corroborated by a companion row that is: depth's own ×0.93 would be nothing on its own and is
+// carried by sector 7 at ×0.81 and careers won at ×0.60 beside it; CAUTERIZE ×0.94 and
+// SHIELD_SLAM ×0.90 likewise, by the nine starting-seven moves that fell harder than they did.
+//
+// SIGNATURES PER RUN HELD AT 4.5 IN BOTH ARMS. Nothing below is about signing more often. It is
+// all about what a signature did once it landed.
+//
+// 1. THE ABILITY TABLES ARE THE WORST-HIT PART OF THIS FILE, and they split perfectly on the
+// recruit line. Every one of the nine special moves belonging to TRENCH_FIEND, HAZMAT and
+// HARPOONER fired MORE under the bug; every starting-seven move that moved at all fired LESS.
+// Not one row crossed.
+//
+//   the three off the road   TANK_RUPTURE ×7.3   DRAG_LINE ×5.7   RIPSAW ×5.4  PURGE_VALVE ×5.4
+//                            WHALE_LINE  ×5.1  OVER_THE_TOP ×4.9  TRENCH_SWEEP ×4.4
+//                            CAUSTIC_BURST ×4.4  BARBED_SHOT ×3.8
+//   the starting seven       FLASHBANG ×0.70  MOLOTOV ×0.70  DEADEYE ×0.75  PIERCING_VOLLEY ×0.75
+//                            SHIV ×0.76  HEAT_WAVE ×0.79  ACID_FLASK ×0.80  IRON_GUARD ×0.82
+//                            HEAVY_WRENCH ×0.86  SHIELD_SLAM ×0.90  CAUTERIZE ×0.94
+//
+// The asymmetry is arithmetic, not a second effect: the line is DEPLOYED = 3, so putting a
+// recruit on it multiplies that recruit's share several times over while diluting each of the
+// seven by a fraction. Fourteen further ability rows held, and every one of them is a
+// starting-seven move. ANY PHASE THAT READ AN ABILITY RATE OFF THIS FILE READ IT THROUGH THAT -
+// D06, D07, E05, E12b and E12c all did. Their qualitative findings survive (a move that never
+// fired at all still never fired); their shares and counts do not, and want re-measuring before
+// they are quoted again.
+//
+// 2. THE SQUAD SURVIVED WORSE, which is the same fact seen from the other side.
+//   wipes per run 5.4 → 6.3      withdrawals per run 3.3 → 4.6      regroups 4.9 → 5.7
+//   scars dealt ×1.26   shell shock ×1.50   dragged clear at a fight's end ×1.26
+//   turns taken with somebody down ×1.18   turns spent saving them ×1.17
+//   arrivals at 60-80% ×2.42, at 40-60% ×2.00, under 40% ×1.52
+//   `hurt arrivals that could not pay` ×1.78 - a line arriving hurt AND unable to buy its way up
+//
+// 3. AND GOT LESS FAR. Careers won 49.7 → 30.0 of 150 - 33% against 20%, the gap I06 re-cut the
+// wall inside. Sector 7 reached 55 → 44, deepest sector mean 4.6 → 4.3, bosses felled 3.8 → 3.4,
+// deepest bond 36.2 → 32.2. Score on a won run went UP (×1.04) while wins fell by a third, which
+// is survivorship rather than a reward change: fewer careers finished, and only the strong ones.
+//
+// 4. THE PURSE. Skulls earned ×0.82 and skulls left unspent ×0.57 - a smaller purse spent harder,
+// which fits a line under more pressure. I01's retreat rows moved with it: retreat was on the
+// table ×1.42, affordable when it was ×1.32.
+//
+// 5. THE RECRUIT-OFFER INSTRUMENT ITSELF (offers seen ×1.20, offered to a full line ×1.22,
+// affordable ×1.14, could afford ×1.36, which card ×1.19, out-hit the worst ×1.18, HARPOONER
+// appearances ×1.18). These are circular - they instrument the very arm that changed - and are
+// recorded for completeness, not as findings.
+//
+// WHAT HELD AS A WHOLE ROW, and can be taken at face value: all sixteen named formations and
+// NO_HANDS; every relic offer and take row, common, rare and cursed alike, plus relics held and
+// offers holding a curse; every warlord standing mean; every follow-up thread that fires at all
+// (three of the ten are flat zero in both arms and prove nothing either way); sealed caches met,
+// forced, opened clean and the scrap out of them; consequences booked and resolved; event
+// choices offered, priced at a sector-one constant and affordable when offered; bounties
+// completed; promotions, crafting, requisitions and stat upgrades per run; kills both ways;
+// actor turns per fight and fights per run; elites broken; mean arrival level and mean relics
+// carried; lost for good; runs that lost nobody; the share of recoveries scarred and every scar
+// type; and risen ×1 and ×2.
+//
+// HELD ONLY AT THE HEAD, so do not quote the tail: classes deployed (see above), ground fought
+// on, sky fought under, confluences, faces met, hostile signatures met, fronts weathered,
+// affixes worn, contracts settled by kind, node kinds offered and taken, which lock a cache
+// was, who opened them, consequences by source, items used per run, wipes by sector and by tier,
+// and the Citadel at the end.
+//
+// The shape of the first list is the finding behind the finding: the bug moved WHO STOOD ON THE
+// LINE and everything downstream of a weaker line, and it did not move what the road put in
+// front of them. Anything this file measures about the world survived; most of what it measures
+// about the squad did not.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
@@ -1978,6 +2126,11 @@ const RECRUIT = flag('recruit', 'price');
 // as specials stopped losing coin flips to basic attacks - and depth did not move at all. So
 // the wall is not a readout of this file's play, which is the one thing that had to be ruled
 // out before anything was concluded from it.
+//
+// I07: those four shares are all starting-seven moves, and the bug it audits suppressed every
+// one of them by 6-30% in absolute terms. THE COMPARISON HERE IS UNHARMED - both arms were read
+// through the same lens, and the conclusion is that the gap between them does not reach depth -
+// but do not carry 7.0% or 6.5% forward as what the move is worth. Re-measure if you need the level.
 //
 // Where it actually sits: wipes by tier read t8:7 t9:7 t10:238. The commander at tier 10 takes
 // 92% of every wipe in the run, and the nine tiers under it produced 20 across sixty runs.
