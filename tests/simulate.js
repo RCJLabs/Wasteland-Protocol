@@ -2045,6 +2045,18 @@ const ROOT = path.join(__dirname, '..');
 // are within a point of each other, so it is not that the sky hits the squad harder; it is that
 // three bodies stand there continuously while hostile groups are killed and replaced.
 //
+// AND THE LEDGER FOUND SOMETHING ELSE ON ITS WAY, which is the argument for building an
+// instrument even when the premise it was built for fails. Its totals came back FRACTIONAL -
+// 133851.4 hostile, SMOG 296919.8 - although both weather sites floor their own damage. A scan
+// of every hp and maxHp write in the engine turned up nothing unfloored, because the arithmetic
+// was in an ARGUMENT rather than an assignment: seventeen overdrive variants hand
+// applyDamageHit `actEnt.dmgBase * 1.2` and the like, mitigate's body is integer operations on
+// whatever figure it is given, and the fraction rode all the way to the bar. Worse, netDmg is
+// interpolated into the floating combat text and the log, so a Scrap Storm off a 58-damage
+// operator showed the player `-69.60000000000001`. J02 floors it once at applyDamageHit's own
+// door and suite 151 pins it. The damage change is under a point on seventeen abilities and is
+// far below what a career can resolve, so nothing here was re-baselined for it.
+//
 // TWO THINGS CHECKED AND DELIBERATELY NOT CLAIMED. difficultyMult does not reach the weather.
 // E06 found the same omission at the spawn sites and repaired it there, but a spawn is an enemy
 // and the sky is not: it damages whoever is standing, so scaling it by the enemy knob would be

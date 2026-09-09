@@ -11434,6 +11434,15 @@ function raiseBody(ent, share) {
 
 function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
     if (target.hp <= 0) return;
+    // J02: every caller but seventeen hands this a whole number. The seventeen are the overdrive
+    // variants, which pass `actEnt.dmgBase * 1.2` and the like straight through, and mitigate's
+    // arithmetic is all integer ops on whatever it is given - so a fractional figure survives to
+    // `target.hp = Math.max(0, target.hp - netDmg)` and the bar goes fractional and stays that
+    // way. It is not only a bookkeeping smell: netDmg is interpolated into the floating combat
+    // text and the log below, so the number the player was shown for a Scrap Storm was
+    // `-69.60000000000001`. Floored here rather than at the seventeen call sites, because this
+    // is the one door damage goes through and the eighteenth variant would have missed it too.
+    calcDmg = Math.floor(calcDmg);
     // Mitigation is figured per victim, so a bond partner who steps in takes the blow through
     // their own armor and resists rather than the original target's.
     // F09: `pierce` is the one thing a banner can promise that mitigation cannot express -
