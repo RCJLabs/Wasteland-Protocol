@@ -2093,6 +2093,20 @@ const RESIGN = flag('resign', 'on');
 // in `value`; this separates them. If burn keeps value's wipe rate, the body was the drag. If it
 // falls back to price's, the money was the gain.
 const RECRUIT = flag('recruit', 'price');
+// I08: EVERY WAY A BODY IMPROVES IN THIS FILE IS GATED ON gridPos > 0 - stat upgrades, gear
+// out of the stash, and augments, all three. The game gates none of them: renderOutpost walks
+// playerRoster unfiltered and canUpg is `scrap >= cost`, nothing more. Perk points are the one
+// channel this file already spends roster-wide, which is also what the engine does.
+//
+// Line-only investment is a defensible player policy by itself. Held next to this file's OWN
+// fielding rule - field the recruit if it out-rates the worst hand on the line - it is not a
+// policy but a deadlock: a recruit is benched because it has not accumulated, and can never
+// accumulate because it is benched. `--invest roster` opens all three gates to every living
+// operator, which is the affordance the game actually offers. It is not a free win: the purse
+// and the materials are the same and now spread over ten bodies instead of three, so the line
+// itself is thinner. `line` is the old behaviour and stays the default so the tables above
+// remain comparable.
+const INVEST = flag('invest', 'line');
 
 // The three games this file can measure, and why the difference is the whole story:
 //
@@ -2137,7 +2151,16 @@ const RECRUIT = flag('recruit', 'price');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy }) => {
+  // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
+  // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
+  // only that the body is alive. Named once so all three sites read the same rule.
+  const invests = c => (investPolicy === 'roster' ? c.hp > 0 : c.gridPos > 0);
+  // The same rating the recruit decision uses, named once so the Outpost and the road cannot
+  // drift apart. Damage is what an operator does every turn, health is how many turns they get,
+  // and at these magnitudes a point of damage is worth roughly four of health. A stated policy,
+  // not a truth - and it sees no perk, augment or trinket that does not land on these two.
+  const rateOf = c => c.dmgBase + c.maxHp / 4;
   const stat = { order: null, fulfilled: false, won: false, wonAt: 0, roadWarlords: 0, raised: 0, stillUp: 0, tallyAtEnd: 0,
                  upgrades: 0, odAimed: 0, bossTopUps: 0, eliteTopUps: 0, reqBought: 0, reqGrudge: null, reqFallback: 0, regroupsHad: 0,
                  engineKills: 0, killGap: 0,
@@ -2158,7 +2181,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  tookNonFight: 0, evOptions: 0, evBookable: 0, evCouldBook: 0,
                  evShown: 0, evPriced: 0, evPricedTook: 0, pricedBySector: {},
                  retreatOpen: 0, retreatAfford: 0, retreatAsked: [], retreatPurse: [], retreatBySector: {},
-                 recruitWhy: {}, recruitBurned: 0, recruitFielded: 0, recruitBenched: 0,
+                 recruitWhy: {}, recruitBurned: 0, recruitFielded: 0, recruitBenched: 0, reslotted: 0, reslottedRecruit: 0,
+                 fieldGap: [], fieldUps: [], fieldMine: [],
                  relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0,
                  bossGrudge: [], metGrudge: [], scars: [], recovered: 0, clockLeft: [], downFaced: 0, downReach: 0, downByMove: 0, downByItem: 0, downByBar: 0, barSaves: 0, bagSaves: 0, handSaves: 0 };
 
@@ -2546,7 +2570,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // Gear helps nobody in the stash: each piece goes to the first deployed operator it fits.
     gearStash.slice().forEach(id => {
       const g = gearById(id); if (!g) return;
-      const fit = playerRoster.find(c => c.gridPos > 0 && (g.slot === 'mod'
+      const fit = playerRoster.find(c => invests(c) && (g.slot === 'mod'
         ? (c.classType === g.cls && !c.weaponMod) : !c.trinket));
       if (fit) { equipGear(fit.id, id); stat.gearEquipped++; }
     });
@@ -2557,7 +2581,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     if (AUGMENTS_ON) {
       let aGuard = 0;
       while (aGuard++ < 8) {
-        const who = playerRoster.filter(c => c.gridPos > 0);
+        const who = playerRoster.filter(invests);
         // Read off the game. This file capped itself at three a head for as long as it has
         // simulated augments, while the game had no cap at all - so every balance figure in
         // this repo was taken against a ceiling that did not exist. D03 gave the game the
@@ -2600,7 +2624,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // squad the game does not sell. Through the button now, alternating the two so a career
       // buys the same mix a player buying "a bit of both" would.
       const cost = typeof upgradeCost === 'function' ? upgradeCost(c) : 30 + (c.upgradeCount * 25);
-      if (c.gridPos > 0 && scrap >= cost * 2) {
+      // I08: `line` is the gate this file has always had; `roster` is the one the game has.
+      if (invests(c) && scrap >= cost * 2) {
         const kind = (c.upgradeCount % 2 === 0) ? 'HP' : 'DMG';
         buyUpgrade(c.id, kind, cost);
         stat.upgrades = (stat.upgrades || 0) + 1;
@@ -2629,6 +2654,34 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         if (c.perkPoints === had) break;
       }
     });
+    // I08: and then field the best three. This file placed an operator exactly twice in a run -
+    // at the muster, and once more the instant a recruit was signed - and never looked again.
+    // The game's position control is on the Outpost screen every visit, so a player re-reads
+    // the line whenever the roster changes. Without this the `roster` arm is incoherent: it
+    // pays to improve a benched body and then never gives that body a way onto the field, so
+    // the money is spent and the decision it was meant to change has already been made.
+    //
+    // Same rate() rule the signing decision uses, through assignSlot, which is the engine's own
+    // door - it keeps SHORT_HANDED's ban on slot 3 and calls checkDoctrine. Only swaps a strict
+    // improvement, so a tie leaves the incumbent standing.
+    if (investPolicy === 'roster') {
+      let sGuard = 0;
+      while (sGuard++ < DEPLOYED) {
+        const onLine = playerRoster.filter(c => c.gridPos > 0 && c.hp > 0);
+        const benched = playerRoster.filter(c => c.gridPos === 0 && c.hp > 0);
+        if (!onLine.length || !benched.length) break;
+        const worst = onLine.reduce((a, c) => (rateOf(c) < rateOf(a) ? c : a));
+        const best = benched.reduce((a, c) => (rateOf(c) > rateOf(a) ? c : a));
+        if (rateOf(best) <= rateOf(worst)) break;
+        const slot = worst.gridPos;
+        assignSlot(best.id, slot);
+        if (best.gridPos !== slot) break;      // the engine refused it; do not spin
+        stat.reslotted = (stat.reslotted || 0) + 1;
+        if (best.classType === 'TRENCH_FIEND' || best.classType === 'HAZMAT' || best.classType === 'HARPOONER') {
+          stat.reslottedRecruit = (stat.reslottedRecruit || 0) + 1;
+        }
+      }
+    }
   };
 
   // Picks the ability with a live combo if there is one, otherwise the first available. This is
@@ -3449,7 +3502,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // arrives with perk points banked to squad par, which no stat comparison sees, so this
       // rating understates them; that is named here rather than buried, because it bounds what
       // the arm can conclude.
-      const rate = c => c.dmgBase + c.maxHp / 4;
+      const rate = rateOf;
       let wants = true, why = 'price';
       if ((recruitPolicy === 'value' || recruitPolicy === 'burn') && tpl) {
         const line = deployed();
@@ -3503,6 +3556,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
           if (free) { assignSlot(me.id, free); stat.recruitFielded = (stat.recruitFielded || 0) + 1; }
           else {
             const worst = line.length ? line.reduce((a, c) => (rate(c) < rate(a) ? c : a)) : null;
+            // I08: the decision, decomposed, so the gap can be read against what bought it.
+            // After the muster the only thing that moves either term of rate() is buyUpgrade -
+            // +10 maxHp or +3 dmgBase a purchase, so 2.5 or 3 points of rate each. signOnRecruit
+            // levels a recruit to squad par and banks a point a level, so the LEVEL gap is
+            // closed by the engine; upgradeCount is not, and arrives at 0.
+            if (worst) {
+              stat.fieldGap.push(Math.round((rate(worst) - rate(me)) * 10) / 10);
+              stat.fieldUps.push(worst.upgradeCount);
+              stat.fieldMine.push(me.upgradeCount);
+            }
             if (worst && rate(me) > rate(worst)) {
               assignSlot(me.id, worst.gridPos);
               stat.recruitFielded = (stat.recruitFielded || 0) + 1;
@@ -3816,7 +3879,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -4050,6 +4113,26 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     const f = results.reduce((a, r) => a + (r.recruitFielded || 0), 0);
     const b = results.reduce((a, r) => a + (r.recruitBenched || 0), 0);
     if (f + b) line('  of those signed, put on the line', `${f} fielded, ${b} left on the bench`);
+    // I08: and WHY, in the only currency the decision is made in. The gap is
+    // rate(incumbent) - rate(recruit), positive when the body already there is ahead. An
+    // Outpost purchase is +10 maxHp or +3 dmgBase, so 2.5 or 3 points of rate; the mix this
+    // file buys alternates, so the incumbent's purchases are worth about 2.75 each. If the gap
+    // and 2.75 x upgrades agree, the purchased-stat difference IS the decision.
+    const gaps = results.flatMap(r => r.fieldGap || []);
+    const ups = results.flatMap(r => r.fieldUps || []);
+    const mine = results.flatMap(r => r.fieldMine || []);
+    if (gaps.length) {
+      const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
+      const g = mean(gaps), u = mean(ups), m = mean(mine);
+      line('  contested placements (line full)', `${gaps.length}`);
+      line('    mean rate gap, incumbent ahead by', `${g.toFixed(1)}`);
+      line('    upgrades bought, incumbent / recruit', `${u.toFixed(1)} / ${m.toFixed(1)}`);
+      line('    what those upgrades are worth in rate', `${(2.75 * (u - m)).toFixed(1)} of the ${g.toFixed(1)}`);
+      line('    decisions the recruit would win at parity', `${gaps.filter((x, i) => x - 2.75 * (ups[i] - mine[i]) < 0).length} of ${gaps.length}`);
+    }
+    const rs = results.reduce((a, r) => a + (r.reslotted || 0), 0);
+    const rr = results.reduce((a, r) => a + (r.reslottedRecruit || 0), 0);
+    if (rs) line('  re-slotted at an Outpost afterwards', `${rs}, of which recruits ${rr}`);
   }
   line('  signed as a share of what was affordable',
       affordN ? `${totalSigned} of ${affordN} (${(totalSigned / affordN * 100).toFixed(0)}%)` : 'nothing affordable');
