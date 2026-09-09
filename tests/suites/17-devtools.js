@@ -3,7 +3,7 @@
 // behaves like a real run.
 module.exports = {
   name: 'Dev tools and ground placement',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, settled }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
 
@@ -11,7 +11,8 @@ module.exports = {
     await page.evaluate(() => { currentSlot = 1; confirmNewGame(1.0); sectorFront = null; openSettings(); });
     await page.waitForTimeout(200);
     await page.locator('[data-action="dev-open"]:visible').first().click();
-    await page.waitForTimeout(300);
+    await settled(page, () => getComputedStyle(document.getElementById('screen-dev')).display === 'flex',
+      'the dev panel to open');
     const panel = await page.evaluate(() => {
       const acts = [...document.querySelectorAll('#screen-dev [data-action]')];
       return { open: getComputedStyle(document.getElementById('screen-dev')).display === 'flex',

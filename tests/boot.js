@@ -78,10 +78,49 @@ async function onScreen(page, screenId, timeout = BOOT_TIMEOUT_MS) {
 // Anything else, with a label so a failure says what was being waited for rather than only how
 // long. The condition runs in the page, so it can read the engine's own state directly.
 async function settled(page, fn, label, arg = null, timeout = BOOT_TIMEOUT_MS) {
+    // J03: an async predicate here is a silent pass, not a wait. waitForFunction checks the
+    // predicate's RETURN VALUE for truthiness, and an async function returns a Promise, which
+    // is truthy on the first poll whatever the condition is doing. Found by writing one: a
+    // 3000ms sleep replaced with `settled(page, async () => (await caches.keys()).length ...)`
+    // came back green in 20ms with the cache still empty. Refused rather than documented,
+    // because the failure mode is a test that passes.
+    if (fn && fn.constructor && fn.constructor.name === 'AsyncFunction') {
+        throw new Error(`settled() was handed an async predicate for ${label}; a Promise is `
+            + 'truthy on the first poll, so it would pass without waiting. Use until() instead.');
+    }
     try {
         await page.waitForFunction(fn, arg, { polling: 'raf', timeout });
     } catch (e) {
         throw new Error(`waited ${timeout}ms for ${label} and it never came true`);
+    }
+}
+
+// Resizing is not instant in the page. setViewportSize returns once the browser has been told,
+// not once the document has been laid out at the new size, and seven suites stood a flat 120ms
+// in that gap. The condition is the size the page itself reports, plus a frame so anything
+// keyed to it has been recomputed - both real, and both faster than the number they replace.
+async function resized(page, size, timeout = BOOT_TIMEOUT_MS) {
+    await page.setViewportSize(size);
+    await settled(page, s => window.innerWidth === s.w && window.innerHeight === s.h,
+        `the viewport to report ${size.width}x${size.height}`,
+        { w: size.width, h: size.height }, timeout);
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+}
+
+// For a condition that can only be asked asynchronously in the page - caches, storage
+// estimates, anything behind an await. Polls from this side, where the Promise is actually
+// awaited, instead of handing waitForFunction something it cannot read.
+async function until(page, fn, label, timeout = BOOT_TIMEOUT_MS, every = 60) {
+    const deadline = Date.now() + timeout;
+    let last = null;
+    for (;;) {
+        try { last = await page.evaluate(fn); } catch (e) { last = `threw: ${e.message}`; }
+        if (last) return last;
+        if (Date.now() >= deadline) {
+            throw new Error(`waited ${timeout}ms for ${label} and it never came true `
+                + `(last read: ${JSON.stringify(last)})`);
+        }
+        await new Promise(r => setTimeout(r, every));
     }
 }
 
@@ -117,4 +156,4 @@ function fixedSleeps(source) {
     return out;
 }
 
-module.exports = { engineUp, enginePublished, onScreen, settled, BOOT_TIMEOUT_MS, navSleeps, fixedSleeps };
+module.exports = { engineUp, enginePublished, onScreen, settled, until, resized, BOOT_TIMEOUT_MS, navSleeps, fixedSleeps };

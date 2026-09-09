@@ -1,7 +1,7 @@
 // Finding 09: the game should install like an app and play with no network.
 module.exports = {
   name: 'Installable and offline',
-  run: async ({ page, context, ok, base, engineUp }) => {
+  run: async ({ page, context, ok, base, engineUp, until }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
 
@@ -25,14 +25,42 @@ module.exports = {
     });
     ok('the service worker activates', reg.active);
 
-    await page.waitForTimeout(3000);
-    const cached = await page.evaluate(async () => {
+    // J03: this was a flat 3000ms hoping the worker had got round to it. The condition it
+    // actually wants is the one the two assertions below check, so it waits for THAT: the art
+    // set and the shell present in the cache. Wrapped in a catch on purpose - if the cache
+    // never fills, the assertions underneath are a better failure line than a thrown timeout,
+    // because they say how much of it arrived.
+    // J03: this was a flat 3000ms hoping the worker had got round to it. It waits for the
+    // condition the assertions below actually check instead. Two things had to change with it.
+    // The wait is asked from the Node side through until(), because the question is behind an
+    // await and settled() cannot read a Promise - see the note on it in tests/boot.js. And the
+    // count is taken across EVERY cache rather than off names[0]: the shell lands first and the
+    // art follows, so a read keyed to one entry is a race the old sleep was papering over.
+    // The catch is deliberate - if the cache never fills, the two assertions underneath are a
+    // better failure line than a thrown timeout, because they say how much of it arrived.
+    const countCache = async () => {
       const names = await caches.keys();
-      const keys = await (await caches.open(names[0])).keys();
-      const urls = keys.map(k => k.url.split('/').pop());
+      const urls = [];
+      for (const n of names) {
+        const keys = await (await caches.open(n)).keys();
+        keys.forEach(k => urls.push(k.url.split('/').pop()));
+      }
       return { art: urls.filter(u => u.endsWith('.webp')).length,
                shell: ['index.html', 'game.js', 'styles.css', ''].filter(f => urls.includes(f)).length };
-    });
+    };
+    try {
+      await until(page, async () => {
+        const names = await caches.keys();
+        const urls = [];
+        for (const n of names) {
+          const keys = await (await caches.open(n)).keys();
+          keys.forEach(k => urls.push(k.url.split('/').pop()));
+        }
+        return urls.filter(u => u.endsWith('.webp')).length >= 20
+            && ['index.html', 'game.js', 'styles.css', ''].filter(f => urls.includes(f)).length >= 3;
+      }, 'the service worker to fill its cache');
+    } catch (e) { /* the assertions below report what did arrive */ }
+    const cached = await page.evaluate(countCache);
     ok(`the art set is cached (${cached.art}/24)`, cached.art >= 20);
     ok('the shell is cached for an offline boot', cached.shell >= 3);
 

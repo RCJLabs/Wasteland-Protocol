@@ -18,7 +18,7 @@ const { engineUp, enginePublished, navSleeps, fixedSleeps, BOOT_TIMEOUT_MS } = r
 
 module.exports = {
   name: 'The wait that is real',
-  run: async ({ page, context, ok, base, engineUp: up }) => {
+  run: async ({ page, context, ok, base, engineUp: up, settled }) => {
     await page.goto(`${base}/index.html`);
     await up(page);
 
@@ -81,6 +81,29 @@ module.exports = {
     // ── The readout ───────────────────────────────────────────────────────────────
     // Not a gate. This is what is left after the 157, so the next pass at it starts from a
     // measured number instead of an impression.
+    // ── The trap that makes a wait pass without waiting ─────────────────────────────
+    // settled() reads its predicate's RETURN VALUE for truthiness, and an async function
+    // returns a Promise, which is truthy on the very first poll whatever the condition is
+    // doing. J03 found it by writing one: a 3000ms sleep replaced with an async settled()
+    // came back green in 20ms with the cache it was waiting on still empty. That is the worst
+    // shape a test helper can have - it does not fail, it stops checking - so it is refused at
+    // the door, and refused here so it stays refused. until() is the form for an async
+    // condition; it polls from the runner's side where the Promise is actually awaited.
+    let onAsync = 'it did not throw at all';
+    try {
+      await settled(page, async () => false, 'a condition that is never true', null, 300);
+    } catch (e) { onAsync = e.message; }
+    ok(`settled() refuses an async predicate instead of passing on a Promise (${onAsync.slice(0, 52)}…)`,
+      /async predicate/.test(onAsync));
+    // And the synchronous form still fails the way it is supposed to, rather than the guard
+    // having swallowed every path to a timeout.
+    let onNever = 'it did not throw at all';
+    try {
+      await settled(page, () => false, 'a condition that is never true', null, 300);
+    } catch (e) { onNever = e.message; }
+    ok(`a synchronous predicate that never comes true still times out (${onNever.slice(0, 52)}…)`,
+      /never came true/.test(onNever));
+
     const left = remaining.reduce((a, c) => a + c, 0);
     ok(`the fixed sleeps that remain are counted, not forgotten (${remaining.length} left, ${(left / 1000).toFixed(1)}s a battery)`,
       remaining.length > 0 && left > 0);

@@ -3,7 +3,7 @@
 // marked-up relic, tempo in a syringe, a quirk do-over, and a prepaid regroup.
 module.exports = {
   name: 'The Armory',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, settled }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
 
@@ -180,7 +180,9 @@ module.exports = {
     await page.reload();
     await engineUp(page);
     await page.click('.title-btn.btn-continue');
-    await page.waitForTimeout(500);
+    // The resumed run lands back on the shop screen; that is the condition, not half a second.
+    await settled(page, () => getComputedStyle(document.getElementById('screen-shop')).display === 'flex',
+      'the shop to come back up on resume');
     const resumed = await page.evaluate(() => ({
       open: getComputedStyle(document.getElementById('screen-shop')).display === 'flex',
       gear: activeShop && activeShop.stock[0] && activeShop.stock[0].id === 'GAS_MASK',

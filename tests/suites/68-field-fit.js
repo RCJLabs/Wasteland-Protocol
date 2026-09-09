@@ -23,7 +23,7 @@ const COMPOSITIONS = [
 ];
 module.exports = {
   name: 'A field that fits',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, resized }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
     await page.evaluate(() => {
@@ -68,8 +68,7 @@ module.exports = {
 
     // ---- the reported bug, at three widths ----
     for (const W of [320, 400, 480]) {
-      await page.setViewportSize({ width: W, height: 800 });
-      await page.waitForTimeout(120);
+      await resized(page, { width: W, height: 800 });
       const rows = [];
       for (const c of COMPOSITIONS) rows.push({ c, r: await page.evaluate(
         ([s, f]) => __field(s, f), [c.squad, c.foes]) });
@@ -87,8 +86,7 @@ module.exports = {
       ok(`and centred on it (worst ${Math.max(...rows.map(x => Math.round(x.r.offCentre)))}px off)`,
         skewed.length === 0);
     }
-    await page.setViewportSize({ width: 400, height: 800 });
-    await page.waitForTimeout(120);
+    await resized(page, { width: 400, height: 800 });
 
     // ---- it only shrinks what it has to ----
     const easy = await page.evaluate(() => __field(3, 1));

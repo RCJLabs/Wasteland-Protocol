@@ -2,7 +2,7 @@
 // slots do. A player learned the resistance badges by losing a turn to a bio-immune drone.
 module.exports = {
   name: 'Field manual',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, settled }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
 
@@ -92,7 +92,10 @@ module.exports = {
     ok(`labelled for a player, not a developer (${reachable.label})`, /MANUAL|CODEX|HELP/i.test(reachable.label || ''));
 
     await page.click('[data-action="codex"]');
-    await page.waitForTimeout(250);
+    // J03: the codex screen showing, with its entries rendered - which is what the read
+    // below asks for. The 250ms was standing in for exactly this and could not say so.
+    await settled(page, () => getComputedStyle(document.getElementById('screen-codex')).display !== 'none'
+      && document.querySelectorAll('#codex-body .codex-entry').length > 0, 'the codex to open');
     const opened = await page.evaluate(() => ({
       codex: getComputedStyle(document.getElementById('screen-codex')).display,
       entries: document.querySelectorAll('#codex-body .codex-entry').length
@@ -112,7 +115,8 @@ module.exports = {
     ok('so the manual is actually clickable', overlay.backClickable);
 
     await page.click('#screen-codex .return-btn');
-    await page.waitForTimeout(250);
+    await settled(page, () => getComputedStyle(document.getElementById('screen-codex')).display === 'none',
+      'the codex to close');
     const closed = await page.evaluate(() => ({
       codex: getComputedStyle(document.getElementById('screen-codex')).display,
       title: getComputedStyle(document.getElementById('screen-title')).display

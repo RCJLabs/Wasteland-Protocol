@@ -21,14 +21,13 @@ const SCREENS = [
 
 module.exports = {
   name: 'Screens that fit what is on them',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, resized }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
 
     const sizes = [[412, 915], [400, 800], [360, 740], [320, 640]];
     for (const [w, h] of sizes) {
-      await page.setViewportSize({ width: w, height: h });
-      await page.waitForTimeout(120);
+      await resized(page, { width: w, height: h });
 
       const read = await page.evaluate((SCREENS) => {
         globalSettings.sfx = false;
@@ -71,8 +70,7 @@ module.exports = {
 
     // And the content really is reachable by scrolling: at the tightest width, scroll to the
     // end and the last thing on the page has to be above the pinned control rather than under it.
-    await page.setViewportSize({ width: 320, height: 640 });
-    await page.waitForTimeout(120);
+    await resized(page, { width: 320, height: 640 });
     const bottom = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); careerWins = 2; bestRung = 2;
       openContracts();

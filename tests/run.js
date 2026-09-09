@@ -4,7 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { serve } = require('./server');
 const { untouchedExports } = require('./coverage');
-const { engineUp, onScreen, settled } = require('./boot');
+const { engineUp, onScreen, settled, until, resized } = require('./boot');
 
 let chromium;
 try { ({ chromium } = require('playwright')); }
@@ -131,7 +131,7 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
 
     console.log(`\n${suite.name}`);
     try {
-      await suite.run({ page, context, ok, base, engineUp, onScreen, settled });
+      await suite.run({ page, context, ok, base, engineUp, onScreen, settled, until, resized });
     } catch (e) {
       // The suite's name goes on the throw line itself. It is printed above too, but an
       // intermittent abort is usually read back out of a filtered log where that line is gone.

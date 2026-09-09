@@ -20,7 +20,7 @@
 const WIDTHS = [320, 400, 480];
 module.exports = {
   name: 'The field at full density',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, resized }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
 
@@ -74,8 +74,7 @@ module.exports = {
     // ── The instrument, before anything it measures ──────────────────────────────────────
     // Why the C11 assertion could not have caught this. If these two ever agree again, the
     // measurement below has stopped being a measurement.
-    await page.setViewportSize({ width: 320, height: 800 });
-    await page.waitForTimeout(120);
+    await resized(page, { width: 320, height: 800 });
     const instrument = await page.evaluate(async () => {
       await __dense(4, 7, true);
       const el = document.querySelector('#enemy-team .entity');
@@ -99,8 +98,7 @@ module.exports = {
     // ── The requirement, at every density and width ──────────────────────────────────────
     const rows = [];
     for (const W of WIDTHS) {
-      await page.setViewportSize({ width: W, height: 800 });
-      await page.waitForTimeout(120);
+      await resized(page, { width: W, height: 800 });
       for (const foes of [3, 4, 5, 6, 7]) {
         const r = await page.evaluate(async f => {
           await __dense(4, f, true);
@@ -126,8 +124,7 @@ module.exports = {
       Math.max(...tags.map(t => t.over)) <= 1);
 
     // ── What is dropped, and what is never dropped ───────────────────────────────────────
-    await page.setViewportSize({ width: 320, height: 800 });
-    await page.waitForTimeout(120);
+    await resized(page, { width: 320, height: 800 });
     const spend = await page.evaluate(async () => {
       const look = () => {
         const cell = document.querySelector('#enemy-team .entity');
@@ -167,8 +164,7 @@ module.exports = {
     ok(`a plain render fits its own slot text (gap ${wired.gap}px)`, wired.tight && wired.gap >= 4);
 
     // ── Where there is room, nothing is spent ────────────────────────────────────────────
-    await page.setViewportSize({ width: 480, height: 800 });
-    await page.waitForTimeout(120);
+    await resized(page, { width: 480, height: 800 });
     const roomy = await page.evaluate(async () => {
       await __dense(4, 3, true);
       const cell = document.querySelector('#enemy-team .entity');
@@ -183,8 +179,7 @@ module.exports = {
     // is wrap INSIDE a word: overflow-wrap: anywhere turned RANGING SHOT into RANG / ING /
     // SHOT. Wrapping at the spaces is the default, and a single word that fits on no line at
     // all overhangs its slot by a few pixels instead of being broken.
-    await page.setViewportSize({ width: 320, height: 800 });
-    await page.waitForTimeout(120);
+    await resized(page, { width: 320, height: 800 });
     const badge = await page.evaluate(async () => {
       // The longest name in the table that has spaces in it, and the longest that has none.
       await __dense(4, 7, true, ['READ_THE_LINE', 'RESURGENCE']);
