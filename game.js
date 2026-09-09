@@ -10667,7 +10667,32 @@ function withdraw() {
 // the squad buys its way out with scrap, does not advance a tier, and walks back into a fight
 // rolled fresh. It can fail, which is the whole of the risk - the scrap goes either way, and a
 // failed break costs the turn as well.
-const RETREAT = { base: 0.80, perFoe: 0.09, floor: 0.30, cost: 45, perDepth: 15 };
+// I01: perDepth was 15, and at 15 this door was shut three times in four. Measured on the
+// shipped build over three careers of 150 - counting every moment a squad was losing and the
+// engine would have let it break away but for the money - retreat was affordable 25 / 27 / 28%
+// of the time, at a median ask of 300 against a median purse of 150 / 159 / 158 at that moment.
+// The price was twice the money, and it was worst at sectors 2 and 3, which is where most of
+// the sample is.
+//
+// That is the failure RECRUIT_COST records and was retuned out of: at 110 + 22 a tier its
+// median ask was 506 against a purse of 324, five of sixty-nine offers affordable, nobody ever
+// signed. Retreat had never had the same treatment. Swept the same way:
+//
+//   perDepth   15        10        8         6
+//   affordable 25-28%    44%       48%       51%
+//   median ask 300       228       198       192
+//   at s7 t10  1,080     735       597       459
+//
+// 6 rather than 8 for a reason that is not the rate - the two are three points apart, because
+// the median decision happens shallow where the base dominates. At 8 a one-off escape costs
+// MORE deep in than a permanent body does (597 against a recruit's 504), which is the wrong
+// way round. At 6 the game has one depth slope instead of two, and breaking off is always
+// exactly 45 cheaper than signing somebody on, at every depth.
+//
+// Nothing measured moves, and that is structural rather than lucky: the harness has never
+// pressed this button, so no figure this file reports can respond to the price. See the I01
+// note in simulate.js for why a taking policy is its own item.
+const RETREAT = { base: 0.80, perFoe: 0.09, floor: 0.30, cost: 45, perDepth: 6 };
 
 // How far into the run the squad is, counted in nodes rather than sectors, so the price of a
 // second chance climbs with what a second chance is worth.

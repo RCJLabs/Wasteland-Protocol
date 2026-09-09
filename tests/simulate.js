@@ -1470,6 +1470,50 @@ const ROOT = path.join(__dirname, '..');
 // that costs a third of a node is not a decision - but it is not a balance one, and this file
 // now says so with numbers rather than by inference.
 
+// ── I01: THE SECOND CHANCE NOBODY COULD BUY ───────────────────────────────────────
+// Retreating is the other way out of a losing fight: withdrawing pays in blood and leaves the
+// node behind, retreating pays in scrap, keeps the node, and can fail. H14 had just established
+// that a price on a curve OTHER than sectorRewardMult is the only kind that can change what a
+// player is able to do, and there are exactly two of those. One had been measured and retuned.
+// This was the other.
+//
+// Measured on the shipped build - three careers of 150, counting every moment a squad was losing
+// and the engine would have let it break away but for the money:
+//
+//   affordable when it was on the table   167/591   145/534   156/621   = 28 / 27 / 25%
+//   median price asked                    300       300       300
+//   median purse at that moment           150       159       158
+//   worst at                              sectors 2 and 3, 18-23%, which is most of the sample
+//
+// The price was twice the money, three times in four. RECRUIT_COST records the same failure and
+// its own retune out of it - 110 + 22 a tier gave a median ask of 506 against a purse of 324,
+// five of sixty-nine offers affordable, nobody ever signed - and retreat had never had that
+// treatment. Swept the same way and shipped at perDepth 6, the recruit's own slope: 56 / 60 /
+// 62% affordable, median ask 183 against a purse of 176 / 194 / 201.
+//
+// THE COUNTER IS THE POINT, and it is easy to get wrong. canRetreat() ends in
+// `scrap >= retreatCost()`, so asking it directly counts only the moments the money was already
+// there and reports 100% affordable every time - which is H10's sum-of-three-things exactly. It
+// lifts the purse, asks the engine, and puts the purse back, so every OTHER clause is read from
+// the engine rather than copied here: the commander gate, a live squad, no pending action. F03
+// found nine hand copies in this file at once and this is deliberately not the tenth.
+//
+// NOTHING HERE TAKES THE RETREAT, and that is why the price could be changed on a measurement
+// this file could still make. No figure it reports can respond to retreatCost, because the
+// button has never been pressed - the `open` counts across the arms (591/534/621 before,
+// 611/566/562 after) are the same band, which is the check on that claim rather than a hope.
+//
+// WHY THERE IS NO TAKING POLICY YET, recorded so the next attempt does not rediscover it.
+// retreat() can fail, and its failure path calls nextTurn(), which calls processTurn(), which
+// runs applyTurnStartEffects on the next actor and schedules an executeEnemyAi through
+// setTimeout. This file's fight loop is a deliberate re-implementation of that walk - see F03 -
+// so a failed break would tick one actor's cooldowns and statuses twice and hand the engine a
+// deferred turn the loop never drove. processTurn cannot be stubbed around it either: retreat()
+// reaches the module-local binding, not the one the harness mirrors onto window. A taking arm
+// therefore needs this loop to hand the turn walk back to the engine, which is a much larger
+// change than a policy flag and is its own item. Until then the shipped question - "is the door
+// open?" - is answered, and "does walking through it change anything?" is not.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
@@ -1698,6 +1742,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  bookedFrom: {},
                  tookNonFight: 0, evOptions: 0, evBookable: 0, evCouldBook: 0,
                  evShown: 0, evPriced: 0, evPricedTook: 0, pricedBySector: {},
+                 retreatOpen: 0, retreatAfford: 0, retreatAsked: [], retreatPurse: [], retreatBySector: {},
                  relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0,
                  bossGrudge: [], metGrudge: [], scars: [], recovered: 0, clockLeft: [], downFaced: 0, downReach: 0, downByMove: 0, downByItem: 0, downByBar: 0, barSaves: 0, bagSaves: 0, handSaves: 0 };
 
@@ -2578,6 +2623,38 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       applyTurnStartEffects(actor);
       if (!activeEntities.some(e => e.isPlayer && e.hp > 0)) break;
       if (!activeEntities.some(e => !e.isPlayer && e.hp > 0)) break;
+      // I01: the price of a second chance, counted at the moment it would be taken. retreatCost
+      // is 45 + 15 a NODE - 1,080 by sector 7 tier 10 - against a purse H14 measured at a median
+      // of 287 at a recruit node. RECRUIT_COST records exactly this failure and its own retune out
+      // of it: at 110 + 22 a tier "five of sixty-nine offers were affordable at all and nobody was
+      // ever signed on". Retreat has never had that treatment, and this file has never pressed the
+      // button, so nothing has ever checked.
+      //
+      // Nothing here takes the retreat - this is the shipped baseline, measured without a policy
+      // on it, so the split below describes the game rather than a robot's taste. Splitting
+      // "the door was relevant" from "the door was affordable" is H10's lesson: a door nobody
+      // walks through is an empty purse or a closed gate before it is ever a dull offer.
+      //
+      // The gate is asked of the engine rather than rebuilt here. canRetreat() ends in
+      // `scrap >= retreatCost()`, so lifting the purse and asking it again reads every OTHER
+      // clause exactly - the boss gate, a live squad, no pending action - with no hand copy to
+      // drift out of step. F03 found nine of those in this file at once; this is not the tenth.
+      if (actor.isPlayer && combatActive && losing(enemyStartHp)) {
+        const held = scrap;
+        scrap = Number.MAX_SAFE_INTEGER;
+        const openBarMoney = canRetreat();
+        scrap = held;
+        if (openBarMoney) {
+          const price = retreatCost();
+          stat.retreatOpen++;
+          stat.retreatAsked.push(price);
+          stat.retreatPurse.push(held);
+          const key = 's' + currentSector;
+          const row = stat.retreatBySector[key] || (stat.retreatBySector[key] = { open: 0, afford: 0 });
+          row.open++;
+          if (held >= price) { stat.retreatAfford++; row.afford++; }
+        }
+      }
       if (actor.isPlayer && withdrawPolicy && canWithdraw() && losing(enemyStartHp)) {
         countBodies();
         // withdraw() reaches recoverDowned on its own, so the operators it picks up have to be
@@ -3886,6 +3963,28 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('  where every option was a fight', `${allFights} (${forks ? (allFights / forks * 100).toFixed(0) : 0}%)`);
   line('  and a non-fight was actually taken', `${tot('tookNonFight')} (${forks ? (tot('tookNonFight') / forks * 100).toFixed(0) : 0}%)`);
   const evOpt = tot('evOptions'), evBk = tot('evBookable'), evCould = tot('evCouldBook');
+  // I01: the second chance, and whether it is on sale. `open` is every moment a squad was losing
+  // and the engine would have let it break away but for the money; `afford` is how many of those
+  // it could actually pay for. Nothing in this file takes the retreat, so this is the door as the
+  // game offers it, not as a policy uses it.
+  {
+    const open = tot('retreatOpen'), afford = tot('retreatAfford');
+    const all = a => results.flatMap(r => r[a] || []);
+    const med = a => a.length ? a.slice().sort((x, y) => x - y)[Math.floor(a.length / 2)] : 0;
+    line('retreat was on the table', `${open} times`);
+    line('  and affordable when it was', `${afford} of ${open} (${open ? (afford / open * 100).toFixed(0) : 0}%)`);
+    line('  median price asked', med(all('retreatAsked')));
+    line('  median purse at that moment', med(all('retreatPurse')));
+    const by = {};
+    results.forEach(r => Object.entries(r.retreatBySector || {}).forEach(([k, v]) => {
+      const row = by[k] || (by[k] = { open: 0, afford: 0 });
+      row.open += v.open; row.afford += v.afford;
+    }));
+    const cols = Object.keys(by).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+    line('  affordable by sector',
+      cols.map(k => `${k.slice(1)}: ${by[k].open ? Math.round(by[k].afford / by[k].open * 100) : 0}% of ${by[k].open}`).join('  '));
+  }
+
   line('event choices offered, total', `${evOpt}`);
   // H14: what the income constant actually buys. A choice priced at a sector-one constant costs
   // a falling fraction of a node as income compounds, so this rate is the exchange rate between
