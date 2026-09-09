@@ -11347,7 +11347,12 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     if ((abilityStr === 'SLUG_SHOT' && hasTrait(attacker, 'BREACHING_ROUNDS')) ||
         (abilityStr === 'QUICK_SHOT' && hasTrait(attacker, 'PIERCING_ROUNDS'))) ac = 0;
     let n = Math.max(1, cd - rv - ac); if (rv >= 100) n = 0;
-    return { n, rv };
+    // J04: `ac` goes back with the figure now. It was computed here and thrown away, and the
+    // explain panel then printed `target.armor` in its place - which is the unit's own plate
+    // and not what was taken off. ASHFALL adds 2 to every unit and an escort adds 20, so the
+    // one surface that answers "why did that number happen" was crediting the escort's plate
+    // to nobody. The soaked TOTAL was always right; it is the breakdown that was short.
+    return { n, rv, ac };
 }
 
 // ── F05: one ledger for a body ──────────────────────────────────────────────────────────
@@ -11450,9 +11455,9 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
     // by armour and a resistance. It still comes through here so the blow keeps its ledger:
     // the kill, the contracts, the bestiary, the Tally, the card that explains it.
     const pierce = !!(opts && opts.pierce);
-    const figure = t => pierce ? { n: Math.max(1, t.hp), rv: 0 }
+    const figure = t => pierce ? { n: Math.max(1, t.hp), rv: 0, ac: 0 }
                                : mitigate(attacker, t, calcDmg, atkType, abilityStr);
-    let { n: netDmg, rv: resistValue } = figure(target);
+    let { n: netDmg, rv: resistValue, ac: armourTaken } = figure(target);
     // File the whole story of this number: what it started as, what bent it, what soaked it.
     const filed = { attacker: attacker.name, target: target.name, raw: calcDmg,
                     trace: (hitTrace || []).slice(), atkType, abilityStr };
@@ -11466,7 +11471,12 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
             log(`> ${savior.name} steps in front of the blow meant for ${target.name}!`, 'log-status');
             spawnFCT(savior.id, 'STEPS IN', 'fct-status');
             target = savior;
-            ({ n: netDmg, rv: resistValue } = figure(target));
+            // J04: `ac` has to come back with the rest of it. figure() is re-run for the savior,
+            // so netDmg and resistValue become theirs - and without this, armourTaken was still
+            // the ORIGINAL target's, which is the plate that did not stop anything. filed.armor
+            // used to read target.armor further down, AFTER the swap, and so was right by
+            // accident; taking the figure from mitigate is what made the staleness reachable.
+            ({ n: netDmg, rv: resistValue, ac: armourTaken } = figure(target));
             // F09: the record was filed before the swap, so the tap-to-explain card named the
             // operator the blow was MEANT for while the log line beside it named the one who
             // took it. The card explains a number, and the number is the saviour's.
@@ -11515,7 +11525,18 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
     triggerHitFlash(target.id);
 
     filed.net = netDmg; filed.soaked = calcDmg - netDmg; filed.resist = resistValue;
-    filed.armor = (abilityStr === 'FERAL_BITE' || (target.corrodedTurns || 0) > 0) ? 0 : target.armor;
+    filed.armor = armourTaken || 0;
+    // J04: E04 scaled defensive GRANTS by armourScale() and left BASE armour flat on purpose,
+    // because base armour subtracts from PLAYER damage, which grows through perks and upgrades
+    // rather than along the enemy curve - and it filed the question of whether flat keeps pace.
+    // hitLog holds the last 24 hits for the explain panel and nothing has ever aggregated them,
+    // so the question had no instrument. Booked on the runStats idiom the weather ledger uses:
+    // what the hit was worth before the plate, and what the plate took off it.
+    if (runStats && attacker && attacker.isPlayer && !target.isPlayer) {
+        runStats.plate = runStats.plate || {};
+        const bag = runStats.plate[currentSector] = runStats.plate[currentSector] || [0, 0, 0];
+        bag[0] += calcDmg; bag[1] += (armourTaken || 0); bag[2] += 1;
+    }
     filed.plated = hasSig(target, 'RIOT_PLATE') && (target.plate || 0) > 0;
     hitLog.push(filed); if (hitLog.length > 24) hitLog.shift();
     const hitId = hitLog.length - 1;

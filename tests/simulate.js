@@ -2064,6 +2064,60 @@ const ROOT = path.join(__dirname, '..');
 // (297k / 269k / 267k against 59k / 62k / 55k), which is chance-versus-certainty rather than a
 // balance gap - SMOG chips every turn and SHRAPNEL rolls.
 
+// ── J04: THE PLATE E04 LEFT FLAT — IT DECAYS, BY HALF AS MUCH AS I FIRST READ ─────
+// E04 scaled defensive GRANTS by armourScale() and left BASE armour alone on purpose. Its
+// reasoning is in 95-armour-scales and it is sound: base armour subtracts from PLAYER damage,
+// which grows through perks and upgrades rather than along the enemy curve, so scaling it by
+// that curve would turn the Bastion's 30 into 250 at sector seven against player hits in the
+// low hundreds. It said so, left it flat, and filed the question of whether flat keeps pace.
+//
+// It had no instrument to answer with. hitLog holds the last 24 hits for the explain panel and
+// nothing has ever aggregated them, so the question sat open from E04 to here. The engine books
+// it now, per sector, on the runStats idiom the weather ledger uses: what the hit was worth
+// before the plate, and what the plate took off it.
+//
+// Three careers of 150:
+//
+//   mean player hit          s1    s2    s3    s4    s5    s6    s7
+//     career 1               29    46    58    63    72    82    92
+//     career 2               30    47    57    65    72    81    87
+//     career 3               30    45    55    62    72    83    96
+//   what the plate took     9.8  14.9  16.9  23.4  18.2  18.3  13.2
+//                          10.1  15.3  20.2  24.3  16.5  22.4  11.4
+//                          10.7  12.4  17.6  17.5  18.8  16.2  15.0
+//   the plate's share      34.2% 32.7% 29.1% 37.1% 25.4% 22.2% 14.2%
+//                          33.3% 32.8% 35.6% 37.6% 22.8% 27.5% 13.1%
+//                          35.6% 27.6% 32.1% 28.3% 26.0% 19.5% 15.6%
+//
+// CONFIRMED, AND SMALLER THAN IT LOOKED. A player hit grows about threefold across the road
+// while the plate's share of it falls from ~34% to ~14% - a factor of 2.4. That is the shape
+// E04 named, on the half it deferred, and it is nowhere near the twelvefold collapse E04
+// measured for grants. 14% of a hit at sector seven is not nothing.
+//
+// AND THE PLATE IS NOT ACTUALLY FLAT IN AGGREGATE, which is the part I had wrong going in.
+// Each unit's plate is a fixed number, but what a hit meets is not: the figure taken rises from
+// ~10 to ~13 across the road, because the road fields more armoured units the deeper it goes
+// and an escort adds 20 of its own. Composition absorbs roughly a third of the decay that
+// per-unit flatness would otherwise produce. "Base armour is flat" is true of a line in a table
+// and false of the fight the player is in.
+//
+// A METHOD NOTE, PAID FOR THE SAME WAY THE FILE'S OWN HEADER SAYS IT WILL BE. A 25-expedition
+// smoke read this as 35% falling to 5.3%, a sixfold collapse, and three careers put it at 34%
+// to 14%. The small sample did not just add noise, it exaggerated the effect by more than
+// double - deep sectors are thinly sampled at 25 runs and the few fights that reach them are
+// not a fair draw. The rule at the top of this file says 150+ before believing anything about
+// depth; this is what ignoring it looks like when the number still points the right way.
+//
+// NOTHING WAS RETUNED. Making the plate matter again at depth makes the game harder exactly
+// where I06 cut the wall to a 30% target, so it is a tuning decision with a target behind it
+// and the target is the owner's. Recorded, pinned by suite 152, left alone.
+//
+// ONE THING SHIPPED ON THE WAY, INDEPENDENT OF ANY OF THAT. mitigate computes the armour it
+// subtracts - the unit's plate, plus ASHFALL's 2, plus 20 for a standing escort - and threw the
+// figure away; the explain panel printed `target.armor` in its place. The soaked TOTAL was
+// always right, so the arithmetic reconciled, but the breakdown under it credited the escort's
+// plate to nobody. mitigate hands the figure back now and the panel names what came off.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
@@ -3982,6 +4036,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.wxTurnsBySector = runStats.wxTurnsBySector || {};
   stat.wxShrPlayer = runStats.wxShrPlayer || {};
   stat.wxShrFoe = runStats.wxShrFoe || {};
+  stat.plate = runStats.plate || {};
   stat.wxByCause = runStats.wxByCause || {};
   if (window.__sk) {
     const k = window.__sk;
@@ -4682,6 +4737,23 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const tables = await page.evaluate(() => ({ grounds: TERRAIN_IDS, skies: ['CLEAR', ...WEATHER_IDS],
     conf: CONFLUENCE.map(c => ({ faction: c.faction, cell: `${c.sky}|${c.ground}` })) }));
   line('ground fought on', spread(tables.grounds, marginal(p => p[1])));
+  // J04: what the enemy's own plate takes off a player hit, by sector. E04 scaled defensive
+  // GRANTS and left base armour flat, reasoning that it subtracts from player damage rather
+  // than from the enemy curve, and filed whether flat keeps pace. This is that row: a plate is
+  // flat, a player hit is not, so the share it eats is the whole question.
+  {
+    const acc = {};
+    results.forEach(r => Object.entries(r.plate || {}).forEach(([k, v]) => {
+      acc[k] = acc[k] || [0, 0, 0];
+      acc[k][0] += v[0]; acc[k][1] += v[1]; acc[k][2] += v[2];
+    }));
+    const keys = Object.keys(acc).sort((a, b) => a - b);
+    if (keys.length) {
+      line('  mean player hit before the plate', keys.map(k => `s${k} ${(acc[k][0] / Math.max(1, acc[k][2])).toFixed(0)}`).join('  '));
+      line('  and what the plate took off it', keys.map(k => `s${k} ${(acc[k][1] / Math.max(1, acc[k][2])).toFixed(1)}`).join('  '));
+      line('  the plate as a share of the hit', keys.map(k => `s${k} ${(acc[k][1] / Math.max(1, acc[k][0]) * 100).toFixed(1)}%`).join('  '));
+    }
+  }
   line('sky fought under', spread(tables.skies, marginal(p => p[0])));
   // J01: and what it took while it was up. Both sides, because the two weather sites damage
   // whatever is standing, and by sector, because the curve they use resets at every sector
