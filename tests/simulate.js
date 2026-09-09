@@ -2139,6 +2139,49 @@ const ROOT = path.join(__dirname, '..');
 // always right, so the arithmetic reconciled, but the breakdown under it credited the escort's
 // plate to nobody. mitigate hands the figure back now and the panel names what came off.
 
+// ── K01: PARITY ON SIGNING — FIELDING TREBLED AND THE WALL DID NOT MOVE ───────────
+// I08 left the recruit as a body nobody could use: signed on 53% of offers, fielded on 8% of
+// those, and behind at the one moment anybody asks. It also measured the cause precisely -
+// purchased upgrades were 19-20 points of a 31-33 point rating gap - and the counterfactual:
+// at parity the merit fieldings would treble. signOnRecruit grants that parity now, at the
+// LINE'S MEDIAN, alongside the level par the engine has always given.
+//
+// I expected this to make the game easier and need re-tuning against I06's 30% target. It did
+// not, and that is the finding.
+//
+//                        before (I08 line)        after (K01)
+//   fielded of signed     20/247  15/236  24/227   55/236  54/237  57/242
+//                            8%      6%     11%      23%     23%     24%
+//   mean rate gap        31.3    31.3    33.3      10.5    10.9    10.7
+//   upgrades, them/us     7.0/0   7.3/0   7.3/0     7.5/8.1 7.5/8.1 7.6/8.1
+//   careers won of 150     53      49      34        49      53      47
+//   wipes per run        5.51    5.23    5.57      5.61    5.55    5.51
+//   score, median        35.1k   31.9k   28.1k     36.7k   37.8k   32.6k
+//   lost for good         513     484     554       487     478     504
+//   bosses felled        3.90    3.68    3.51      3.93    3.99    3.61
+//
+// THE FIELDING RATE TREBLED, 8% TO 23%, WHICH IS EXACTLY WHAT I08 PREDICTED. And every other
+// row OVERLAPS - not one of them separates under the rule the rest of this file holds effects
+// to. Wins read 33% against 30% on the means, and the before-arm carries a 34 that the after-arm
+// has no answer to; three separate samples of near-identical builds have now read 32% (I06),
+// 30% (I08) and 33% (K01), which is the career band and not a movement. THE WALL IS WHERE I06
+// LEFT IT. Nothing was re-tuned and nothing needs to be.
+//
+// WHY IT DOES NOT MOVE THE WALL, which is worth understanding rather than just recording. The
+// placement rule only fields the hire when it beats the worst hand standing, so a better hire
+// does not put a WORSE line on the field - it replaces the weakest member slightly more often.
+// And the gap does not close to zero: 10.5 points remain after parity, because augments, gear
+// and spent perk points are still the squad's and not theirs. The hire became usable without
+// becoming a shortcut.
+//
+// THE ROW THAT INVERTED. `upgrades bought, incumbent / recruit` now reads 7.5 / 8.1 - the hire
+// carries slightly MORE than the mean incumbent, so the line "what those upgrades are worth in
+// rate" prints a NEGATIVE contribution. That is not a defect in either the grant or the
+// instrument: parity is taken from the line's MEDIAN and the instrument reports against the
+// incumbent it is actually being compared to, which is the worst hand standing and therefore
+// usually below the median. Two different comparators, both correct, and the sign is the proof
+// they are different.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
