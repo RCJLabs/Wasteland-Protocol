@@ -2309,6 +2309,12 @@ const AUGMENTS_ON = AUGMENT_POLICY !== 'off';
 // how a harness change gets attributed to the game. `--augcat 3` is the bench as it stood
 // before this phase, driven by whichever policy is asked for.
 const AUGMENT_CAT = Math.max(1, Number(flag('augcat', '99')) || 99);
+// K05: how many SITUATIONAL rows one body is allowed. The `road` policy puts the answers second
+// in the front rank's order, so a front-liner fills two of its three slots with them - and the
+// first measurement of the widened bench cannot tell "the content is a trap" from "this policy
+// buys too much of it". This is the arm that separates them: `--augmax 1` is a player who takes
+// at most one answer and spends the rest on stats.
+const AUGMENT_MAX = Math.max(0, Number(flag('augmax', '99')));
 // A sim that never walks out measures a game with one ending. `--extract N` gives it the
 // player who leaves once the run is worth banking: from sector N on, it takes the camp's door
 // when the squad is worn down. `off` (the default) is the old behaviour, for comparison.
@@ -2512,7 +2518,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -2971,8 +2977,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         // Affordability is asked of the game, the same way crafting does it, so repricing an
         // augment cannot leave this file buying at yesterday's price.
         const shelf = AUGMENTS.slice(0, augCat).map(a => a.id);
+        // How many answers this body is already carrying, by tag, so the cap is read off what is
+        // actually installed rather than counted here.
+        const worn = (target.augments || []).length;
+        const answerTags = AUGMENTS.filter(a => a.answers).map(a => a.tag);
+        const carried = (target.augments || []).filter(t => answerTags.includes(t)).length;
         const order = (augPolicy === 'road' ? window.__augWants(target) : AUGMENTS.map(a => a.id))
-          .filter(id => shelf.includes(id));
+          .filter(id => shelf.includes(id))
+          .filter(id => { const a = augmentById(id);
+            return !a || !a.answers || carried < augMax; });
+        void worn;
         const afford = order.map(augmentById).filter(Boolean).find(a => canAugment(target, a.id));
         if (!afford) break;
         installAugment(target.id, afford.id);
@@ -4290,7 +4304,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
