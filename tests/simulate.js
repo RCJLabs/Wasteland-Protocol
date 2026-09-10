@@ -2375,6 +2375,10 @@ const AUGMENT_CAT = Math.max(1, Number(flag('augcat', '99')) || 99);
 // depth. The first answer displaces the third-best flat option and the second displaces the
 // second-best, which is the whole of the difference.
 const AUGMENT_MAX = Math.max(0, Number(flag('augmax', '1')));
+// K06: `--trinket RIOT_SHIELD` fits the whole line with that piece at every muster, so what the
+// trinket slot is worth can be asked without the drop rate answering first. Off by default; this
+// is a bench test for a measurement, not a player anybody has.
+const TRINKET_ARM = flag('trinket', '');
 // A sim that never walks out measures a game with one ending. `--extract N` gives it the
 // player who leaves once the run is worth banking: from sector N on, it takes the camp's door
 // when the squad is worn down. `off` (the default) is the old behaviour, for comparison.
@@ -2578,7 +2582,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, trinketArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -2820,6 +2824,19 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // The real deploy button is what applies a doctrine's edge and banks its multiplier, so the
   // sim goes through it rather than around it.
   musterDeploy();
+  // K06: a BENCH TEST, not a policy. Every source of gear in the game is rollGear(), a uniform
+  // draw over the unowned pool - the elite drop, the commander drop, an event, and the Armory's
+  // single gear slot - so a player cannot seek a particular piece and the drop rate swamps any
+  // question about what a piece is WORTH. This puts the named trinket on every deployed operator
+  // at the muster, through the game's own equipGear so apply() runs and the ledger books it, and
+  // that takes the rarity out of the measurement: what is left is the slot.
+  if (trinketArm && gearById(trinketArm)) {
+    playerRoster.filter(c => c.gridPos > 0).forEach(c => {
+      if (c.trinket) return;
+      gearStash.push(trinketArm);
+      equipGear(c.id, trinketArm);
+    });
+  }
   // H03: the file reported skulls LEFT and never skulls EARNED, so "42 unspent" had no
   // denominator and could be read as a surplus or as a rounding error. Counting it needs care:
   // skulls are spent BEFORE a run (requisitions) and DURING it (the Citadel), so the net rise
@@ -4291,6 +4308,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // income arrives at twenty different sites and a second copy of that sum would be wrong the
   // first time one of them moved.
   stat.mat = runStats.mat || { craft: {}, aug: {}, crafted: {}, augged: {} };
+  stat.gear = runStats.gear || { worn: {}, slot: {} };
+  // K06: and what is standing on the line at the end of it - worn is a count of equippings and
+  // a piece can be taken off again, so what an operator ACTUALLY finished the run wearing is
+  // read off the roster rather than inferred from the ledger.
+  stat.trinketsHeld = playerRoster.filter(c => c.trinket).map(c => c.trinket);
   stat.matLeft = { ...materials };
   // K05: and how full each body ended up. A catalogue the same size as the cap means a filled
   // operator carries the whole catalogue, so the shape of this histogram is the question - if
@@ -4362,7 +4384,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, trinketArm: TRINKET_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -4943,6 +4965,23 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('signatures bought at the Outpost', `${mean(nums('sigsBought')).toFixed(1)} per run`);
   line('capstones reached', `${mean(nums('capsTaken')).toFixed(2)} taken on promotion, ${mean(nums('capsBought')).toFixed(2)} bought at the Outpost, per run`);
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
+  // K06: which pieces, because a total with no names in it cannot say whether the slot is being
+  // spent on output or on mitigation - and K05 measured that those are not worth the same.
+  {
+    const tally = pick => {
+      const t = {};
+      results.forEach(r => { const v = pick(r);
+        if (Array.isArray(v)) v.forEach(k => { t[k] = (t[k] || 0) + 1; });
+        else Object.entries(v || {}).forEach(([k, n]) => { t[k] = (t[k] || 0) + n; }); });
+      return t;
+    };
+    const worn = tally(r => (r.gear || {}).worn);
+    const held = tally(r => r.trinketsHeld);
+    const say = t => Object.entries(t).sort((a, b) => b[1] - a[1])
+      .map(([k, v]) => `${k} ${(v / n).toFixed(2)}`).join(', ') || 'none';
+    line('  pieces put on, per run', say(worn));
+    line('  trinkets still worn at the end', say(held));
+  }
   line('armories visited per run', `${mean(nums('shops')).toFixed(1)} (${Math.round(mean(nums('shopScrap')))} scrap spent)`);
   const sigs = {};
   results.forEach(r => Object.entries(r.sigsFaced || {}).forEach(([k, v]) => { sigs[k] = (sigs[k] || 0) + v; }));

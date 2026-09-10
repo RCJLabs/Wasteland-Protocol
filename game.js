@@ -377,6 +377,16 @@ function equipGear(charId, gearId) {
     gearStash.splice(idx, 1);
     ch[slotKey] = g.id;
     if (g.apply) g.apply(ch);
+    // K06: which piece went on, and for how long. K05 measured that output compounds and
+    // mitigation does not - a second resistance on a body costs ten wins - and the trinket slot
+    // sells exactly that trade three times over, against +3 DMG and +15 HP in the same slot.
+    // Nothing has ever counted which of the eight actually gets worn, so the question has had
+    // no instrument: `gear equipped per run` is a total with no names in it.
+    if (runStats) {
+        runStats.gear = runStats.gear || { worn: {}, slot: {} };
+        runStats.gear.worn[g.id] = (runStats.gear.worn[g.id] || 0) + 1;
+        runStats.gear.slot[g.slot] = (runStats.gear.slot[g.slot] || 0) + 1;
+    }
     saveGameState();
 }
 
