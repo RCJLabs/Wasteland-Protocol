@@ -2260,6 +2260,56 @@ const ROOT = path.join(__dirname, '..');
 // something too. At the squad: nothing is ever stopped dead, and only physical lands on a
 // weakness at all (2.3%, which is the Hound).
 
+// ── K05: THE BENCH GETS A SECOND ROW PER MATERIAL — AND A RIGHT AMOUNT OF IT ──────
+// Filed as "three augments is the thinnest axis in the game, and materials are the currency with
+// almost nowhere to go". A materials ledger went into the engine before anything was designed,
+// and the premise came apart three times over three 150-expedition careers:
+//
+//   MATERIALS ARE NOT DEAD.  33 into the bench, 105 into schematics, 10 left standing. 94% spent.
+//   THE BENCH IS NOT IDLE.   15 installs a run; 45% of bodies end at the slot cap.
+//   IT IS NOT A CHECKLIST.   installAugment caps SLOTS, not repeats. Of filled bodies only 20%
+//                            carried one of each; 21% carried three of the same, and eight
+//                            distinct sets turned up in twenty-five runs.
+//
+// What survived is narrower: all three rows were flat stat bumps, so nothing about the RUN ever
+// bore on which to buy. That eight-way spread is a fact about which materials were in the bag,
+// not about a decision. So each material bought a second thing - parts a thicker hide, chems a
+// sealed suit, tech an earth strap - sized off K02's incidence figures so each is worth about
+// five points off an average blow.
+//
+//                      wins /150      wipes             reached sector 7
+//   greedy/3 baseline  50 50 53       5.48 5.38 5.31    41% 37% 39%
+//   road/3 policy only 54 52 50       5.72 5.77 5.51    39% 45% 37%
+//   road/6 both        40 39 43       5.49 5.29 5.53    29% 30% 31%
+//   road/6 + augmax 1  56 53 52       4.97 5.40 5.65    40% 39% 41%
+//
+// THE POLICY ALONE IS A NULL. road/3 overlaps the baseline on every row, which is what the
+// --augcat arm was built to establish: the harness change is attributable and harmless.
+//
+// THE CATALOGUE IS NEUTRAL AT ONE ANSWER A BODY AND EXPENSIVE AT TWO. Unrestricted, the road
+// policy fills a front-liner's second and third slots with answers - 35% of every install - and
+// that arm separates cleanly and badly: ten wins and eight points of depth. Capped at one, 18%
+// of installs are answers, every row overlaps the baseline, and the sets read Optics+Optics+Rod
+// and Optics+Pump+Weave. The content is not a trap; the first draft of the policy was buying
+// twice as much of it as it is worth.
+//
+// WHY, AND IT IS THE GENERAL POINT: output compounds and mitigation does not. +4 DMG shortens
+// the fight, which cuts incoming damage on every turn after it. +20 energy resist saves a fixed
+// amount per blow and changes nothing about how long the fight runs. I sized the answers to
+// equal points-per-blow, and equal points are not equal value in a game where killing faster is
+// itself a defence. The first answer on a body displaces the third-best flat option and costs
+// nothing; the second displaces the second-best and costs real ground.
+//
+// WHAT I GOT WRONG, in order: the premise (three times), the sizing principle (points-per-blow
+// rather than value-per-slot), and then very nearly the verdict - the first three arms said
+// "revert this" and the only reason they did not get their way is that the policy was measured
+// separately from the content. An arm that separates a trap from an over-eager harness was worth
+// more than the thirty-five minutes it cost.
+//
+// TWO DEFAULTS CHANGED, both measured neutral against the greedy baseline before being changed:
+// --augments defaults to `road` because the greedy scan provably cannot reach half the bench,
+// and --augmax defaults to 1 because that is the number the careers support.
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
@@ -2301,7 +2351,13 @@ const TACTICS = flag('tactics', 'stim');
 // bumps; it stops being invisible the moment some of them are situational. `road` is a policy
 // that actually chooses: the front rank buys hide, the back rank buys output, and the third slot
 // answers whatever the run has been walking into. `off` installs nothing, as before.
-const AUGMENT_POLICY = flag('augments', 'on');
+// K05: `road` is the DEFAULT now and `on` is the old greedy scan, kept for comparison. The
+// greedy scan takes the first affordable row in table order, which cannot reach the second half
+// of the bench at all - verified, not assumed: --augcat 3 and --augcat 6 install identical sets
+// under it. A default that cannot see half the content it is measuring is not a default. Both
+// halves of the swap were measured against the greedy baseline over three 150-expedition careers
+// and both came back neutral; the record above the argument list has the rows.
+const AUGMENT_POLICY = flag('augments', 'road');
 const AUGMENTS_ON = AUGMENT_POLICY !== 'off';
 // K05: how many rows of the bench the simulated player is allowed to consider, counted from the
 // top of AUGMENTS. The game's table is untouched - this exists so the CATALOGUE and the POLICY
@@ -2314,7 +2370,11 @@ const AUGMENT_CAT = Math.max(1, Number(flag('augcat', '99')) || 99);
 // first measurement of the widened bench cannot tell "the content is a trap" from "this policy
 // buys too much of it". This is the arm that separates them: `--augmax 1` is a player who takes
 // at most one answer and spends the rest on stats.
-const AUGMENT_MAX = Math.max(0, Number(flag('augmax', '99')));
+// And one situational row a body, which is the number the careers actually support: at one, the
+// widened bench is neutral on every row; at two or more it costs ten wins and eight points of
+// depth. The first answer displaces the third-best flat option and the second displaces the
+// second-best, which is the whole of the difference.
+const AUGMENT_MAX = Math.max(0, Number(flag('augmax', '1')));
 // A sim that never walks out measures a game with one ending. `--extract N` gives it the
 // player who leaves once the run is worth banking: from sector N on, it takes the camp's door
 // when the squad is worn down. `off` (the default) is the old behaviour, for comparison.
@@ -2979,14 +3039,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         const shelf = AUGMENTS.slice(0, augCat).map(a => a.id);
         // How many answers this body is already carrying, by tag, so the cap is read off what is
         // actually installed rather than counted here.
-        const worn = (target.augments || []).length;
         const answerTags = AUGMENTS.filter(a => a.answers).map(a => a.tag);
         const carried = (target.augments || []).filter(t => answerTags.includes(t)).length;
         const order = (augPolicy === 'road' ? window.__augWants(target) : AUGMENTS.map(a => a.id))
           .filter(id => shelf.includes(id))
           .filter(id => { const a = augmentById(id);
             return !a || !a.answers || carried < augMax; });
-        void worn;
         const afford = order.map(augmentById).filter(Boolean).find(a => canAugment(target, a.id));
         if (!afford) break;
         installAugment(target.id, afford.id);

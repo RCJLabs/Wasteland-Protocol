@@ -177,6 +177,18 @@ module.exports = {
     }
     await resized(page, { width: 1280, height: 800 });
 
+    // ── And the manual says what stacking one is worth ────────────────────────────
+    // The bench's page has promised "three of one is a build" since the cap was written, and it
+    // was written when every row was a flat stat. Half of them are answers now, and the careers
+    // are unambiguous: one answer a body is free, two costs about a fifth of the wins. A manual
+    // that only carries the half of that which sounds good is a manual pointing at a trap.
+    const says = await page.evaluate(() => CODEX.find(c => c.id === 'BAG').body().join(' \n '));
+    ok(`the manual says the shelf is wider than the slots (${/bench carries \d+/.exec(says)?.[0] || 'nothing'})`,
+      /bench carries \d+/.test(says));
+    ok('and that an answer is not worth stacking the way a stat is',
+      /stat is worth stacking and an answer is not/i.test(says)
+      && /one answer a body/i.test(says));
+
     // ── And what it bought reads on the operator ──────────────────────────────────
     // The through-line from K02 and K04: the augment moves a resistance, the roster card names
     // it, and the field badge shows it. Bought through the bench, read off the two surfaces.

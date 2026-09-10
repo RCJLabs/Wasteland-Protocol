@@ -2733,8 +2733,17 @@ const CODEX = [
     { id: 'BAG', title: 'THE BAG', body: () => [
         'Four schematics at the workbench, four slots in the bag, and using one in a fight costs the operator\u2019s whole turn. They are the only thing in the game that answers a problem the squad you brought cannot: a hostile winding up out of everyone\u2019s reach, a stun on the one operator who could have stopped it.',
         `The same three materials buy augments, which are permanent and per-operator, so every consumable made is an augment not installed. The bag is what you spend on the run in front of you.`,
-        `Every operator has ${AUGMENT_SLOTS} augment slots and no more. Three of one is a build; one of each is a checklist. ` +
+        `Every operator has ${AUGMENT_SLOTS} augment slots and no more, and the bench carries ${AUGMENTS.length} - so filling somebody is a choice about which. Three of one is a build; one of each is a checklist. ` +
             AUGMENTS.map(a => `${a.name} ${a.short} (${a.cost} ${MATERIAL_ICON[a.mat]})`).join(', ') + '.',
+        // K05: the line above was written when every row was a flat stat, where stacking is
+        // simply more of it. Half the bench is a resistance now, and stacking one of those is
+        // NOT simply more: a bigger bar or a harder swing pays on every fight, while an answer
+        // only pays on the fights that throw the thing it answers. Measured over three careers -
+        // one answer a body costs the run nothing at all, and two costs about a fifth of the
+        // wins. Said out loud rather than left to be discovered, because the slots are permanent.
+        'A stat is worth stacking and an answer is not. A second bar or a second sight pays in '
+            + 'every fight; a second filter only pays in the fights that were already throwing '
+            + 'that at you. One answer a body, and spend the rest on what always works.',
         ...Object.entries(ITEM_DATA).map(([id, i]) => `${i.label} (${itemCost(id)}) \u2014 ${i.desc}`)
     ] },
     { id: 'BENCH', title: 'THE BENCH', body: () => [
