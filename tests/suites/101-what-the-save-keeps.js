@@ -29,6 +29,10 @@ module.exports = {
   run: async ({ page, ok, base, engineUp }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
+    // K03: the rows below judge a fight log against the engine's own BLITZ threshold rather
+    // than against a number somebody measured once. It is fetched here because ok() runs on
+    // the Node side, where the engine's globals do not exist.
+    const BLITZ = await page.evaluate(() => BLITZ_TURNS);
 
     // ── The two halves are one list now ─────────────────────────────────────────────
     const drift = await page.evaluate(() => {
@@ -91,6 +95,10 @@ module.exports = {
       momentumFocus = 1; pressExtra = true;
       window.__was = { contracts: [...activeContracts], regroups: totalRegroups(), carry: canCarry(),
                        mult: runStats.contractMult, vacated: [...vacatedRanks], bg: combatBgFile,
+                       // K03: the fight log as it stood BEFORE the save, so the row below can
+                       // assert the count came back unchanged rather than that it came back
+                       // above a number somebody once measured it at.
+                       log: fightLog ? { ...fightLog } : null,
                        names: contractNames() };
       saveGameState();
     });
@@ -114,8 +122,14 @@ module.exports = {
       now.carry === false && was.carry === false);
     ok(`with the score charging for what is actually being carried (x${now.mult})`,
       now.mult === was.mult && now.mult > 1 && now.names.length === was.names.length);
+    // K03: `turns >= 9` sat 0.4 sd above a measurement of 9.15 +/- 0.37 - the tightest row in
+    // the whole battery, and a floor set on the MEDIAN of the thing it judges. 9 is where the
+    // engine's own note says a fight lands; what the claim needs is only that the fight ran long
+    // enough to have lost BLITZ, which the engine names. Read off BLITZ_TURNS, and paired with
+    // the identity that actually matters here: the count came back from the save unchanged.
     ok(`a fight that lost FLAWLESS, BLITZ and FRUGAL has still lost them (${JSON.stringify(now.log)})`,
-      now.log && now.log.hurt === true && now.log.spent === true && now.log.turns >= 9 && now.log.chased === true);
+      now.log && now.log.hurt === true && now.log.spent === true && now.log.chased === true
+      && now.log.turns > BLITZ && now.log.turns === was.log.turns);
     ok(`the rank a fallen operator left is still a rank to close (${JSON.stringify(now.vacated)})`,
       JSON.stringify(now.vacated) === JSON.stringify(was.vacated) && was.vacated.length === 1);
     ok('and the momentum already spent on FOCUS and PRESS is still spent on them',
@@ -156,8 +170,14 @@ module.exports = {
     // resumeCombat ends in processTurn, which counts the turn it is resuming into when it is a
     // player's - so a rebuilt log reads 0 or 1 depending on whose turn the fight was saved on,
     // and pinning it to 0 is a coin flip on the speed roll rather than an assertion.
+    // K03: this read `turns <= 1` on a value the sweep measured at 0.06 +/- 0.25 - it comes back 0
+    // or 1 depending on whether the resume has taken a turn yet, and a 2 would fire it. What a
+    // fresh log means is that it has not run long enough to lose anything, which BLITZ_TURNS
+    // names. The note lives above the call rather than inside it: a bound written in prose
+    // inside an ok() is a bound tests/noise.js will read back as real.
     ok(`and lands on what a fresh fight would have, rather than on undefined (turns ${old.log && old.log.turns})`,
-      old.contracts.length === 0 && old.log !== null && old.log.turns <= 1 && old.log.hurt === false
+      old.contracts.length === 0 && old.log !== null && old.log.turns >= 0
+      && old.log.turns < BLITZ && old.log.hurt === false
       && old.vacated.length === 0 && old.focus === 0 && old.press === false);
     ok(`with the scene falling back rather than blanking (${old.weather} / ${old.terrain} / ${old.bg})`,
       old.weather === 'CLEAR' && old.terrain === 'OPEN_ROAD' && old.bg === 'bg_combat.webp');
@@ -187,7 +207,11 @@ module.exports = {
     ok(`ground and weather that do not exist fall back (${junk.terrain} / ${junk.weather})`,
       junk.terrain === 'OPEN_ROAD' && junk.weather === 'CLEAR');
     ok(`and a tampered focus is clamped rather than believed (${junk.focus})`, junk.focus === 1);
+    // K03: same shape, and here the tampered value is the point - the save said turns: -5. What
+    // is being claimed is that the rebuild REFUSED it, not that the fresh fight is exactly one
+    // turn old. A non-negative count still inside a fresh fight says both, with room to say it.
     ok(`a half-written fight log is rebuilt whole (${JSON.stringify(junk.log)})`,
-      junk.log.turns <= 1 && junk.log.hurt === true && junk.log.spent === false && junk.log.chased === false);
+      junk.log.turns >= 0 && junk.log.turns < BLITZ
+      && junk.log.hurt === true && junk.log.spent === false && junk.log.chased === false);
   }
 };

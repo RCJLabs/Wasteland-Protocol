@@ -238,9 +238,25 @@ module.exports = {
       checkWinState();
       const bossDrop = gearStash.length;
       combatActive = false; pendingRelicOffer = null;
-      return { eliteDrops, bossDrop };
+      return { eliteDrops, bossDrop, dial: ELITE_GEAR_CHANCE };
     });
-    ok(`elites drop gear at a real rate (${drops.eliteDrops}/60)`, drops.eliteDrops >= 12 && drops.eliteDrops <= 38);
+    // K03: `>= 12 && <= 38` over 60 fights sat 2.6 sd above its own floor on a measurement of
+    // 22.7 +/- 4.2 - a band picked around a number rather than around the dial the engine rolls
+    // against. That dial is named now (ELITE_GEAR_CHANCE), so the claim can be what it always
+    // meant: the observed rate TRACKS it. The band is roughly five sd either side and follows
+    // the dial wherever a later phase moves it, which a pair of literals never would.
+    // ...and the first draft of that band was 0.6 to 1.4, which the sweep then measured at only
+    // 1.7 sd: sixty fights against a coin weighted 0.4 carry a standard deviation of about a
+    // sixth of the rate, so sixty fights CANNOT resolve a rate to within a band worth asserting.
+    // What sixty fights can say without any noise in it at all is that the drop is a roll rather
+    // than a rule - some elites pay and some do not - which is the thing a regression would
+    // break in either direction. The rate is kept as a wide sanity band around the dial, there
+    // to catch a gross move rather than to measure one.
+    const rate = drops.eliteDrops / 60, tracks = rate / drops.dial;
+    ok(`elites drop gear on a roll, not on a rule (${drops.eliteDrops} of 60 paid)`,
+      drops.eliteDrops > 0 && drops.eliteDrops < 60);
+    ok(`and near enough the rate the engine asks for (${(rate * 100).toFixed(0)}% against a dial of ${drops.dial * 100}% — ${tracks.toFixed(2)} of it)`,
+      tracks > 0.35 && tracks < 1.65);
     ok('a commander always yields a piece', drops.bossDrop === 1);
 
     // ---- the outpost UI ----

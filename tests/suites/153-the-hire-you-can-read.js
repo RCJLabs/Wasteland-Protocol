@@ -119,10 +119,17 @@ module.exports = {
       const worst = line.reduce((x, c) => (rate(c) < rate(x) ? c : x));
       return { stock: rate(tpl), arrived: a.dmgBase + a.maxHp / 4, worst: rate(worst), who: worst.name };
     });
-    ok(`the stock line loses to the worst hand on the field (${worth.stock} against ${worth.who}'s ${worth.worst})`,
-      worth.stock < worth.worst);
-    ok(`and the body that actually arrives does not (${worth.arrived} against ${worth.worst})`,
+    // K03: `stock < worst` went red in a sweep at 39 against 39. The line it compares against is
+    // whatever a deep run happens to have levelled, so a tie is a draw the roll can produce on a
+    // build with nothing wrong with it - and a tie is not the claim. What K01 is about is that
+    // the PARITY GRANT is what puts the hire on the field: stock does not beat the worst hand,
+    // the arrived body does, and the grant is the difference between them.
+    ok(`the stock line does not beat the worst hand on the field (${worth.stock} against ${worth.who}'s ${worth.worst})`,
+      worth.stock <= worth.worst);
+    ok(`and the body that actually arrives does (${worth.arrived} against ${worth.worst})`,
       worth.arrived > worth.worst);
+    ok(`which is the grant, not the template (${worth.stock} stock, ${worth.arrived} arrived)`,
+      worth.arrived > worth.stock);
 
     // ── The card says what the hand is for ───────────────────────────────────────
     const answer = await page.evaluate(() => {

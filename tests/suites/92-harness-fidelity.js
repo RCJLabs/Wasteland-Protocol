@@ -66,7 +66,9 @@ module.exports = {
       return { before, after: runStats.kills || 0, foes: guard };
     });
     ok(`the engine counts every hostile it drops, without help (${kills.before} -> ${kills.after})`,
-      kills.after > kills.before && kills.after >= 1);
+      // K03: `&& kills.after >= 1` was here too, which a count that has just gone UP already
+      // says - and a redundant bound is a row the noise sweep reports every time for nothing.
+      kills.after > kills.before);
 
     // ── SECTOR progress exists in exactly one place, and openingTier is what a career buys ──
     const crossing = await page.evaluate(() => {

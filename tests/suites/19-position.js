@@ -286,8 +286,13 @@ module.exports = {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       playerRoster.forEach((h, i) => { h.gridPos = i < 3 ? i + 1 : 0; h.maxHp = 600; h.hp = 600; });
       initiateCombat('RAIDERS', false);
+      // K03: the cap was 60 and the sweep measured this fight at 6 to 60 turns - it HIT the cap
+      // in at least one battery of twenty, and the row under it only passed because of an `||`
+      // that is true whenever anything at all has died. The squad is at 600 health here, so the
+      // fight is not in doubt; what was in doubt is whether it finishes inside an arbitrary
+      // number. Raised well clear of it, and the row now asserts the fight actually ended.
       let turns = 0;
-      while (combatActive && turns < 60) {
+      while (combatActive && turns < 400) {
         const actor = turnQueue[activeIndex];
         if (!actor || actor.hp <= 0) { activeIndex = (activeIndex + 1) % turnQueue.length; turns++; continue; }
         if (actor.isPlayer) {
@@ -301,10 +306,12 @@ module.exports = {
         }
         activeIndex = (activeIndex + 1) % turnQueue.length; turns++;
       }
-      return { turns, resolved: activeEntities.some(e => e.hp <= 0),
+      return { turns, resolved: activeEntities.some(e => e.hp <= 0), stillOn: combatActive,
+               foesLeft: activeEntities.filter(e => !e.isPlayer && e.hp > 0).length,
                squadStanding: activeEntities.filter(e => e.isPlayer && e.hp > 0).length };
     });
-    ok(`a scripted fight runs to a conclusion (${live.turns} turns)`, live.turns < 60 || live.resolved);
+    ok(`a scripted fight runs to a conclusion (${live.turns} turns, ${live.foesLeft} still standing)`,
+      live.turns < 400 && (!live.stillOn || live.foesLeft === 0));
     ok('with the squad still tracked', live.squadStanding >= 0);
   }
 };

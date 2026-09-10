@@ -149,10 +149,15 @@ module.exports = {
     });
     ok(`running from a warlord owes nothing (${notOwed.ranAway.purse} kept)`,
       notOwed.ranAway.purse >= 2000 && notOwed.ranAway.due === false);
-    ok(`an ordinary fight owes nothing (${notOwed.ordinary.purse})`,
-      notOwed.ordinary.purse > 2000 && notOwed.ordinary.due === false);
-    ok(`and neither does a squad that is not carrying the debt (${notOwed.noRelic.purse})`,
-      notOwed.noRelic.purse > 2000);
+    // K03: both of these read `> 2000` against a purse seeded at exactly 2000, so what they were
+    // really asserting was that the fight PAID something - and the payout is a roll. Measured
+    // over twenty batteries the second sat 2.6 sd above its own floor. What the rows are for is
+    // that the collector took NOTHING, which is `>= 2000` and has no roll in it at all; the line
+    // above them already reads it that way.
+    ok(`an ordinary fight owes nothing (${notOwed.ordinary.purse} kept of 2000)`,
+      notOwed.ordinary.purse >= 2000 && notOwed.ordinary.due === false);
+    ok(`and neither does a squad that is not carrying the debt (${notOwed.noRelic.purse} kept)`,
+      notOwed.noRelic.purse >= 2000);
 
     // ── And it cannot be walked away from by reloading on the LOOT screen ─────────
     const reload = await page.evaluate(() => {

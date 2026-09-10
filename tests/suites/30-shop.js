@@ -10,7 +10,8 @@ module.exports = {
     // ---- the generator places it, uncommonly and in bounds ----
     const gen = await page.evaluate(() => {
       let withShop = 0, twoPlus = 0, badTier = 0, badHost = 0, invalid = 0;
-      for (let i = 0; i < 60; i++) {
+      const MAPS = 200;
+      for (let i = 0; i < MAPS; i++) {
         const m = generateSectorMap(Math.random);
         if (!validateSectorMap(m)) invalid++;
         const shops = m.nodes.filter(n => n.type === 'SHOP');
@@ -21,9 +22,14 @@ module.exports = {
           if (s.elite) badHost++;
         });
       }
-      return { withShop, twoPlus, badTier, badHost, invalid };
+      return { withShop, twoPlus, badTier, badHost, invalid, maps: MAPS };
     });
-    ok(`most maps carry one armory, not all (${gen.withShop}/60)`, gen.withShop >= 25 && gen.withShop <= 52);
+    // K03: `>= 25 && <= 52` over 60 maps sat 4.4 sd from its ceiling on a measurement of
+    // 39.4 +/- 2.9. Map generation is cheap, so the sample is 200 now and the band is a share
+    // rather than a pair of counts - the claim was always "most, and not all".
+    const share = gen.withShop / gen.maps;
+    ok(`most maps carry one armory, not all (${gen.withShop}/${gen.maps} = ${(share * 100).toFixed(0)}%)`,
+      share >= 0.35 && share <= 0.9);
     ok('never two of them', gen.twoPlus === 0);
     ok('always tiers 3-9, never on an elite', gen.badTier === 0 && gen.badHost === 0);
     ok('shop maps still validate', gen.invalid === 0);

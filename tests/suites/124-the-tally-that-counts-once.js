@@ -160,18 +160,21 @@ module.exports = {
       k.intents = [['ATTACK', 1.0]];
       const roll = n => { let sig = 0; for (let i = 0; i < n; i++) { k.sigCd = 0;
         if (rollIntent(k).type === 'SIG') sig++; } return sig; };
-      const nothingToCount = roll(400);
+      // K03: 400 rolls put the floor below 3.5 sd from what it measures. These are bare
+      // rollIntent calls, so the sample is nearly free and five times as many settles it.
+      const N = 2000;
+      const nothingToCount = roll(N);
       window.__lose();
-      const somethingToCount = roll(400);
+      const somethingToCount = roll(N);
       window.__fire(k);
-      const countedAlready = roll(400);
-      return { nothingToCount, somethingToCount, countedAlready, weight: sigOf(k).weight };
+      const countedAlready = roll(N);
+      return { nothingToCount, somethingToCount, countedAlready, rolls: N, weight: sigOf(k).weight };
     });
-    ok(`with nothing to count the Ossuary does not stand there counting (${intent.nothingToCount} of 400 rolls)`,
+    ok(`with nothing to count the Ossuary does not stand there counting (${intent.nothingToCount} of ${intent.rolls} rolls)`,
       intent.nothingToCount === 0);
-    ok(`with a death to write down it comes up at its own weight (${intent.somethingToCount} of 400, weight ${intent.weight})`,
-      intent.somethingToCount > 60);
-    ok(`and once that death is written it stops coming up again (${intent.countedAlready} of 400)`,
+    ok(`with a death to write down it comes up at its own weight (${intent.somethingToCount} of ${intent.rolls}, weight ${intent.weight})`,
+      intent.somethingToCount > intent.rolls * 0.15);
+    ok(`and once that death is written it stops coming up again (${intent.countedAlready} of ${intent.rolls})`,
       intent.countedAlready === 0);
 
     // ── Its own dead still work the way they always did ────────────────────────────

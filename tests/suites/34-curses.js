@@ -37,13 +37,16 @@ module.exports = {
       const roll = rollRelic();
       const shopStock = rollShopStock().filter(it => it.kind === 'RELIC').length;
       activeRelics = [];
-      let offered = 0;
-      for (let i = 0; i < 60; i++) if (rollRelicOffer().some(r => r.tier === 'CURSED')) offered++;
-      return { roll, shopStock, offered };
+      // K03: 60 tables left the floor 4.8 sd off a measurement of 21.8 +/- 2.8. rollRelicOffer
+      // is a pure draw, so four times the sample costs nothing and the band becomes a share.
+      let offered = 0; const TABLES = 240;
+      for (let i = 0; i < TABLES; i++) if (rollRelicOffer().some(r => r.tier === 'CURSED')) offered++;
+      return { roll, shopStock, offered, tables: TABLES };
     });
     ok('the random drop never deals a curse', dealt.roll === null);
     ok('neither does the armory shelf', dealt.shopStock === 0);
-    ok(`the cache offers one deliberately (${dealt.offered}/60 tables)`, dealt.offered >= 8 && dealt.offered <= 36);
+    ok(`the cache offers one deliberately (${dealt.offered}/${dealt.tables} tables = ${(dealt.offered / dealt.tables * 100).toFixed(0)}%)`,
+      dealt.offered / dealt.tables >= 0.15 && dealt.offered / dealt.tables <= 0.6);
 
     // ---- the cache marks them unmistakably ----
     const marked = await page.evaluate(() => {

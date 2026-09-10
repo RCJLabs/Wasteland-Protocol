@@ -132,31 +132,54 @@ module.exports = {
     // ---- QUARTERMASTER: one more out of every wreck ----
     const qm = await page.evaluate(() => {
       // The salvage is dealt on the win path of a real fight, not in collectLoot.
+      // K03: this compared the MEANS of two independent samples against a +-0.25 tolerance, and
+      // it went red in the K03 sweep - 1.85 against 2.60, a difference of 0.75. A note here said
+      // 40 draws was too few and 150 held between 0.92 and 1.05; that note was written off eight
+      // samples of its own, and eight samples is not enough to see a tail. The tolerance was
+      // still inside the measurement's noise, only more quietly.
+      //
+      // The cause was not the sample size at all. Two uncontrolled inputs were riding along.
+      // A sector front pays DOUBLE on one material, and confirmNewGame rolls a QUIRK onto every
+      // operator - and SCRAP_RAT pockets an extra material for each survivor carrying it. So a
+      // salvage was worth 1, 2 or 3, the extra had nothing to do with the job, and the two arms
+      // drew different quirks. Raising the sample from 40 to 150 made the noise quieter without
+      // touching where it came from, which is why it came back.
+      //
+      // With the front off and the quirks stripped, the engine's rule is exact: matDrops takes
+      // +1 and every drop is worth exactly 1. So it is asserted exactly, as a shifted RANGE
+      // rather than a difference of means - without the job a salvage is 1 or 2, with it 2 or 3.
+      // Same claim, no noise in it at all, and it fails the moment the +1 stops being a +1.
       const haul = job => {
-        // 40 was not enough to hold a +-0.25 tolerance: sampled eight times the difference
-        // ran 0.85 to 1.23, and a battery caught it at 1.25 - a real flake rather than a
-        // real regression. At 150 the same measurement sits between 0.92 and 1.05, so the
-        // tolerance keeps its meaning instead of being widened around the noise.
-        let total = 0; const N = 150;
+        const seen = {};
+        let total = 0; const N = 60;
         for (let i = 0; i < N; i++) {
           const { bench } = __fresh();
           currentSector = 2; currentTier = 3;
+          sectorFront = null;
+          playerRoster.forEach(c => { c.quirk = null; });
           if (job) __give(bench[0], job);
           initiateCombat('RAIDERS', false);
+          sectorFront = null;
           materials = { parts: 0, chems: 0, tech: 0 };
           activeEntities.filter(e => !e.isPlayer).forEach(e => { e.hp = 0; });
           checkWinState();
-          total += materials.parts + materials.chems + materials.tech;
+          const got = materials.parts + materials.chems + materials.tech;
+          seen[got] = (seen[got] || 0) + 1;
+          total += got;
           combatActive = false;
         }
         benchJob = null;
-        return total / N;
+        return { mean: total / N, band: Object.keys(seen).map(Number).sort((a, b) => a - b), seen };
       };
       return { none: haul(null), qm: haul('QUARTERMASTER'), other: haul('MEDIC') };
     });
-    ok(`a quartermaster gets one more out of every salvage (${qm.none.toFixed(2)} -> ${qm.qm.toFixed(2)})`,
-      Math.abs((qm.qm - qm.none) - 1) < 0.25);
-    ok(`and no other job does (${qm.other.toFixed(2)})`, Math.abs(qm.other - qm.none) < 0.25);
+    const band = r => r.band.join('/');
+    ok(`without a job a salvage is worth ${band(qm.none)} (mean ${qm.none.mean.toFixed(2)} over 60)`,
+      band(qm.none) === '1/2');
+    ok(`a quartermaster gets one more out of every salvage: ${band(qm.none)} becomes ${band(qm.qm)} (mean ${qm.none.mean.toFixed(2)} -> ${qm.qm.mean.toFixed(2)})`,
+      band(qm.qm) === '2/3');
+    ok(`and no other job does (${band(qm.other)}, mean ${qm.other.mean.toFixed(2)})`,
+      band(qm.other) === '1/2');
 
     // ---- FIELD MEDIC: the camp is run properly, and reaches the bench ----
     const medic = await page.evaluate(() => {

@@ -48,20 +48,36 @@ module.exports = {
       return { art: urls.filter(u => u.endsWith('.webp')).length,
                shell: ['index.html', 'game.js', 'styles.css', ''].filter(f => urls.includes(f)).length };
     };
+    // K03: the wait and the row under it both asked for 20 webp files, against an art set that
+    // has since grown to 48 - so the label said "/24" while counting up to 48, and the floor of
+    // 20 had quietly become "at least two fifths of it". Measured over twenty batteries the
+    // count read 23 to 48, mean 35.8, which put the floor 1.9 sd away: a row that fires on
+    // whoever is unlucky, on a build with nothing wrong with it.
+    //
+    // The spread is the harness racing the worker rather than anything about the game, so the
+    // answer is to wait for the whole set rather than to widen the band around a half-filled
+    // cache. The size is read off ASSET_LIST, so a phase that adds art moves the wait with it.
+    // until() evaluates its predicate in the page with no argument, so the figure is parked on
+    // the window rather than baked into the closure - a closed-over value does not survive
+    // being serialised across.
+    const wanted = await page.evaluate(() => {
+      window.__wantArt = ASSET_LIST.filter(a => a.endsWith('.webp')).length;
+      return window.__wantArt;
+    });
     try {
       await until(page, async () => {
         const names = await caches.keys();
         const urls = [];
-        for (const n of names) {
-          const keys = await (await caches.open(n)).keys();
+        for (const nm of names) {
+          const keys = await (await caches.open(nm)).keys();
           keys.forEach(k => urls.push(k.url.split('/').pop()));
         }
-        return urls.filter(u => u.endsWith('.webp')).length >= 20
+        return urls.filter(u => u.endsWith('.webp')).length >= window.__wantArt
             && ['index.html', 'game.js', 'styles.css', ''].filter(f => urls.includes(f)).length >= 3;
-      }, 'the service worker to fill its cache');
+      }, `the service worker to cache all ${wanted} pieces of art`);
     } catch (e) { /* the assertions below report what did arrive */ }
     const cached = await page.evaluate(countCache);
-    ok(`the art set is cached (${cached.art}/24)`, cached.art >= 20);
+    ok(`the art set is cached (${cached.art}/${wanted})`, cached.art >= wanted);
     ok('the shell is cached for an offline boot', cached.shell >= 3);
 
     await context.setOffline(true);
