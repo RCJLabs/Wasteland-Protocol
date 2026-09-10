@@ -2182,6 +2182,84 @@ const ROOT = path.join(__dirname, '..');
 // usually below the median. Two different comparators, both correct, and the sign is the proof
 // they are different.
 
+// ── K02: SIX OF THE RANK AND FILE NAME WHAT THEY THROW — 3% OF BLOWS BECAME 38% ───
+// Two of the player's three resistance fields answered almost nothing. enemyStrike and every
+// other enemy damage site read `enemy.dmgType || 'phys'`, and exactly three templates in the
+// game set that field: the Carrion Matriarch, the Vatborn and the Stormcaller, all commanders.
+// Every one of the rank and file swung physical. Measured with a per-type ledger over three
+// 150-expedition careers, the squad met bio on 1.3-1.5% of the blows aimed at it and energy on
+// 1.1-1.4%. Four pieces of shipped content answered that: the Gas Mask (+10 bio), the Insulated
+// Coat (+10 energy), the HAZMAT perk Closed Circuit (+40 bio) and the bio 25 baked into the
+// Hazmat's own line.
+//
+// The fix is DATA, not engine - the damage sites already read the field. Three units the
+// bestiary already calls chemical throw bio (Chem Fiend, Censer Bearer, Blight Moth) and the
+// three powered machines throw energy (Drone, Turret, War Rig), which makes MECH an energy
+// faction end to end.
+//
+//                          before (K01 line)        after (K02)
+//   blows at the squad
+//     phys                 97.1%  97.4%  97.6%     61.6%  61.3%  62.6%
+//     bio                   1.5%   1.3%   1.4%     13.8%  12.4%  12.9%
+//     energy                1.4%   1.3%   1.1%     24.5%  26.3%  24.5%
+//   careers won of 150       57     51     63        48     51     52
+//   wipes per run          5.31   5.34   5.43      5.55   5.33   5.51
+//   reached sector 7        45%    39%    47%       35%    37%    38%
+//   lost for good          3.03   3.37   3.47      3.23   3.36   2.95
+//   score, median         52.0k  40.2k  54.0k     31.3k  30.5k  32.6k
+//   bosses felled          4.07   3.97   4.09      3.73   3.75   3.86
+//   resistance's share of
+//     all incoming damage  10.9%  12.7%  11.5%      8.7%   9.3%   9.6%
+//
+// THE CLAIM SEPARATES BY A MILE: 2.8% of incoming blows were bio or energy, and 38% of them
+// are now. That row is definition-independent and needs no argument.
+//
+// IT IS A MODEST HARDENING, WHICH IS NOT WHAT I PREDICTED. I expected the switch to be neutral
+// or slightly kind, because most operators carry 0 in bio and energy and would simply take the
+// blow unresisted. That reasoning was backwards. What matters is the resistance that STOPS
+// applying: everybody carries a little physical (5 on the Bruiser and the Breacher, -2 on the
+// Hound), and 38% of blows no longer meet it. The composite share of incoming damage that any
+// resistance soaks fell from 10.9-12.7% to 8.7-9.6% - about two and a half points more damage
+// taken, and the run rows follow it.
+//
+// WHICH ROWS ACTUALLY MOVED, under the separation rule the rest of this file holds effects to.
+// SEPARATED: score median (40.2k floor before against a 32.6k ceiling after - a wide gap),
+// reached sector 7 (39% against 38% - by one point), bosses felled (3.97 against 3.86).
+// OVERLAPPED: careers won, wipes per run, lost for good. Seven rows at three-against-three is
+// about 0.7 spurious separations on I07's own arithmetic, so three separations all pointing the
+// same way is more than chance - but only the score row separates by a margin that survives
+// being looked at twice. THE HONEST READING IS: runs end shallower and score lower; the win
+// rate does not move out of the career band.
+//
+// NOTHING WAS RE-TUNED FOR IT. The win rate is what I06 tuned against, and the after-arm sits
+// at 32/34/35 (mean 34%) against a 30% target, where the before-arm sat at 38/34/42 (mean 38%).
+// The change moves the wall TOWARD where I06 aimed, not away from it, and it does so without
+// separating. A compensating buff would be re-tuning against a row that did not move.
+//
+// AND THE CAREERS ABOVE MEASURE A PLAYER WHO NEVER ADAPTS. The sim's gear policy does not buy
+// for a resistance, so those numbers are the floor rather than the expectation. What the answer
+// is worth is measured directly in suite 154 instead, off the engine's own curve: the Gas Mask
+// takes a flat 10 off every bio blow, which is 48% of a Censer Bearer's ordinary swing where
+// the Choir first stands and 21% of it at the end of the road; with Closed Circuit on top, its
+// ordinary swing is shut out entirely at every depth, and its heavy turn drops 70 to 20. And it
+// buys nothing at all against the energy the machines throw - which is what makes the trinket
+// slot a decision rather than a strictly better hat.
+//
+// ONE ROW IN THIS FILE IS NOT COMPARABLE ACROSS THIS COMMIT. The first draft of the damage-type
+// ledger booked a resistance at its FACE VALUE, so a bio-immune machine booked 100 against a
+// 30-point blow and `of the blow, resistance took` read 78-91% on the hostile side - a number
+// most of which was a wall stopping everything rather than a subtraction taking 88 of every 100.
+// It is booked as the blow it actually stopped now, and counted separately on its own line. The
+// hostile-side row is quoted AFTER only. The squad side is near-comparable (no player carries an
+// immunity - `stopped dead` reads 0.0% in every career) but the cap can still bite where a chip
+// blow is smaller than the resistance meeting it, so read the composite row as indicative.
+//
+// WHAT THE NEW LINES SAY THAT THE OLD ONE COULD NOT. At the hostiles: bio blows are stopped
+// dead 22.4% of the time and energy blows land on a weakness 60.6% of the time - the bestiary
+// was already written as "bring energy, do not bring bio", and now the incoming direction says
+// something too. At the squad: nothing is ever stopped dead, and only physical lands on a
+// weakness at all (2.3%, which is the Hound).
+
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
 const flag = (name, fallback) => {
@@ -4101,6 +4179,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.wxShrPlayer = runStats.wxShrPlayer || {};
   stat.wxShrFoe = runStats.wxShrFoe || {};
   stat.plate = runStats.plate || {};
+  stat.dt = runStats.dt || {};
   stat.wxByCause = runStats.wxByCause || {};
   if (window.__sk) {
     const k = window.__sk;
@@ -4817,6 +4896,37 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       line('  and what the plate took off it', keys.map(k => `s${k} ${(acc[k][1] / Math.max(1, acc[k][2])).toFixed(1)}`).join('  '));
       line('  the plate as a share of the hit', keys.map(k => `s${k} ${(acc[k][1] / Math.max(1, acc[k][0]) * 100).toFixed(1)}%`).join('  '));
     }
+  }
+  // K02: which damage type a blow carried, both ways, and what resistance took off it. The
+  // player's resistances have three fields and the question is whether two of them ever meet
+  // anything: enemyStrike reads `enemy.dmgType || 'phys'` and three templates set it.
+  {
+    const acc = {};
+    results.forEach(r => Object.entries(r.dt || {}).forEach(([side, bag]) => {
+      const s2 = acc[side] = acc[side] || {};
+      Object.entries(bag).forEach(([t, v]) => {
+        const row = s2[t] = s2[t] || { hits: 0, raw: 0, resisted: 0, weak: 0, immune: 0 };
+        row.hits += v.hits; row.raw += v.raw; row.resisted += v.resisted;
+        row.weak += (v.weak || 0); row.immune += (v.immune || 0);
+      });
+    }));
+    const show = (side, label) => {
+      const b = acc[side]; if (!b) return;
+      const tot = Object.values(b).reduce((a, v) => a + v.hits, 0) || 1;
+      line(label, Object.entries(b).sort((x, y) => y[1].hits - x[1].hits)
+        .map(([t, v]) => `${t} ${(v.hits / tot * 100).toFixed(1)}%`).join(', '));
+      line('  of the blow, resistance took', Object.entries(b).sort((x, y) => y[1].hits - x[1].hits)
+        .map(([t, v]) => `${t} ${(v.resisted / Math.max(1, v.raw) * 100).toFixed(1)}%`).join(', '));
+      // The two ends of the same axis, which the share above folds together: a wall the blow
+      // died against, and a seam it opened wider. Both are what a resistance IS, and a report
+      // that only prints the middle cannot tell an immunity from a very good coat.
+      line('  of those blows, stopped dead', Object.entries(b).sort((x, y) => y[1].hits - x[1].hits)
+        .map(([t, v]) => `${t} ${(v.immune / Math.max(1, v.hits) * 100).toFixed(1)}%`).join(', '));
+      line('  and landed on a weakness', Object.entries(b).sort((x, y) => y[1].hits - x[1].hits)
+        .map(([t, v]) => `${t} ${(v.weak / Math.max(1, v.hits) * 100).toFixed(1)}%`).join(', '));
+    };
+    show('atSquad', 'blows at the squad, by type');
+    show('atFoe', 'blows at the hostiles, by type');
   }
   line('sky fought under', spread(tables.skies, marginal(p => p[0])));
   // J01: and what it took while it was up. Both sides, because the two weather sites damage

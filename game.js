@@ -2631,7 +2631,20 @@ const CODEX = [
     { id: 'RESISTANCE', title: 'ARMOUR AND RESISTANCE', body: () => [
         'Every enemy carries three badges under its health: P physical, B biological, E energy.',
         'Orange means weak to it. Grey means it shrugs it off. Struck through means immune - that attack does nothing at all.',
-        'Armour subtracts from every hit. Corroding a target strips its armour outright, which is the answer to anything that re-plates itself.'
+        'A resistance takes a flat number off the hit, never a share of it - 10 off a 30 is worth three times 10 off a 90. A hundred or more is immunity. A negative reading adds instead.',
+        'Armour subtracts from every hit. Corroding a target strips its armour outright, which is the answer to anything that re-plates itself.',
+        // K02: your own three resistances answer whatever is aimed at you, and for most of the
+        // game's life the answer was "physical, always" - so two of the three were dead stats
+        // and the Gas Mask, the Insulated Coat and Closed Circuit bought nothing. Read off the
+        // live pools rather than listed here, so the page cannot name a bestiary the game has
+        // stopped having.
+        (() => {
+            const by = {};
+            Object.values(ENEMY_POOL).flat().concat(BOSS_POOL)
+                .forEach(e => { if (e.dmgType) (by[e.dmgType] = by[e.dmgType] || []).push(e.name); });
+            const parts = DMG_TYPES.map(([t]) => by[t] && `${t} from ${by[t].join(', ')}`).filter(Boolean);
+            return `Your own three answer whatever is aimed at you. Nearly everything out there swings physical - what does not is ${parts.join('; ')}.`;
+        })()
     ] },
     { id: 'STATUS', title: 'STATUS', body: () => [
         '💧 bleeding - loses health at the start of its turn.',
@@ -8019,11 +8032,13 @@ function recruitReach(tpl) {
 }
 
 // K01: what this body is FOR, against the line standing behind you and the road you are on.
-// Elemental matching would have been the obvious hook and it is not available: enemyStrike
-// reads `enemy.dmgType || 'phys'` and exactly three templates in the game set it, all of them
-// commanders - so a bio resist answers two fights in a career and nothing you can plan a
-// signing around (filed as K02). What DOES decide it is the shape of the line: a hole in it,
-// a reach it has none of, and whether this hand beats the weakest one already standing.
+// Elemental matching would have been the obvious hook and it was not available: enemyStrike
+// reads `enemy.dmgType || 'phys'` and exactly three templates set it, all of them commanders -
+// so a bio resist answered two fights in a career and nothing you could plan a signing around.
+// K02 gave six of the rank and file a type, which makes the resistances real, but it is still
+// not what the card leads with: a type answers the fights that faction turns up in, and the
+// shape of the line answers every fight. So what DOES decide it stays the same: a hole in the
+// line, a reach it has none of, and whether this hand beats the weakest one already standing.
 function recruitAnswer(tpl) {
     const line = playerRoster.filter(c => c.gridPos > 0 && c.hp > 0);
     const notes = [];
@@ -8046,8 +8061,15 @@ function recruitCardHtml(tpl) {
     const why = recruitAnswer(tpl);
     const deck = [...(ABILITIES[tpl.classType] || [])];
     const verbs = deck.map(a => `<li><b>${a.label}</b> — ${a.reach === 'self' ? 'self' : a.reach}</li>`).join('');
+    // K02: this is the ONLY surface in the game that prints a player-side resistance figure -
+    // the roster card does not, and resistBadges returns nothing for an operator - and it
+    // printed `+25% bio` against arithmetic that subtracts flat. Quoted in the words the gear
+    // that sells one already uses ("+10 bio resist"), and a negative reading is named as the
+    // weakness it is rather than as a resistance with a minus in front of it.
     const res = Object.entries(tpl.resistances).filter(([, v]) => v !== 0)
-        .map(([k, v]) => `${v > 0 ? '+' : ''}${v}% ${k}`).join(' · ');
+        .map(([k, v]) => v >= 100 ? `immune to ${k}`
+                       : v > 0 ? `+${v} ${k} resist`
+                       : `weak to ${k} (${v})`).join(' · ');
     return `<div class="recruit-card">
         <img class="recruit-portrait portrait" src="${tpl.img}" alt="${tpl.name}">
         <div class="recruit-info">
@@ -8923,7 +8945,7 @@ function summonedRoster() {
             out.push({ name: spec.name, faction: 'COMMAND', sig: spec.sig || null, rider: null,
                        minTier: null, range: spec.range, isHeavy: false,
                        resistances: spec.resistances || { phys: 0, bio: 0, energy: 0 },
-                       boss: false, summonedBy: b.name, how });
+                       dmgType: spec.dmgType || 'phys', boss: false, summonedBy: b.name, how });
         });
     });
     // And the commanders you have already put down, brought back off your own record.
@@ -8966,12 +8988,14 @@ function bestiaryRoster() {
     const out = [];
     Object.entries(ENEMY_POOL).forEach(([faction, list]) =>
         list.forEach(e => out.push({ name: e.name, faction, sig: e.sig, rider: e.rider || null, minTier: e.minTier,
-                                     range: e.range, isHeavy: e.isHeavy, resistances: e.resistances, boss: false })));
+                                     range: e.range, isHeavy: e.isHeavy, resistances: e.resistances,
+                                     dmgType: e.dmgType || 'phys', boss: false })));
     BOSS_POOL.forEach(b => out.push({ name: b.name, faction: 'COMMAND',
                                       // What it picked up off you, once it has picked it up.
                                       sig: (learnedMove(b, grudgeOn(b.id)) || {}).sig || null,
                                       minTier: null,
-                                      range: b.range, isHeavy: true, resistances: b.resistances, boss: true,
+                                      range: b.range, isHeavy: true, resistances: b.resistances,
+                                      dmgType: b.dmgType || 'phys', boss: true,
                                       grudge: grudgeOn(b.id),
                                       passive: b.passive || null }));
     summonedRoster().forEach(e => out.push(e));
@@ -9023,7 +9047,7 @@ function dossierHtml(name) {
     }).join('');
     return `<div class="dossier-body">
         <div class="dossier-name">${name}</div>
-        <div class="dossier-sub">${rec.boss ? 'WARLORD' : rec.faction} \u00B7 ${rec.range === 'ranged' ? 'RANGED' : 'MELEE'}${rec.isHeavy && !rec.boss ? ' \u00B7 HEAVY' : ''}${rec.minTier ? (d => ` \u00B7 FROM S${d.sector} T${d.tier}`)(unlockDepth(rec.minTier)) : ''}</div>
+        <div class="dossier-sub">${rec.boss ? 'WARLORD' : rec.faction} \u00B7 ${rec.range === 'ranged' ? 'RANGED' : 'MELEE'}${rec.isHeavy && !rec.boss ? ' \u00B7 HEAVY' : ''} \u00B7 THROWS ${(rec.dmgType || 'phys').toUpperCase()}${rec.minTier ? (d => ` \u00B7 FROM S${d.sector} T${d.tier}`)(unlockDepth(rec.minTier)) : ''}</div>
         ${sig ? `<div class="dossier-sig"><span class="dossier-sig-name">${sig.name}</span>
             <span class="dossier-sig-kind">${sig.kind === 'action' ? 'TELEGRAPHED' : sig.kind.toUpperCase()}</span>
             <span class="dossier-sig-desc">${sig.desc}</span></div>` : ''}
@@ -9072,7 +9096,7 @@ const ENEMY_POOL = {
     'BEASTS': [
     { name: "Attack Dog", sig: 'PACK_HUNT', intents: [['ATTACK', 0.50], ['FLANK', 0.35], ['HEAVY', 0.15]], rider: 'RAW', minTier: 1, isHeavy: false, classType: "BEAST", range: 'melee', maxHp: 30, speed: 18, armor: 0, dmgBase: 10, img: "enemy_dog.webp", scale: 0.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 0, energy: 0 } }, 
     { name: "Mutant", sig: 'DRAG_DOWN', intents: [['ATTACK', 0.45], ['HEAVY', 0.35], ['DEFEND', 0.10], ['STATUS', 0.10]], rider: 'RAW', minTier: 9, isHeavy: true, classType: "MUTANT", range: 'melee', maxHp: 70, speed: 7, armor: 0, dmgBase: 25, img: "enemy_mutant.webp", scale: 1.5, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 20, energy: -5 } }, 
-    { name: "Chem Fiend", sig: 'GAS_BLOOM', intents: [['ATTACK', 0.45], ['STATUS', 0.25], ['AOE', 0.25], ['DEFEND', 0.05]], rider: 'RAW', minTier: 11, isHeavy: true, classType: "MUTANT", range: 'ranged', maxHp: 60, speed: 11, armor: 0, dmgBase: 15, img: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 50, energy: -5 } }
+    { name: "Chem Fiend", dmgType: 'bio', sig: 'GAS_BLOOM', intents: [['ATTACK', 0.45], ['STATUS', 0.25], ['AOE', 0.25], ['DEFEND', 0.05]], rider: 'RAW', minTier: 11, isHeavy: true, classType: "MUTANT", range: 'ranged', maxHp: 60, speed: 11, armor: 0, dmgBase: 15, img: "enemy_chem.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 50, energy: -5 } }
     ],
     'RAIDERS': [
     { name: "Raider", sig: 'CALL_IT_IN', intents: [['ATTACK', 0.60], ['HEAVY', 0.25], ['DEFEND', 0.10], ['STATUS', 0.05]], minTier: 1, isHeavy: false, classType: "RAIDER", range: 'melee', maxHp: 40, speed: 10, armor: 0, dmgBase: 12, img: "enemy_raider.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -2, bio: 2, energy: 0 } }, 
@@ -9081,20 +9105,20 @@ const ENEMY_POOL = {
     { name: "Juggernaut", sig: 'RIOT_PLATE', intents: [['ATTACK', 0.35], ['HEAVY', 0.40], ['DEFEND', 0.25]], minTier: 12, isHeavy: true, classType: "RAIDER", range: 'melee', maxHp: 90, speed: 6, armor: 5, dmgBase: 18, img: "enemy_juggernaut.webp", scale: 1.8, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 0, energy: -5 } }
     ],
     'MECH': [
-    { name: "Drone", sig: 'ROTOR_LIFT', intents: [['ATTACK', 0.75], ['HEAVY', 0.15], ['STATUS', 0.10]], minTier: 4, isHeavy: false, classType: "DRONE", range: 'ranged', isHovering: true, maxHp: 25, speed: 18, armor: 5, dmgBase: 8, img: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 100, energy: -10 } }, 
-    { name: "Turret", sig: 'OVERWATCH', intents: [['ATTACK', 0.45], ['HEAVY', 0.32], ['DEFEND', 0.18], ['STATUS', 0.05]], minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
-    { name: "War Rig", sig: 'AEGIS', intents: [['ATTACK', 0.35], ['AOE', 0.20], ['HEAVY', 0.20], ['DEFEND', 0.25]], minTier: 14, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
+    { name: "Drone", dmgType: 'energy', sig: 'ROTOR_LIFT', intents: [['ATTACK', 0.75], ['HEAVY', 0.15], ['STATUS', 0.10]], minTier: 4, isHeavy: false, classType: "DRONE", range: 'ranged', isHovering: true, maxHp: 25, speed: 18, armor: 5, dmgBase: 8, img: "enemy_drone.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 100, energy: -10 } }, 
+    { name: "Turret", dmgType: 'energy', sig: 'OVERWATCH', intents: [['ATTACK', 0.45], ['HEAVY', 0.32], ['DEFEND', 0.18], ['STATUS', 0.05]], minTier: 5, isHeavy: false, classType: "MECH", range: 'ranged', maxHp: 50, speed: 2, armor: 8, dmgBase: 18, img: "enemy_turret.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 100, energy: -10 } }, 
+    { name: "War Rig", dmgType: 'energy', sig: 'AEGIS', intents: [['ATTACK', 0.35], ['AOE', 0.20], ['HEAVY', 0.20], ['DEFEND', 0.25]], minTier: 14, isHeavy: true, classType: "MECH", range: 'ranged', maxHp: 150, speed: 5, armor: 10, dmgBase: 25, img: "enemy_warrig.webp", scale: 1.8, hpDrop: -20, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 15, bio: 100, energy: -15 } }
     ],
     // Two factions built to be answered rather than out-damaged.
     'CHOIR': [
     { name: "Acolyte", sig: 'LITANY', intents: [['ATTACK', 0.60], ['HEAVY', 0.25], ['DEFEND', 0.15]], minTier: 4, isHeavy: false, classType: "CULTIST", range: 'melee', maxHp: 45, speed: 12, armor: 0, dmgBase: 12, img: "enemy_choir_acolyte.webp", scale: 0.9, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 40, energy: -10 } },
-    { name: "Censer Bearer", sig: 'RAD_WASH', intents: [['ATTACK', 0.55], ['HEAVY', 0.15], ['STATUS', 0.20], ['AOE', 0.10]], minTier: 6, isHeavy: false, classType: "CULTIST", range: 'ranged', maxHp: 55, speed: 10, armor: 4, dmgBase: 14, img: "enemy_choir_censer.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 55, energy: -10 } },
+    { name: "Censer Bearer", dmgType: 'bio', sig: 'RAD_WASH', intents: [['ATTACK', 0.55], ['HEAVY', 0.15], ['STATUS', 0.20], ['AOE', 0.10]], minTier: 6, isHeavy: false, classType: "CULTIST", range: 'ranged', maxHp: 55, speed: 10, armor: 4, dmgBase: 14, img: "enemy_choir_censer.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 55, energy: -10 } },
     { name: "Reliquary", sig: 'MARTYR', intents: [['ATTACK', 0.40], ['HEAVY', 0.35], ['DEFEND', 0.25]], minTier: 10, isHeavy: true, classType: "CULTIST", range: 'melee', maxHp: 85, speed: 7, armor: 6, dmgBase: 16, img: "enemy_choir_reliquary.webp", scale: 1.4, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 60, energy: -15 } },
     { name: "Hierophant", unique: true, sig: 'RESURGENCE', intents: [['ATTACK', 0.50], ['STATUS', 0.20], ['AOE', 0.20], ['DEFEND', 0.10]], minTier: 13, isHeavy: true, classType: "CULTIST", range: 'ranged', maxHp: 75, speed: 13, armor: 4, dmgBase: 20, img: "enemy_choir_hierophant.webp", scale: 1.3, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 70, energy: -5 } }
     ],
     'CARRION': [
     { name: "Carrion Rat", sig: 'TEEMING', intents: [['ATTACK', 0.55], ['FLANK', 0.30], ['HEAVY', 0.15]], minTier: 3, isHeavy: false, classType: "VERMIN", range: 'melee', maxHp: 22, speed: 20, armor: 0, dmgBase: 9, img: "enemy_carrion_rat.webp", scale: 0.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -5, bio: 25, energy: 0 } },
-    { name: "Blight Moth", sig: 'TEEMING', intents: [['ATTACK', 0.55], ['STATUS', 0.30], ['AOE', 0.15]], minTier: 5, isHeavy: false, classType: "VERMIN", range: 'ranged', isHovering: true, maxHp: 26, speed: 22, armor: 0, dmgBase: 11, img: "enemy_carrion_moth.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -5, bio: 30, energy: -10 } },
+    { name: "Blight Moth", dmgType: 'bio', sig: 'TEEMING', intents: [['ATTACK', 0.55], ['STATUS', 0.30], ['AOE', 0.15]], minTier: 5, isHeavy: false, classType: "VERMIN", range: 'ranged', isHovering: true, maxHp: 26, speed: 22, armor: 0, dmgBase: 11, img: "enemy_carrion_moth.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -5, bio: 30, energy: -10 } },
     { name: "Gorge Worm", sig: 'BURROW', intents: [['ATTACK', 0.45], ['HEAVY', 0.35], ['DEFEND', 0.20]], minTier: 9, isHeavy: true, classType: "VERMIN", range: 'melee', maxHp: 70, speed: 9, armor: 2, dmgBase: 22, img: "enemy_carrion_worm.webp", scale: 1.4, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 35, energy: -10 } },
     { name: "Brood Mother", unique: true, sig: 'BROOD', intents: [['ATTACK', 0.45], ['HEAVY', 0.20], ['DEFEND', 0.20], ['AOE', 0.15]], minTier: 12, isHeavy: true, classType: "VERMIN", range: 'ranged', maxHp: 95, speed: 8, armor: 4, dmgBase: 15, img: "enemy_carrion_brood.webp", scale: 1.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 45, energy: -15 } }
     ]
@@ -11620,6 +11644,30 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
     // hitLog holds the last 24 hits for the explain panel and nothing has ever aggregated them,
     // so the question had no instrument. Booked on the runStats idiom the weather ledger uses:
     // what the hit was worth before the plate, and what the plate took off it.
+    // K02: and which TYPE the blow was, both ways, with what the target's resistance took off
+    // it. enemyStrike reads `enemy.dmgType || 'phys'` and three templates in the game set it,
+    // all commanders - so the question is whether a player's bio and energy resistance ever
+    // meets anything, and the ledger answers it rather than the count of templates.
+    if (runStats) {
+        const side = (attacker && attacker.isPlayer && !target.isPlayer) ? 'atFoe'
+                   : (target.isPlayer ? 'atSquad' : null);
+        if (side) {
+            runStats.dt = runStats.dt || {};
+            const bag = runStats.dt[side] = runStats.dt[side] || {};
+            const row = bag[atkType] = bag[atkType] || { hits: 0, raw: 0, resisted: 0 };
+            row.hits++; row.raw += calcDmg;
+            // What the resistance actually took off - floored at nothing, capped at the blow.
+            // A NEGATIVE resistance is a weakness and adds instead, and lumping the two
+            // together would report a gas mask and a weakness to gas as the same fact. An
+            // immunity is a wall rather than a subtraction and stops the whole blow, so it is
+            // booked as the whole blow and counted on its own: reading it as its face value
+            // put 100 against 30-point hits and reported 88% taken off a table where most of
+            // that number was a hundred that never had 88 points in front of it.
+            row.resisted += resistValue >= 100 ? calcDmg : Math.min(calcDmg, Math.max(0, resistValue));
+            if (resistValue >= 100) row.immune = (row.immune || 0) + 1;
+            if (resistValue < 0) row.weak = (row.weak || 0) + 1;
+        }
+    }
     if (runStats && attacker && attacker.isPlayer && !target.isPlayer) {
         runStats.plate = runStats.plate || {};
         const bag = runStats.plate[currentSector] = runStats.plate[currentSector] || [0, 0, 0];
