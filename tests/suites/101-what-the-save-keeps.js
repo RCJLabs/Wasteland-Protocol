@@ -26,7 +26,7 @@
 // payload with a validator in the migrateRelics idiom.
 module.exports = {
   name: 'What the save keeps',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, settled }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
     // K03: the rows below judge a fight log against the engine's own BLITZ threshold rather
@@ -89,9 +89,32 @@ module.exports = {
       beginExpedition();
       sectorFront = null; currentSector = 2; currentTier = 5;
       initiateCombat('RAIDERS', false);
-      fightLog.turns = 9; fightLog.hurt = true; fightLog.spent = true; fightLog.chased = true;
+    });
+    // K06: THE ROW BELOW WAS RIGHT AND THE ENGINE WAS WRONG, and this is how the difference was
+    // found. `turns` came back one higher than it went in, about one battery in ten, and the
+    // rate was the tell: whether it happened depended on WHOSE TURN the save was taken on.
+    // resumeCombat finishes by calling processTurn to put the field back up, and processTurn
+    // counts a squad turn - so coming back on a player's turn counted that turn a second time,
+    // and coming back on an enemy's did not. A reload cost the player a turn against BLITZ.
+    // Fixed in the engine, and this suite now catches it every time rather than sometimes,
+    // because the save is deliberately taken on a stopped clock.
+    //
+    // Which the probe needs anyway: processTurn also calls saveGameState(), and it is reached
+    // through a setTimeout(nextTurn) chain, so a turn still queued when an evaluate returns
+    // fires after it and REWRITES the save underneath the probe. loseOperator is the same thing
+    // from the other end - taking the active body out of the queue schedules the next turn. On a
+    // PLAYER's turn processTurn returns without scheduling anything, so the chain has terminated:
+    // a real condition rather than a wait. It is asked for twice, once to reach a stopped clock
+    // and again after the operator falls.
+    const clockStopped = () => combatActive && turnQueue[activeIndex] && turnQueue[activeIndex].isPlayer;
+    await settled(page, clockStopped, 'the fight to reach a player turn, where its clock stops');
+    await page.evaluate(() => {
       const victim = activeEntities.find(e => e.isPlayer && e.gridPos > 0);
       loseOperator(victim, 'COMBAT');
+    });
+    await settled(page, clockStopped, 'the clock to stop again after the operator falls');
+    await page.evaluate(() => {
+      fightLog.turns = 9; fightLog.hurt = true; fightLog.spent = true; fightLog.chased = true;
       momentumFocus = 1; pressExtra = true;
       window.__was = { contracts: [...activeContracts], regroups: totalRegroups(), carry: canCarry(),
                        mult: runStats.contractMult, vacated: [...vacatedRanks], bg: combatBgFile,
@@ -130,6 +153,8 @@ module.exports = {
     ok(`a fight that lost FLAWLESS, BLITZ and FRUGAL has still lost them (${JSON.stringify(now.log)})`,
       now.log && now.log.hurt === true && now.log.spent === true && now.log.chased === true
       && now.log.turns > BLITZ && now.log.turns === was.log.turns);
+    ok(`and resuming did not charge the fight for the turn it came back on (${was.log.turns} -> ${now.log.turns})`,
+      now.log.turns === 9 && was.log.turns === 9);
     ok(`the rank a fallen operator left is still a rank to close (${JSON.stringify(now.vacated)})`,
       JSON.stringify(now.vacated) === JSON.stringify(was.vacated) && was.vacated.length === 1);
     ok('and the momentum already spent on FOCUS and PRESS is still spent on them',

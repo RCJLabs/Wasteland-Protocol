@@ -3661,6 +3661,10 @@ function recruitables() { return RECRUIT_POOL.filter(r => !playerRoster.some(c =
 function recruitById(id) { return RECRUIT_POOL.find(r => r.id === id) || null; }
 
 let playerRoster = []; let activeEntities = []; let turnQueue = []; let activeIndex = -1; let combatActive = false; let pendingAction = null;
+// Set for exactly one processTurn, by resumeCombat. The turn a reload comes back on has
+// already been counted against the fight log; without this, running processTurn to redraw
+// the field counts it a second time. See the note on processTurn.
+let resumingTurn = false;
 
 window.addEventListener('click', initAudio, { once: true });
 
@@ -6426,6 +6430,7 @@ function resumeCombat(c) {
     switchScreen('screen-combat'); document.getElementById('log').innerHTML = '';
     applyCombatScenery(combatBgFile, currentNodeType === 'BOSS' ? bossForSector().banner : null);
     log("> COMBAT RESUMED.", "log-turn");
+    resumingTurn = true;
     processTurn();
 }
 // Everything a fight is, apart from the entities themselves. buildCombatSnapshot and
@@ -10556,10 +10561,18 @@ function renderCommandDeck() {
 
 function processTurn() {
     if (!combatActive) return;
+    // A RESUMED TURN IS NOT A NEW TURN. resumeCombat finishes by calling this to put the field
+    // back up, on the same actor the save was taken on - and the squad turn that actor is taking
+    // was already counted before the save. Counting it again charged a reload one turn against
+    // BLITZ, which is the bounty that pays for winning inside BLITZ_TURNS: reload three times in
+    // one fight and the bounty is gone with nothing on the field to show for it. I02 found this
+    // shape once already, where every fight opened one turn twice. The flag is read and cleared
+    // in the same breath so an early return below cannot carry it into a turn that IS new.
+    const resumed = resumingTurn; resumingTurn = false;
     // Before anything can fall this turn, and before the save below writes the field down.
     clearStaleClocks();
     pendingAction = null; let aE = turnQueue[activeIndex]; if (aE.hp <= 0) { nextTurn(); return; }
-    if (aE.isPlayer && fightLog) fightLog.turns++;
+    if (aE.isPlayer && fightLog && !resumed) fightLog.turns++;
     saveGameState();
     renderField(); applyTurnStartEffects(aE); if (!combatActive) return; if (!aE.hp > 0) return checkWinState(); 
     if (aE.stunnedTurns > 0) { if (!aE.isPlayer) { log(`> ${aE.name} stunned.`, "log-status"); spawnFCT(aE.id, "STUNNED", "fct-status"); aE.stunnedTurns--; setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return; } else return; }
