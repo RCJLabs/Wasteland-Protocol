@@ -2295,7 +2295,20 @@ const BENCH = flag('bench', 'off');
 const TACTICS = flag('tactics', 'stim');
 // `--augments off` measures the materials economy the way this file used to see it: consumables
 // only, with the permanent upgrades it never installed left on the shelf.
-const AUGMENTS_ON = flag('augments', 'on') !== 'off';
+// K05: `on` is the greedy scan this file has always used - first affordable row in table order,
+// which means every augment figure in this repo has described the TABLE'S ORDER and the material
+// prices rather than any preference. That was invisible while all three rows were flat stat
+// bumps; it stops being invisible the moment some of them are situational. `road` is a policy
+// that actually chooses: the front rank buys hide, the back rank buys output, and the third slot
+// answers whatever the run has been walking into. `off` installs nothing, as before.
+const AUGMENT_POLICY = flag('augments', 'on');
+const AUGMENTS_ON = AUGMENT_POLICY !== 'off';
+// K05: how many rows of the bench the simulated player is allowed to consider, counted from the
+// top of AUGMENTS. The game's table is untouched - this exists so the CATALOGUE and the POLICY
+// can be separated in a measurement, because changing both at once and reading one number is
+// how a harness change gets attributed to the game. `--augcat 3` is the bench as it stood
+// before this phase, driven by whichever policy is asked for.
+const AUGMENT_CAT = Math.max(1, Number(flag('augcat', '99')) || 99);
 // A sim that never walks out measures a game with one ending. `--extract N` gives it the
 // player who leaves once the run is worth banking: from sector N on, it takes the camp's door
 // when the squad is worn down. `off` (the default) is the old behaviour, for comparison.
@@ -2499,7 +2512,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -2747,6 +2760,24 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // across an expedition understates income by exactly what was spent. Income is therefore
   // derived - (end - start) + spent - rather than sampled, which is what made the first attempt
   // report 366% of income spent.
+  // K05: which augment this operator wants, in order. Read off two things the run already
+  // knows: where they stand, and what has actually been landing on the squad - K02's damage-type
+  // ledger, rather than a guess about the road. A situational augment is worth its size times how
+  // often the thing it answers turns up, so that product is what orders them; the flat rows sit
+  // where the rank puts them. This is a POLICY, not a rule of the game: it exists so the
+  // instrument can express a preference at all, because the greedy scan never could.
+  window.__augWants = c => {
+    const bag = (runStats && runStats.dt && runStats.dt.atSquad) || {};
+    const hits = t => (bag[t] || {}).hits || 0;
+    const seen = ['phys', 'bio', 'energy'].reduce((a, t) => a + hits(t), 0) || 1;
+    const answers = AUGMENTS.slice(0, augCat).filter(a => a.answers)
+      .map(a => ({ id: a.id, worth: (hits(a.answers.type) / seen) * a.answers.by }))
+      .sort((x, y) => y.worth - x.worth).map(x => x.id);
+    // The front rank is where the blows are taken; everyone behind it is there to end the fight.
+    return c.gridPos === 1
+      ? ['PLATING', ...answers, 'OPTICS', 'PUMP']
+      : ['OPTICS', 'PUMP', ...answers, 'PLATING'];
+  };
   if (!window.__sk) window.__sk = { earned: 0, meta: 0, req: 0 };
   window.__sk.runStart = bossSkulls;
   window.__sk.runSpent = 0;
@@ -2939,7 +2970,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         const had = (target.augments || []).length;
         // Affordability is asked of the game, the same way crafting does it, so repricing an
         // augment cannot leave this file buying at yesterday's price.
-        const afford = AUGMENTS.find(a => canAugment(target, a.id));
+        const shelf = AUGMENTS.slice(0, augCat).map(a => a.id);
+        const order = (augPolicy === 'road' ? window.__augWants(target) : AUGMENTS.map(a => a.id))
+          .filter(id => shelf.includes(id));
+        const afford = order.map(augmentById).filter(Boolean).find(a => canAugment(target, a.id));
         if (!afford) break;
         installAugment(target.id, afford.id);
         if ((target.augments || []).length === had) break;
@@ -4180,6 +4214,21 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.wxShrFoe = runStats.wxShrFoe || {};
   stat.plate = runStats.plate || {};
   stat.dt = runStats.dt || {};
+  // K05: what came out of the materials bag and by which door, plus what was still sitting in
+  // it when the run ended. The leftover is read off `materials` rather than derived, because
+  // income arrives at twenty different sites and a second copy of that sum would be wrong the
+  // first time one of them moved.
+  stat.mat = runStats.mat || { craft: {}, aug: {}, crafted: {}, augged: {} };
+  stat.matLeft = { ...materials };
+  // K05: and how full each body ended up. A catalogue the same size as the cap means a filled
+  // operator carries the whole catalogue, so the shape of this histogram is the question - if
+  // most augmented bodies sit at the cap, there was never a choice about WHICH, only about who.
+  stat.augFill = playerRoster.map(c => (c.augments || []).length);
+  // K05: and WHAT a filled body carries, as a multiset rather than a count. The manual promises
+  // "three of one is a build; one of each is a checklist" and nothing has ever checked which of
+  // those a run actually produces - installAugment caps slots, not repeats, so both are legal.
+  stat.augSets = playerRoster.filter(c => (c.augments || []).length > 0)
+    .map(c => [...c.augments].sort().join('+'));
   stat.wxByCause = runStats.wxByCause || {};
   if (window.__sk) {
     const k = window.__sk;
@@ -4241,7 +4290,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -4859,6 +4908,37 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('kills, both ways', `${banked} banked by the engine, ${bodies} bodies counted here`
     + (gap ? ` (${gap} more bodies than kills)` : ''));
   line('augments installed per run', (results.reduce((a, r) => a + (r.augments || 0), 0) / n).toFixed(1));
+  // K05: the materials economy, end to end. Three kinds come in off salvage and there are two
+  // doors out - the bench and the schematics - so what is left standing at the end of a run is
+  // material the game gave the player and gave them nothing to do with.
+  {
+    const kinds = ['parts', 'chems', 'tech'];
+    const sum = (pick, k) => results.reduce((a, r) => a + ((pick(r) || {})[k] || 0), 0) / n;
+    const row = (label, pick) => line(label, kinds.map(k => `${k} ${sum(pick, k).toFixed(1)}`).join(', ')
+      + `  (${kinds.reduce((a, k) => a + sum(pick, k), 0).toFixed(1)} total)`);
+    row('  materials into the bench', r => (r.mat || {}).aug);
+    row('  materials into schematics', r => (r.mat || {}).craft);
+    row('  materials left standing', r => r.matLeft);
+    const tally = pick => {
+      const t = {};
+      results.forEach(r => Object.entries(pick(r) || {}).forEach(([k, v]) => { t[k] = (t[k] || 0) + v; }));
+      return Object.entries(t).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${(v / n).toFixed(2)}`).join(', ');
+    };
+    // Which augments, in a catalogue of three against three slots per body: a run that fills a
+    // slot has no decision to record, so an even spread here is the absence of one.
+    const fill = {};
+    results.forEach(r => (r.augFill || []).forEach(v => { fill[v] = (fill[v] || 0) + 1; }));
+    const bodies = Object.values(fill).reduce((a, v) => a + v, 0) || 1;
+    line('  slots filled per body', Object.keys(fill).sort()
+      .map(k => `${k}: ${(fill[k] / bodies * 100).toFixed(0)}%`).join(', '));
+    const sets = {};
+    results.forEach(r => (r.augSets || []).forEach(k => { sets[k] = (sets[k] || 0) + 1; }));
+    const setN = Object.values(sets).reduce((a, v) => a + v, 0) || 1;
+    line('  what a filled body carries', Object.entries(sets).sort((a, b) => b[1] - a[1]).slice(0, 8)
+      .map(([k, v]) => `${k} ${(v / setN * 100).toFixed(0)}%`).join(', ') || 'none');
+    line('  which augment, per run', tally(r => (r.mat || {}).augged) || 'none');
+    line('  which schematic, per run', tally(r => (r.mat || {}).crafted) || 'none');
+  }
   const faces = {};
   results.forEach(r => Object.entries(r.facesMet || {}).forEach(([k, v]) => { faces[k] = (faces[k] || 0) + v; }));
   line('faces met', Object.entries(faces).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${v}`).join(', ') || 'none');

@@ -27,10 +27,20 @@ module.exports = {
       byId: AUGMENTS.every(a => !!augmentById(a.id)),
       missing: augmentById('NOPE')
     }));
-    ok(`${table.ids.length} augments, ${table.slots} slots an operator`, table.ids.length === 3 && table.slots === 3);
+    // K05: this read `ids.length === 3`, which was the whole shelf when the cap was written and
+    // is no longer - the bench carries six now, deliberately more than a body can hold, and that
+    // gap is what suite 156 is about. What THIS suite is about is the ceiling, so it asserts the
+    // ceiling and prints the shelf beside it rather than pinning both to one number.
+    ok(`${table.ids.length} augments on the shelf, ${table.slots} slots an operator`,
+      table.slots === 3 && table.ids.length >= table.slots);
     ok('each is named, costed and does something', table.complete);
     ok('no two share an id', new Set(table.ids).size === table.ids.length);
-    ok('each spends a different material', new Set(table.mats).size === table.mats.length);
+    // K05: and this read "each spends a different material", which was true of three rows one
+    // per material and is false of six by design - each material now buys a flat stat AND an
+    // answer. What it was guarding is that no single pool drains the whole bench, which is what
+    // it says now.
+    ok(`no one material buys the whole bench (${table.mats.join(', ')})`,
+      new Set(table.mats).size >= 3 && !table.mats.every(m => m === table.mats[0]));
     ok('augmentById finds each and nothing else', table.byId && table.missing === null);
 
     // ── The ceiling is at the function, not the button ───────────────────────────────────
@@ -121,14 +131,19 @@ module.exports = {
       const fullEnabled = [...cardOf(ch.id).querySelectorAll('.aug-btn')].filter(b => !b.disabled).length;
       // Somebody else with room is still buyable, so it is the operator that is full and not the shop.
       const otherEnabled = [...cardOf(playerRoster[1].id).querySelectorAll('.aug-btn')].filter(b => !b.disabled).length;
-      return { empty, full, emptyEnabled, fullEnabled, otherEnabled, slots: AUGMENT_SLOTS };
+      // K05: read off the table rather than written down here, so widening the bench again does
+      // not need this file edited a second time.
+      return { empty, full, emptyEnabled, fullEnabled, otherEnabled, slots: AUGMENT_SLOTS,
+               shelf: AUGMENTS.length };
     });
     ok(`an empty operator shows the count (${/AUGS [^:]*:/.exec(screen.empty)?.[0] || '??'})`,
        screen.empty.includes(`AUGS 0/${screen.slots}`));
-    ok('and offers every augment', screen.emptyEnabled === 3);
+    ok(`and offers every augment (${screen.emptyEnabled} of ${screen.shelf})`,
+      screen.emptyEnabled === screen.shelf);
     ok('a full one says so instead of listing a fourth', /AUGS FULL/.test(screen.full));
     ok('and offers none of them', screen.fullEnabled === 0);
-    ok('while an operator with room is still buyable', screen.otherEnabled === 3);
+    ok(`while an operator with room is still buyable (${screen.otherEnabled} of ${screen.shelf})`,
+      screen.otherEnabled === screen.shelf);
 
     // The codex carries the ceiling, off the same constant.
     const codex = await page.evaluate(() => {

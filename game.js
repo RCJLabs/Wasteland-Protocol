@@ -4781,7 +4781,34 @@ const AUGMENTS = [
     { id: 'OPTICS',  name: 'OPTICS',             short: '+4 DMG',  mat: 'tech',  cost: 2,
       tag: 'Optics',  apply: c => { c.dmgBase += 4; } },
     { id: 'PUMP',    name: 'ADRENAL PUMP',       short: '+3 SPD',  mat: 'chems', cost: 2,
-      tag: 'Pump',    apply: c => { c.speed += 3; } }
+      tag: 'Pump',    apply: c => { c.speed += 3; } },
+    // K05: the three above are one flat stat each, one per material, and the bench has never
+    // asked a question - measured over three careers, 14.9 augments went in a run and every one
+    // of them was whichever row the simulator's greedy scan reached first. Nothing in the game
+    // or in the harness ever preferred one.
+    //
+    // These three give each material a SECOND thing to buy, and the second thing is situational
+    // where the first is flat: parts buy a bigger bar or a thicker hide, chems buy speed or a
+    // sealed suit, tech buys damage or an earth strap. Which one is worth taking depends on the
+    // road - K02 gave six of the rank and file a damage type, so a Choir sector and an Ironclad
+    // sector now want different answers, and K04 put the badge on the squad so the answer can
+    // be read off the field.
+    //
+    // SIZED BY WHAT EACH TYPE ACTUALLY THROWS, measured in K02: the squad meets physical on 61%
+    // of the blows aimed at it, energy on 25% and bio on 13%. A flat subtraction is worth its
+    // size times how often it is met, so the numbers run the other way to the incidence and all
+    // three come out worth about five points off the average blow. The rarest is the one a body
+    // can wall off completely: three rebreathers is 105, which is over the hundred that makes an
+    // immunity, and that is the "three of one is a build" the manual has been promising.
+    { id: 'WEAVE',   name: 'CERAMIC WEAVE',     short: '+8 phys',   mat: 'parts', cost: 3,
+      answers: { type: 'phys', by: 8 },
+      tag: 'Weave',   apply: c => { c.resistances.phys += 8; } },
+    { id: 'FILTER',  name: 'SEALED REBREATHER', short: '+35 bio',   mat: 'chems', cost: 2,
+      answers: { type: 'bio', by: 35 },
+      tag: 'Rebreather', apply: c => { c.resistances.bio += 35; } },
+    { id: 'ROD',     name: 'GROUNDING ROD',     short: '+20 energy', mat: 'tech', cost: 2,
+      answers: { type: 'energy', by: 20 },
+      tag: 'Rod',     apply: c => { c.resistances.energy += 20; } }
 ];
 function augmentById(id) { return AUGMENTS.find(a => a.id === id) || null; }
 function augmentsOn(ch) { return (ch && ch.augments) || []; }
@@ -7220,6 +7247,18 @@ function breakdownScrap() { const c = breakdownCost(); if (scrap < c) return; sc
 function craftItem(item) {
     if (!canCarry() || !canAfford(item)) return;
     Object.entries(ITEM_DATA[item].mats).forEach(([k, n]) => { materials[k] -= n; });
+    // K05: where the materials went. Salvage pays parts, chems and tech into a bag with exactly
+    // two doors out of it - the schematics here and the augment bench - and nothing has ever
+    // counted what walked through either, so "the whole economy resolves to make more stims"
+    // has been repeated for several phases without a number behind it. Booked on the runStats
+    // idiom the weather and damage-type ledgers use; the leftover is read off the bag itself.
+    if (runStats) {
+        runStats.mat = runStats.mat || { craft: {}, aug: {}, crafted: {}, augged: {} };
+        Object.entries(ITEM_DATA[item].mats).forEach(([k, n]) => {
+            runStats.mat.craft[k] = (runStats.mat.craft[k] || 0) + n;
+        });
+        runStats.mat.crafted[item] = (runStats.mat.crafted[item] || 0) + 1;
+    }
     inventory.push(item); checkBountyProgress('CRAFT');
     saveGameState(); renderOutpost();
 }
@@ -7234,6 +7273,14 @@ function installAugment(charId, type) {
     materials[a.mat] -= a.cost;
     a.apply(char);
     char.augments.push(a.tag);
+    // K05: the other door out of the materials bag, and WHICH augment went through it - a
+    // catalogue of three against three slots means a filled operator carries all of them, so
+    // the id is the only thing that could ever show a choice being made.
+    if (runStats) {
+        runStats.mat = runStats.mat || { craft: {}, aug: {}, crafted: {}, augged: {} };
+        runStats.mat.aug[a.mat] = (runStats.mat.aug[a.mat] || 0) + a.cost;
+        runStats.mat.augged[a.id] = (runStats.mat.augged[a.id] || 0) + 1;
+    }
     saveGameState(); renderOutpost();
     return true;
 }
