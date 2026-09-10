@@ -116,12 +116,23 @@ module.exports = {
       immune: document.querySelectorAll('.res-immune').length,
       weak: document.querySelectorAll('.res-weak').length,
       onPlayers: [...document.querySelectorAll('#player-team .res-row')].length,
+      // K04: who on the line has anything to say, read off their own resistances, so the row
+      // below compares the badges drawn against the bodies that should be drawing them rather
+      // than against a count somebody wrote down.
+      shouldShow: playerRoster.filter(c => c.gridPos > 0 && c.hp > 0
+        && DMG_TYPES.some(([t]) => (c.resistances[t] || 0) > 5 || (c.resistances[t] || 0) < 0)).length,
       titled: [...document.querySelectorAll('.res')].every(e => e.title.length > 0)
     }));
     ok('enemies show resistance badges', badges.rows > 0);
     ok('bio-immune mechs are marked immune', badges.immune > 0);
     ok('their energy weakness is marked', badges.weak > 0);
-    ok('badges are not drawn on the player squad', badges.onPlayers === 0);
+    // K04: this used to read `onPlayers === 0`, and that was the rule until K02 gave six of the
+    // rank and file a damage type. While everything swung physical, a badge on the squad said
+    // nothing worth the row it cost; now a quarter of what lands on the line is energy and an
+    // eighth is bio, so the squad carries the same marks the hostiles do - and exactly the
+    // operators whose own line has something to say.
+    ok(`the squad carries them too, and only where there is something to carry (${badges.onPlayers} of ${badges.shouldShow})`,
+      badges.onPlayers === badges.shouldShow);
     ok('each badge carries a readable tooltip', badges.titled);
 
     const hidden = await page.evaluate(() => {

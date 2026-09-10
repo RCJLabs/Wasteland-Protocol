@@ -220,6 +220,9 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .upgrade-card { background: #0a0a0a; border: 1px solid #333; padding: 15px; display: flex; flex-direction: column; gap: 10px; }
 .upgrade-header { display: flex; justify-content: space-between; align-items: center; color: #B8860B; font-weight: bold; border-bottom: 1px solid #222; padding-bottom: 5px;}
 .upgrade-stats { display: flex; justify-content: space-between; font-size: 0.6875rem; color: #888; }
+/* K04: what an operator shrugs off, on the screen where the trinket that buys one is equipped.
+   Same green the traits line uses - it is a standing property of the body, not a warning. */
+.upgrade-res { font-size: 0.625rem; color: #6B8E23; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 2px; }
 .upgrade-btn-group { display: flex; gap: 10px; margin-top: 5px; flex-wrap: wrap;}
 .upg-btn { flex: 1; min-width: 30%; padding: 10px; background: #111; color: #ccc; border: 1px solid #444; cursor: pointer; font-family: monospace; font-size: 0.75rem; transition: 0.2s;}
 .upg-btn:hover:not(:disabled) { background: #333; border-color: #888; color: #fff;}
