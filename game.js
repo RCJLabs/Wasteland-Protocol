@@ -357,12 +357,54 @@ function cdFor(ent, id, base) {
     return Math.max(1, cd);
 }
 
-// A random piece the run has not already got everywhere; mods lean to classes in the roster.
-function rollGear() {
+// Everything the run does not already hold, worn or in the bag. One definition, because the
+// draw and the shelf below have to agree about what is left or the shelf can offer a piece the
+// squad is already wearing.
+function unheldGear() {
     const held = new Set([...gearStash, ...playerRoster.flatMap(c => [c.weaponMod, c.trinket])].filter(Boolean));
-    const pool = GEAR_POOL.filter(g => !held.has(g.id));
+    return GEAR_POOL.filter(g => !held.has(g.id));
+}
+
+// A random piece the run has not already got everywhere. Loot: the road decides, not the player.
+function rollGear() {
+    const pool = unheldGear();
     if (!pool.length) return null;
     return pool[Math.floor(Math.random() * pool.length)].id;
+}
+
+// K07: THE ONE DOOR THAT IS A DECISION. K06 censused where gear comes from and found four
+// sources, all of them rollGear() - so a player being gassed by the Choir had no action anywhere
+// in the game that improved their odds of holding a Gas Mask. The Gas Mask reached a run about
+// one time in three and was still on somebody at the end about one in five, and those rates are
+// set by the size of the pool rather than by anything the squad is being hit with.
+//
+// Three of the four doors should stay that way. An elite's pockets, a commander's arsenal and a
+// piece Orrin sets aside are loot: the road hands them over and taking them is not a decision.
+// The Armory is the one a player ROUTES TO ON PURPOSE and PAYS AT, and that is where the agency
+// belongs. So the shelf carries n distinct pieces and sells exactly one of them - the same
+// piece per Armory the economy was tuned around, chosen instead of dealt.
+//
+// Drawn without replacement from the same pool rollGear reads, so the shelf can never offer two
+// of a kind or a piece already on the line. rollGear itself is untouched and still takes no
+// arguments: the loot doors have nothing to say about which piece falls out.
+//
+// AND THE SHELF LEANS TO WHAT THE LINE CAN WEAR, which is the difference between a choice and a
+// display case. Twenty of the twenty-eight pieces are class-locked mods, so a blind shelf of
+// three came up 48% wearable and offered nothing at all one time in eight - measured, not
+// guessed. Three pieces for classes nobody brought is not a decision, it is a longer way of
+// saying no. So what fits goes in first and the rest only top up a shelf a thin roster cannot
+// fill. The loot doors stay blind: an elite's pockets hold what they hold, and this is the door
+// where somebody is laying stock out for a customer they can see.
+function rollGearShelf(n) {
+    const pool = unheldGear();
+    const fits = g => g.slot !== 'mod'
+        || playerRoster.some(c => c.gridPos > 0 && c.classType === g.cls);
+    const wearable = pool.filter(fits), rest = pool.filter(g => !fits(g));
+    const out = [];
+    const take = from => out.push(from.splice(Math.floor(Math.random() * from.length), 1)[0].id);
+    while (out.length < n && wearable.length) take(wearable);
+    while (out.length < n && rest.length) take(rest);
+    return out;
 }
 
 function equipGear(charId, gearId) {
@@ -2738,13 +2780,15 @@ const CODEX = [
     { id: 'GEAR', title: 'GEAR', body: () => [
         'Two slots per operator: a weapon mod and a trinket, swapped freely at the Outpost.',
         'Weapon mods change what an ability does - its reach, its cooldown, who it hits, what it leaves behind. Trinkets are worn passives.',
-        // K06: this page listed all twenty-eight pieces under one sentence naming two of the four
-        // ways to get one, which reads as a catalogue. It is not a catalogue - every source rolls
-        // a piece out of what the squad does not already hold, and no action in the game bends
-        // that roll. A player hunting a Gas Mask was reading this page and planning something
-        // impossible; the sentences below say so.
-        'Four ways a piece reaches you: an elite sometimes carries one, a commander always does, the Armory keeps one on the shelf, and Orrin sets one aside once you have bought from him often enough.',
-        'WHICH piece is never yours to pick. All four roll at random out of whatever the squad does not already hold, and the Armory charges the same for any of them. What you decide is who wears it - and, in the Footlocker, that the first piece a run picks up is the one that survives it.',
+        // K06 found this page listing all twenty-eight pieces under one sentence naming two of the
+        // four ways to get one, which reads as a catalogue - and it was not one, because every
+        // source rolled and nothing bent the roll. K07 made one of the four a decision, so the
+        // page now has something worth saying: three doors are luck and the fourth is the reason
+        // to route to an Armory. Said plainly, because a player who cannot tell which is which
+        // will plan against the wrong one.
+        `Four ways a piece reaches you: an elite sometimes carries one, a commander always does, Orrin sets one aside once you have bought from him often enough, and the Armory lays out ${SHELF_GEAR} and sells you one of them.`,
+        'The first three are luck. They roll a piece out of whatever the squad does not already hold, and wanting a particular one does nothing about it. The Armory is the exception and the reason to walk to one: read the shelf, pay for the piece the road has actually been throwing at you, and the rest go back in the crate.',
+        'Everywhere else the decision is who wears it - and, in the Footlocker, that the first piece a run picks up is the one that survives it.',
         ...GEAR_POOL.filter(g => g.slot === 'mod').map(g => `${g.name} (${g.cls}) — ${g.desc}`),
         ...GEAR_POOL.filter(g => g.slot === 'trinket').map(g => `${g.name} — ${g.desc}`)
     ] },
@@ -8074,10 +8118,16 @@ let shopRerollPick = false;   // the quirk-therapy row is waiting on an operator
 // the stock actually costs here rather than on its list price somewhere else.
 const shopPrice = base => Math.max(1, Math.floor(base * sectorRewardMult() * (1 - ARMORY_CUT / 100 * (metaUpgrades.discount || 0))));
 
+// K07: how many pieces the trader lays out. ONE of them is sold; the rest go back in the crate
+// when the choice is made. Three is the smallest number that makes the shelf a decision rather
+// than an offer - at two a player is choosing between one piece and no piece about as often as
+// they are choosing between two they want.
+const SHELF_GEAR = 3;
+
 function rollShopStock() {
     const stock = [];
-    const gearId = rollGear();
-    if (gearId) stock.push({ kind: 'GEAR', id: gearId, price: shopPrice(140), sold: false });
+    rollGearShelf(SHELF_GEAR).forEach(id =>
+        stock.push({ kind: 'GEAR', id, price: shopPrice(140), sold: false }));
     const relics = unownedRelics().filter(r => r.tier !== 'CURSED');
     if (relics.length) {
         const r = relics[Math.floor(Math.random() * relics.length)];
@@ -8393,10 +8443,18 @@ function renderShop() {
         const L = shopItemLabel(it);
         let btn;
         if (it.sold) btn = `<span class="shop-tag">SOLD</span>`;
+        else if (it.withdrawn) btn = `<span class="shop-tag">PACKED AWAY</span>`;
         else if (it.kind === 'INSURANCE' && regroupInsured) btn = `<span class="shop-tag">INSURED</span>`;
         else if (it.kind === 'STIM' && !canCarry()) btn = `<span class="shop-tag">BAG FULL</span>`;
         else btn = `<button class="shop-buy" data-action="shop-buy" data-index="${i}" ${scrap < it.price ? 'disabled' : ''}>◇ ${it.price}</button>`;
-        return `<div class="shop-row"><div class="shop-info"><span class="shop-name">${L.name}</span><span class="shop-desc">${L.desc}</span></div>${btn}</div>`;
+        // K07: the shelf's rule has to be on the shelf. A player who reads three pieces and buys
+        // the cheapest-looking one, then finds the other two packed away, has been surprised by
+        // a rule the screen knew and did not say. It goes above the first gear row rather than
+        // in each description, so it reads as one decision instead of three warnings.
+        const head = (it.kind === 'GEAR' && i === activeShop.stock.findIndex(s => s.kind === 'GEAR'))
+            ? `<div class="shop-head">SALVAGE — ${activeShop.stock.filter(s => s.kind === 'GEAR').length > 1
+                ? 'THE TRADER SELLS YOU ONE OF THESE' : 'ONE PIECE, TAKE IT OR LEAVE IT'}</div>` : '';
+        return `${head}<div class="shop-row${it.withdrawn ? ' shop-row-gone' : ''}"><div class="shop-info"><span class="shop-name">${L.name}</span><span class="shop-desc">${L.desc}</span></div>${btn}</div>`;
     });
     let pick = '';
     if (shopRerollPick) {
@@ -8411,9 +8469,20 @@ function renderShop() {
 
 function buyShopItem(index) {
     const it = activeShop && activeShop.stock[index];
-    if (!it || it.sold || scrap < it.price) return;
+    // K07: `withdrawn` is a refusal, not a render state. renderShop stops drawing the button on a
+    // packed-away row, but the button is not the rule - a stale click, a queued tap or anything
+    // that reaches this by index has to be turned away here or the shelf sells three.
+    if (!it || it.sold || it.withdrawn || scrap < it.price) return;
     if (it.kind === 'REROLL') { shopRerollPick = true; renderShop(); return; }
-    if (it.kind === 'GEAR') gearStash.push(it.id);
+    if (it.kind === 'GEAR') {
+        gearStash.push(it.id);
+        // K07: the shelf is a CHOICE, not a bigger shelf. Selling all three would be three times
+        // the gear for three times the scrap, which is a different change to the economy than
+        // the one this is - so the moment one is taken the others go back in the crate. Marked
+        // rather than spliced out, because the row has to stay on screen saying what happened:
+        // a shelf that silently shortens reads as a bug.
+        activeShop.stock.forEach(s => { if (s.kind === 'GEAR' && s !== it) s.withdrawn = true; });
+    }
     else if (it.kind === 'RELIC') {
         const r = RELIC_POOL.find(x => x.id === it.id);
         if (!r || hasRelic(r.id)) return;
@@ -12746,7 +12815,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
-    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
+    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, noteKill, raiseBody, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder,

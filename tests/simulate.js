@@ -2354,6 +2354,78 @@ const ROOT = path.join(__dirname, '..');
 // --augments defaults to `road` because the greedy scan provably cannot reach half the bench,
 // and --augmax defaults to 1 because that is the number the careers support.
 
+// ── K07: THE ARMORY IS A DECISION NOW — AND IT ONLY PAYS IF YOU MAKE IT ───────────
+// K06 censused where gear comes from and found nothing a player could aim at: four sources, all
+// rollGear(), a uniform draw over the unheld pool. The Gas Mask reached a run about one time in
+// three and was still worn at the end about one in five, and those rates were set by the size of
+// the pool rather than by anything the squad was being hit with. The content was not mistuned,
+// it was unreachable - and K06 filed the fix rather than shipping it, because the same phase had
+// just shown the career instrument cannot price a change like this at three careers an arm.
+//
+// WHAT SHIPPED. The Armory - the one door a player routes to on purpose and pays at - lays out
+// SHELF_GEAR pieces and sells exactly one of them. The same piece per Armory the economy was
+// tuned around, chosen instead of dealt. The elite drop, the commander drop and Orrin's Workshop
+// stay blind, because an elite's pockets are not a shop.
+//
+// AND THE SHELF LEANS TO WHAT THE LINE CAN WEAR, which was not in the plan and came out of the
+// first measurement of it. Twenty of the twenty-eight pieces are class-locked mods, so a blind
+// shelf of three came up 48% wearable and offered NOTHING the squad could equip one shelf in
+// eight. A choice between three things nobody can use is a longer way of saying no. What fits
+// goes on first and the rest only top up what a thin roster cannot fill: 100% wearable over
+// 1,871 shelves, one dud in all of them.
+//
+// MEASURED AT THE SAMPLE SIZE K06 ASKED FOR: eighteen 150-expedition careers, six an arm.
+//   before   the pre-K07 tree at 3f54663, run from a worktree
+//   default  this tree, shipped behaviour, buying the leftmost row - a player who does not look
+//   reads    this tree with --shoppick answer, which takes whatever answers what has been
+//            landing. A BENCH CEILING, not a model of play: it spends the slot on mitigation
+//            every time it can, so `default` and `reads` bracket a person rather than predict one
+//
+// THE WALL DID NOT MOVE, and this time that is a measurement rather than a hope. Every row
+// overlaps in both arms, largest 2.0 sd, on a design that could have settled a gap of 8.6 wins:
+//
+//                          before        default              reads
+//   careers won of 150      51.2      47.3  (1.3 sd)      50.0  (0.5 sd)     all overlap
+//   wipes per run            5.29      5.45 (1.8)          5.46 (2.0)        all overlap
+//   reached sector 7        57.3      53.5  (1.2)         59.0  (0.6)        all overlap
+//   score, median          35.2k     34.3k  (0.2)        36.9k  (0.5)        all overlap
+//   gear equipped per run    5.57      5.68 (0.9)          5.77 (1.5)        all overlap
+//
+// AND WHAT A RUN ENDS UP HOLDING SPLITS THE TWO ARMS APART, which is the whole finding. `worn at
+// the end` is a per-run rate averaged over 150 runs, so its career-to-career noise is small -
+// these are the rows a six-a-side design can actually resolve, and K06's floor does not apply to
+// them the way it applies to a win count:
+//
+//                            before      default            reads
+//   an answer (mask + coat)    0.44    0.46 (0.8 sd)    0.59 (10.5 sd, RANGES SEPARATE)
+//   any resistance trinket     0.65    0.72 (2.8)       0.90 ( 9.4 sd, RANGES SEPARATE)
+//   GAS_MASK                   0.20    0.24 (2.8)       0.29 ( 7.4 sd, RANGES SEPARATE)
+//   INSULATED_COAT             0.24    0.22 (0.7)       0.30 ( 4.4 sd, overlapping)
+//   RIOT_SHIELD                0.21    0.26 (3.0)       0.31 ( 4.2 sd, RANGES SEPARATE)
+//
+// THE SHELF CHANGES NOTHING FOR SOMEBODY WHO TAKES THE FIRST THING ON IT, and lifts how often a
+// run ends holding an answer by a third for somebody who reads it. That is what a decision is
+// supposed to look like: it pays out to the decision rather than to everybody. The `default`
+// column is not a disappointment, it is the control working.
+//
+// AT THE COUNTER, over 1,273 and 1,383 purchases - counts rather than career averages, so they
+// read at any sample size. Of the pieces bought at an Armory, how many moved a resistance at
+// all, and how many answered bio or energy: 20% / 14% indifferent, and 47% / 30% reading. A
+// blind draw over the whole pool would be 3 of 28 and 2 of 28, which is 11% and 7%; the
+// indifferent buyer beats that only because the wearable lean raises the trinkets' share of the
+// shelf - every trinket fits anybody, and only about half the mods do.
+//
+// AND THE PHYS PIECE WINS THE POLICY'S OWN ARITHMETIC, which is why the two columns come apart.
+// A flat resistance is worth its size times how often the type it answers lands, and after K02
+// the squad meets phys on 61% of incoming blows against bio's 13%: a Riot Shield's flat 6 is
+// worth 3.7 off an average blow where a Gas Mask's flat 10 is worth 1.3. A player reading the
+// shelf for mitigation should usually take the Riot Shield. That is not a fault in K07 - it is
+// the first thing K07 made it possible to be right about - but it does suggest the two answer
+// trinkets are undersized against the phys one. Filed rather than tuned here, because
+// average-blow value undersells concentrated protection: suite 154 measures the Gas Mask at 48%
+// of a Censer Bearer's ordinary swing where the Choir first stands, and that is the fight it is
+// for.
+
 // ── K06: THE MITIGATION CONTENT IS NOT WEAK. IT IS UNREACHABLE ─────────────────────
 // Filed as "K02 gave the rank and file bio and energy to throw; is the rest of the mitigation
 // content a trap too?" - meaning the Gas Mask, the Insulated Coat, Closed Circuit, the Hazmat
@@ -2566,6 +2638,18 @@ const AUGMENT_CAT = Math.max(1, Number(flag('augcat', '99')) || 99);
 // option than the last did. One is the cautious default in the direction the mechanism points.
 // Whether it is the right one is UNMEASURED; see the K06 record and the arm it asks for.
 const AUGMENT_MAX = Math.max(0, Number(flag('augmax', '1')));
+// K07: how many of the Armory's gear rows this file lets itself look at. The engine lays out
+// SHELF_GEAR of them and sells one; `--shelf 1` looks at the leftmost only, which is
+// distributionally the pre-K07 shelf - one piece drawn uniformly from what the run does not
+// already hold. Same trick as --augcat: the game's table is untouched, so the CATALOGUE change
+// and the POLICY change below can be read apart instead of landing in one number together.
+const SHELF_SEE = Math.max(1, Number(flag('shelf', '99')) || 99);
+// And WHICH of the rows it looks at gets bought. `first` is the leftmost - no preference, which
+// is what this file has always had and what the pre-K07 shelf could only give. `answer` takes
+// whichever piece answers what has actually been landing on the squad. That is a BENCH POLICY
+// rather than a model of play: it spends the slot on mitigation every time it can, so the pair
+// reads as a floor and a ceiling on what K07 made reachable rather than as a person's judgement.
+const SHOP_PICK = flag('shoppick', 'first');
 // K06: `--trinket RIOT_SHIELD` fits the whole line with that piece at every muster, so what the
 // trinket slot is worth can be asked without the drop rate answering first. Off by default; this
 // is a bench test for a measurement, not a player anybody has.
@@ -2773,7 +2857,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, trinketArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -3052,6 +3136,50 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       ? ['PLATING', ...answers, 'OPTICS', 'PUMP']
       : ['OPTICS', 'PUMP', ...answers, 'PLATING'];
   };
+  // K07: which of the Armory's shelf to buy. The worth of a piece is read OFF THE ENGINE - it is
+  // applied to a probe body and the resistances are read afterwards - so a piece added later is
+  // priced here without anybody remembering to update a table, and a piece whose apply() changes
+  // prices itself. The product is the one __augWants uses: how big the resistance is times how
+  // often the thing it answers has actually been landing. A piece that moves no resistance is
+  // worth nothing ON THIS MEASURE, which is the point - `answer` is the mitigation ceiling, not
+  // a claim that a Gas Mask beats +3 DMG.
+  // PHYSICAL COUNTS, and it usually wins. 61% of the blows aimed at the squad are physical, so a
+  // Riot Shield's flat 6 is worth 3.7 off an average blow where a Gas Mask's flat 10 is worth
+  // 1.3. Excluding phys would make this policy chase the piece its own arithmetic says is worse,
+  // which would be a strawman rather than a ceiling. The report splits the two so the reader can
+  // see which kind of mitigation the shelf actually sold.
+  window.__gearPick = rows => {
+    if (shopPick !== 'answer' || rows.length < 2) return rows[0];
+    const bag = (runStats && runStats.dt && runStats.dt.atSquad) || {};
+    const hits = t => (bag[t] || {}).hits || 0;
+    const seen = ['phys', 'bio', 'energy'].reduce((a, t) => a + hits(t), 0) || 1;
+    const worth = row => {
+      const g = gearById(row.id);
+      if (!g || !g.apply) return 0;
+      const probe = { maxHp: 100, hp: 100, speed: 10, dmgBase: 10,
+                      resistances: { phys: 0, bio: 0, energy: 0 } };
+      g.apply(probe);
+      return Object.entries(probe.resistances)
+        .reduce((a, [t, v]) => a + (v > 0 ? (hits(t) / seen) * v : 0), 0);
+    };
+    let best = rows[0], bestWorth = worth(rows[0]);
+    rows.slice(1).forEach(r => { const w = worth(r); if (w > bestWorth) { best = r; bestWorth = w; } });
+    return best;
+  };
+  // Which pieces count as mitigation in the report below, read off apply() rather than listed,
+  // and split two ways. `gearMit` is anything that moves a resistance at all - what the policy
+  // above is actually shopping for. `gearAnswers` is the bio/energy subset, which is the content
+  // K06 found unreachable. They are separate rows because they answer different questions, and
+  // because the phys piece wins the policy's own arithmetic: a Riot Shield's 6 against 61% of
+  // blows is worth more per blow than a Gas Mask's 10 against 13%.
+  const probeGear = g => {
+    const probe = { maxHp: 100, hp: 100, speed: 10, dmgBase: 10,
+                    resistances: { phys: 0, bio: 0, energy: 0 } };
+    if (g.apply) g.apply(probe);
+    return probe.resistances;
+  };
+  stat.gearMit = GEAR_POOL.filter(g => g.apply && Object.values(probeGear(g)).some(v => v > 0)).map(g => g.id);
+  stat.gearAnswers = GEAR_POOL.filter(g => { const r = probeGear(g); return r.bio > 0 || r.energy > 0; }).map(g => g.id);
   if (!window.__sk) window.__sk = { earned: 0, meta: 0, req: 0 };
   window.__sk.runStart = bossSkulls;
   window.__sk.runSpent = 0;
@@ -4248,12 +4376,40 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // Buys the way a player would: gear first, tempo second, the bond and the marked-up
       // relic only when flush. The keep argument is scrap held back for triage.
       const buy = (kind, keep) => {
-        const i = activeShop.stock.findIndex(s => s.kind === kind && !s.sold);
+        const i = activeShop.stock.findIndex(s => s.kind === kind && !s.sold && !s.withdrawn);
         if (i >= 0 && scrap >= activeShop.stock[i].price + keep) {
           const before = scrap; buyShopItem(i); stat.shopScrap += before - scrap;
         }
       };
-      buy('GEAR', 60); buy('STIM', 40); buy('STIM', 40); buy('INSURANCE', 150); buy('RELIC', 400);
+      // K07: the shelf sells ONE of several now, so which one is a decision this file has to
+      // make rather than fall into. `shelfSee` trims what it is allowed to look at and
+      // __gearPick chooses among those; buyShopItem does the withdrawing, so nothing here
+      // reimplements the rule. Booked so the arms can be told apart afterwards.
+      const shelf = activeShop.stock.map((s, i) => ({ ...s, i }))
+        .filter(s => s.kind === 'GEAR' && !s.sold && !s.withdrawn).slice(0, shelfSee);
+      if (shelf.length) {
+        stat.shelfSeen = (stat.shelfSeen || 0) + shelf.length;
+        stat.shelfShown = (stat.shelfShown || 0) + activeShop.stock.filter(s => s.kind === 'GEAR').length;
+        // K07: a shelf is only a choice if the line can wear what is on it. Mods are class-locked
+        // and twenty of the twenty-eight pieces are mods, so a shelf can come up entirely made of
+        // gear for classes nobody is fielding. Counted rather than assumed: `usable` asks the
+        // engine's own fit rule, and `shelfDud` is how often the answer was none of them.
+        const fits = row => { const g = gearById(row.id);
+          return !!g && (g.slot !== 'mod' || playerRoster.some(c => c.gridPos > 0 && c.classType === g.cls)); };
+        const wearable = shelf.filter(fits);
+        stat.shelfUsable = (stat.shelfUsable || 0) + wearable.length;
+        if (!wearable.length) stat.shelfDud = (stat.shelfDud || 0) + 1;
+        // 140 scrap for a mod nobody on the line can equip is not a purchase a player makes, and
+        // this file was making it: equipGear refuses the fit and the piece sits in the stash for
+        // the rest of the run. It buys off the wearable rows or it buys nothing.
+        const want = wearable.length ? window.__gearPick(wearable) : null;
+        if (want && scrap >= want.price + 60) {
+          const before = scrap; buyShopItem(want.i); stat.shopScrap += before - scrap;
+          stat.shelfTook = stat.shelfTook || {};
+          stat.shelfTook[want.id] = (stat.shelfTook[want.id] || 0) + 1;
+        }
+      }
+      buy('STIM', 40); buy('STIM', 40); buy('INSURANCE', 150); buy('RELIC', 400);
       finishShop();
       stat.nodes++;
       settleDue();
@@ -4575,7 +4731,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, trinketArm: TRINKET_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -5186,6 +5342,41 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     line('  trinkets still worn at the end', say(held));
   }
   line('armories visited per run', `${mean(nums('shops')).toFixed(1)} (${Math.round(mean(nums('shopScrap')))} scrap spent)`);
+  // K07: the shelf, and what this file did with it. `shown` is what the Armory laid out and
+  // `seen` is what the policy let itself look at, so an arm running --shelf 1 says so in the
+  // output instead of being something a reader has to remember about the invocation. The pieces
+  // taken are a census - a count of purchases, not a career average - so they are readable at
+  // any sample size, which after K06 is the difference between a number worth quoting and one
+  // that is not.
+  const shelfShown = results.reduce((a, r) => a + (r.shelfShown || 0), 0);
+  const shelfSeen = results.reduce((a, r) => a + (r.shelfSeen || 0), 0);
+  if (shelfShown) {
+    const shelfUsable = results.reduce((a, r) => a + (r.shelfUsable || 0), 0);
+    const shelfDud = results.reduce((a, r) => a + (r.shelfDud || 0), 0);
+    const shelves = results.reduce((a, r) => a + (r.shops || 0), 0);
+    line('  shelf laid out / looked at', `${(shelfShown / n).toFixed(1)} / ${(shelfSeen / n).toFixed(1)} rows a run`);
+    line('    rows the line could actually wear',
+      shelfSeen ? `${Math.round(shelfUsable / shelfSeen * 100)}% of them, and ${shelfDud} of ${shelves} shelves offered none`
+                : 'no shelf reached');
+    const took = {};
+    results.forEach(r => Object.entries(r.shelfTook || {}).forEach(([k, v]) => { took[k] = (took[k] || 0) + v; }));
+    const bought = Object.values(took).reduce((a, v) => a + v, 0);
+    line('  bought off the shelf, per run',
+      Object.entries(took).sort((a, b) => b[1] - a[1]).slice(0, 8)
+        .map(([k, v]) => `${k} ${(v / n).toFixed(2)}`).join(', ') || 'nothing');
+    // The row K07 exists to move: of the pieces bought at an Armory, how many answered a damage
+    // type at all. Read off the engine's own apply() rather than a list written here.
+    const MIT = (results.find(r => r.gearMit) || {}).gearMit || [];
+    const ANSWERS = (results.find(r => r.gearAnswers) || {}).gearAnswers || [];
+    const share = ids => Math.round(ids.reduce((a, id) => a + (took[id] || 0), 0) / bought * 100);
+    // The two rows K07 exists to move, and the reason they are counts rather than averages: a
+    // purchase either happened or it did not, so these read at any sample size. After K06 that
+    // is the difference between a number worth quoting and one that is not.
+    line('  of those, pieces that move a resistance',
+      bought ? `${share(MIT)}% of ${bought} (${MIT.join(', ')})` : 'none bought');
+    line('    of which bio or energy',
+      bought ? `${share(ANSWERS)}% of ${bought} (${ANSWERS.join(', ')})` : 'none bought');
+  }
   const sigs = {};
   results.forEach(r => Object.entries(r.sigsFaced || {}).forEach(([k, v]) => { sigs[k] = (sigs[k] || 0) + v; }));
   line('hostile signatures met', Object.entries(sigs).sort((a, b) => b[1] - a[1])

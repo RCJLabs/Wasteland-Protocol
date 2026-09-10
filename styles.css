@@ -896,6 +896,11 @@ button.reach-short { border-color: #7a5a20; }
 #recruit-sign:disabled { opacity: 0.35; cursor: not-allowed; }
 .map-node.recruit-node .node-icon { color: #3aa17e; }
 .shop-tag { flex-shrink: 0; font-size: 0.625rem; color: #666; letter-spacing: 1px; }
+/* K07: the shelf sells one of three, so the three have to read as one block with a rule on
+   it rather than as three separate offers. The heading carries the rule; the dimmed row is
+   what the other two become once the choice is made. */
+.shop-head { font-size: 0.625rem; color: #3aa17e; letter-spacing: 1px; margin-top: 2px; }
+.shop-row-gone { opacity: 0.45; }
 .shop-pick { display: flex; flex-direction: column; gap: 6px; border: 1px dashed #3aa17e; padding: 10px; }
 .shop-pick-title { font-size: 0.625rem; color: #3aa17e; letter-spacing: 1px; }
 .shop-pick-btn { background: #111; border: 1px solid #444; color: #ccc; font-family: monospace; font-size: 0.6875rem; padding: 8px; cursor: pointer; text-align: left; }

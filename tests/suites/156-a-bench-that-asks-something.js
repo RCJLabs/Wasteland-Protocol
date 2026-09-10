@@ -89,15 +89,30 @@ module.exports = {
       who.augments = []; who.resistances = { phys: 0, bio: 0, energy: 0 };
       const a = AUGMENTS.find(x => x.answers && x.answers.type === 'bio');
       materials = { parts: 99, chems: 99, tech: 99 };
+      // K07: the physical reading is taken on this body BEFORE the augments and again after,
+      // rather than against a literal 60. The muster rolls a quirk, and THICK_HIDE takes three
+      // off every blow - so `60 lands 60` was asserting about a body the test never controlled
+      // and went red about one run in six. What the row actually claims is that a bio wall does
+      // not change what physical does to the SAME body, and a before-and-after says exactly that
+      // whatever the muster dealt.
+      const foe = { id: 'k5', name: 'Thrower', isPlayer: false, hp: 50, maxHp: 50, cooldowns: {} };
+      activeEntities = [who, foe];
+      const physBefore = mitigate(foe, who, 60, 'phys', null).n;
       const took = [0, 1, 2].map(() => installAugment(who.id, a.id));
       const fourth = installAugment(who.id, a.id);
       // What the wall is worth, asked of mitigate rather than of the number on the body.
-      const foe = { id: 'k5', name: 'Thrower', isPlayer: false, hp: 50, maxHp: 50, cooldowns: {} };
-      activeEntities = [who, foe];
       const landed = mitigate(foe, who, 60, 'bio', null).n;
       const stillPhys = mitigate(foe, who, 60, 'phys', null).n;
+      // And the case that found the trap, forced rather than waited for: THICK_HIDE is the quirk
+      // that eats three off every blow, and a muster that happens to deal it is why the row above
+      // compares the body to itself instead of to a literal.
+      const quirkWas = who.quirk;
+      who.quirk = QUIRK_POOL.find(q => q.id === 'THICK_HIDE');
+      const hidePhys = mitigate(foe, who, 60, 'phys', null).n;
+      who.quirk = quirkWas;
       return { took, fourth, bio: who.resistances.bio, worn: [...who.augments],
-               landed, stillPhys, spent: 99 - materials.chems, price: a.cost, id: a.id };
+               landed, stillPhys, physBefore, hidePhys, quirk: who.quirk ? who.quirk.id : 'none',
+               spent: 99 - materials.chems, price: a.cost, id: a.id };
     });
     ok(`a body can take three of the same (${build.worn.join(' + ')})`,
       build.took.every(Boolean) && build.worn.length === 3);
@@ -108,8 +123,10 @@ module.exports = {
       build.bio >= 100 && build.landed === 0);
     // The cost of building it: a body that shrugs off one thing entirely still stands in front
     // of the other two, which is what stops the wall from being the only build.
-    ok(`and the same body takes physical as it always did (60 lands ${build.stillPhys})`,
-      build.stillPhys === 60);
+    ok(`and the same body takes physical as it always did (60 landed ${build.physBefore} before, ${build.stillPhys} after — quirk ${build.quirk})`,
+      build.stillPhys === build.physBefore && build.physBefore > 0);
+    ok(`while a quirk still can change it, which is why that row reads the body twice (THICK_HIDE: 60 lands ${build.hidePhys})`,
+      build.hidePhys === 57);
 
     // ── The prices did not move ───────────────────────────────────────────────────
     // The bench got twice the rows at the same cost per material, so nothing about what a run

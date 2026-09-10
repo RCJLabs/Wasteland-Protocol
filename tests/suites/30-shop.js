@@ -177,8 +177,14 @@ module.exports = {
     // ---- a reload mid-haggle resumes the same shelf ----
     await page.evaluate(() => {
       activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      // K07: the shelf sells one of three, so a row the trader has PACKED AWAY has to come back
+      // packed away. If `withdrawn` fell out of the save, reloading mid-haggle would put the
+      // other two pieces back on sale - the same shape as the contract bug the loader note
+      // above warns about, where an F5 was a cheat code. Carried here rather than in 157,
+      // because this is where the shelf's round trip is read.
       activeShop = { nodeId: 'persist', stock: [
         { kind: 'GEAR', id: 'GAS_MASK', price: 140, sold: false },
+        { kind: 'GEAR', id: 'RIOT_SHIELD', price: 140, sold: false, withdrawn: true },
         { kind: 'STIM', price: 35, sold: true }
       ] };
       saveGameState();
@@ -189,13 +195,26 @@ module.exports = {
     // The resumed run lands back on the shop screen; that is the condition, not half a second.
     await settled(page, () => getComputedStyle(document.getElementById('screen-shop')).display === 'flex',
       'the shop to come back up on resume');
-    const resumed = await page.evaluate(() => ({
-      open: getComputedStyle(document.getElementById('screen-shop')).display === 'flex',
-      gear: activeShop && activeShop.stock[0] && activeShop.stock[0].id === 'GAS_MASK',
-      soldKept: activeShop && activeShop.stock[1] && activeShop.stock[1].sold === true
-    }));
+    const resumed = await page.evaluate(() => {
+      const before = { scrap, stash: gearStash.length };
+      const packedIdx = activeShop ? activeShop.stock.findIndex(it => it.withdrawn) : -1;
+      scrap = 1000;
+      if (packedIdx >= 0) buyShopItem(packedIdx);
+      const out = {
+        open: getComputedStyle(document.getElementById('screen-shop')).display === 'flex',
+        gear: activeShop && activeShop.stock[0] && activeShop.stock[0].id === 'GAS_MASK',
+        soldKept: activeShop && activeShop.stock[2] && activeShop.stock[2].sold === true,
+        packedKept: packedIdx === 1,
+        stillRefuses: scrap === 1000 && gearStash.length === before.stash,
+        tag: /PACKED AWAY/.test(document.getElementById('shop-stock').innerHTML)
+      };
+      scrap = before.scrap;
+      return out;
+    });
     ok('a reload mid-haggle reopens the same shelf', resumed.open && resumed.gear);
     ok('with SOLD rows still sold', resumed.soldKept);
+    ok('and a packed-away row still packed away, still refusing a full purse',
+      resumed.packedKept && resumed.stillRefuses && resumed.tag);
 
     // ---- saves from before the Armory existed ----
     const legacy = await page.evaluate(() => {
