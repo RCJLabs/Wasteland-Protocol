@@ -179,9 +179,14 @@ module.exports = {
 
     // ── And the manual says what stacking one is worth ────────────────────────────
     // The bench's page has promised "three of one is a build" since the cap was written, and it
-    // was written when every row was a flat stat. Half of them are answers now, and the careers
-    // are unambiguous: one answer a body is free, two costs about a fifth of the wins. A manual
-    // that only carries the half of that which sounds good is a manual pointing at a trap.
+    // was written when every row was a flat stat. Half of them are answers now, and an answer
+    // pays only on the blows of its own type - 13% of incoming for bio and 25% for energy, which
+    // K02 censused. A manual that only carries the half of that which sounds good is a manual
+    // pointing at a trap.
+    // K06: what stood here cited a career arm alongside that - "two answers costs about a fifth
+    // of the wins" - which has since been withdrawn as inside the instrument's own noise. The
+    // rows below never rested on it; they read the manual against the incidence, which is a
+    // count rather than a sample.
     const says = await page.evaluate(() => CODEX.find(c => c.id === 'BAG').body().join(' \n '));
     ok(`the manual says the shelf is wider than the slots (${/bench carries \d+/.exec(says)?.[0] || 'nothing'})`,
       /bench carries \d+/.test(says));

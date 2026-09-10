@@ -377,11 +377,13 @@ function equipGear(charId, gearId) {
     gearStash.splice(idx, 1);
     ch[slotKey] = g.id;
     if (g.apply) g.apply(ch);
-    // K06: which piece went on, and for how long. K05 measured that output compounds and
-    // mitigation does not - a second resistance on a body costs ten wins - and the trinket slot
-    // sells exactly that trade three times over, against +3 DMG and +15 HP in the same slot.
-    // Nothing has ever counted which of the eight actually gets worn, so the question has had
-    // no instrument: `gear equipped per run` is a total with no names in it.
+    // K06: which piece went on, and for how long. The trinket slot sells one trade three times
+    // over - a resistance against +3 DMG or +15 HP - and a resistance pays only on the blows of
+    // its own type, which after K02 is 13% of them for bio and 25% for energy. Nothing had ever
+    // counted which of the eight actually gets worn, so the question had no instrument:
+    // `gear equipped per run` is a total with no names in it. (K05 also put a career number on
+    // that trade. K06 withdrew it as inside the instrument's noise; the incidence above is a
+    // census and is what this ledger is read against.)
     if (runStats) {
         runStats.gear = runStats.gear || { worn: {}, slot: {} };
         runStats.gear.worn[g.id] = (runStats.gear.worn[g.id] || 0) + 1;
@@ -2736,7 +2738,13 @@ const CODEX = [
     { id: 'GEAR', title: 'GEAR', body: () => [
         'Two slots per operator: a weapon mod and a trinket, swapped freely at the Outpost.',
         'Weapon mods change what an ability does - its reach, its cooldown, who it hits, what it leaves behind. Trinkets are worn passives.',
-        'Elites sometimes carry a piece; a commander always does.',
+        // K06: this page listed all twenty-eight pieces under one sentence naming two of the four
+        // ways to get one, which reads as a catalogue. It is not a catalogue - every source rolls
+        // a piece out of what the squad does not already hold, and no action in the game bends
+        // that roll. A player hunting a Gas Mask was reading this page and planning something
+        // impossible; the sentences below say so.
+        'Four ways a piece reaches you: an elite sometimes carries one, a commander always does, the Armory keeps one on the shelf, and Orrin sets one aside once you have bought from him often enough.',
+        'WHICH piece is never yours to pick. All four roll at random out of whatever the squad does not already hold, and the Armory charges the same for any of them. What you decide is who wears it - and, in the Footlocker, that the first piece a run picks up is the one that survives it.',
         ...GEAR_POOL.filter(g => g.slot === 'mod').map(g => `${g.name} (${g.cls}) — ${g.desc}`),
         ...GEAR_POOL.filter(g => g.slot === 'trinket').map(g => `${g.name} — ${g.desc}`)
     ] },
@@ -2748,9 +2756,12 @@ const CODEX = [
         // K05: the line above was written when every row was a flat stat, where stacking is
         // simply more of it. Half the bench is a resistance now, and stacking one of those is
         // NOT simply more: a bigger bar or a harder swing pays on every fight, while an answer
-        // only pays on the fights that throw the thing it answers. Measured over three careers -
-        // one answer a body costs the run nothing at all, and two costs about a fifth of the
-        // wins. Said out loud rather than left to be discovered, because the slots are permanent.
+        // only pays on the fights that throw the thing it answers - 13% of incoming blows for
+        // bio and 25% for energy, censused in K02. Said out loud rather than left to be
+        // discovered, because the slots are permanent.
+        // K06: what stood here also quoted a career arm - "two answers costs about a fifth of
+        // the wins" - and that arm has been withdrawn as inside the instrument's own noise. The
+        // advice below does not rest on it. It rests on the incidence above, which is a count.
         'A stat is worth stacking and an answer is not. A second bar or a second sight pays in '
             + 'every fight; a second filter only pays in the fights that were already throwing '
             + 'that at you. One answer a body, and spend the rest on what always works.',

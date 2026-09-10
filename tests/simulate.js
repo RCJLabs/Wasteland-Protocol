@@ -2220,30 +2220,72 @@ const ROOT = path.join(__dirname, '..');
 // applying: everybody carries a little physical (5 on the Bruiser and the Breacher, -2 on the
 // Hound), and 38% of blows no longer meet it. The composite share of incoming damage that any
 // resistance soaks fell from 10.9-12.7% to 8.7-9.6% - about two and a half points more damage
-// taken, and the run rows follow it.
+// taken. That row is a share of every blow in a career rather than a per-career outcome, which
+// is why it separates cleanly where the run rows below it turn out not to. It says the squad
+// takes more damage. It does not say by itself how much that costs a run.
 //
 // WHICH ROWS ACTUALLY MOVED, under the separation rule the rest of this file holds effects to.
 // SEPARATED: score median (40.2k floor before against a 32.6k ceiling after - a wide gap),
 // reached sector 7 (39% against 38% - by one point), bosses felled (3.97 against 3.86).
-// OVERLAPPED: careers won, wipes per run, lost for good. Seven rows at three-against-three is
-// about 0.7 spurious separations on I07's own arithmetic, so three separations all pointing the
-// same way is more than chance - but only the score row separates by a margin that survives
-// being looked at twice. THE HONEST READING IS: runs end shallower and score lower; the win
-// rate does not move out of the career band.
+// OVERLAPPED: careers won, wipes per run, lost for good.
+//
+// K06 CORRECTS THE READING OF THOSE ROWS, though not the ledger row above them. Two things were
+// wrong with it. The first: "seven rows at three-against-three is about 0.7 spurious separations
+// on I07's own arithmetic, so three separations all pointing the same way is more than chance."
+// That arithmetic assumes the rows are independent. Measured across nine careers on identical
+// code, reached sector 7 correlates with the win count at +0.94 and score at +0.54 - they are
+// not seven readings, they are two or three wearing seven labels, and separations that agree are
+// one fact counted several times rather than three confirmations of it.
+//
+// The second, and worse: none of the three gaps clears the noise. On that same nine-career
+// control, score median spans 28.3k to 40.2k on identical code - so a 40.2k floor against a
+// 32.6k ceiling is the whole band, not a wide gap. Reached sector 7 spans 42 to 62 of 150; a
+// one-point difference is nothing. Bosses felled spans 5.6 to 5.8 against a claimed 3.97 to 3.86
+// - the same order as the noise. All three ROWS separated and NONE of the effects did.
+//
+// SO THE HONEST READING IS NARROWER THAN WHAT STOOD HERE, which was "runs end shallower and
+// score lower; the win rate does not move out of the career band". The second half stands. The
+// first half is withdrawn: at three careers an arm this file could not have seen it either way.
+// What is left is the census - 2.8% of incoming blows were bio or energy and 38% are now - and
+// the resistance-share row under it, both of which count rather than sample.
 //
 // NOTHING WAS RE-TUNED FOR IT. The win rate is what I06 tuned against, and the after-arm sits
 // at 32/34/35 (mean 34%) against a 30% target, where the before-arm sat at 38/34/42 (mean 38%).
 // The change moves the wall TOWARD where I06 aimed, not away from it, and it does so without
 // separating. A compensating buff would be re-tuning against a row that did not move.
 //
-// AND THE CAREERS ABOVE MEASURE A PLAYER WHO NEVER ADAPTS. The sim's gear policy does not buy
-// for a resistance, so those numbers are the floor rather than the expectation. What the answer
-// is worth is measured directly in suite 154 instead, off the engine's own curve: the Gas Mask
-// takes a flat 10 off every bio blow, which is 48% of a Censer Bearer's ordinary swing where
-// the Choir first stands and 21% of it at the end of the road; with Closed Circuit on top, its
-// ordinary swing is shut out entirely at every depth, and its heavy turn drops 70 to 20. And it
-// buys nothing at all against the energy the machines throw - which is what makes the trinket
-// slot a decision rather than a strictly better hat.
+// WHAT THE ANSWER IS WORTH is measured directly in suite 154, off the engine's own curve: the
+// Gas Mask takes a flat 10 off every bio blow, which is 48% of a Censer Bearer's ordinary swing
+// where the Choir first stands and 21% of it at the end of the road; with Closed Circuit on top,
+// that ordinary swing is shut out entirely at every depth, and its heavy turn drops 70 to 20.
+// Those are arithmetic on the engine and they stand.
+//
+// TWO SENTENCES THAT STOOD HERE WERE WRONG. K06 CORRECTED THEM. They said the careers above
+// "measure a player who never adapts", and that having no answer to energy is "what makes the
+// trinket slot a decision rather than a strictly better hat". Both assume a player who wants a
+// Gas Mask can go and get one. NO PATH IN THE GAME LETS A PLAYER CHOOSE A PIECE OF GEAR. Every
+// source is rollGear() - a uniform draw over whatever the run does not already hold - and there
+// are four: the elite drop, the commander drop, the event that sets a piece aside, and the
+// Armory's single GEAR row, which is one rolled piece at a fixed price rather than a shelf. The
+// Footlocker carries one piece between runs and keeps THE FIRST the squad picked up, not a
+// chosen one. What a player does decide is whether to pay for the row that was rolled, and which
+// operator wears what is already in the bag. Neither of those is choosing the piece.
+//
+// SO THE "NEVER ADAPTS" FRAMING WAS BACKWARDS. This file's shop policy buys the GEAR row FIRST
+// of five, ahead of stims, insurance and the relic, and its Outpost policy puts every piece it
+// holds on the first deployed body it fits. In the one dimension the sentence claimed was
+// missing - going and getting the answer - it is not behind a human, because a human cannot do
+// it either. The real gap is narrower: who wears what. K05 measured that dimension on the bench,
+// where the choice does exist, and found choosing by need neutral at best.
+//
+// AND THE RATE IS A CENSUS, not an argument, so K06's noise finding below does not touch it.
+// Over three 150-expedition careers the Gas Mask is put on somebody in 0.33 / 0.33 / 0.27 of
+// runs and is still worn at the end in 0.25 / 0.16 / 0.19; the Insulated Coat reads 0.37 / 0.37
+// / 0.36 and 0.22 / 0.19 / 0.21. All eight trinkets sit inside that same band, and that flatness
+// IS the uniform draw - nothing in the game bends it toward what the squad is being hit with. A
+// squad meets bio on 13% of the blows aimed at it and energy on 25%, which is to say every run;
+// it ends about one run in five holding the answer to either. THAT is what makes the mitigation
+// content thin, and it is a reachability problem rather than a strength problem. Filed as K07.
 //
 // ONE ROW IN THIS FILE IS NOT COMPARABLE ACROSS THIS COMMIT. The first draft of the damage-type
 // ledger booked a resistance at its FACE VALUE, so a bio-immune machine booked 100 against a
@@ -2286,12 +2328,14 @@ const ROOT = path.join(__dirname, '..');
 // THE POLICY ALONE IS A NULL. road/3 overlaps the baseline on every row, which is what the
 // --augcat arm was built to establish: the harness change is attributable and harmless.
 //
-// THE CATALOGUE IS NEUTRAL AT ONE ANSWER A BODY AND EXPENSIVE AT TWO. Unrestricted, the road
-// policy fills a front-liner's second and third slots with answers - 35% of every install - and
-// that arm separates cleanly and badly: ten wins and eight points of depth. Capped at one, 18%
-// of installs are answers, every row overlaps the baseline, and the sets read Optics+Optics+Rod
-// and Optics+Pump+Weave. The content is not a trap; the first draft of the policy was buying
-// twice as much of it as it is worth.
+// WITHDRAWN BY K06. What this said was: "the catalogue is neutral at one answer a body and
+// expensive at two", off max1 (53.7 wins) against road6 (40.7). K06 re-ran that same max1
+// configuration twice more and got 41.3 and 48.3 - so the gap this conclusion rested on is
+// inside the instrument's own noise, which nobody had measured. The honest state of the question
+// is UNMEASURED. What still stands from the arms is the shape rather than the size: the road
+// policy takes answers into 35% of installs unrestricted and 18% capped, and the sets it
+// produces are Optics+Optics+Rod and Optics+Pump+Weave rather than three of the same. Whether
+// that costs anything needs six careers an arm; see the K06 record above the argument list.
 //
 // WHY, AND IT IS THE GENERAL POINT: output compounds and mitigation does not. +4 DMG shortens
 // the fight, which cuts incoming damage on every turn after it. +20 energy resist saves a fixed
@@ -2309,6 +2353,149 @@ const ROOT = path.join(__dirname, '..');
 // TWO DEFAULTS CHANGED, both measured neutral against the greedy baseline before being changed:
 // --augments defaults to `road` because the greedy scan provably cannot reach half the bench,
 // and --augmax defaults to 1 because that is the number the careers support.
+
+// ── K06: THE MITIGATION CONTENT IS NOT WEAK. IT IS UNREACHABLE ─────────────────────
+// Filed as "K02 gave the rank and file bio and energy to throw; is the rest of the mitigation
+// content a trap too?" - meaning the Gas Mask, the Insulated Coat, Closed Circuit, the Hazmat
+// Specialist's baked bio 25 and K05's three answer augments. The expected shape of the answer
+// was a win-rate arm: fit the line with a resist and see whether it buys anything. It does not
+// need one, and at three careers it could not have one (see the noise record below).
+//
+// THE ANSWER IS A CENSUS. Every piece of gear that enters a run does so through rollGear(), a
+// uniform draw over whatever the run does not already hold. There are exactly four callers -
+// the elite drop, the commander drop, the event that sets a piece aside, and rollShopStock,
+// which puts ONE rolled piece on the Armory's shelf at a fixed price. The Footlocker carries
+// one piece between runs and lockerFrom() keeps THE FIRST the squad picked up. Nothing filters,
+// weights or offers a choice of piece anywhere in that path. A player being gassed by the Choir
+// has no action available that raises their odds of holding a Gas Mask.
+//
+// AND THE ODDS ARE FLAT, which is the same fact seen from the other end. Three 150-expedition
+// careers, `pieces put on, per run` and `trinkets still worn at the end`:
+//
+//                        put on              worn at the end
+//   GAS_MASK        0.33  0.33  0.27        0.25  0.16  0.19
+//   INSULATED_COAT  0.37  0.37  0.36        0.22  0.19  0.21
+//   RIOT_SHIELD     0.33  0.41  0.27        0.23  0.22  0.19
+//   PLATED_VEST     0.34  0.49  0.36        0.21  0.27  0.23
+//   TOURNIQUET      0.34  0.42  0.37        0.20  0.23  0.20
+//   REFLEX_WRAP     0.33  0.33  0.33        0.20  0.20  0.22
+//   IRON_KNUCKLES   0.33  0.37  0.31        0.18  0.20  0.20
+//   WAR_TROPHY      0.30  0.34  0.31        0.19  0.24  0.23
+//
+// EIGHT TRINKETS, ONE BAND. That flatness is the uniform draw printing itself. The two pieces
+// that answer a damage type are not rarer than the six that do not - and they are not commoner
+// when the squad needs them, because nothing in the game knows the squad needs them.
+//
+// SET THAT AGAINST WHAT THE SQUAD MEETS: after K02, 13% of the blows aimed at it are bio and
+// 25% are energy, which at 150 expeditions means every single run meets both. It ends about one
+// run in five holding an answer to either. THE CONTENT IS NOT MISTUNED. The Gas Mask's flat 10
+// is worth 48% of a Censer Bearer's swing where the Choir first stands (suite 154 measures that
+// off the engine); the trouble is that wanting it does nothing.
+//
+// WHY NO BALANCE CHANGE SHIPS HERE. The fix is small and obvious - let the Armory's GEAR row be
+// picked from two or three, or weight the roll by what the run has actually been taking - and it
+// is a design change to the one economy this phase has just proved it cannot measure. K06 found
+// its answer and the limits of the instrument that would price the fix in the same phase, and
+// that instrument says three careers cannot see ten wins. So the change is filed as K07 with the
+// sample size it needs written on it, and what ships instead costs nothing to be wrong about:
+// this record, the census, the correction to K02, suite 157, and the manual page - which listed
+// all twenty-eight pieces under one sentence naming two of the four ways to get one, and now
+// names all four and says the piece is rolled rather than chosen.
+//
+// WHAT WAS ADDED TO MEASURE IT, and stays: a gear ledger in equipGear (which pieces, which
+// slots, per run), the `worn at the end` roster read, and a `--trinket <ID>` bench arm that
+// fits the whole line with one piece at the muster. The ledger is a census and is trustworthy.
+// The bench arm is a career sample and, at three careers, is not.
+
+// ── K06: THE CAREER INSTRUMENT'S OWN NOISE, WHICH NOBODY EVER MEASURED ────────────
+// STOP AND READ THIS BEFORE QUOTING A WIN RATE. Every balance phase in this file has judged an
+// effect by the D17 rule - same direction across three careers AND complete separation of the
+// ranges. That rule was never checked against the spread of the measurement it judges.
+//
+// THE SHORTEST FORM OF THE ANSWER is three careers run back to back on one tree, one invocation,
+// one sitting, with nothing whatsoever between them:
+//
+//   55  42  48        wins of 150.  Thirteen wins of spread, from a machine told to do the
+//                     same thing three times.
+//
+// Three careers cannot resolve thirteen wins, because three careers PRODUCE thirteen wins out of
+// nothing. Every arm this file has ever compared was three careers.
+//
+// THE FULL SET, nine careers on one configuration. The middle arm is the trinket-bench control,
+// the last is the arm above; both ran on this tree. The first is K05's max1 arm on the tree one
+// commit back, whose diff carries no behavioural change - and the arm above, which shares K05's
+// invocation and this tree, lands between the two, which is what a tree difference would not do.
+//
+//   K05 "max1" arm      56 53 52     mean 53.7
+//   K06 "none" arm      39 43 42     mean 41.3
+//   K06 verify arm      55 42 48     mean 48.3
+//
+// TWO OF THOSE ARMS SEPARATE COMPLETELY - 39-43 against 52-56, no overlap. That is the exact
+// pattern this file has been reading as proof of an effect.
+//
+// AND IT IS NOT ONLY THE WIN COUNT. Every headline row, measured across those same nine careers,
+// with the gap two arms of three can actually settle (three sd of the difference of their means):
+//
+//   row                   mean       sd of one   sd of an     settles a gap        observed
+//                                      career    arm of 3       wider than          range
+//   careers won of 150      47.8         6.4        3.7            16            39 to 56
+//   reached sector 7        54.1         6.6        3.8            16            42 to 62
+//   score, median         31,959       3,375      1,948          8,266      28.3k to 40.2k
+//   lost for good          514.2        19.5       11.2             48          483 to 552
+//   wipes per run           5.37        0.25       0.15            0.6        4.97 to 5.65
+//   warlords felled         5.73        0.09       0.05           0.21         5.6 to 5.8
+//
+// The noise is not a defect to fix - 6.4 wins against a theoretical binomial sd of 5.7 at p=0.32
+// says these careers behave like independent draws, and the only cure is more of them. To resolve
+// a ten-win difference takes about SIX careers an arm, not three.
+//
+// AND THE ROWS ARE NOT INDEPENDENT, WHICH I07's ARITHMETIC ASSUMED THEY WERE. Correlation with
+// the win count, across the same nine identical careers: reached sector 7 +0.94, score +0.54,
+// wipes per run -0.51, lost for good -0.35, warlords felled +0.19. `reached sector 7` at +0.94 is
+// not a second row, it is the win count wearing another label. So a run of separations all
+// pointing one way is NOT the independent confirmation it reads as - it is one fact counted
+// several times, and the multiple-comparisons correction I07 applied (seven rows, about 0.7
+// spurious separations) is too generous rather than too strict. The control arm here demonstrates
+// it: "none" sits lowest of the three on wins, on sector 7, on score AND on bosses felled - four
+// rows moving together, on identical code.
+//
+// WHAT THIS COSTS, honestly:
+//
+//   TRUE NULLS ARE SAFE. A phase that claimed "the wall did not move" and showed overlapping
+//   ranges was right for the right reason - K01 and K02's win rate among them.
+//
+//   K05'S CENTRAL CLAIM IS WITHDRAWN. "The widened bench costs ten wins uncapped and is neutral
+//   capped at one" rested on max1 (53.7) against road6 (40.7). max1 has since re-measured at
+//   41.3 and 48.3. The difference between those two arms is inside the noise, and the honest
+//   state of that question is UNMEASURED rather than neutral. The catalogue is left in place -
+//   pulling shipped content on evidence that has itself been shown unreliable is the same
+//   mistake facing the other way - but its record no longer claims a wall reading.
+//
+//   I08 IS NOT A NULL AND IS NOT CLEAN. It read "wipes per run SEPARATES, roster worse" off
+//   5.23/5.51/5.57 against 5.77/5.87/5.89. The ranges do separate, but against the floor
+//   measured above that gap of 0.41 is 2.0 sd of an arm-mean difference - suggestive, under the
+//   bar. Its win rate overlapped and was reported as overlapping. What survives untouched is the
+//   pair of rows that are DIRECT consequences of the policy rather than downstream of it:
+//   upgrades bought (47.9 against 61.1) and gear equipped (5.4 against 6.5, about 5 sd). So the
+//   true reading of I08 is that opening the gate demonstrably buys more, and that it plays worse
+//   for it is suggested rather than shown. `line` stays the default on the safe half of that.
+//
+//   K06'S OWN TRINKET ARMS ARE UNDER-POWERED and are not quoted as a finding. none 41.3 against
+//   knuckles 55.7 and shield 56.7 looks large, and the no-effect arms above already spanned
+//   12.4, so it is not safe at three careers. Filed, with the sample size it needs.
+//
+// AND THE FLOOR IS PRINTED NOW, on every career, under `runs that ended the road`. The row is
+// the count every balance phase in this file quotes, and `what that count can resolve` sits
+// directly beneath it with the sd of one career, the sd of a three-career arm mean, and the gap
+// two such arms can actually settle. The lesson only holds if it is read at the same moment as
+// the number. A note two thousand lines up would have been skipped by exactly the phases that
+// needed it - which is how a rule from D17 survived every balance phase after it unexamined.
+//
+//   ANY SEPARATION THIS FILE CLAIMS AT THREE CAREERS should be checked against the table above
+//   before it is quoted, and read as suggestive if it does not clear the `settles a gap wider
+//   than` column. The rows that are NOT affected are the ones that count something directly
+//   rather than averaging a career - blows by damage type, materials in and out, which augment
+//   went in, how full a body ended up, which piece of gear was worn. Censuses, not samples.
 
 const args = process.argv.slice(2);
 const RUNS = Number(args.find(a => /^\d+$/.test(a))) || 60;
@@ -2370,10 +2557,14 @@ const AUGMENT_CAT = Math.max(1, Number(flag('augcat', '99')) || 99);
 // first measurement of the widened bench cannot tell "the content is a trap" from "this policy
 // buys too much of it". This is the arm that separates them: `--augmax 1` is a player who takes
 // at most one answer and spends the rest on stats.
-// And one situational row a body, which is the number the careers actually support: at one, the
-// widened bench is neutral on every row; at two or more it costs ten wins and eight points of
-// depth. The first answer displaces the third-best flat option and the second displaces the
-// second-best, which is the whole of the difference.
+// It defaults to one situational row a body. K05 set that default off a career arm reading "at
+// one the widened bench is neutral on every row; at two or more it costs ten wins and eight
+// points of depth", and K06 withdrew that arm as inside the instrument's own noise - so the
+// default now rests on the mechanism rather than the number. The mechanism is a census: a flat
+// resistance pays only on the blows of its own type, 13% of incoming for bio and 25% for energy,
+// while a bar or a swing pays on all of them, so each further answer displaces a better flat
+// option than the last did. One is the cautious default in the direction the mechanism points.
+// Whether it is the right one is UNMEASURED; see the K06 record and the arm it asks for.
 const AUGMENT_MAX = Math.max(0, Number(flag('augmax', '1')));
 // K06: `--trinket RIOT_SHIELD` fits the whole line with that piece at every muster, so what the
 // trinket slot is worth can be asked without the drop rate answering first. Off by default; this
@@ -4720,6 +4911,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('  and won it', reached.length ? `${wins.length} of ${reached.length} (${Math.round(wins.length / reached.length * 100)}%)`
                                       : 'no run got that far');
   line('runs that ended the road', `${wins.length} of ${n} (${Math.round(wins.length / n * 100)}%)`);
+  // K06: THE NUMBER THAT WAS ALWAYS MISSING FROM THE ROW ABOVE. Every balance phase in this file
+  // quotes that count and compares it across arms, and not one of them ever wrote down how far it
+  // moves on its own. It is a tally of independent successes, so the standard deviation of the
+  // count is sqrt(n·p·(1-p)) - about 5.7 wins at 150 expeditions and a 32% rate, which nine
+  // careers run on one identical configuration then confirmed at 6.4 observed. Printed here so
+  // the next phase meets the noise floor at the same moment it meets the number, instead of a
+  // year later with a shipped conclusion resting on it.
+  const winRate = wins.length / n, winSd = Math.sqrt(n * winRate * (1 - winRate));
+  const armSd = winSd / Math.sqrt(3), settles = 3 * armSd * Math.SQRT2;
+  line('  what that count can resolve',
+    `±${winSd.toFixed(1)} wins on one career; an arm of three means ±${armSd.toFixed(1)}, `
+    + `so two arms of three only settle a gap wider than about ${Math.round(settles)} wins`);
   if (wins.length) {
     line('  warlords felled on the way, mean', (wins.reduce((a, r) => a + r.roadWarlords, 0) / wins.length).toFixed(1));
     line('  raised by the ossuary, mean', (wins.reduce((a, r) => a + r.raised, 0) / wins.length).toFixed(1));
