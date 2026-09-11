@@ -2355,6 +2355,54 @@ const ROOT = path.join(__dirname, '..');
 // --augments defaults to `road` because the greedy scan provably cannot reach half the bench,
 // and --augmax defaults to 1 because that is the number the careers support.
 
+// ── K10: THE SKY IS STILL A SKY — THE PREMISE IS REFUTED ──────────────────────────
+// K08 routed the sky's tick through mitigate, which was the correctness fix, and it cost the
+// sky most of its weight: 6.87 damage a turn to 2.76. That was left un-re-cut deliberately, and
+// filed as "is TOXIC_SMOG still worth being a sky, and does the chip want raising about 3.3x to
+// put its old totals back?" The answer is no, and the reason is that the question had never been
+// asked in a unit that could answer it.
+//
+// NOBODY HAD EVER PUT THE SEVEN SKIES SIDE BY SIDE. Four of them are not damage at all - a
+// ranged penalty, plating and an AoE cut, cooldowns and a damage cut, a backline screen - so
+// "the smog does 2.76 a turn" could not be compared to anything. `--sky <ID>` stamps one sky on
+// every fight a run takes, so each can be read against a forced-CLEAR floor in the only unit
+// they share: what the exchange looks like underneath them.
+//
+// 60 expeditions an arm, raw damage per run, against a forced-clear baseline:
+//
+//   sky               at the squad    at the hostiles    the shift    wipes
+//   TOXIC_SMOG           +37.8%           +22.6%           -15.2       4.97
+//   SHRAPNEL_WINDS       +24.5%           +11.6%           -12.9       4.97
+//   BLOOD_HAZE           +12.3%            +0.4%           -11.9       5.62
+//   SANDSTORM            +30.0%           +26.2%            -3.8       5.77
+//   ASHFALL              +27.6%           +32.1%            +4.5       5.35
+//   ION_STORM             -0.3%            +7.5%            +7.8       5.12
+//   (clear)                  --               --              --       4.77
+//
+// THE SMOG IS THE HARSHEST SKY IN THE GAME ON THE SQUAD SIDE, not a spent one. A squad under it
+// takes about 38% more raw damage than under a clear sky, and that figure is the one thing here
+// that replicates tightly: a second set of arms read +38.8% against +37.8%. Every other column
+// wobbles, because the forced-clear baseline is itself a single 60-run sample and it moved 8%
+// between the two sets - so the SHIFT column is an ordering rather than a measurement, and the
+// only ordering claim worth making from it is that the smog sits at the bottom of it twice.
+//
+// SO THE RE-CUT IS REFUSED, and now on evidence rather than caution. Raising the chip 3.3x to
+// restore the pre-K08 totals would be a large buff to the most punishing sky of the seven. K08
+// made the smog smaller AND more one-sided at the same time, and the second half is what
+// matters: what it lost was mostly what it used to do to the Choir, the Carrion and the machines,
+// which are precisely the factions built to shrug bio off. A sky that hurts you and not the
+// thing you are fighting is a harder sky, not a weaker one, whatever its total says.
+//
+// TWO THINGS THIS ARM IS NOT. It forces one sky on every fight, so a faction's OWN sky and the
+// confluence that fires when a sky meets its matching ground both come up far more than they
+// would on a road - the smog over FLOODED bites twice, and FLOODED is 5.6% of ground, so the
+// smog arm carries about 5% more sky damage than a played run would. And 60 expeditions is a
+// bench, not a career: nothing above is a wall reading and none of it is quoted as one.
+//
+// WHAT SHIPS IS THE INSTRUMENT. No dial moves. The sky flag stays because the next phase to ask
+// what a sky is worth should not have to build it again, and because the table above is the
+// first time this repo could answer "compared to what".
+
 // ── K09: WHAT A RESISTANCE IS WORTH, MEASURED INSTEAD OF MODELLED ─────────────────
 // K08 left an owed correction: bio is 32% of the blows aimed at the squad, not the 13% every
 // phase since K02 had quoted, so every conclusion reasoned from "incidence times size" had the
@@ -2753,6 +2801,13 @@ const AUGMENT_CAT = Math.max(1, Number(flag('augcat', '99')) || 99);
 // option than the last did. One is the cautious default in the direction the mechanism points.
 // Whether it is the right one is UNMEASURED; see the K06 record and the arm it asks for.
 const AUGMENT_MAX = Math.max(0, Number(flag('augmax', '1')));
+// K10: stamp one sky on every fight this run takes, so what a sky is WORTH can be asked in the
+// same unit for all seven of them. `--sky none` forces CLEAR, which is the floor the other six
+// are read against. A bench arm, not a policy: nobody plays under one sky for 150 expeditions.
+// The node is stamped rather than currentWeather being set, because the node is where the game
+// puts it - the banner, the forecast and the confluence all read from there, and a run that had
+// the sky forced somewhere further down would be measuring a different thing to the one played.
+const SKY_ARM = flag('sky', '');
 // K07: how many of the Armory's gear rows this file lets itself look at. The engine lays out
 // SHELF_GEAR of them and sells one; `--shelf 1` looks at the leftmost only, which is
 // distributionally the pre-K07 shelf - one piece drawn uniformly from what the run does not
@@ -2972,7 +3027,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -4210,6 +4265,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     if (avail.every(n => isFight(n))) stat.forksAllFights++;
     stat.takenNodes[kindOf(node)] = (stat.takenNodes[kindOf(node)] || 0) + 1;
     if (!isFight(node)) stat.tookNonFight++;
+    // K10: the bench arm. Stamped here rather than at generation because a node's sky is rolled
+    // when the map is, and a run crosses seven of them - this catches every fight on every map
+    // with one line, and leaves the node untouched when no arm is asked for.
+    if (skyArm && (node.type === 'BOSS' || FIGHT_NODES.includes(node.type)))
+      node.weather = skyArm === 'none' ? 'CLEAR' : skyArm;
     enterNode(node.id);
 
     if (node.type === 'EVENT') {
@@ -4846,7 +4906,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
