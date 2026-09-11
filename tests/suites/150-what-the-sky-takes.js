@@ -38,7 +38,20 @@ module.exports = {
           : { id: 'x1', name: 'Dummy', isPlayer: false, hp: 400, maxHp: 400, cooldowns: {},
               stunnedTurns: 0, bleedingTurns: 0, oiledTurns: 0, corrodedTurns: 0, armorTurns: 0,
               armor: 0, resistances: { phys: 0, bio: 0, energy: 0 } };
-        if (who === 'player') { ent.hp = ent.maxHp = 400; }
+        // L07: the hostile here is hand-built with nothing in the way and the player used to be
+        // whatever the muster rolled, which was harmless while the sky was a raw subtraction and
+        // stopped being harmless the moment K08 sent it through mitigate. THICK_HIDE takes 3 off
+        // every hit, the tier-6 chip is 6, and "at the same rate" below then read 3 against 6 in
+        // whatever share of batteries drew that quirk into the line - measured at 7 of 24 by
+        // tests/noise.js. The body is stripped to match the dummy: this suite is about what the
+        // SKY does, and a resistance belongs to the rows that are about resistances.
+        if (who === 'player') {
+          ent.hp = ent.maxHp = 400;
+          ent.armor = 0; ent.baseArmor = 0; ent.plate = 0;
+          ent.quirk = null; ent.weaponMod = null; ent.trinket = null; ent.traits = [];
+          ent.resistances = { phys: 0, bio: 0, energy: 0 };
+          ent.venomStacks = 0; ent.corrodedTurns = 0; ent.oiledTurns = 0;
+        }
         const before = ent.hp;
         applyTurnStartEffects(ent);
         return { took: before - ent.hp,
