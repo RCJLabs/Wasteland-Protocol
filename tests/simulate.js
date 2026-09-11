@@ -2329,14 +2329,25 @@ const ROOT = path.join(__dirname, '..');
 // THE POLICY ALONE IS A NULL. road/3 overlaps the baseline on every row, which is what the
 // --augcat arm was built to establish: the harness change is attributable and harmless.
 //
-// WITHDRAWN BY K06. What this said was: "the catalogue is neutral at one answer a body and
-// expensive at two", off max1 (53.7 wins) against road6 (40.7). K06 re-ran that same max1
-// configuration twice more and got 41.3 and 48.3 - so the gap this conclusion rested on is
-// inside the instrument's own noise, which nobody had measured. The honest state of the question
-// is UNMEASURED. What still stands from the arms is the shape rather than the size: the road
-// policy takes answers into 35% of installs unrestricted and 18% capped, and the sets it
-// produces are Optics+Optics+Rod and Optics+Pump+Weave rather than three of the same. Whether
-// that costs anything needs six careers an arm; see the K06 record above the argument list.
+// WITHDRAWN BY K06, AND SETTLED BY K11. What this said was: "the catalogue is neutral at one
+// answer a body and expensive at two", off max1 (53.7 wins) against road6 (40.7). K06 re-ran
+// that same max1 configuration twice more and got 41.3 and 48.3, so the gap it rested on was
+// inside the instrument's own noise. K11 then measured it properly, six careers an arm:
+//
+//   careers won of 150   capped at one 45.8   uncapped 44.3   -1.5, 0.6 sd, on a design that
+//                                                             settles a gap wider than 8.0
+//
+// UNCAPPING THE ANSWERS IS A NULL. Every row overlaps - depth, wipes, score, bodies lost - and
+// the largest of them is 0.8 sd. The original claim was ten wins; the measurement is one and a
+// half in the same direction, which is to say nothing. And the row that explains why sits beside
+// it: augments installed per run reads 15.45 capped against 15.47 uncapped. The cap never
+// changed how much of the bench got bought, only WHICH - so it was always a question about the
+// mix, and the mix turns out not to be worth a wall reading either way.
+//
+// What still stands from the arms is the shape: the road policy takes answers into 35% of
+// installs unrestricted and 18% capped, and the sets it produces are Optics+Optics+Rod and
+// Optics+Pump+Weave rather than three of the same. --augmax stays at 1, on the mechanism K09
+// re-based it onto rather than on a wall reading, because there is no wall reading to have.
 //
 // WHY, AND IT IS THE GENERAL POINT: output compounds and mitigation does not. +4 DMG shortens
 // the fight, which cuts incoming damage on every turn after it. +20 energy resist saves a fixed
@@ -2354,6 +2365,51 @@ const ROOT = path.join(__dirname, '..');
 // TWO DEFAULTS CHANGED, both measured neutral against the greedy baseline before being changed:
 // --augments defaults to `road` because the greedy scan provably cannot reach half the bench,
 // and --augmax defaults to 1 because that is the number the careers support.
+
+// ── K11: THE TWO DEBTS K06 LEFT, PAID AT SIX CAREERS AN ARM ───────────────────────
+// K06 measured the career instrument's own noise and withdrew two claims for resting inside it:
+// K05's reading of the augment cap, and its own trinket-bench arms. Both were filed with the
+// sample size written on them. This is that sample: four arms of six 150-expedition careers,
+// 3,600 expeditions, run back to back on one tree with the checksum held across all of it.
+//
+// The baseline arm is the shipped configuration - answers capped at one, no trinket forced - so
+// it serves as the control for both questions at once and the whole set costs 24 careers rather
+// than the 48 two separate designs would have.
+//
+//   base       41 49 45 39 48 53   mean 45.8  sd 5.2
+//   augfree    46 37 48 44 44 47   mean 44.3  sd 3.9    --augmax 3, answers uncapped
+//   knuckles   53 50 50 61 58 63   mean 55.8  sd 5.6    --trinket IRON_KNUCKLES, +3 DMG a body
+//   shield     56 52 63 45 43 52   mean 51.8  sd 7.3    --trinket RIOT_SHIELD, +6 phys a body
+//
+// THE AUGMENT CAP IS A NULL (see the K05 record for the detail). -1.5 wins at 0.6 sd, every row
+// overlapping, and installs per run identical at 15.45 against 15.47.
+//
+// THE TRINKET SLOT IS WORTH ABOUT TEN WINS, which is the first thing in this file to come out of
+// the trinket bench that the instrument can actually hold:
+//
+//                          base      knuckles                 shield
+//   careers won of 150      45.8   55.8  (+10.0, 3.2 sd)   51.8  (+6.0, 1.6 sd)
+//   reached sector 7        52.0   62.8  (+10.8, 3.7)      59.0  (+7.0, 2.1)
+//   score, median          29.2k   41.8k (+12.6k, 4.4 sd, RANGES SEPARATE)   40.0k (+10.8k, 2.6)
+//   wipes per run            5.42   5.18  (-0.24, 2.2)      5.24  (-0.18, 1.6)
+//
+// The score row is the only one that separates outright, and it separates hard - 29.2k against
+// 41.8k, where K06's nine-career control put score's whole noise band at 28.3k to 40.2k. The win
+// row at 3.2 sd clears the bar this file set itself (a gap wider than 9.4 here) but its ranges
+// still touch, which is what a ten-win effect looks like at six careers: real, and only just.
+//
+// OUTPUT AGAINST MITIGATION DOES NOT SEPARATE. +3 DMG reads ten wins and +6 phys reads six, and
+// head to head every row overlaps - the widest is 1.1 sd on the win count. K05 argued that output
+// compounds and mitigation does not, because a shorter fight cuts incoming damage on every later
+// turn; these numbers lean that way and cannot carry it. What K09 settled on the SOAK axis - the
+// shield takes 9.0 points off every hundred incoming against the knuckles' nothing - is not in
+// dispute; what is unresolved is whether that soak is worth as much as the swing, and six careers
+// an arm cannot say. It would take about twelve.
+//
+// AND THE ARMS ARE STILL A BENCH. Every one of them fits the whole deployed line with one piece
+// at every muster, which no player can do: K07 measured that the Armory sells one piece per visit
+// and the other three doors are blind. So "the trinket slot is worth ten wins" is a CEILING on
+// what the slot could be worth, not what it is worth to somebody playing.
 
 // ── K10: THE SKY IS STILL A SKY — THE PREMISE IS REFUTED ──────────────────────────
 // K08 routed the sky's tick through mitigate, which was the correctness fix, and it cost the
@@ -2718,6 +2774,9 @@ const ROOT = path.join(__dirname, '..');
 //   K06'S OWN TRINKET ARMS ARE UNDER-POWERED and are not quoted as a finding. none 41.3 against
 //   knuckles 55.7 and shield 56.7 looks large, and the no-effect arms above already spanned
 //   12.4, so it is not safe at three careers. Filed, with the sample size it needs.
+//   K11 RAN IT AT SIX: none 45.8, knuckles 55.8, shield 51.8. The knuckles arm replicated almost
+//   exactly and the shield arm came down five wins - which is this record's own point landing on
+//   itself, since the three-career shield arm was the one overstating.
 //
 // AND THE FLOOR IS PRINTED NOW, on every career, under `runs that ended the road`. The row is
 // the count every balance phase in this file quotes, and `what that count can resolve` sits
