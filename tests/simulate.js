@@ -2394,6 +2394,43 @@ const ROOT = path.join(__dirname, '..');
 // --augments defaults to `road` because the greedy scan provably cannot reach half the bench,
 // and --augmax defaults to 1 because that is the number the careers support.
 
+// ── L03: WHAT THE TYPE LEDGER CANNOT SEE, MEASURED AT LAST ──────────────────
+// noteDamageType has exactly two callers - the damage door and the sky's tick - so every share
+// this file prints for damage by type, K09's soak figures among them, is a share of LEDGERED
+// damage rather than of damage taken. L02 closed three unledgered paths and measured them at
+// under 1%. Bleed was the one left: 8% of maxHp a turn, on a status nine moves can apply.
+//
+// Booked without being changed, and the distinction matters. Whether a bleed should meet
+// mitigate, or carry a damage type at all, is a DESIGN question - bleeding is bleeding and a Gas
+// Mask has no obvious business stopping it - and it should not be settled as a side effect of
+// wanting an honest denominator. The arithmetic is untouched; only the ledger grew. Kept in its
+// own bag rather than as a fourth key on `dt`, because a reader who found `bleed` sitting beside
+// phys, bio and energy would reasonably conclude there was a badge that answers it.
+//
+// One 150-expedition career, and these are counts over ~24,000 ticks so they read at any size:
+//
+//                          points a run    ticks      share of all that side took
+//   at the squad   BLEED          539      9,901                    2.3%
+//   at the hostiles BLEED       5,455     14,051                   10.8%
+//
+// SO K09'S ABSOLUTE SHARES WERE VERY NEARLY RIGHT. The baseline soak of 16.3% was 16.3% of a
+// denominator short by 2.3%, which puts the true figure at 15.9% - a 0.4-point correction, well
+// inside how precisely anyone was going to use it. K09's comparisons were never in question
+// (same lens both sides), and now its absolutes are not either.
+//
+// THE BLIND SPOT WAS ON THE OTHER SIDE, which nobody had thought to look at. The squad DEALS
+// about ten times the bleed it takes - 5,455 points a run against 539 - because E12b gave nine
+// moves a mark to cash and the line actually uses them. So "blows at the hostiles, by type" has
+// been under-reporting what the squad puts out by about a ninth, and every reading of the
+// squad's damage composition taken off that row has been short by that much. That is a bigger
+// error than the one this task was filed to find, and it was found by looking at both columns of
+// a row that had only ever been read down one.
+//
+// STILL OPEN, and deliberately: whether bleed should be typed. The case for leaving it alone is
+// that it is not elemental and a resistance answering it would be strange. The case against is
+// that the codex says "Armour subtracts from every hit" and a bleed is a hit. Nothing here
+// decides it - the instrument is honest now either way, which is what was actually blocking.
+//
 // ── L02: THREE EFFECTS THAT IGNORED EVERY DEFENCE, AND WHAT IT COST TO FIX ─────
 // K08 sent the sky through mitigate and left three in-combat paths to zero behind: the
 // Vatborn's grudge aura, the Stormcaller's skyToll, and the Hazmat capstone's vent. The
@@ -4966,6 +5003,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.wxShrFoe = runStats.wxShrFoe || {};
   stat.plate = runStats.plate || {};
   stat.dt = runStats.dt || {};
+  stat.ut = runStats.ut || {};   // L03: the damage the type ledger cannot see
   // K05: what came out of the materials bag and by which door, plus what was still sitting in
   // it when the run ended. The leftover is read off `materials` rather than derived, because
   // income arrives at twenty different sites and a second copy of that sum would be wrong the
@@ -5851,6 +5889,31 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     };
     show('atSquad', 'blows at the squad, by type');
     show('atFoe', 'blows at the hostiles, by type');
+
+    // L03: AND WHAT THE ROWS ABOVE CANNOT SEE. noteDamageType has exactly two callers - the
+    // damage door and the sky's tick - so the shares above, K09's soak figures among them, are
+    // shares of LEDGERED damage rather than of damage taken. L02 closed three unledgered paths
+    // and measured them at under 1% of squad damage; bleed is the one that is left, and it is
+    // common rather than grudge-phase. This row is the denominator's honesty: raw points, the
+    // same unit the row above uses, so the two can simply be added.
+    const ut = {};
+    results.forEach(r => Object.entries(r.ut || {}).forEach(([side, bag]) =>
+      Object.entries(bag).forEach(([cause, v]) => {
+        const k = side + '/' + cause;
+        ut[k] = ut[k] || { hits: 0, points: 0 };
+        ut[k].hits += v.hits; ut[k].points += v.points;
+      })));
+    const typedRaw = (side) => Object.values((acc[side] || {})).reduce((a, v) => a + v.raw, 0);
+    ['atSquad', 'atFoe'].forEach(side => {
+      const rows = Object.entries(ut).filter(([k]) => k.startsWith(side + '/'));
+      if (!rows.length) return;
+      const pts = rows.reduce((a, [, v]) => a + v.points, 0);
+      const typed = typedRaw(side);
+      line(side === 'atSquad' ? 'damage the type ledger cannot see' : '  the same at the hostiles',
+        `${rows.map(([k, v]) => `${k.split('/')[1]} ${Math.round(v.points / n)} a run over ${v.hits} ticks`).join(', ')}`);
+      line('  as a share of all damage that side took',
+        `${(pts / Math.max(1, pts + typed) * 100).toFixed(1)}%  (${Math.round(pts / n)} untyped against ${Math.round(typed / n)} typed, a run)`);
+    });
   }
   line('sky fought under', spread(tables.skies, marginal(p => p[0])));
   // J01: and what it took while it was up. Both sides, because the two weather sites damage

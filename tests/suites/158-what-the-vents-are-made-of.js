@@ -214,6 +214,38 @@ module.exports = {
       derived.typed.length > 0);
     ok('and the manual names exactly those, off the same derivation', derived.named && !derived.untypedNamed);
 
+    // ── L03: bleed is counted, and DELIBERATELY not changed ──────────────────────
+    // The fourth raw subtraction, and the one L02 left alone on purpose: whether a bleed should
+    // meet mitigate, or carry a damage type at all, is a design question - bleeding is bleeding
+    // and a Gas Mask has no obvious business stopping it. What was not defensible was the
+    // instrument being silent about it, so it is BOOKED without being touched. These rows pin
+    // both halves, because "we only added a counter" is exactly the kind of claim that quietly
+    // stops being true.
+    const bleed = await page.evaluate(() => {
+      const tick = (res) => {
+        window.__fresh();
+        const t = window.__bareBody({ resistances: res, maxHp: 400, hp: 400 });
+        t.bleedingTurns = 3;
+        activeEntities = [t];
+        const before = t.hp;
+        applyTurnStartEffects(t);
+        const row = ((runStats.ut || {}).atSquad || {}).BLEED || { hits: 0, points: 0 };
+        return { took: before - t.hp, hits: row.hits, points: row.points,
+                 typed: Object.keys((runStats.dt || {}).atSquad || {}) };
+      };
+      return { open: tick({ phys: 0, bio: 0, energy: 0 }),
+               sealed: tick({ phys: 100, bio: 100, energy: 100 }),
+               share: Math.floor(400 * 0.08) };
+    });
+    ok(`a bleed is booked where the type ledger cannot reach (${bleed.open.hits} tick, ${bleed.open.points} points)`,
+      bleed.open.hits === 1 && bleed.open.points === bleed.open.took);
+    ok('and not as a damage type, because it is not one',
+      bleed.open.typed.length === 0 && bleed.sealed.typed.length === 0);
+    // The row that catches a future phase quietly routing bleed through mitigate while thinking
+    // it is only tidying up: a body immune to all three still bleeds for exactly the same.
+    ok(`a body sealed against everything bleeds for the same (${bleed.open.took} open, ${bleed.sealed.took} sealed)`,
+      bleed.open.took === bleed.sealed.took && bleed.open.took === bleed.share);
+
     // ── No path back to a raw subtraction ─────────────────────────────────────────
     // Read off the source, in suite 157's idiom: the defect this suite exists for was a line of
     // arithmetic, and the way it comes back is somebody writing that line again.

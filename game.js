@@ -10795,7 +10795,12 @@ function applyTurnStartEffects(ent) {
         if (ent.isPlayer && hasRelic('FIELD_DRESSING')) b = Math.max(1, Math.floor(b / 2));
         if (ent.isPlayer && relicSetActive('Field Surgery')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 1);
         if (hasQuirk(ent, 'SLOW_BLEEDER')) b = Math.max(1, Math.floor(b / 2));
-        if (hasTrinket(ent, 'TOURNIQUET')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 2); ent.hp = Math.max(0, ent.hp - b); log(`> ${ent.name} bleeds for ${b}.`, "log-dmg"); spawnFCT(ent.id, `-${b}`, "fct-dmg"); ent.bleedingTurns--; chg = true; if(ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('BLEED'); }
+        if (hasTrinket(ent, 'TOURNIQUET')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 2);
+        // The RAW figure, uncapped by what is left of the bar, because that is the unit the
+        // typed ledger books: noteDamageType files calcDmg before mitigate and before the floor
+        // at zero. A denominator assembled out of two different units would be worse than none.
+        noteUntyped(ent.isPlayer ? 'atSquad' : 'atFoe', 'BLEED', b);
+        ent.hp = Math.max(0, ent.hp - b); log(`> ${ent.name} bleeds for ${b}.`, "log-dmg"); spawnFCT(ent.id, `-${b}`, "fct-dmg"); ent.bleedingTurns--; chg = true; if(ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('BLEED'); }
     // Bleeding out and choking are deaths too. Now that a unit going down has a voice, dying to
     // a status tick in silence is the odd one out rather than the norm.
     if (wasAlive && ent.hp <= 0) { playSFX(ent.isPlayer ? 'fallen' : 'downed'); if (ent.isPlayer) goDown(ent); }
@@ -11847,6 +11852,29 @@ function typedToll(target, raw, atkType, cls) {
     target.hp = Math.max(0, target.hp - cut.n);
     spawnFCT(target.id, `-${cut.n}`, cls || 'fct-status'); triggerHitFlash(target.id);
     return cut.n;
+}
+
+// L03: WHAT THE TYPE LEDGER CANNOT SEE, COUNTED RATHER THAN GUESSED AT.
+// noteDamageType has exactly two callers - the damage door and the sky's own tick - so every
+// other path to a lower bar is invisible to it, and K09's soak shares are therefore shares of
+// LEDGERED damage rather than of damage taken. L02 closed three of those paths and measured
+// them at under 1% of squad damage. Bleed is the one that is left, and unlike the other three
+// it is common rather than grudge-phase: 8% of maxHp a turn, on a status nine moves can apply.
+//
+// This books it WITHOUT changing it. Whether a bleed should meet mitigate, and whether it has a
+// damage type at all, is a design question - bleeding is bleeding, and a Gas Mask has no
+// obvious business stopping it - and that question should not be settled as a side effect of
+// wanting an honest denominator. So the arithmetic is untouched and only the ledger grows.
+//
+// Kept in its own bag rather than as a fourth key on `dt`, because it is NOT a damage type and
+// a reader who found `bleed` sitting beside phys, bio and energy would reasonably conclude
+// there was a badge that answers it.
+function noteUntyped(side, cause, points) {
+    if (!runStats || !side || !(points > 0)) return;
+    runStats.ut = runStats.ut || {};
+    const bag = runStats.ut[side] = runStats.ut[side] || {};
+    const row = bag[cause] = bag[cause] || { hits: 0, points: 0 };
+    row.hits++; row.points += points;
 }
 
 function noteDamageType(side, atkType, calcDmg, resistValue) {
@@ -12942,7 +12970,7 @@ globalThis.WP = {
     LEARNED_AT, learnedMove, tradeIntents, growTally,
     BENCH_JOBS, CAMP_TRIAGE, CAMP_TRIAGE_JOB, benchJobById, benchJobHolder, hasBenchJob, benchJobName, takeBenchJob,
     get benchJob() { return benchJob; }, set benchJob(v) { benchJob = v; },
-    WEATHER, WEATHER_IDS, WEATHER_CHANCE, CONFLUENCE, confluence, sky, weatherName, skyDamageType, typedToll,
+    WEATHER, WEATHER_IDS, WEATHER_CHANCE, CONFLUENCE, confluence, sky, weatherName, skyDamageType, typedToll, noteUntyped,
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
