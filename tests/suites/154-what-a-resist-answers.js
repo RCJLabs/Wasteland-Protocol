@@ -89,7 +89,10 @@ module.exports = {
         stunnedTurns: 0, bleedingTurns: 0, oiledTurns: 0, corrodedTurns: 0, armorTurns: 0 });
       const hit = (rv, dmg) => { const t = dummy(rv); activeEntities = [t]; return mitigate(a, t, dmg, 'bio', null); };
       return { small: hit(10, 50), big: hit(10, 200),
-               immune: hit(100, 200), weak: hit(-10, 200), none: hit(0, 200) };
+               immune: hit(100, 200), weak: hit(-10, 200), none: hit(0, 200),
+               // K09: the blow smaller than the resistance meeting it. This is the term three
+               // separate phases dropped out of "worth its size times how often it is met".
+               tick: hit(10, 5), tickBig: hit(35, 5), tickNone: hit(0, 5) };
     });
     ok(`the same resistance takes the same amount off two different blows (50 landed ${flat.small.n}, 200 landed ${flat.big.n})`,
       50 - flat.small.n === 200 - flat.big.n);
@@ -97,6 +100,16 @@ module.exports = {
       (50 - flat.small.n) / 50 !== (200 - flat.big.n) / 200);
     ok(`a hundred and over is a wall, not a subtraction (200 landed ${flat.immune.n})`,
       flat.immune.n === 0);
+    // K09: AND A RESISTANCE CANNOT SAVE MORE THAN THE BLOW IS WORTH. What it takes off is
+    // min(R, blow), and a phase reading "flat" as "always R" will over-price every piece it
+    // judges against small hits. That is not hypothetical: the sky ticks for 2 to 8, it is the
+    // largest single source of bio in the game since K08 typed it, and against it a +35 Sealed
+    // Rebreather is worth exactly what a +10 Gas Mask is worth. K05, K06 and K07 all sized
+    // answers with "size times incidence" and all three were missing this.
+    ok(`a resistance cannot take more off a blow than the blow had (a 5 against +10 lands ${flat.tick.n}, unresisted ${flat.tickNone.n})`,
+      flat.tickNone.n === 5 && flat.tick.n === 1 && 5 - flat.tick.n < 10);
+    ok(`so a bigger resistance buys nothing more against a small blow (+10 lands ${flat.tick.n}, +35 lands ${flat.tickBig.n})`,
+      flat.tickBig.n === flat.tick.n);
     ok(`and a negative reading adds to the blow (${flat.none.n} unresisted, ${flat.weak.n} weak)`,
       flat.weak.n > flat.none.n);
 

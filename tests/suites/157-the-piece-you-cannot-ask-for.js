@@ -9,7 +9,9 @@
 // rolled row. The census agreed - over three 150-expedition careers the Gas Mask was put on
 // somebody in 0.33 / 0.33 / 0.27 of runs and the Insulated Coat in 0.37 / 0.37 / 0.36, and all
 // eight trinkets sat inside that same band, which is the uniform draw printing itself. Meanwhile
-// the squad met bio on 13% of the blows aimed at it and energy on 25%: every run, both. A player
+// the squad met bio on 32% of the blows aimed at it and energy on 20%: every run, both. (K07
+// wrote 13% here, which was the figure before K08 found the sky was not wired to a type at all.)
+// A player
 // being gassed by the Choir had no action anywhere in the game that improved their odds.
 //
 // K07 GAVE ONE DOOR OF THE FOUR A DECISION, and it is the one a player routes to on purpose and

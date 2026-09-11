@@ -113,29 +113,50 @@ module.exports = {
       loseOperator(victim, 'COMBAT');
     });
     await settled(page, clockStopped, 'the clock to stop again after the operator falls');
-    await page.evaluate(() => {
+    // K09: the save and the read-back are ONE evaluate. They used to be two, and the gap between
+    // them is a round trip to the browser - which is exactly the window the note above says a
+    // queued nextTurn fires in. When it did, the turn ended the fight and saveGameState() wrote a
+    // post-combat state over the probe's, so the reload came back with no fight to resume and
+    // `the fight comes back up at all` went red - about one battery in three once K08 made the
+    // sky weaker and fights a turn longer. Nothing awaits between writing the save and reading
+    // what was written now, so there is no window to lose it in.
+    const was = await page.evaluate(() => {
       fightLog.turns = 9; fightLog.hurt = true; fightLog.spent = true; fightLog.chased = true;
       momentumFocus = 1; pressExtra = true;
-      window.__was = { contracts: [...activeContracts], regroups: totalRegroups(), carry: canCarry(),
-                       mult: runStats.contractMult, vacated: [...vacatedRanks], bg: combatBgFile,
-                       // K03: the fight log as it stood BEFORE the save, so the row below can
-                       // assert the count came back unchanged rather than that it came back
-                       // above a number somebody once measured it at.
-                       log: fightLog ? { ...fightLog } : null,
-                       names: contractNames() };
+      const snap = { contracts: [...activeContracts], regroups: totalRegroups(), carry: canCarry(),
+                     mult: runStats.contractMult, vacated: [...vacatedRanks], bg: combatBgFile,
+                     // K03: the fight log as it stood BEFORE the save, so the row below can
+                     // assert the count came back unchanged rather than that it came back
+                     // above a number somebody once measured it at.
+                     log: fightLog ? { ...fightLog } : null,
+                     names: contractNames() };
       saveGameState();
+      // And the save itself, carried out of the page as a string. buildCombatSnapshot returns
+      // null when the fight is not live and a queue to resume when it is, so a snapshot with
+      // bodies in its queue is the condition - checked here, and then the exact bytes are put
+      // back after the reload. Closing the gap between saving and reading was not enough on its
+      // own: there is a second gap between reading and page.reload(), and a queued nextTurn
+      // firing in THAT one ends the fight and writes a post-combat save over the probe's, so the
+      // reload came back with nothing to resume. What this suite is for is the load path, so the
+      // save under test is pinned rather than raced for.
+      snap.saved = Store.get(BASE_SAVE_KEY + currentSlot) || '';
+      const raw = JSON.parse(snap.saved || '{}');
+      snap.savedLive = !!(raw.combat && (raw.combat.queueIds || []).length > 0);
+      return snap;
     });
-    const was = await page.evaluate(() => window.__was);
+    ok('the save the probe took has a live fight in it', was.savedLive === true);
     await page.reload();
     await engineUp(page);
-    const now = await page.evaluate(() => {
-      currentSlot = 1; loadGameState();
+    const now = await page.evaluate(saved => {
+      currentSlot = 1;
+      Store.set(BASE_SAVE_KEY + currentSlot, saved);   // the save under test, not whatever raced it
+      loadGameState();
       if (pendingCombat) resumeCombat(pendingCombat);
       return { contracts: [...activeContracts], regroups: totalRegroups(), carry: canCarry(),
                mult: runStats.contractMult, names: contractNames(),
                log: fightLog ? { ...fightLog } : null, vacated: [...vacatedRanks],
                focus: momentumFocus, press: pressExtra, bg: combatBgFile, resumed: combatActive };
-    });
+    }, was.saved);
     ok('the fight comes back up at all', now.resumed === true);
     ok(`the handicaps signed for are still signed for (${now.contracts.join(', ')})`,
       JSON.stringify(now.contracts) === JSON.stringify(was.contracts) && was.contracts.length === 3);

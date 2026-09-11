@@ -2283,7 +2283,8 @@ const ROOT = path.join(__dirname, '..');
 // runs and is still worn at the end in 0.25 / 0.16 / 0.19; the Insulated Coat reads 0.37 / 0.37
 // / 0.36 and 0.22 / 0.19 / 0.21. All eight trinkets sit inside that same band, and that flatness
 // IS the uniform draw - nothing in the game bends it toward what the squad is being hit with. A
-// squad meets bio on 13% of the blows aimed at it and energy on 25%, which is to say every run;
+// squad meets bio on 32% of the blows aimed at it and energy on 20% (K08's figure - the 13%
+// written here originally predated the sky being wired to a type), which is to say every run;
 // it ends about one run in five holding the answer to either. THAT is what makes the mitigation
 // content thin, and it is a reachability problem rather than a strength problem. Filed as K07.
 //
@@ -2353,6 +2354,55 @@ const ROOT = path.join(__dirname, '..');
 // TWO DEFAULTS CHANGED, both measured neutral against the greedy baseline before being changed:
 // --augments defaults to `road` because the greedy scan provably cannot reach half the bench,
 // and --augmax defaults to 1 because that is the number the careers support.
+
+// ── K09: WHAT A RESISTANCE IS WORTH, MEASURED INSTEAD OF MODELLED ─────────────────
+// K08 left an owed correction: bio is 32% of the blows aimed at the squad, not the 13% every
+// phase since K02 had quoted, so every conclusion reasoned from "incidence times size" had the
+// wrong incidence. Redoing that arithmetic is what this item was filed as. It got about four
+// lines in before the arithmetic itself turned out to be the problem.
+//
+// THE MODEL WAS WRONG TWICE OVER, not once. "A flat resistance is worth its size times how often
+// the type it answers lands" forgets the flat part: a resistance saves min(R, blow), not R. The
+// sky's tick is 2 at tier 1 and 8 at tier 9, so against the largest single source of bio in the
+// game a +10 Gas Mask saves the TICK and not the ten, and a +35 Sealed Rebreather saves exactly
+// the same as the mask does. No amount of correcting the incidence fixes that - the term the
+// model is missing is not a number, it is the min().
+//
+// SO IT IS MEASURED. Five arms of 60 expeditions, each fitting the whole deployed line with one
+// piece at every muster (K06's --trinket bench), reading the ledger's raw and soaked in POINTS
+// rather than in shares - which is the row K09 added, because a share cannot answer this:
+//
+//   arm                        soaks, of every 100 points aimed at the squad
+//   none                        16.3        the baseline: class lines, perks, what the bench bought
+//   RIOT_SHIELD   +6 phys       25.2        +9.0
+//   GAS_MASK     +10 bio        20.6        +4.3
+//   INSULATED_COAT +10 energy   19.3        +3.0
+//   PLATED_VEST  +15 HP         15.9        -0.4   (not a resistance - the control, and it reads as one)
+//
+// And what each does to its OWN type, as a share of that type's raw: the Gas Mask takes bio from
+// 28% soaked to 64%, the Coat takes energy from 19% to 49%, the Shield takes phys from 12% to
+// only 24% - the SMALLEST proportional lift of the three, and still the biggest piece, because
+// phys is 65% of the points even at 48% of the blows.
+//
+// K07'S CONCLUSION HOLDS AND ITS REASONING DOES NOT. K07 wrote that the Riot Shield beats both
+// answer trinkets, off 0.61 x 6 = 3.7 against 0.13 x 10 = 1.3. The conclusion is right - the
+// shield is worth about twice either - but the ratio is 2.1 rather than 2.8, one input was wrong
+// by a factor of two and a half, and the model that produced it was missing a term. A right
+// answer from broken arithmetic is worth correcting, because the next question it is asked will
+// not come out right.
+//
+// AND THE ANSWER TO "ARE THEY UNDERSIZED" IS NO. A situational piece SHOULD be worth less on
+// average and more where it lands, and both of these now have somewhere to land:
+//   THE COAT'S HOME IS MACHINE UPRISING. Walked through generateEnemies, that front is 57%
+//   energy against a 20% baseline, and 34% phys against 62% - so the coat roughly triples while
+//   the shield roughly halves, and on that front the coat is the better buy by about two to one.
+//   THE MASK'S HOME IS IRRADIATED, and it is K08 that gave it one. Smog on 70% of roads and on
+//   the boss, and a line in Gas Masks cuts what the sky takes off the squad from 54,215 to
+//   27,505 over 60 expeditions - it halves the weather. Before K08 that number was zero, which
+//   is exactly why K07 could find no front where the mask was the right buy.
+//
+// NOTHING IS RE-SIZED. The pieces measure as what they are meant to be. What was wrong was the
+// arithmetic being used to judge them, and that is what this record replaces.
 
 // ── K08: THE SKY SAID BIO DMG AND WAS NOT BIO AT ALL ──────────────────────────────
 // READ THIS BEFORE QUOTING THE DAMAGE-TYPE LEDGER. Every figure this file has carried since K02
@@ -2522,8 +2572,9 @@ const ROOT = path.join(__dirname, '..');
 // that answer a damage type are not rarer than the six that do not - and they are not commoner
 // when the squad needs them, because nothing in the game knows the squad needs them.
 //
-// SET THAT AGAINST WHAT THE SQUAD MEETS: after K02, 13% of the blows aimed at it are bio and
-// 25% are energy, which at 150 expeditions means every single run meets both. It ends about one
+// SET THAT AGAINST WHAT THE SQUAD MEETS: 32% of the blows aimed at it are bio and 20% are
+// energy (K08's figure; this record was written at K02's 13%, which was missing the sky), which
+// at 150 expeditions means every single run meets both. It ends about one
 // run in five holding an answer to either. THE CONTENT IS NOT MISTUNED. The Gas Mask's flat 10
 // is worth 48% of a Censer Bearer's swing where the Choir first stands (suite 154 measures that
 // off the engine); the trouble is that wanting it does nothing.
@@ -2697,7 +2748,7 @@ const AUGMENT_CAT = Math.max(1, Number(flag('augcat', '99')) || 99);
 // one the widened bench is neutral on every row; at two or more it costs ten wins and eight
 // points of depth", and K06 withdrew that arm as inside the instrument's own noise - so the
 // default now rests on the mechanism rather than the number. The mechanism is a census: a flat
-// resistance pays only on the blows of its own type, 13% of incoming for bio and 25% for energy,
+// resistance pays only on the blows of its own type, 32% of incoming for bio and 20% for energy,
 // while a bar or a swing pays on all of them, so each further answer displaces a better flat
 // option than the last did. One is the cautious default in the direction the mechanism points.
 // Whether it is the right one is UNMEASURED; see the K06 record and the arm it asks for.
@@ -5573,6 +5624,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         .map(([t, v]) => `${t} ${(v.immune / Math.max(1, v.hits) * 100).toFixed(1)}%`).join(', '));
       line('  and landed on a weakness', Object.entries(b).sort((x, y) => y[1].hits - x[1].hits)
         .map(([t, v]) => `${t} ${(v.weak / Math.max(1, v.hits) * 100).toFixed(1)}%`).join(', '));
+      // K09: and the same thing in POINTS. Every row above is a share, and a share cannot answer
+      // the question the trinket bench asks - what a piece is worth is how much damage it stops,
+      // not what fraction of a category it stops. A flat resistance saves min(R, blow) per blow,
+      // so a +10 against the sky's 2-to-8 tick saves the tick and not the ten: the shares hide
+      // exactly the term that decides it. Absolute, per run, so two arms can be read side by side.
+      line('  and in points a run, raw / soaked', Object.entries(b).sort((x, y) => y[1].hits - x[1].hits)
+        .map(([t, v]) => `${t} ${Math.round(v.raw / n)} / ${Math.round(v.resisted / n)}`).join(', '));
     };
     show('atSquad', 'blows at the squad, by type');
     show('atFoe', 'blows at the hostiles, by type');

@@ -4,7 +4,8 @@
 // a bestiary that threw none is noise on a crowded row.
 //
 // K02 gave six of the rank and file a damage type. The squad now meets bio on about 13% of the
-// blows aimed at it and energy on 25%, so which operator is standing in front of a censer bearer
+// blows aimed at it and energy on 25% - K08 later put those at 32% and 20%, the sky having been
+// missing from the count - so which operator is standing in front of a censer bearer
 // is a thing to read rather than to remember - and the answers are buyable, which means the
 // screen where they are bought has to show what they did. The roster card showed HP, damage and
 // the upgrade price and nothing at all about what a body shrugs off.

@@ -20,7 +20,8 @@
 // field answers.
 //
 // SIZED BY WHAT EACH TYPE THROWS, measured in K02: the squad meets physical on 61% of the blows
-// aimed at it, energy on 25%, bio on 13%. A flat subtraction is worth its size times how often
+// aimed at it, energy on 25%, bio on 13% - all three superseded by K08's 48 / 20 / 32, the sky
+// having been missing from the count. A flat subtraction is worth its size times how often
 // it is met, so the numbers run the other way to the incidence and all three come out worth
 // about five points off an average blow. The rarest is the one a body can wall off completely -
 // three rebreathers is 105, over the hundred that makes an immunity.
@@ -197,7 +198,7 @@ module.exports = {
     // ── And the manual says what stacking one is worth ────────────────────────────
     // The bench's page has promised "three of one is a build" since the cap was written, and it
     // was written when every row was a flat stat. Half of them are answers now, and an answer
-    // pays only on the blows of its own type - 13% of incoming for bio and 25% for energy, which
+    // pays only on the blows of its own type - 32% of incoming for bio and 20% for energy, which
     // K02 censused. A manual that only carries the half of that which sounds good is a manual
     // pointing at a trap.
     // K06: what stood here cited a career arm alongside that - "two answers costs about a fifth

@@ -194,6 +194,13 @@ module.exports = {
         const ent = activeEntities.find(e => e.isPlayer && e.hp > 0);
         ent.resistances = { phys: 0, bio: bio || 0, energy: 0 };
         ent.armor = 0; ent.gridPos = 2;      // out of the front rank, so no ground cover either
+        // K09: and no quirk. breathe() musters a fresh squad on every call, so the body the two
+        // readings land on is a different body each time - and THICK_HIDE takes 3 off every hit.
+        // Suite 156 had the same trap and this row inherited it: `road` came back 1 instead of 4
+        // whenever the draw happened to deal it, about one battery in three. Everything that can
+        // stand between the sky and the body is set to nothing here, deliberately, because what
+        // the row is about is the sky.
+        ent.quirk = null;
         const before = ent.hp;
         applyTurnStartEffects(ent);
         const took = before - ent.hp;

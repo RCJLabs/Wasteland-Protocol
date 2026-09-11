@@ -421,7 +421,10 @@ function equipGear(charId, gearId) {
     if (g.apply) g.apply(ch);
     // K06: which piece went on, and for how long. The trinket slot sells one trade three times
     // over - a resistance against +3 DMG or +15 HP - and a resistance pays only on the blows of
-    // its own type, which after K02 is 13% of them for bio and 25% for energy. Nothing had ever
+    // its own type, which is 48% phys / 32% bio / 20% energy (K08's figure; K02's 13% for bio
+    // was taken before the sky was wired to a type and was missing its biggest term). What each
+    // piece is actually worth was then measured rather than modelled in K09, because a flat
+    // resistance saves min(R, blow) and the arithmetic kept forgetting the min. Nothing had ever
     // counted which of the eight actually gets worn, so the question had no instrument:
     // `gear equipped per run` is a total with no names in it. (K05 also put a career number on
     // that trade. K06 withdrew it as inside the instrument's noise; the incidence above is a
@@ -2809,8 +2812,9 @@ const CODEX = [
         // K05: the line above was written when every row was a flat stat, where stacking is
         // simply more of it. Half the bench is a resistance now, and stacking one of those is
         // NOT simply more: a bigger bar or a harder swing pays on every fight, while an answer
-        // only pays on the fights that throw the thing it answers - 13% of incoming blows for
-        // bio and 25% for energy, censused in K02. Said out loud rather than left to be
+        // only pays on the fights that throw the thing it answers - 32% of incoming blows for
+        // bio and 20% for energy (K08's figure; K02's 13% predated the sky being typed). Said
+        // out loud rather than left to be
         // discovered, because the slots are permanent.
         // K06: what stood here also quoted a career arm - "two answers costs about a fifth of
         // the wins" - and that arm has been withdrawn as inside the instrument's own noise. The
@@ -4881,10 +4885,14 @@ const AUGMENTS = [
     // sector now want different answers, and K04 put the badge on the squad so the answer can
     // be read off the field.
     //
-    // SIZED BY WHAT EACH TYPE ACTUALLY THROWS, measured in K02: the squad meets physical on 61%
-    // of the blows aimed at it, energy on 25% and bio on 13%. A flat subtraction is worth its
-    // size times how often it is met, so the numbers run the other way to the incidence and all
-    // three come out worth about five points off the average blow. The rarest is the one a body
+    // SIZED BY WHAT EACH TYPE ACTUALLY THROWS. K05 sized these off 61% phys / 25% energy / 13%
+    // bio and the rule "size times how often it is met", and both halves were wrong: the shares
+    // are 48% / 20% / 32% once the sky is counted (K08), and the rule forgets that a flat
+    // resistance saves min(R, blow) - against the sky's 2-to-8 tick a +35 saves the tick, not the
+    // thirty-five. K09 measured what the pieces are worth instead of modelling it. The sizes are
+    // NOT re-cut on that: what the measurement showed is that a situational answer is correctly
+    // worth less on average and more where it lands, which is what these are. The rarest is the
+    // one a body
     // can wall off completely: three rebreathers is 105, which is over the hundred that makes an
     // immunity, and that is the "three of one is a build" the manual has been promising.
     { id: 'WEAVE',   name: 'CERAMIC WEAVE',     short: '+8 phys',   mat: 'parts', cost: 3,
@@ -10313,7 +10321,8 @@ function statusChips(ent) {
 // K04: the `ent.isPlayer` guard here was the last place the player could not read their own
 // resistances. It was harmless while 97% of what came at the squad was physical - a badge saying
 // "shrugs bio" against a bestiary that never threw any is noise. K02 gave six of the rank and
-// file a type, so the squad now meets bio on 13% of the blows aimed at it and energy on 25%, and
+// file a type and K08 wired the sky to one, so the squad meets bio on 32% of the blows aimed at
+// it and energy on 20%, and
 // which operator is standing in front of a censer is a thing to read off the field rather than
 // off memory. Same rule and same glyphs both ways: the badge describes whoever it sits on.
 function resistBadges(ent) {
