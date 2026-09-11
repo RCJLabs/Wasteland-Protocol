@@ -202,7 +202,10 @@ function hasQuirk(ent, id) { return !!(ent && ent.isPlayer && ent.quirk && ent.q
 // the risk for. See D17 if anyone wants to reopen it.
 const SCAR_CHANCE = 0.08;      // per operator still down when the fight ends
 const SCAR_MAX = 3;            // as much as one body can carry
-const SCAR_TREAT_COST = 120;
+const SCAR_TREAT_COST = 120;    // kept: saves, older records and the migration path still name it
+// M03b: what a treatment actually costs now, in the currency that does not come back every run.
+// About two runs of warlord income, against a board that already wants those skulls.
+const SCAR_TREAT_SKULLS = 40;
 // Each of the five hangs off exactly one hook. Three are stat deltas applied to the operator
 // the way a quirk is; the other two are read where they bite - the first turn of a fight, and
 // the bleed-out clock.
@@ -288,21 +291,30 @@ function markScars(ids, rng = Math.random) {
 // game already prices repeat purchases this way - upgradeCost rides upgradeCount - so this is
 // the house idiom rather than a new rule.
 //
-// Counted per EXPEDITION, not per career: walking out and coming back should reset the price,
-// because the alternative is a career-long debt nobody can read off a screen.
+// M03b: AND THE CURRENCY IS SKULLS, BECAUSE PRICE WAS THE WRONG LEVER. The escalating scrap
+// price above was measured and was a NULL - 90% of scars treated became 87%. Doubling does not
+// bite when the purse is large by the time scars accumulate, and no scrap number fixes that
+// because scrap regenerates every single run.
+//
+// Skulls do not. They are earned off warlords at about 18 a run and they are what the Citadel
+// and the requisition board are already competing for, with roughly a third going unspent. So
+// treating a scar now trades a run-level inconvenience against CAREER-level power, which is a
+// decision rather than a toll - and it is no longer a scrap tax in the literal sense either.
+//
+// Flat rather than escalating: the escalation was there to stop laundering and the currency now
+// does that job, so a second mechanism doing the same work would only be harder to read.
 function scarTreatCost() {
     if (metaUpgrades.chapel && runStats && !runStats.chapelUsed) return 0;
-    const paid = (runStats && runStats.scarsTreated) || 0;
-    return SCAR_TREAT_COST * Math.pow(2, Math.min(paid, 5));
+    return SCAR_TREAT_SKULLS;
 }
 function healScar(charId, scarId) {
     const ch = playerRoster.find(c => c.id === charId);
     const s = scarById(scarId);
     const price = scarTreatCost();
-    if (!ch || !s || !hasScar(ch, scarId) || scrap < price) return false;
+    if (!ch || !s || !hasScar(ch, scarId) || bossSkulls < price) return false;
     if (price === 0 && runStats) runStats.chapelUsed = true;
     else if (runStats) runStats.scarsTreated = (runStats.scarsTreated || 0) + 1;
-    scrap -= price;
+    bossSkulls -= price;
     ch.scars = ch.scars.filter(id => id !== scarId);
     removeScarStats(ch, s);
     // The capacity comes back and the blood with it - otherwise treating cracked ribs leaves
@@ -2834,7 +2846,7 @@ const CODEX = [
         `Everyone comes round on the same ${Math.round(DRAGGED_CLEAR * 100)}% of their health, and every one of them rolls the same ${Math.round(SCAR_CHANCE * 100)}% for a scar. How long they lay there changes neither number. Charging for the time was tried and taken out again: it moved the same scarring out of the sectors that absorb it and into the ones that end a run.`,
         'Picking them up before the end - any heal, any turn spent on it - skips the roll altogether: only an operator the fight ended on top of is ever in it. So a fall is not a flat tax and it is not free either. It is a question about this fight, and the answer is worth more the earlier it comes. A scar follows them through every node left in the expedition, and scars are never rolled at the muster; they are only ever earned.',
         ...SCAR_POOL.map(sc => `${sc.name} \u2014 ${sc.desc}`),
-        `At most ${SCAR_MAX} to a body and never the same one twice. The Outpost treats them one at a time for ${SCAR_TREAT_COST} Scrap, which is the only way one comes off.`
+        `At most ${SCAR_MAX} to a body and never the same one twice. The Outpost treats them one at a time for ${SCAR_TREAT_SKULLS} \uD83D\uDC80, which is the only way one comes off - and those are the same Skulls the Citadel and the requisition board want, so a scar costs you something that does not come back next run.`
     ] },
     { id: 'PROMOTIONS', title: 'FIELD PROMOTIONS', body: () => [
         'A level-up offers three perks on the spot: class signatures that change what an ability does, and repeatable training for flat stats. Banking the point keeps it for the Outpost instead.',
@@ -6907,7 +6919,7 @@ const CITADEL_SPOTS = [
     { kind: 'CHAPEL',  name: 'THE CHAPEL', cost: 6, max: 1, wins: 1,
       level: () => metaUpgrades.chapel ? 1 : 0,
       apply: () => { metaUpgrades.chapel = 1; },
-      effect: l => l ? `The first scar treated each expedition costs nothing.` : `Every scar costs ${SCAR_TREAT_COST} Scrap to treat.`,
+      effect: l => l ? `The first scar treated each expedition costs nothing.` : `Every scar costs ${SCAR_TREAT_SKULLS} \uD83D\uDC80 to treat.`,
       pitch: 'Somewhere to take the wounded. One treatment an expedition, free.' },
     { kind: 'LOCKER',  name: 'THE FOOTLOCKER', cost: 8, max: 1, wins: 1, needs: 'VAULT',
       level: () => metaUpgrades.footlocker ? 1 : 0,
@@ -7291,11 +7303,14 @@ function operatorCardHtml(char) {
         const scarList = scarsOf(char);
         let scarDisplay = scarList.length
             ? `<div class="scar-line" title="${scarList.map(sc => sc.name + ': ' + sc.desc).join(' \u2014 ')}">✚ ${scarList.map(sc => sc.name).join(', ')}</div>` : '';
-        // Treatment is the only way a scar comes off, and it is priced as a real decision -
-        // four upgrades' worth of Scrap to undo what one bad node left behind.
+        // Treatment is the only way a scar comes off, and it is priced as a real decision. M03b
+        // moved that price from Scrap to SKULLS: scrap regenerates every run, so no number in it
+        // was ever going to make a scar stick - 90% were treated at a flat 120 and 87% at a
+        // doubling one. Skulls are what the Citadel and the board are already competing for.
         const scarPrice = scarTreatCost();
+        const canPayScar = bossSkulls >= scarPrice;
         let scarBtn = scarList.length
-            ? ` <button class="upg-btn scar-btn" ${scrap < scarPrice || isDead ? 'disabled' : ''} data-action="scar-menu" data-id="${char.id}" title="${scarPrice ? `Treat a scar - ${scarPrice} Scrap each.` : 'The Chapel covers the first treatment of the expedition.'}">TREAT (${scarPrice || 'FREE'})</button>` : '';
+            ? ` <button class="upg-btn scar-btn" ${!canPayScar || isDead ? 'disabled' : ''} data-action="scar-menu" data-id="${char.id}" title="${scarPrice ? `Treat a scar - ${scarPrice} Skulls each.` : 'The Chapel covers the first treatment of the expedition.'}">TREAT (${scarPrice ? scarPrice + ' \uD83D\uDC80' : 'FREE'})</button>` : '';
 
         const modG = gearById(char.weaponMod), trkG = gearById(char.trinket);
         let gearHtml = '';
@@ -7330,7 +7345,7 @@ function operatorCardHtml(char) {
                 + (twin ? ` title="Closes ${twin.name}"` : '')
                 + `>${p.label}${p.sig ? ` (${p.cost} SCRAP)` : ''}</button>`;
         }).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
-        else if (activeScarSelector === char.id) { btnGroupHtml = scarList.map(sc => `<button class="upg-btn sub-menu-btn scar-btn" ${scrap < scarPrice ? 'disabled' : ''} data-action="treat-scar" data-id="${char.id}" data-scar="${sc.id}" title="${sc.desc}">TREAT ${sc.name}</button>`).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
+        else if (activeScarSelector === char.id) { btnGroupHtml = scarList.map(sc => `<button class="upg-btn sub-menu-btn scar-btn" ${!canPayScar ? 'disabled' : ''} data-action="treat-scar" data-id="${char.id}" data-scar="${sc.id}" title="${sc.desc}">TREAT ${sc.name}</button>`).join(' ') + ` <button class="upg-btn sub-menu-btn" style="border-color:#888;" data-action="selector-cancel">CANCEL</button>`; } 
         else { btnGroupHtml = `<button class="upg-btn ${posClass}" data-action="pos-menu" data-id="${char.id}">${posText}</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="HP" data-cost="${cost}">+10 HP</button> <button class="upg-btn" ${!canUpg || isDead ? 'disabled' : ''} data-action="buy-upg" data-id="${char.id}" data-kind="DMG" data-cost="${cost}">+3 DMG</button> ${medHtml}${scarBtn}`; }
 
         // F10: the muster is the only other place this control exists, and a run is long past
@@ -10842,7 +10857,7 @@ function applyTurnStartEffects(ent) {
         // every hit", and PHYS is what a wound is made of. So plate and a physical resistance
         // answer it, THIN_BLOOD becomes a scar somebody can armour against, and the untyped bag
         // L03 built goes empty - which the report states rather than leaving blank.
-        const cut = mitigate(null, ent, b, 'phys', null);
+        const cut = mitigate(null, ent, b, 'phys', 'BLEED');
         noteDamageType(ent.isPlayer ? 'atSquad' : 'atFoe', 'phys', b, cut.rv);
         ent.bleedingTurns--; chg = true;
         if (cut.n > 0) {
@@ -11747,7 +11762,18 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     // Corrosion eats plating outright - the counter to a unit that re-plates itself each turn.
     // Ashfall cakes onto everything - and corrodes off it with the rest of the plating.
     const w = sky();
-    let ac = (abilityStr === 'FERAL_BITE' || (t.corrodedTurns || 0) > 0) ? 0 : t.armor + (w.armor || 0);
+    // M03b: BLEED bypasses plate, and only plate. Typing bleed cost fourteen points of win rate
+    // when armour applied, and the bisect found the reason: L03 measured the squad DEALING 10.8%
+    // of its damage as bleed and TAKING 2.3%, and hostiles carry far more armour than operators
+    // do - so a flat armour term cut the squad's own output about five times harder than its
+    // intake. A correctness fix arriving as a one-sided nerf.
+    //
+    // Resistances still answer it, which is the half the owner asked for and the half the codex
+    // promises. Armour does not, which is also what a wound IS: plate stops the blow that opens
+    // you, it does nothing about the bleeding afterwards. Routed through the same abilityStr
+    // door FERAL_BITE already uses rather than a new parameter.
+    let ac = (abilityStr === 'FERAL_BITE' || abilityStr === 'BLEED' || (t.corrodedTurns || 0) > 0)
+        ? 0 : t.armor + (w.armor || 0);
     if (t.oiledTurns > 0 && atkType === 'energy') rv -= 15;
     let cd = calcDmg;
     if (hasRelic('KINETIC_MESH') && t.isPlayer && t.gridPos <= meshRanks() && atkType === 'phys') cd = Math.floor(cd * 0.75);
@@ -13003,7 +13029,7 @@ globalThis.WP = {
     FINAL_SECTOR, FINAL_BOSS, BOSS_ROTATION, isFinalSector, VICTORY, noteTally, raiseFelled, REVENANT,
     spendTally, noteVictory, renderVictory, victoryWalk, victoryPress, roadWarlords,
     BLEED_OUT, DRAGGED_CLEAR, REACHES_THE_DOWN, isDown, bleedingOut, goDown, tickBleedOut,
-    SCAR_POOL, SCAR_CHANCE, SCAR_MAX, SCAR_TREAT_COST, scarById, hasScar, scarsOf, scarFits,
+    SCAR_POOL, SCAR_CHANCE, SCAR_MAX, SCAR_TREAT_COST, SCAR_TREAT_SKULLS, scarById, hasScar, scarsOf, scarFits,
     applyScarStats, removeScarStats, giveScar, markScars, healScar,
     loseOperator, recoverDowned, closeRanks,
     RECRUIT_POOL, RECRUIT_COST, RECRUIT_HEALTH, recruitCost, recruitables, recruitById, recruitReach,

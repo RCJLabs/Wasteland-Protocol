@@ -92,7 +92,10 @@ module.exports = {
         activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
         const c = playerRoster[0];
         c.scars = []; giveScar(c, () => 0); giveScar(c, () => 0.5);
-        scrap = 0;
+        // M03b: a treatment is bought with SKULLS now, so this is the purse that has to be
+        // empty for the "cannot afford it" half of the rows. Scrap is left rich on purpose -
+        // if the engine ever reads the wrong pile again these rows go red rather than quiet.
+        scrap = 99999; bossSkulls = 0;
         const first = { price: scarTreatCost(), took: healScar(c.id, c.scars[0]) };
         const second = { price: scarTreatCost(), took: c.scars.length ? healScar(c.id, c.scars[0]) : false };
         return { first, second, left: c.scars.length };
@@ -102,11 +105,11 @@ module.exports = {
       __wipe(); careerWins = 1; bossSkulls = 50; buyMetaUpgrade('CHAPEL');
       activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
       const a = playerRoster[0]; a.scars = []; giveScar(a, () => 0);
-      scrap = 0; healScar(a.id, a.scars[0]);
+      scrap = 99999; bossSkulls = 0; healScar(a.id, a.scars[0]);
       const spentThisRun = scarTreatCost();
       confirmNewGame(1.0);
       const freshRun = scarTreatCost();
-      return { withOut, withIt, spentThisRun, freshRun, full: SCAR_TREAT_COST };
+      return { withOut, withIt, spentThisRun, freshRun, full: SCAR_TREAT_SKULLS };
     });
     ok(`without the Chapel a treatment costs ${chapel.full}`,
       chapel.withOut.first.price === chapel.full && chapel.withOut.first.took === false);

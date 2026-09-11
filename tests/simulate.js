@@ -3856,8 +3856,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       const carrying = [...playerRoster].sort((a, b) => (b.gridPos > 0) - (a.gridPos > 0));
       for (const c of carrying) {
         for (const id of [...(c.scars || [])]) {
-          const cost = typeof scarTreatCost === 'function' ? scarTreatCost() : 120;
-          if (cost > 0 && scrap < cost * 3) continue;
+          // M03b: the price is in SKULLS now, and the policy has to ask the right purse. Kept at
+          // "comfortably afford" rather than "can afford" for the same reason as before - a
+          // policy that spends its last skull on a scar is modelling a player nobody is.
+          const cost = typeof scarTreatCost === 'function' ? scarTreatCost() : 40;
+          if (cost > 0 && bossSkulls < cost * 2) continue;
           const had = (c.scars || []).length;
           healScar(c.id, id);
           if ((c.scars || []).length < had) stat.scarsTreated = (stat.scarsTreated || 0) + 1;

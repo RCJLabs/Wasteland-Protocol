@@ -191,20 +191,23 @@ module.exports = {
       giveScar(c, () => 0);
       const worn = scarById(c.scars[0]);
       const marked = c.maxHp !== was.hp || c.dmgBase !== was.dmg || c.speed !== was.spd;
-      scrap = SCAR_TREAT_COST - 1;
+      // M03b: the currency is Skulls now. Scrap is left deliberately huge so this block cannot
+      // pass by accident on the wrong purse.
+      scrap = 99999;
+      bossSkulls = SCAR_TREAT_SKULLS - 1;
       const broke = healScar(c.id, worn.id);
-      scrap = SCAR_TREAT_COST + 5;
+      bossSkulls = SCAR_TREAT_SKULLS + 5;
       const paid = healScar(c.id, worn.id);
-      return { broke, paid, marked, left: (c.scars || []).length, scrap, cost: SCAR_TREAT_COST,
+      return { broke, paid, marked, left: (c.scars || []).length, purse: bossSkulls, cost: SCAR_TREAT_SKULLS,
                restored: c.maxHp === was.hp && c.dmgBase === was.dmg && c.speed === was.spd,
                // Cracked ribs give the capacity back and the blood with it.
                notShort: c.hp <= c.maxHp,
                // Nothing is treated that is not carried.
                phantom: healScar(c.id, 'SHELL_SHOCK') };
     });
-    ok(`treatment is refused ${treat.cost - 1} Scrap short`, treat.broke === false);
+    ok(`treatment is refused ${treat.cost - 1} Skulls short`, treat.broke === false);
     ok('and taken at the price', treat.paid === true && treat.left === 0);
-    ok('the Scrap actually leaves the pile', treat.scrap === 5);
+    ok(`the Skulls actually leave the pile (${treat.purse} left)`, treat.purse === 5);
     ok('the scar moved a stat in the first place', treat.marked);
     ok('and the operator gets back exactly what it took', treat.restored && treat.notShort);
     ok('a scar nobody carries cannot be treated', treat.phantom === false);
@@ -260,7 +263,9 @@ module.exports = {
       const c = playerRoster[0];
       c.scars = []; giveScar(c, () => 0);
       const worn = scarById(c.scars[0]);
-      scrap = SCAR_TREAT_COST + 50;
+      // M03b: the card gates on Skulls now. Scrap deliberately left at zero so a card that
+      // still read the old purse would show a disabled button and fail here rather than pass.
+      scrap = 0; bossSkulls = SCAR_TREAT_SKULLS + 50;
       renderOutpost();
       const txt = document.getElementById('outpost-roster').innerText;
       const btn = document.querySelector(`[data-action="scar-menu"][data-id="${c.id}"]`);
@@ -270,7 +275,7 @@ module.exports = {
       const hadPick = !!pick;
       if (pick) dispatchAction(pick);
       renderOutpost();
-      return { named: txt.includes(worn.name), cost: txt.includes(String(SCAR_TREAT_COST)),
+      return { named: txt.includes(worn.name), cost: txt.includes(String(SCAR_TREAT_SKULLS)),
                menu: menu.includes(worn.name), hadPick,
                gone: !document.getElementById('outpost-roster').innerText.includes(worn.name),
                clean: !document.querySelector(`[data-action="scar-menu"][data-id="${c.id}"]`) };
@@ -300,7 +305,7 @@ module.exports = {
                named: SCAR_POOL.every(s => txt.includes(s.name)),
                // The prevention is the part a player has to be told.
                prevention: /pick(ing)? them up|any heal/i.test(txt),
-               cost: txt.includes(String(SCAR_TREAT_COST)),
+               cost: txt.includes(String(SCAR_TREAT_SKULLS)),
                clock: txt.includes(String(BLEED_OUT)) };
     });
     ok('the manual has an entry for going down', manual.has);
@@ -415,53 +420,66 @@ module.exports = {
     ok(`the pool carries ${poolShape.n} scars, ${poolShape.behavioural} of them behavioural rather than a stat`,
       poolShape.n >= 10 && poolShape.behavioural >= 7);
 
-    // ── M03: a scar is not something you can launder ────────────────────────────────
-    // M01 measured 91-93% of scars treated across 150 runs, which made a scar a toll rather
-    // than a condition - and bought off the situational ones before they could be situational.
-    // The price climbs within an expedition now: the one that really hurts is still worth
-    // clearing, all of them is not.
+    // ── M03b: a scar costs SKULLS, because price was the wrong lever ────────────────
+    // M01 measured 91-93% of scars treated. M03 doubled the scrap price inside an expedition and
+    // measured 87% - a null, because scrap regenerates every run and no number in it can make a
+    // scar stick. Skulls do not regenerate: they come off warlords at about 18 a run and the
+    // Citadel and the requisition board already want them. So treating a scar now trades a
+    // run-level inconvenience for career-level power.
     const price = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       runStats = newRunStats(); metaUpgrades.chapel = false;
-      const seen = [];
-      for (let i = 0; i < 4; i++) { seen.push(scarTreatCost()); runStats.scarsTreated = i + 1; }
-      // Walking out and coming back resets it - a career-long debt is not readable off a screen.
-      runStats = newRunStats();
-      const afterFreshRun = scarTreatCost();
-      // The Chapel still covers the first of each expedition, and only the first.
+      const flat = scarTreatCost();
+      // It does not climb any more - the currency does that job, and two mechanisms doing one
+      // job is just harder to read.
+      runStats.scarsTreated = 3;
+      const afterThree = scarTreatCost();
       metaUpgrades.chapel = true; runStats = newRunStats();
       const chapelFirst = scarTreatCost();
       runStats.chapelUsed = true;
       const chapelSecond = scarTreatCost();
       metaUpgrades.chapel = false;
-      return { seen, afterFreshRun, chapelFirst, chapelSecond, base: SCAR_TREAT_COST };
+      return { flat, afterThree, chapelFirst, chapelSecond, skulls: SCAR_TREAT_SKULLS };
     });
-    ok(`the first treatment of an expedition is the base price (${price.seen[0]})`,
-      price.seen[0] === price.base);
-    ok(`and every one after it doubles (${price.seen.join(', ')})`,
-      price.seen[1] === price.base * 2 && price.seen[2] === price.base * 4 && price.seen[3] === price.base * 8);
-    ok(`a fresh expedition starts the price over (${price.afterFreshRun})`,
-      price.afterFreshRun === price.base);
-    ok(`the Chapel still covers the first one and only the first (${price.chapelFirst} then ${price.chapelSecond})`,
-      price.chapelFirst === 0 && price.chapelSecond === price.base);
+    ok(`a treatment is priced in Skulls (${price.flat})`, price.flat === price.skulls);
+    ok(`and does not climb, because the currency is the lever (${price.afterThree})`,
+      price.afterThree === price.skulls);
+    ok(`the Chapel still covers the first of an expedition and only the first (${price.chapelFirst} then ${price.chapelSecond})`,
+      price.chapelFirst === 0 && price.chapelSecond === price.skulls);
 
-    // The rows above set runStats.scarsTreated by hand, which tests the FORMULA and not the
-    // wiring - mutation testing removed the line in healScar that increments it and every row
-    // above still passed. This one goes through the real door twice and watches the purse.
-    const climbs = await page.evaluate(() => {
+    // Through the real door, watching the right purse - and the WRONG one, because the first
+    // draft of the engine change left the button gating on scrap while the cost was skulls.
+    const spend = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       runStats = newRunStats(); metaUpgrades.chapel = false;
       const c = playerRoster.find(x => x.gridPos > 0);
       c.scars = ['SHELL_SHOCK', 'GUN_SHY'];
-      scrap = 5000;
-      const first = scrap; healScar(c.id, 'SHELL_SHOCK');
-      const paidFirst = first - scrap;
-      const second = scrap; healScar(c.id, 'GUN_SHY');
-      const paidSecond = second - scrap;
-      return { paidFirst, paidSecond, left: (c.scars || []).length, base: SCAR_TREAT_COST };
+      scrap = 100000; bossSkulls = 0;
+      const brokeButRich = healScar(c.id, 'SHELL_SHOCK');
+      bossSkulls = SCAR_TREAT_SKULLS * 2; scrap = 0;
+      const skullsBefore = bossSkulls, scrapBefore = scrap;
+      const paid = healScar(c.id, 'SHELL_SHOCK');
+      return { brokeButRich, paid, spentSkulls: skullsBefore - bossSkulls,
+               spentScrap: scrapBefore - scrap, left: (c.scars || []).length,
+               price: SCAR_TREAT_SKULLS };
     });
-    ok(`treating two in one expedition really does cost more the second time (${climbs.paidFirst} then ${climbs.paidSecond})`,
-      climbs.paidFirst === climbs.base && climbs.paidSecond === climbs.base * 2);
-    ok('and both came off', climbs.left === 0);
+    ok('a purse full of Scrap and no Skulls buys no treatment', spend.brokeButRich === false);
+    ok(`and Skulls with no Scrap buys one (${spend.spentSkulls} Skulls, ${spend.spentScrap} Scrap)`,
+      spend.paid === true && spend.spentSkulls === spend.price && spend.spentScrap === 0);
+    ok('which took the scar off', spend.left === 1);
+
+    // Both player-facing prices name the currency the engine actually charges. M03b changed the
+    // door and left two texts saying Scrap - the labelled-but-not-wired class the L-audit was
+    // convened to find, authored by the same hand that had just filed it.
+    const says = await page.evaluate(() => {
+      const page_ = CODEX.find(p => p.id === 'SCARS' || /scar/i.test(p.title));
+      const body = page_ ? page_.body().join(' ') : '';
+      const chapel = (CITADEL_SPOTS.find(sp => /chapel/i.test(sp.id || sp.name || '')) || {});
+      const eff = typeof chapel.effect === 'function' ? chapel.effect(false) : '';
+      return { body, eff, skulls: SCAR_TREAT_SKULLS };
+    });
+    ok(`the manual quotes the Skull price (${says.skulls})`,
+      says.body.includes(String(says.skulls)) && !/\d+ Scrap.{0,24}(treat|comes off)/i.test(says.body));
+    ok('and the Chapel does not still advertise Scrap', !/Scrap/i.test(says.eff));
   }
 };

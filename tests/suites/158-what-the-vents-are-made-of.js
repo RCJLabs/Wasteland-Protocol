@@ -241,8 +241,13 @@ module.exports = {
       bleed.open.typed.length === 1 && bleed.open.typed[0] === 'phys');
     ok(`and the raw figure is the share the engine names (${bleed.open.raw} of ${bleed.share})`,
       bleed.open.raw === bleed.share);
-    ok(`armour subtracts from it, which is what the manual promised (${bleed.open.took} -> ${bleed.armoured.took})`,
-      bleed.armoured.took === bleed.open.took - 10);
+    // M03b INVERTED THIS ROW, and it went red on the commit that did so - which is what it was
+    // for. M03 let armour subtract from a bleed and the paired arm priced that at fourteen points
+    // of win rate: the squad DEALS 10.8% of its damage as bleed and TAKES 2.3%, and hostiles
+    // carry far more plate than operators, so a flat armour term cut the squad's own output about
+    // five times harder than its intake. Plate does not stop a wound that is already open.
+    ok(`armour does NOT stop a bleed - plate is not an answer to an open wound (${bleed.open.took} -> ${bleed.armoured.took})`,
+      bleed.armoured.took === bleed.open.took);
     ok(`and a body sealed against physical takes nothing from it (${bleed.sealed.took})`,
       bleed.sealed.took === 0 && bleed.open.took > 0);
 
