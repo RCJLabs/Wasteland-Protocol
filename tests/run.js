@@ -132,7 +132,7 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
       //   STRUCTURAL - read by mitigate but not a mitigation; a body still has to be somebody
       window.__BARE_FIELDS = ['resistances', 'armor', 'baseArmor', 'plate', 'quirk', 'weaponMod',
         'trinket', 'traits', 'sig', 'venom', 'venomStacks', 'corrodedTurns', 'oiledTurns',
-        'wardId', 'wardSoak', 'escortId', 'escortArmor', 'revenantWard'];
+        'wardId', 'wardSoak', 'escortId', 'escortArmor', 'revenantWard', 'scars'];
       window.__FIELD_FIELDS = ['gridPos'];
       window.__STRUCTURAL_FIELDS = ['isPlayer', 'hp', 'maxHp', 'id', 'name'];
 
@@ -147,6 +147,10 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
         ent.corrodedTurns = 0; ent.oiledTurns = 0;
         ent.wardId = null; ent.wardSoak = 0; ent.escortId = null; ent.escortArmor = 0;
         ent.revenantWard = 0;
+        // M01 put BURNED LUNGS inside mitigate, which made scars a mitigation for the first
+        // time. Suite 159 caught it as an unaccounted field on the commit that introduced it,
+        // which is the whole reason that suite exists.
+        ent.scars = [];
         return ent;
       };
 

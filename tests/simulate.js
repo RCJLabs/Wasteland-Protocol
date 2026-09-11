@@ -2931,6 +2931,9 @@ const WITHDRAW_POLICY = flag('withdraw', 'on') !== 'off';
 // what a player with a free multiplier on the table actually does. It is not the default: the
 // default is left alone so runs measured before doctrines existed stay comparable.
 const DRAFT = flag('draft', 'line');
+// M01: whether the Outpost ever takes a scar off. `off` is the behaviour every career before
+// M01 ran with, kept so those records stay comparable.
+const SCAR_POLICY = flag('scars', 'treat');
 // The bench holds a job for the expedition and this file never gave one out, so a lever a real
 // player can take for free at the muster - QUARTERMASTER for one more material a salvage, FIELD
 // MEDIC for a camp that heals for more, SCOUT so the route does not close behind you - has
@@ -3205,7 +3208,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -3753,6 +3756,29 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       craftItem(pick);
       if (inventory.length === n) break;
       stat.crafted++;
+    }
+    // M01: AND THE SCAR THE OUTPOST WILL TAKE OFF. This file counted scars from the day they
+    // shipped and never treated one, so the only decision C02 built - is this worth 120 scrap -
+    // has never been exercised by the instrument. That is the D06 shape: a feature measured by
+    // a harness that cannot reach it, and it matters more now that M01 made the scars differ
+    // from each other in how bad they are.
+    //
+    // Deliberately a NAIVE policy, and named as one. It treats what it can comfortably afford,
+    // preferring the line over the bench; it does not read the road ahead. A policy that scored
+    // each scar against the coming sector would measure my own model of a player rather than
+    // the game - the D05 trap - so the interesting comparison (does road-reading beat this?)
+    // is filed as its own arm rather than smuggled in as the default.
+    if (scarPolicy !== 'off') {
+      const carrying = [...playerRoster].sort((a, b) => (b.gridPos > 0) - (a.gridPos > 0));
+      for (const c of carrying) {
+        for (const id of [...(c.scars || [])]) {
+          const cost = typeof scarTreatCost === 'function' ? scarTreatCost() : 120;
+          if (cost > 0 && scrap < cost * 3) continue;
+          const had = (c.scars || []).length;
+          healScar(c.id, id);
+          if ((c.scars || []).length < had) stat.scarsTreated = (stat.scarsTreated || 0) + 1;
+        }
+      }
     }
     playerRoster.forEach(c => {
       // F03: this was a hand copy at the sector-1 price that granted BOTH stats per purchase.
@@ -5085,7 +5111,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -5255,6 +5281,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('scars dealt', `${allScars.length} (${(allScars.length / n).toFixed(2)} per run)`);
   line('  median / worst run', `${perRun[Math.floor(n / 2)]} / ${perRun[n - 1]}`);
   line('runs that took none', `${results.filter(r => !r.scars.length).length} of ${n}`);
+  // M01: and how many were paid off rather than carried. A census - a treatment either happened
+  // or it did not - so it reads at any sample size.
+  {
+    const treated = results.reduce((a, r) => a + (r.scarsTreated || 0), 0);
+    line('  treated at the Outpost', `${treated} of ${allScars.length} (${allScars.length ? Math.round(treated / allScars.length * 100) : 0}%), policy ${SCAR_POLICY}`);
+  }
   line('share of recoveries scarred', recovered ? `${Math.round(allScars.length / recovered * 100)}%` : 'n/a');
   const byScar = {};
   allScars.forEach(id => { byScar[id] = (byScar[id] || 0) + 1; });

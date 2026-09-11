@@ -211,7 +211,17 @@ const SCAR_POOL = [
     { id: 'NERVE_DAMAGE', name: 'NERVE DAMAGE', desc: '-2 SPD. The leg drags.',                    hp: 0,   dmg: 0,  spd: -2 },
     { id: 'TREMOR',       name: 'TREMOR',       desc: '-3 DMG. The hand will not hold steady.',    hp: 0,   dmg: -3, spd: 0 },
     { id: 'SHELL_SHOCK',  name: 'SHELL SHOCK',  desc: 'Loses the first turn of every fight.',      hp: 0,   dmg: 0,  spd: 0 },
-    { id: 'SLOW_TO_RISE', name: 'SLOW TO RISE', desc: 'Bleeds out in 2 turns instead of 3.',       hp: 0,   dmg: 0,  spd: 0 }
+    { id: 'SLOW_TO_RISE', name: 'SLOW TO RISE', desc: 'Bleeds out in 2 turns instead of 3.',       hp: 0,   dmg: 0,  spd: 0 },
+    // M01: the five above are all the same scar wearing different numbers - each one is equally
+    // bad on every road, which makes "treat this for 120 scrap" a question about your purse
+    // rather than about where you are going. These five are SITUATIONAL: vicious against some
+    // sectors and nearly free against others, so the treat decision becomes a read of the road.
+    // That is the shape K07 gave the Armory and K09 confirmed for the answer trinkets.
+    { id: 'BURNED_LUNGS', name: 'BURNED LUNGS', desc: '-25 BIO resist. The smoke got in and stayed.', hp: 0, dmg: 0, spd: 0 },
+    { id: 'STIFF_JOINTS', name: 'STIFF JOINTS', desc: 'Every cooldown is a turn longer.',          hp: 0,   dmg: 0,  spd: 0 },
+    { id: 'THIN_BLOOD',   name: 'THIN BLOOD',   desc: 'Bleeds for half again as much.',            hp: 0,   dmg: 0,  spd: 0 },
+    { id: 'GUN_SHY',      name: 'GUN SHY',      desc: 'Never goes over the top.',                  hp: 0,   dmg: 0,  spd: 0 },
+    { id: 'RUINED_GRIP',  name: 'RUINED GRIP',  desc: 'Carries no weapon mod. The hand will not close on one.', hp: 0, dmg: 0, spd: 0 }
 ];
 function scarById(id) { return SCAR_POOL.find(s => s.id === id) || null; }
 function hasScar(ent, id) { return !!(ent && Array.isArray(ent.scars) && ent.scars.indexOf(id) !== -1); }
@@ -245,6 +255,9 @@ function giveScar(ch, rng = Math.random) {
     const s = pool[Math.floor(rng() * pool.length)];
     ch.scars.push(s.id);
     applyScarStats(ch, s);
+    // RUINED GRIP does not wait for the next Outpost visit to matter: whatever is bolted to the
+    // weapon comes off now and goes back to the stash, where another operator can take it.
+    if (s.id === 'RUINED_GRIP' && ch.weaponMod) unequipGear(ch.id, 'mod');
     return s;
 }
 // At most one roll per operator per fight, which the caller gets for free: recoverDowned runs
@@ -354,6 +367,9 @@ function cdFor(ent, id, base) {
     }
     // A charged sky cycles everything faster, the squad's and theirs alike.
     cd -= (sky().cdCut || 0);
+    // M01 STIFF JOINTS: the body still works, it just will not come back around as fast. Applied
+    // after the sky so a charged storm still helps, and before the floor so it cannot go under 1.
+    if (hasScar(ent, 'STIFF_JOINTS')) cd += 1;
     return Math.max(1, cd);
 }
 
@@ -411,6 +427,7 @@ function equipGear(charId, gearId) {
     const ch = playerRoster.find(c => c.id === charId);
     const g = gearById(gearId);
     if (!ch || !g) return;
+    if (g.slot === 'mod' && hasScar(ch, 'RUINED_GRIP')) return;
     const idx = gearStash.indexOf(gearId);
     if (idx === -1) return;
     if (g.slot === 'mod' && g.cls !== ch.classType) return;
@@ -10587,7 +10604,10 @@ function renderCommandDeck() {
 
     let cds = aE.cooldowns; let deckHtml = '';
 
-    if (momentum >= overdriveAt()) {
+    // M01 GUN SHY: the bar still fills - it is the squad's, not theirs - but this operator will
+    // not spend it. Gated in the DECK so the button never appears for them, and again at the
+    // resolve below, because a queued action can outlive the render that offered it.
+    if (momentum >= overdriveAt() && !hasScar(aE, 'GUN_SHY')) {
         const pair = OVERDRIVES[aE.classType] || [];
         if (!odChoices[aE.classType] && pair.length === 2) {
             // The first full bar of the run: both options on the table, and using one is choosing.
@@ -10795,6 +10815,9 @@ function applyTurnStartEffects(ent) {
         if (ent.isPlayer && hasRelic('FIELD_DRESSING')) b = Math.max(1, Math.floor(b / 2));
         if (ent.isPlayer && relicSetActive('Field Surgery')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 1);
         if (hasQuirk(ent, 'SLOW_BLEEDER')) b = Math.max(1, Math.floor(b / 2));
+        // M01 THIN BLOOD: the other end of SLOW BLEEDER, and read after it so a body carrying
+        // both lands near where it started rather than at one of the two extremes.
+        if (hasScar(ent, 'THIN_BLOOD')) b = Math.floor(b * 1.5);
         if (hasTrinket(ent, 'TOURNIQUET')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 2);
         // The RAW figure, uncapped by what is left of the bar, because that is the unit the
         // typed ledger books: noteDamageType files calcDmg before mitigate and before the floor
@@ -11235,7 +11258,11 @@ function spendTactic(kind) {
 }
 
 function skipStunnedTurn() { turnQueue[activeIndex].stunnedTurns--; renderField(); setTimeout(nextTurn, 500 * globalSettings.combatSpeed); }
-function queueAction(a, variant) { pendingAction = a; if (a === 'OVERDRIVE') pendingOverdrive = variant || null; renderField(); }
+function queueAction(a, variant) {
+    const aE = turnQueue[activeIndex];
+    if (a === 'OVERDRIVE' && hasScar(aE, 'GUN_SHY')) return;
+    pendingAction = a; if (a === 'OVERDRIVE') pendingOverdrive = variant || null; renderField();
+}
 function cancelAction() { pendingAction = null; renderField(); }
 
 // A turret that has locked the field down shoots whoever moves next, before their action
@@ -11681,6 +11708,11 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     // throws on a missing field is a landmine, so a body with no resistances resists nothing
     // rather than taking the whole turn down with it.
     let rv = (t.resistances && t.resistances[atkType]) || 0;
+    // M01 BURNED LUNGS: a scar that opens one badge rather than taking a flat number off a stat.
+    // It can drive the reading negative, which the engine already means something by - the codex
+    // says "a negative reading adds instead" - so a smog sector stops being weather and becomes
+    // the reason this operator stays at the Outpost.
+    if (atkType === 'bio' && hasScar(t, 'BURNED_LUNGS')) rv -= 25;
     // BROAD SPECTRUM: a line carrying an answer in every type finds the seam in whatever it
     // is shooting at. Only ever eases a resistance toward zero - it does not turn a resistant
     // target into a weak one, and it cannot open an immunity, which is a wall by design.

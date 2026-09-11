@@ -308,5 +308,111 @@ module.exports = {
     ok('and says how to avoid one', manual.prevention);
     ok('and what it costs to be rid of one', manual.cost);
     ok('and how long the clock runs', manual.clock);
+
+    // ── M01: the five situational ones ──────────────────────────────────────────────
+    // The point of these is not that they are bad. It is that they are bad IN PLACES, so that
+    // paying SCAR_TREAT_COST to be rid of one is a read of the road ahead rather than a question
+    // about your purse. So each pair of rows below is "it bites here" and "it costs nothing
+    // there" - the second row is the one that would go quiet if a scar were flattened into
+    // another -3 DMG.
+    const burned = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      window.__clearField();
+      const t = window.__bare(playerRoster.find(c => c.gridPos > 0));
+      t.hp = t.maxHp = 4000; activeEntities = [t];
+      const before = { bio: mitigate(null, t, 100, 'bio', null).n, phys: mitigate(null, t, 100, 'phys', null).n };
+      t.scars = ['BURNED_LUNGS'];
+      return { before, after: { bio: mitigate(null, t, 100, 'bio', null).n,
+                                phys: mitigate(null, t, 100, 'phys', null).n } };
+    });
+    ok(`BURNED LUNGS opens the bio badge (${burned.before.bio} -> ${burned.after.bio} of 100)`,
+      burned.after.bio === burned.before.bio + 25);
+    ok(`and costs nothing at all against anything else (${burned.after.phys} of 100)`,
+      burned.after.phys === burned.before.phys);
+
+    const stiff = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      window.__clearField();
+      const t = window.__bare(playerRoster.find(c => c.gridPos > 0));
+      const base = cdFor(t, 'nothing_in_particular', 3);
+      t.scars = ['STIFF_JOINTS'];
+      return { base, scarred: cdFor(t, 'nothing_in_particular', 3),
+               floored: cdFor(t, 'nothing_in_particular', 1) };
+    });
+    ok(`STIFF JOINTS puts a turn on every cooldown (${stiff.base} -> ${stiff.scarred})`,
+      stiff.scarred === stiff.base + 1);
+    // Said plainly rather than as a floor check, which is what the first draft of this row
+    // claimed and was not: the scar puts a turn on the SHORTEST move too, so the cheapest thing
+    // in the deck stops being free. The Math.max(1) in cdFor guards the sky's cdCut, not this.
+    ok(`including the cheapest move in the deck (a 1-turn cooldown becomes ${stiff.floored})`,
+      stiff.floored === 2);
+
+    const thin = await page.evaluate(() => {
+      const tick = (scars, quirk) => {
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+        window.__clearField(); runStats = newRunStats();
+        const t = window.__bare(playerRoster.find(c => c.gridPos > 0));
+        t.hp = t.maxHp = 400; t.bleedingTurns = 3;
+        t.scars = scars; t.quirk = quirk;
+        activeEntities = [t];
+        const before = t.hp;
+        applyTurnStartEffects(t);
+        return before - t.hp;
+      };
+      return { plain: tick([], null), thin: tick(['THIN_BLOOD'], null),
+               both: tick(['THIN_BLOOD'], { id: 'SLOW_BLEEDER', name: 'Slow Bleeder' }) };
+    });
+    ok(`THIN BLOOD bleeds half again as much (${thin.plain} -> ${thin.thin})`,
+      thin.thin === Math.floor(thin.plain * 1.5));
+    ok(`and a slow bleeder carrying it lands back near where they started (${thin.both} against ${thin.plain})`,
+      thin.both < thin.thin && thin.both <= thin.plain);
+
+    const shy = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      initiateCombat('RAIDERS', false);
+      const t = playerRoster.find(c => c.gridPos > 0);
+      turnQueue = [t]; activeIndex = 0; combatActive = true;
+      momentum = 100;
+      pendingAction = null; queueAction('OVERDRIVE', null);
+      const refused = pendingAction;
+      t.scars = [];
+      pendingAction = null; queueAction('OVERDRIVE', null);
+      const allowed = pendingAction;
+      t.scars = ['GUN_SHY'];
+      pendingAction = null; queueAction('OVERDRIVE', null);
+      const refusedScarred = pendingAction;
+      combatActive = false;
+      return { refused, allowed, refusedScarred };
+    });
+    ok(`an operator without the scar can queue an overdrive (${shy.allowed})`, shy.allowed === 'OVERDRIVE');
+    ok(`GUN SHY will not spend a full bar (${shy.refusedScarred})`, shy.refusedScarred === null);
+
+    const grip = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      const t = playerRoster.find(c => c.gridPos > 0);
+      t.scars = [];
+      const mod = GEAR_POOL.find(g => g.slot === 'mod' && g.cls === t.classType);
+      if (!mod) return { skip: true };
+      gearStash.push(mod.id); equipGear(t.id, mod.id);
+      const worn = t.weaponMod;
+      // The scar lands on a body already carrying one.
+      t.scars.push('RUINED_GRIP');
+      if (t.weaponMod) unequipGear(t.id, 'mod');
+      const afterScar = t.weaponMod, inStash = gearStash.includes(mod.id);
+      equipGear(t.id, mod.id);
+      return { worn, afterScar, inStash, refused: t.weaponMod };
+    });
+    ok(`a mod goes on an unscarred hand (${grip.worn})`, !!grip.worn);
+    ok('RUINED GRIP takes it off and puts it back in the stash', grip.afterScar === null && grip.inStash);
+    ok('and the hand will not close on another', grip.refused === null);
+
+    // The pool grew, and the manual row above quotes every entry in it - so this is the row that
+    // says the growth was real rather than five more names on one list.
+    const poolShape = await page.evaluate(() => ({
+      n: SCAR_POOL.length,
+      flat: SCAR_POOL.filter(s => s.hp || s.dmg || s.spd).length,
+      behavioural: SCAR_POOL.filter(s => !s.hp && !s.dmg && !s.spd).length }));
+    ok(`the pool carries ${poolShape.n} scars, ${poolShape.behavioural} of them behavioural rather than a stat`,
+      poolShape.n >= 10 && poolShape.behavioural >= 7);
   }
 };

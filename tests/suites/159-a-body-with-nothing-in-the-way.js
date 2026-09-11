@@ -58,11 +58,31 @@ module.exports = {
       const read = new Set();
       const re = new RegExp('\\b' + target + '\\.([A-Za-z_$][\\w$]*)', 'g');
       let m; while ((m = re.exec(body))) read.add(m[1]);
-      // The three predicates reach through the target to a field of their own, so a call to one
-      // of them is a read of that field even though the body never spells it.
-      if (new RegExp('hasQuirk\\(\\s*' + target).test(body)) read.add('quirk');
-      if (new RegExp('hasSig\\(\\s*' + target).test(body)) read.add('sig');
-      if (new RegExp('hasTrait\\(\\s*' + target).test(body)) read.add('traits');
+      // A predicate called ON the target reads a field of its own, and mitigate's body never
+      // spells that field - hasQuirk(t, 'THICK_HIDE') is a read of t.quirk. The first draft of
+      // this suite listed the three predicates that existed at the time, which made the guard a
+      // hand-maintained list in exactly the way it exists to prevent: M01 then added a fourth,
+      // hasScar, and walked straight through it. So they are RESOLVED instead - any function
+      // called with the target as its first argument is opened up and read for what IT reads off
+      // its own first parameter.
+      const helpers = new Set();
+      let h; const call = new RegExp('([A-Za-z_$][\\w$]*)\\(\\s*' + target + '\\s*[,)]', 'g');
+      while ((h = call.exec(body))) helpers.add(h[1]);
+      helpers.forEach(fn => {
+        const fat = src.indexOf('function ' + fn + '(');
+        if (fat < 0) return;
+        const fsig = src.slice(fat, src.indexOf(')', fat));
+        const param = fsig.split('(')[1].split(',')[0].trim();
+        if (!param) return;
+        let fd = 0, fi = src.indexOf('{', fat), fend = fi;
+        for (; fend < src.length; fend++) {
+          if (src[fend] === '{') fd++;
+          else if (src[fend] === '}') { fd--; if (!fd) break; }
+        }
+        const fbody = src.slice(fi, fend);
+        const fre = new RegExp('\\b' + param + '\\.([A-Za-z_$][\\w$]*)', 'g');
+        let fm; while ((fm = fre.exec(fbody))) read.add(fm[1]);
+      });
       const known = new Set([].concat(window.__BARE_FIELDS, window.__FIELD_FIELDS,
                                       window.__STRUCTURAL_FIELDS));
       return { target, read: [...read].sort(),
