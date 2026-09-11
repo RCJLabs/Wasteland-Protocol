@@ -2366,6 +2366,60 @@ const ROOT = path.join(__dirname, '..');
 // --augments defaults to `road` because the greedy scan provably cannot reach half the bench,
 // and --augmax defaults to 1 because that is the number the careers support.
 
+// ── L02: THREE EFFECTS THAT IGNORED EVERY DEFENCE, AND WHAT IT COST TO FIX ─────
+// K08 sent the sky through mitigate and left three in-combat paths to zero behind: the
+// Vatborn's grudge aura, the Stormcaller's skyToll, and the Hazmat capstone's vent. The
+// Vatborn's was declared `aura: { share: 0.06, type: 'bio', rank: 1 }` with `aura.type` read
+// ZERO times in the file. All three now go through mitigate and book into the damage-type
+// ledger, which means armour and a badge answer them for the first time.
+//
+// THE WORRY WAS A QUIET NERF: three effects that ignored every defence now meet one, so they
+// land softer, and the intent was answerable rather than weaker. Matched pair, 3 x 150 an arm,
+// this file byte-identical on both sides, the before arm run from a frozen copy of the tree:
+//
+//                                    before      after     arms (before / after)
+//   grudge commanders, % won            43         44      45 41 43 / 45 44 42   overlap
+//   risen x3, % won                     43         43      44 41 43 / 44 44 41   overlap
+//   runs won of 150                     48         48      52 44 47 / 51 47 45   overlap
+//   wipes per run                     5.41       5.54      5.23 5.57 5.43 / 5.33 5.35 5.95
+//
+// NOTHING MOVED. The commander rows are the ones that matter here, because the aura and the
+// toll are GRUDGE-PHASE content and that is where they fire - and they carry 3,744 and 3,925
+// fights behind them, so they are proportions over thousands rather than career samples, and
+// they read at this sample size. Runs won is dead flat at 48 against 48.
+//
+// WHY IT COST NOTHING, which is the part worth keeping: mitigate floors at `Math.max(1, cd -
+// rv - ac)`, and K06 established that the squad's bio and energy resistances are mostly ZERO
+// because the mitigation content is hard to aim at. So for a squad that bought nothing, the
+// vent still lands very nearly whole and only armour takes anything off it. The fix creates a
+// REWARD for buying the answer without punishing the squad that did not - the shape K07 gave
+// the Armory.
+//
+// AND A TRAP THIS FILE SHOULD NOT FALL INTO AGAIN. The first read of this pair was that squad
+// damage went UP 5.8% a run, which looked like the ledger seeing what it had been blind to:
+//
+//   damage at squad, raw/run       23,180 -> 24,535   +5.8%   ranges separate
+//   fights per run, median             55 -> 58       +4.8%   ranges overlap
+//   damage per FIGHT                421.5 -> 425.5    +0.9%   <- normalised
+//
+// It was not. Normalised by fights the row is flat, and +5.8% a run is +4.8% more fights a run
+// wearing a different label. Every "per run" row in this report divides by RUNS, so any change
+// in how far careers get moves all of them together; a phase reading one of them as an effect
+// is reading run length. THE THREE PATHS L02 CLOSED WERE WORTH UNDER 1% OF SQUAD DAMAGE - they
+// are grudge-phase-rare, and the ledger was not missing much through them.
+//
+// WHICH LEAVES BLEED AS THE BIG ONE. It is the fourth raw subtraction, it is 8% of maxHp a
+// turn, and bleeding is common rather than grudge-phase - so the remaining blind spot in the
+// damage-type ledger is almost all bleed, and sizing it is worth doing before any absolute
+// share this file prints for soak is quoted again. L02 deliberately did not decide whether
+// bleed should be typed; that is a design question, not an evident defect.
+//
+// NOT ESTABLISHED, and listed so it is not mistaken for a finding: nodes cleared, score and
+// fights per run all point at careers running slightly longer. That is ONE signal read four
+// ways, not four confirmations - they are the same quantity - and runs won is flat against it.
+// Score's arms do separate (25.7k-30.5k against 31.0k-34.9k) but both sit inside the 28.3k to
+// 40.2k band K06's nine-career control measured for score, so it is noise with a direction.
+//
 // ── K11: THE TWO DEBTS K06 LEFT, PAID AT SIX CAREERS AN ARM ───────────────────────
 // K06 measured the career instrument's own noise and withdrew two claims for resting inside it:
 // K05's reading of the augment cap, and its own trinket-bench arms. Both were filed with the
