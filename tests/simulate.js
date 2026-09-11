@@ -2394,6 +2394,45 @@ const ROOT = path.join(__dirname, '..');
 // --augments defaults to `road` because the greedy scan provably cannot reach half the bench,
 // and --augmax defaults to 1 because that is the number the careers support.
 
+// ── M03: TYPING BLEED COSTS FOURTEEN POINTS OF WIN RATE, AND THE SCAR REPRICE IS A NULL
+// Two owner design calls, measured together and then BISECTED because both were live and the
+// combined arm could not attribute anything. Three arms, 3 x 150 each, this file identical
+// throughout, before = the M01 tree.
+//
+//                              before    bleed typed ONLY    both changes
+//   runs won of 150              44.3          24.7              27.3      42 45 46 / 20 35 19 / 23 29 30
+//   wipes per run                5.27          6.08              6.21
+//   grudge commanders % won        44            36                36
+//   wipes at tier ten             704           810               830
+//   % of scars treated             90            89                87
+//
+// TYPING BLEED IS THE WHOLE EFFECT. The bleed-only arm sits at or below the both-changes arm on
+// every row, so the scar reprice contributes nothing to the difficulty move - the commander rate
+// falls the full 8 points on bleed alone, and wipes and tier-ten wipes do 84-86% of their move
+// there. The win count drop clears K06's ~14 floor and the ranges separate completely, so this
+// is real and not three noisy careers.
+//
+// In the terms I06 tuned to: the win rate goes from about 30% to about 16%.
+//
+// WHY IT IS SO EXPENSIVE, and it is ARMOUR rather than resistance. L03 measured the squad
+// DEALING 10.8% of its damage as bleed and TAKING only 2.3%. Hostiles carry far more armour
+// than operators do, and mitigate subtracts armour from every tick now - so the change cuts the
+// squad's own bleed output roughly five times harder than it cuts the squad's intake. Fights run
+// longer, the squad eats more on the way, and the commander rate falls. A correctness fix landed
+// as a one-sided nerf because the two sides of the ledger were never symmetric.
+//
+// AND THE SCAR REPRICE DID NOT DO ITS JOB. 90% -> 87% treated is a null. Doubling the price
+// within an expedition does not bite because the purse is large by the time scars accumulate and
+// the harness policy only asks for scrap >= cost x 3; even 960 clears that late. If scars are
+// meant to stick, PRICE IS THE WRONG LEVER - the fix has to be scarcity (a cap per expedition, a
+// cost in something other than scrap) rather than a bigger number.
+//
+// A ROW NOT TO QUOTE FROM THIS PAIR: "damage BY the squad, a run" reads +24.9% and means nothing,
+// because M03 moved bleed OUT of L03's untyped bag and INTO the typed rows - so the metric counts
+// different things on the two sides. The typed ledger also books the RAW figure before armour
+// eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
+// Same trap as L02's "+5.8% squad damage", wearing a different costume.
+//
 // ── M01: TEN SCARS INSTEAD OF FIVE, AND THE WALL DID NOT NOTICE ─────────────
 // Five situational scars added to five flat ones. Matched pair, 3 x 150 an arm, this file
 // byte-identical on both sides, the before arm a frozen game.js at 5 scars - so the SAME treat
