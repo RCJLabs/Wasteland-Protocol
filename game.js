@@ -1484,6 +1484,13 @@ function sky() {
     return c ? { ...w, ...c.mod } : w;
 }
 function weatherName(id) { return (WEATHER[id] || WEATHER.CLEAR).name; }
+// L02: what a sky's own damage is made of, or null for a sky that does not deal any. Was
+// derived inline in the codex and nowhere else, because nothing else needed it; the
+// Stormcaller's toll needs it now, and one derivation is better than two that can drift.
+function skyDamageType(id) {
+    const w = WEATHER[id] || {};
+    return w.chipType || (w.shrapnel || {}).type || null;
+}
 // How often an eligible fight carries its faction's own sky. Weather stays rarer than ground's
 // 0.75 on purpose: the ground is where the fight is, the weather is something happening to it.
 const WEATHER_CHANCE = 0.4;
@@ -2701,8 +2708,8 @@ const CODEX = [
         // K08: the sky's own damage went round the whole system - a raw subtraction wearing a bio
         // label - so a page that only talked about hits was telling the truth about half of it.
         (() => {
-            const typed = WEATHER_IDS.filter(id => WEATHER[id].chipType || (WEATHER[id].shrapnel || {}).type)
-                .map(id => `${WEATHER[id].name} is ${(WEATHER[id].chipType || WEATHER[id].shrapnel.type).toUpperCase()}`);
+            const typed = WEATHER_IDS.filter(id => skyDamageType(id))
+                .map(id => `${WEATHER[id].name} is ${skyDamageType(id).toUpperCase()}`);
             return `The sky counts too. What falls out of it is damage of a type like anything else, and the same badge answers it: ${typed.join(', ')}. Sealed lungs take nothing at all from smog; a machine never notices it.`;
         })(),
         // K02: your own three resistances answer whatever is aimed at you, and for most of the
@@ -4657,8 +4664,9 @@ function goDown(ent) {
         const caught = activeEntities.filter(e => !e.isPlayer && e.hp > 0);
         caught.forEach(e => {
             const vent = Math.max(1, Math.floor(e.maxHp * 0.15));
-            e.hp = Math.max(0, e.hp - vent);
-            spawnFCT(e.id, `-${vent}`, 'fct-status'); triggerHitFlash(e.id);
+            // Chem tanks, so the vent is bio - which means a machine at bio 100 walks out of
+            // the cloud, and the Hazmat's own capstone has a matchup it is bad against.
+            typedToll(e, vent, 'bio', 'fct-status');
             // F05: the fourth path to zero, and the newest - the capstone was written after
             // the ledger it was skipping.
             noteKill(e, { cause: 'DEAD_MANS_SWITCH' });
@@ -11796,6 +11804,33 @@ function raiseBody(ent, share) {
 // subtraction and stops the whole blow, so it is booked as the whole blow and counted on its own:
 // reading it at face value put 100 against 30-point hits and reported 88% taken off a table where
 // most of that number was a hundred that never had 88 points in front of it.
+// L02: THE THREE EFFECTS K08 LEFT BEHIND. K08 sent the sky through mitigate and fixed the
+// smog's "Bio DMG" label; three other in-combat paths still reached zero by raw subtraction,
+// and one of them was carrying its damage type as a field the engine never read. The Vatborn's
+// grudge declares `aura: { share: 0.06, type: 'bio', rank: 1 }` and `aura.type` had no reader
+// anywhere in the file - written once, consulted never.
+//
+// What the player was told, on the codex page K08 itself wrote: "The sky counts too. What falls
+// out of it is damage of a type like anything else, and the same badge answers it", and "Your
+// own three answer whatever is aimed at you." A vent aimed at the front rank, a sky dropped on
+// the squad by the thing that just turned it, and a set of chem tanks letting go are all aimed
+// at somebody, and none of the three met a badge.
+//
+// Attacker is null on all three, the way the sky is null: these are area effects, not swings.
+// That keeps NO_HANDS - which reads `attacker.range === 'melee'` - from firing on a vent, and
+// it costs BROAD_SPECTRUM nothing worth having.
+//
+// Floored at 1 by mitigate, so an answer blunts these rather than deleting them and only a
+// genuine immunity takes nothing: the same contract the sky got, for the same reason.
+function typedToll(target, raw, atkType, cls) {
+    const cut = mitigate(null, target, raw, atkType, null);
+    noteDamageType(target.isPlayer ? 'atSquad' : 'atFoe', atkType, raw, cut.rv);
+    if (cut.n <= 0) return 0;
+    target.hp = Math.max(0, target.hp - cut.n);
+    spawnFCT(target.id, `-${cut.n}`, cls || 'fct-status'); triggerHitFlash(target.id);
+    return cut.n;
+}
+
 function noteDamageType(side, atkType, calcDmg, resistValue) {
     if (!runStats || !side) return;
     runStats.dt = runStats.dt || {};
@@ -12060,8 +12095,11 @@ function turnTheSky(enemy) {
     if (enemy.skyToll) {
         activeEntities.filter(t => t.isPlayer && t.hp > 0).forEach(t => {
             const toll = Math.max(1, Math.floor(t.maxHp * enemy.skyToll));
-            t.hp = Math.max(0, t.hp - toll);
-            spawnFCT(t.id, `-${toll}`, 'fct-status'); triggerHitFlash(t.id);
+            // It turns the sky and then drops that sky on you, so the toll is made of whatever
+            // it just turned the sky to - and a squad that bought the answer to a smog gets to
+            // use it on the Stormcaller's smog too. A sky with no damage of its own falls back
+            // to phys, which is what a horizon coming down on you is.
+            typedToll(t, toll, skyDamageType(currentWeather) || 'phys', 'fct-status');
             if (t.hp <= 0) { noteFelled(t, { name: enemy.name, boss: true, sector: currentSector, tier: currentTier, cause: 'COMBAT' }); goDown(t); }
         });
         log(`> The sky comes down on the squad.`, 'log-dmg');
@@ -12234,8 +12272,7 @@ function executeEnemyAi(enemy) {
         const caught = activeEntities.filter(t => t.isPlayer && t.hp > 0 && t.gridPos <= (enemy.aura.rank || 1));
         caught.forEach(t => {
             const burn = Math.max(1, Math.floor(t.maxHp * enemy.aura.share));
-            t.hp = Math.max(0, t.hp - burn);
-            spawnFCT(t.id, `-${burn}`, 'fct-status'); triggerHitFlash(t.id);
+            typedToll(t, burn, enemy.aura.type || 'bio', 'fct-status');
             if (t.hp <= 0) { noteFelled(t, { name: enemy.name, boss: true, sector: currentSector, tier: currentTier, cause: 'COMBAT' }); goDown(t); }
         });
         if (caught.length) log(`> The vents open over the front rank.`, 'log-dmg');
@@ -12887,7 +12924,7 @@ globalThis.WP = {
     LEARNED_AT, learnedMove, tradeIntents, growTally,
     BENCH_JOBS, CAMP_TRIAGE, CAMP_TRIAGE_JOB, benchJobById, benchJobHolder, hasBenchJob, benchJobName, takeBenchJob,
     get benchJob() { return benchJob; }, set benchJob(v) { benchJob = v; },
-    WEATHER, WEATHER_IDS, WEATHER_CHANCE, CONFLUENCE, confluence, sky, weatherName,
+    WEATHER, WEATHER_IDS, WEATHER_CHANCE, CONFLUENCE, confluence, sky, weatherName, skyDamageType, typedToll,
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
