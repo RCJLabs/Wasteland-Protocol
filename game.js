@@ -2203,7 +2203,19 @@ function generateSectorMap(rng = Math.random) {
 
     // The forecast is a contract: the weather a node shows is the weather its fight gets.
     nodes.forEach(n => {
-        if (n.type === 'BOSS') n.weather = 'BLOODLUST';
+        // L01: a boss node used to be dressed BLOODLUST unconditionally, and initiateCombat
+        // then overrode it for a front that promises its sky over the last fight - so on an
+        // IRRADIATED sector the board read BLOODLUST and the fight was TOXIC_SMOG. That is the
+        // F09 defect, on the one node F09 did not reach, and K08 and K10 made it expensive:
+        // the smog is typed bio now, and it is the harshest sky in the game. The board was
+        // hiding the one forecast a player could have bought a Gas Mask for.
+        //
+        // Dressed from the front here instead, so the node shows what the fight gets. The
+        // fight itself is unchanged - it was already running the front's sky.
+        if (n.type === 'BOSS') {
+            const bf = frontById(sectorFront);
+            n.weather = (bf && bf.sky && bf.bossSky) ? bf.sky : 'BLOODLUST';
+        }
         else if (FIGHT_NODES.includes(n.type)) {
             const fr = frontById(sectorFront);
             if (currentSector === 1 && n.tier === openingTier()) n.weather = 'CLEAR';
@@ -10154,8 +10166,14 @@ function initiateCombat(nodeType, isEliteNode) {
     // A front whose description promises the boss fights under its sky delivers that; the rest
     // tilt the roads only. Generalising this to every front with a sky would have had three of
     // them quietly cancelling the arena's bloodlust without ever saying so.
+    // L01: never over a forecast, for the same reason HARSH_SKIES above is not. A boss node
+    // entered from the map is dressed with this sky at generation and has already shown it, so
+    // re-applying it here can only ever contradict a board that was right. A boss fight staged
+    // directly - dev tools, suites - has no node behind it, and this is still where it is told
+    // which sky the front promises.
     const bossFront = frontById(sectorFront);
-    if (nodeType === 'BOSS' && bossFront && bossFront.sky && bossFront.bossSky) currentWeather = bossFront.sky;
+    if (!hadForecast && nodeType === 'BOSS' && bossFront && bossFront.sky && bossFront.bossSky)
+        currentWeather = bossFront.sky;
     applyCombatScenery(bgFile, nodeType === 'BOSS' ? bossForSector().banner : null);
 
     // Enemies are built fresh each fight; the squad persists, so anything left on a unit has to

@@ -19,6 +19,14 @@
 //     splash, follow-ups and every overdrive paid nothing.
 //  7. The opening fight is plain by a rule keyed on tier 1, and Road Crew opens the run on
 //     tier 2 - so the upgrade bought you the dressed first fight the rule forbids.
+//
+// L01 adds the eighth, found by the L-audit: the BOSS node was the one node F09 never reached.
+// It was dressed BLOODLUST unconditionally at generation while initiateCombat overrode it for
+// a front that promises its sky over the last fight, so an IRRADIATED sector showed BLOODLUST
+// on the board and fought under TOXIC_SMOG. Newly expensive rather than newly wrong: K08 typed
+// the smog bio and K10 measured it the harshest sky in the game, so the board was hiding the
+// one forecast a player could have answered with a Gas Mask. The fight is unchanged - it was
+// always the front's sky - and only the board was lying.
 module.exports = {
   name: 'Every banner keeps its promise',
   run: async ({ page, ok, base, engineUp }) => {
@@ -270,5 +278,40 @@ module.exports = {
       road.off.tier === 1 && road.off.total > 0 && road.off.dressed === 0);
     ok(`with it the run opens on tier ${road.on.tier}, and that one is plain too (${road.on.dressed} of ${road.on.total})`,
       road.on.tier === 2 && road.on.total > 0 && road.on.dressed === 0);
+
+    // ── 8. The boss node forecasts what the boss fight gets ─────────────────────────
+    // Every front, not just the one that was wrong: a row that only checked IRRADIATED would
+    // pass just as well if boss nodes stopped being dressed at all.
+    const boss = await page.evaluate(() => {
+      activeContracts = []; currentSlot = 1; confirmNewGame(1.0);
+      const rows = FRONTS.map(f => {
+        currentSector = 4; sectorFront = f.id;
+        sectorMap = generateSectorMap(); clearedNodeIds = []; currentNodeId = null;
+        const node = sectorMap.nodes.find(n => n.type === 'BOSS');
+        const shown = node.weather;
+        enterNode(node.id);
+        const forecast = forecastWeather;
+        currentTier = TOTAL_TIERS;
+        initiateCombat('BOSS', false);
+        const fought = currentWeather;
+        combatActive = false;
+        return { front: f.id, shown, forecast, fought,
+                 promised: !!(f.sky && f.bossSky), sky: f.sky || null };
+      });
+      sectorFront = null;
+      return rows;
+    });
+    const mismatched = boss.filter(r => r.shown !== r.fought);
+    ok(`every front's boss node shows the sky its fight gets (${boss.length} fronts, ${mismatched.length} wrong)`,
+      boss.length > 0 && mismatched.length === 0);
+    ok('and the node carries that sky into the forecast rather than losing it at the door',
+      boss.every(r => r.forecast === r.shown));
+    // The two halves of the rule, each asserted on the fronts it applies to, so neither can be
+    // satisfied by the engine simply doing one thing everywhere.
+    const promises = boss.filter(r => r.promised), plain = boss.filter(r => !r.promised);
+    ok(`a front that promises its sky over the last fight shows that sky (${promises.map(r => `${r.front} ${r.shown}`).join(', ')})`,
+      promises.length > 0 && promises.every(r => r.shown === r.sky));
+    ok(`and every other front still forecasts the arena (${plain.length} fronts on BLOODLUST)`,
+      plain.length > 0 && plain.every(r => r.shown === 'BLOODLUST'));
   }
 };
