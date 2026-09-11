@@ -108,6 +108,71 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
           }
         }
       });
+
+      // ── L06: ONE DEFINITION OF "A BODY WITH NOTHING IN THE WAY" ──────────────────
+      // This repo had 112 hand-rolled fixture helpers across 70 suites and no shared version
+      // of this, so each re-derived what "bare" means and stripped the fields its author
+      // thought of. That produced the same defect three times in one session: five assertions
+      // found by flaking during K07-K11, one written into suite 158 during L02 and caught only
+      // by mutation testing, and L07 - a fixture correct for a year that stopped being bare the
+      // moment K08 sent the sky through mitigate, because it had never stripped a quirk.
+      // THICK_HIDE takes 3 off every hit and the row went red in 7 batteries of 24.
+      //
+      // The failure mode is never "somebody forgot entirely". It is that the ENGINE grows a
+      // thing mitigate consults and 112 fixtures silently fall one field behind. So the list
+      // lives here once, and suite 159 checks it against what mitigate actually reads rather
+      // than trusting it to be maintained by hand.
+      //
+      // Installed from addInitScript rather than at engineUp because it has to survive the
+      // reloads that suites like 101 drive.
+      //
+      // Three kinds of field, neutralised three different ways:
+      //   BARE       - stripped off the body itself
+      //   FIELD      - not on the body; ambient state that __clearField puts back to neutral
+      //   STRUCTURAL - read by mitigate but not a mitigation; a body still has to be somebody
+      window.__BARE_FIELDS = ['resistances', 'armor', 'baseArmor', 'plate', 'quirk', 'weaponMod',
+        'trinket', 'traits', 'sig', 'venom', 'venomStacks', 'corrodedTurns', 'oiledTurns',
+        'wardId', 'wardSoak', 'escortId', 'escortArmor', 'revenantWard'];
+      window.__FIELD_FIELDS = ['gridPos'];
+      window.__STRUCTURAL_FIELDS = ['isPlayer', 'hp', 'maxHp', 'id', 'name'];
+
+      // Strips a body in place and hands it back, so it composes:
+      //   const t = __bare(playerRoster.find(c => c.gridPos > 0)); t.hp = t.maxHp = 400;
+      window.__bare = (ent) => {
+        if (!ent) return ent;
+        ent.resistances = { phys: 0, bio: 0, energy: 0 };
+        ent.armor = 0; ent.baseArmor = 0; ent.plate = 0;
+        ent.quirk = null; ent.weaponMod = null; ent.trinket = null; ent.traits = [];
+        ent.sig = null; ent.venom = null; ent.venomStacks = 0;
+        ent.corrodedTurns = 0; ent.oiledTurns = 0;
+        ent.wardId = null; ent.wardSoak = 0; ent.escortId = null; ent.escortArmor = 0;
+        ent.revenantWard = 0;
+        return ent;
+      };
+
+      // A body with nothing in the way and nothing interesting about it. Hostile by default;
+      // pass { isPlayer: true } for the squad side.
+      //
+      // Stripped FIRST and overridden second, which is the only order that lets a caller ask for
+      // the thing these fixtures usually want: __dummy({ resistances: { bio: 100 } }) is a body
+      // sealed against one type and bare in every other way. Merging first and stripping after
+      // would silently throw that override away, which is a trap in a helper whose whole job is
+      // to stop traps.
+      window.__dummy = (over) => Object.assign(window.__bare({
+        id: 'dummy1', name: 'Dummy', isPlayer: false, classType: 'RAIDER', range: 'melee',
+        hp: 400, maxHp: 400, speed: 1, dmgBase: 10, scale: 1, hpDrop: 0, gridPos: 1,
+        cooldowns: {}, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, markedTurns: 0,
+        intent: { type: 'ATTACK', icon: '#' }
+      }), over || {});
+
+      // The ambient half, and the half a fixture is likeliest to miss: every one of these is a
+      // multiplier inside mitigate that lives on the FIELD rather than on a body. ASHFALL adds
+      // armour to everyone standing; RUINS gives the front rank cover. A fixture that strips a
+      // body and leaves these alone is only half bare.
+      window.__clearField = () => {
+        currentWeather = 'CLEAR'; currentTerrain = 'OPEN_ROAD'; currentFormation = null;
+        activeRelics = []; bonds = {};
+      };
     });
     const page = await context.newPage();
     const errors = [];

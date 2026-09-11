@@ -26,31 +26,28 @@ module.exports = {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
 
-    // A body with nothing in the way. L06 filed the fact that this repo has 112 hand-rolled
-    // fixtures and no shared version of this; until that exists, the list is written out in
-    // full rather than trusting confirmNewGame to have left a clean body behind.
+    // L06: this suite shipped its own __bare and __clearField, which was the 112th copy of a
+    // definition that should have had one. Both now come from tests/run.js, installed on every
+    // page, and suite 159 holds them against what mitigate actually reads.
     await page.evaluate(() => {
-      window.__bare = (over) => Object.assign({
-        id: 'bare1', name: 'Bare', isPlayer: true, gridPos: 1, hp: 400, maxHp: 400,
-        armor: 0, baseArmor: 0, plate: 0, quirk: null, weaponMod: null, trinket: null, traits: [],
-        resistances: { phys: 0, bio: 0, energy: 0 }, cooldowns: {}, venomStacks: 0,
-        stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0,
-        markedTurns: 0, downTurns: 0, fallen: false
-      }, over || {});
-      // Nothing in the sky, nothing on the ground, no doctrine and no relic: every one of those
-      // is a multiplier inside mitigate, and this suite is about the type, not the stack.
-      window.__clearField = () => {
+      window.__bareBody = (over) => window.__dummy(Object.assign(
+        { id: 'bare1', name: 'Bare', isPlayer: true, gridPos: 1, hp: 400, maxHp: 400,
+          downTurns: 0, fallen: false }, over || {}));
+      // The shared __clearField neutralises the ambient MITIGATIONS - sky, ground, relics,
+      // bonds - and deliberately stops there. Starting a run and opening a fresh ledger is a
+      // different concern and belongs to whichever suite needs it, which here is every row.
+      window.__fresh = () => {
         currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
-        currentWeather = 'CLEAR'; currentTerrain = null; currentFormation = null;
-        activeRelics = []; bonds = {}; runStats = newRunStats();
+        window.__clearField();
+        runStats = newRunStats();
       };
     });
 
     // ── The mechanism: a type, a badge, and a floor ────────────────────────────────
     const mech = await page.evaluate(() => {
-      window.__clearField();
+      window.__fresh();
       const one = (res, type) => {
-        const t = window.__bare({ resistances: res });
+        const t = window.__bareBody({ resistances: res });
         activeEntities = [t];
         const took = typedToll(t, 100, type, 'fct-status');
         return { took, left: t.hp };
@@ -72,8 +69,8 @@ module.exports = {
     // A resistance bigger than the blow still leaves a mark: mitigate floors at 1, which is the
     // contract K08 gave the sky and the reason a cultist at bio 55 still chokes under smog.
     const floored = await page.evaluate(() => {
-      window.__clearField();
-      const t = window.__bare({ resistances: { phys: 0, bio: 90, energy: 0 } });
+      window.__fresh();
+      const t = window.__bareBody({ resistances: { phys: 0, bio: 90, energy: 0 } });
       activeEntities = [t];
       return typedToll(t, 20, 'bio', 'fct-status');
     });
@@ -81,11 +78,11 @@ module.exports = {
 
     // ── The ledger sees it, which is the half K09 reads through ───────────────────
     const booked = await page.evaluate(() => {
-      window.__clearField();
-      const t = window.__bare({ resistances: { phys: 0, bio: 20, energy: 0 } });
+      window.__fresh();
+      const t = window.__bareBody({ resistances: { phys: 0, bio: 20, energy: 0 } });
       activeEntities = [t];
       typedToll(t, 100, 'bio', 'fct-status');
-      const sealed = window.__bare({ id: 'bare2', resistances: { phys: 0, bio: 100, energy: 0 } });
+      const sealed = window.__bareBody({ id: 'bare2', resistances: { phys: 0, bio: 100, energy: 0 } });
       activeEntities.push(sealed);
       typedToll(sealed, 100, 'bio', 'fct-status');
       const row = ((runStats.dt || {}).atSquad || {}).bio || {};
@@ -105,8 +102,8 @@ module.exports = {
     // a plausible fix looks like from the outside - the energy arm would still book bio.
     const vat = await page.evaluate(() => {
       const run = (type) => {
-        window.__clearField();
-        const t = window.__bare({ gridPos: 1 });
+        window.__fresh();
+        const t = window.__bareBody({ gridPos: 1 });
         // dmgType phys on the boss, so whatever else the AI does this turn lands on another row
         // and the vent is the only thing that can be booked under its own type.
         const boss = { id: 'vat', name: 'Vatborn', isPlayer: false, classType: 'BOSS', range: 'melee',
@@ -144,8 +141,8 @@ module.exports = {
     // contents or the order of WEATHER_IDS.
     const storm = await page.evaluate(() => {
       const turnTo = (want) => {
-        window.__clearField();
-        const t = window.__bare({ gridPos: 1 });
+        window.__fresh();
+        const t = window.__bareBody({ gridPos: 1 });
         const boss = { id: 'storm', name: 'Stormcaller', isPlayer: false, classType: 'BOSS',
                        hp: 900, maxHp: 900, armor: 0, skyToll: 0.05,
                        resistances: { phys: 0, bio: 0, energy: 0 } };
@@ -181,7 +178,7 @@ module.exports = {
 
     // ── WIRING 3: the Hazmat's tanks ─────────────────────────────────────────────
     const tanks = await page.evaluate(() => {
-      window.__clearField();
+      window.__fresh();
       const hz = playerRoster.find(c => c.gridPos > 0);
       hz.traits = (hz.traits || []).concat('CAP_DEAD_MANS_SWITCH');
       hz.hp = 0;
