@@ -60,6 +60,34 @@
 // numbers against three, p = 0.03, and about as much as this instrument can honestly deliver
 // without going to the hundreds.
 //
+// ── THAT PROHIBITION IS NOW A NUMBER. READ THIS BEFORE ACTING ON THE PARAGRAPH ABOVE ────
+// "Never for comparing two" stood for four letter-series, and it was a rule of thumb standing
+// in for a quantity nobody had measured: the win count could not compare two arms because its
+// SPREAD was unknown, not because a proportion is unusable in principle. K06 measured it.
+//
+//   sd of one 150-expedition career's win count            6.4
+//   sd of a three-career arm mean                          3.7
+//   gap two arms of THREE can settle                       wider than ~14 wins
+//   gap two arms of SIX can settle                         wider than ~9 wins
+//
+// So the honest statement is not "never". It is: at fourteen runs, three wins is inside its
+// own noise and the D09 story above is what that looks like; at 150 expeditions and SIX
+// careers an arm, a gap wider than about nine wins is real. K11 then used exactly that -
+// eighteen careers, three arms of six - and measured the trinket slot at +10.0 wins against a
+// 3.2 sd, which is a claim the paragraph above would have forbidden and which the instrument
+// can in fact support. See the K06 and K11 records below for both.
+//
+// Two things the measurement does NOT license, because they are the part the old rule got
+// right. Three careers an arm still cannot settle a win-count difference unless it is very
+// large, so the many "3 x 60" and "3 x 150" arms recorded below are describing samples and are
+// not comparisons on that row whatever they say. And none of this touches the whole-report
+// problem in the next section: a floor per row says nothing about reading two hundred rows at
+// once.
+//
+// The general shape, which is the thing to carry forward: a claim this file cannot make is
+// usually a claim whose instrument nobody has characterised yet. Measure the instrument, and
+// the prohibition turns into a threshold.
+//
 // A rule of thumb for the next phase that wants to move a difficulty dial: a change worth
 // shipping should show up in the same direction in three separate samples, and if it only
 // shows up in one statistic, bisect it before believing it.
@@ -5062,6 +5090,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const met = results.flatMap(r => r.bossMet).filter(m => m.won !== undefined);
   const cold = met.filter(m => !m.grudge), risen = met.filter(m => m.grudge > 0);
   const rate = a => a.length ? (a.filter(m => m.won).length / a.length * 100).toFixed(0) + '%' : '-';
+  // L05: what kind of number each row is. The L-audit filed this as "225 rows, 4 with an error
+  // bar" and concluded the reader could not tell which survive the sample size. That count was
+  // right and the conclusion was wrong - most of those rows are counts over thousands of events
+  // and need no bar. What was actually missing was the reader being TOLD that, so the three
+  // kinds are named once here rather than marked 225 times.
+  console.log('\n── HOW TO READ THESE NUMBERS ' + '─'.repeat(29));
+  console.log('  counts and shares over events (blows, purchases, fights, wipes by tier) read at');
+  console.log('  any sample size. Per-career figures do not, and the two that carry the most weight');
+  console.log('  say so themselves: every median prints a bootstrap 90% interval, and runs won');
+  console.log('  prints the gap it can resolve. Anything labelled "mean" over ' + RUNS + ' runs sits');
+  console.log('  between the two - stable for a common quantity, thin for a rare one.');
   console.log('\n── COMMANDERS ' + '─'.repeat(46));
   line('fights reached, total', met.length);
   line('met for the first time', `${cold.length} fought, ${rate(cold)} won`);
@@ -5309,7 +5348,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       line('  never spent', p(led.onHand));
     }
   }
-  line('deepest sector, mean, by third', `${depthOf(band(0, third))} / ${depthOf(band(third, 2 * third))} / ${depthOf(band(2 * third, n))}`);
+  // K06 withdrew a claim read off this row - "points of depth" across a career - because a third
+  // of a career is ~50 runs of a heavy-tailed quantity and the thirds move that much on identical
+  // code. Printed with the spread of the three so the row cannot be read as a trend without it.
+  const thirds = [depthOf(band(0, third)), depthOf(band(third, 2 * third)), depthOf(band(2 * third, n))];
+  const tSpread = Math.max(...thirds.map(Number)) - Math.min(...thirds.map(Number));
+  line('deepest sector, mean, by third', `${thirds.join(' / ')}   (spread ${tSpread.toFixed(2)} on ~${Math.round(n / 3)} runs a third)`);
   line('grudge on commanders met, same', `${grudgeOf(band(0, third))} / ${grudgeOf(band(third, 2 * third))} / ${grudgeOf(band(2 * third, n))}`);
 
   // How long an order actually takes, which is the question orders exist to answer.
