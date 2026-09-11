@@ -1414,7 +1414,9 @@ const WEATHER = {
     CLEAR: { name: 'CLEAR', short: 'CLEAR', desc: 'Nothing overhead worth mentioning.' },
     TOXIC_SMOG: { name: 'TOXIC SMOG', short: 'SMOG', dot: 'wx-smog', cls: 'weather-smog',
         desc: 'Yellow air that settles in the low ground. Everything in it is being poisoned, including them.',
-        chip: 2,
+        // K08: the type lives here rather than at the call site, so the manual can name it off
+        // the same table the arithmetic reads and the two cannot drift apart.
+        chip: 2, chipType: 'bio',
         banner: '\u26A0\uFE0F TOXIC SMOG: passive Bio DMG to active units \u26A0\uFE0F' },
     SANDSTORM: { name: 'SANDSTORM', short: 'SAND', dot: 'wx-sand', cls: 'weather-sand',
         desc: 'Grit at forty miles an hour. Nothing fired across the field arrives the way it left.',
@@ -1422,7 +1424,7 @@ const WEATHER = {
         banner: '\u26A0\uFE0F SANDSTORM: ranged attacks -25% \u26A0\uFE0F' },
     SHRAPNEL_WINDS: { name: 'SHRAPNEL WINDS', short: 'SHRAP', dot: 'wx-shrap', cls: 'weather-shrap',
         desc: 'The wind is carrying the last place it went through. Standing still is not safe either.',
-        shrapnel: { chance: 0.3, dmg: 5 },
+        shrapnel: { chance: 0.3, dmg: 5, type: 'phys' },
         banner: '\u26A0\uFE0F SHRAPNEL WINDS: 30% chance of random DMG at turn start \u26A0\uFE0F' },
     // Three skies with rules of the ground's weight, each pulling a lever nothing else pulls:
     // plating, cooldowns, and how easily the back rank is found.
@@ -2693,6 +2695,13 @@ const CODEX = [
         'Orange means weak to it. Grey means it shrugs it off. Struck through means immune - that attack does nothing at all.',
         'A resistance takes a flat number off the hit, never a share of it - 10 off a 30 is worth three times 10 off a 90. A hundred or more is immunity. A negative reading adds instead.',
         'Armour subtracts from every hit. Corroding a target strips its armour outright, which is the answer to anything that re-plates itself.',
+        // K08: the sky's own damage went round the whole system - a raw subtraction wearing a bio
+        // label - so a page that only talked about hits was telling the truth about half of it.
+        (() => {
+            const typed = WEATHER_IDS.filter(id => WEATHER[id].chipType || (WEATHER[id].shrapnel || {}).type)
+                .map(id => `${WEATHER[id].name} is ${(WEATHER[id].chipType || WEATHER[id].shrapnel.type).toUpperCase()}`);
+            return `The sky counts too. What falls out of it is damage of a type like anything else, and the same badge answers it: ${typed.join(', ')}. Sealed lungs take nothing at all from smog; a machine never notices it.`;
+        })(),
         // K02: your own three resistances answer whatever is aimed at you, and for most of the
         // game's life the answer was "physical, always" - so two of the three were dead stats
         // and the Gas Mask, the Insulated Coat and Closed Circuit bought nothing. Read off the
@@ -10710,8 +10719,39 @@ function applyTurnStartEffects(ent) {
         runStats.wxTurnsBySector = runStats.wxTurnsBySector || {};
         runStats.wxTurnsBySector[currentSector] = (runStats.wxTurnsBySector[currentSector] || 0) + 1;
     }
-    if (wx.chip) { const _b = ent.hp; let sDmg = Math.floor(wx.chip * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - sDmg); noteWeather(_b, 'SMOG'); log(`> ${ent.name} choked by Smog for ${sDmg} DMG.`, "log-dmg"); spawnFCT(ent.id, `-${sDmg}`, "fct-status"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SMOG'); }
-    if (wx.shrapnel && Math.random() < wx.shrapnel.chance) { const _b = ent.hp; let shrapDmg = Math.floor(wx.shrapnel.dmg * (1 + ((currentTier - 1) * 0.4))); ent.hp = Math.max(0, ent.hp - shrapDmg); noteWeather(_b, 'SHRAPNEL'); log(`> Shrapnel struck ${ent.name} for ${shrapDmg} DMG!`, "log-dmg"); spawnFCT(ent.id, `-${shrapDmg}`, "fct-dmg"); chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('SHRAPNEL'); }
+    // K08: THE SKY GOES THROUGH THE SAME DOOR AS EVERYTHING ELSE. Both of these used to read
+    // `ent.hp = Math.max(0, ent.hp - dmg)` - a raw subtraction that never met mitigate. The smog
+    // banner has always said "passive Bio DMG to active units" and its description has always
+    // said everything in it is being poisoned, and none of that was true of the arithmetic: a
+    // Gas Mask, the HAZMAT perk Closed Circuit, the Hazmat's own baked bio 25 and three Sealed
+    // Rebreathers stacking a body past 100 all did nothing about it, and neither did the bio
+    // 25-100 the Choir, the Carrion and the machines carry. It was untyped true damage wearing
+    // a bio label, and K02's damage-type ledger could not see it either, so every "13% of blows
+    // are bio" figure this repo has quoted excluded the most concentrated bio source in it.
+    //
+    // Through mitigate the sky keeps its bite rather than losing it: `Math.max(1, cd - rv - ac)`
+    // floors a blow at one, so a cultist at bio 55 still chokes for 1 a turn and only a genuine
+    // immunity - the machines at bio 100, or a body carrying three Rebreathers - takes nothing.
+    // A machine not breathing is the right answer and a legible one: K04 put the badge on the
+    // field, so a squad under smog can see which of them it is working on.
+    //
+    // Shrapnel is metal moving fast and is typed phys for the same reason: it had no type, and
+    // everything that stops a physical blow should stop a piece of one.
+    const skyHit = (type, raw, cause, cls) => {
+        const cut = mitigate(null, ent, raw, type, null);
+        noteDamageType(ent.isPlayer ? 'atSquad' : 'atFoe', type, raw, cut.rv);
+        if (cut.n <= 0) return;
+        const _b = ent.hp;
+        ent.hp = Math.max(0, ent.hp - cut.n);
+        noteWeather(_b, cause);
+        log(`> ${cause === 'SMOG' ? `${ent.name} choked by Smog for ${cut.n} DMG.`
+                                 : `Shrapnel struck ${ent.name} for ${cut.n} DMG!`}`, "log-dmg");
+        spawnFCT(ent.id, `-${cut.n}`, cls);
+        chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath(cause);
+    };
+    if (wx.chip) skyHit(wx.chipType || 'phys', Math.floor(wx.chip * (1 + ((currentTier - 1) * 0.4))), 'SMOG', 'fct-status');
+    if (wx.shrapnel && Math.random() < wx.shrapnel.chance)
+        skyHit(wx.shrapnel.type || 'phys', Math.floor(wx.shrapnel.dmg * (1 + ((currentTier - 1) * 0.4))), 'SHRAPNEL', 'fct-dmg');
 
     // Over The Top runs on the Fiend's own turns, so it is spent here rather than on the clock.
     if ((ent.chargeTurns || 0) > 0) { ent.chargeTurns--; chg = true; if (ent.chargeTurns > 0) spawnFCT(ent.id, "OVER THE TOP", "fct-combo"); }
@@ -11596,7 +11636,11 @@ function resolveAction(targetId) {
 // arithmetic the real hit does - a preview that recomputes is a preview that drifts.
 function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
 
-    let rv = t.resistances[atkType] || 0;
+    // K08: the sky now sends its tick through here, and the sky ticks EVERY active body -
+    // including ones put on the field rather than drawn off a template. A damage function that
+    // throws on a missing field is a landmine, so a body with no resistances resists nothing
+    // rather than taking the whole turn down with it.
+    let rv = (t.resistances && t.resistances[atkType]) || 0;
     // BROAD SPECTRUM: a line carrying an answer in every type finds the seam in whatever it
     // is shooting at. Only ever eases a resistance toward zero - it does not turn a resistant
     // target into a weak one, and it cannot open an immunity, which is a wall by design.
@@ -11733,6 +11777,27 @@ function raiseBody(ent, share) {
     return true;
 }
 
+// K02 built this inside applyDamageHit: which TYPE a blow was, both ways, and what the target's
+// resistance took off it. K08 lifted it out, because applyDamageHit is not the only place damage
+// with a type happens - the sky ticks every active unit at the start of its turn, and that tick
+// was invisible to the ledger for as long as it was invisible to the resistances.
+//
+// A NEGATIVE resistance is a weakness and adds instead, and lumping the two together would report
+// a gas mask and a weakness to gas as the same fact. An immunity is a wall rather than a
+// subtraction and stops the whole blow, so it is booked as the whole blow and counted on its own:
+// reading it at face value put 100 against 30-point hits and reported 88% taken off a table where
+// most of that number was a hundred that never had 88 points in front of it.
+function noteDamageType(side, atkType, calcDmg, resistValue) {
+    if (!runStats || !side) return;
+    runStats.dt = runStats.dt || {};
+    const bag = runStats.dt[side] = runStats.dt[side] || {};
+    const row = bag[atkType] = bag[atkType] || { hits: 0, raw: 0, resisted: 0 };
+    row.hits++; row.raw += calcDmg;
+    row.resisted += resistValue >= 100 ? calcDmg : Math.min(calcDmg, Math.max(0, resistValue));
+    if (resistValue >= 100) row.immune = (row.immune || 0) + 1;
+    if (resistValue < 0) row.weak = (row.weak || 0) + 1;
+}
+
 function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
     if (target.hp <= 0) return;
     // J02: every caller but seventeen hands this a whole number. The seventeen are the overdrive
@@ -11832,26 +11897,8 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
     // it. enemyStrike reads `enemy.dmgType || 'phys'` and three templates in the game set it,
     // all commanders - so the question is whether a player's bio and energy resistance ever
     // meets anything, and the ledger answers it rather than the count of templates.
-    if (runStats) {
-        const side = (attacker && attacker.isPlayer && !target.isPlayer) ? 'atFoe'
-                   : (target.isPlayer ? 'atSquad' : null);
-        if (side) {
-            runStats.dt = runStats.dt || {};
-            const bag = runStats.dt[side] = runStats.dt[side] || {};
-            const row = bag[atkType] = bag[atkType] || { hits: 0, raw: 0, resisted: 0 };
-            row.hits++; row.raw += calcDmg;
-            // What the resistance actually took off - floored at nothing, capped at the blow.
-            // A NEGATIVE resistance is a weakness and adds instead, and lumping the two
-            // together would report a gas mask and a weakness to gas as the same fact. An
-            // immunity is a wall rather than a subtraction and stops the whole blow, so it is
-            // booked as the whole blow and counted on its own: reading it as its face value
-            // put 100 against 30-point hits and reported 88% taken off a table where most of
-            // that number was a hundred that never had 88 points in front of it.
-            row.resisted += resistValue >= 100 ? calcDmg : Math.min(calcDmg, Math.max(0, resistValue));
-            if (resistValue >= 100) row.immune = (row.immune || 0) + 1;
-            if (resistValue < 0) row.weak = (row.weak || 0) + 1;
-        }
-    }
+    noteDamageType((attacker && attacker.isPlayer && !target.isPlayer) ? 'atFoe'
+                 : (target.isPlayer ? 'atSquad' : null), atkType, calcDmg, resistValue);
     if (runStats && attacker && attacker.isPlayer && !target.isPlayer) {
         runStats.plate = runStats.plate || {};
         const bag = runStats.plate[currentSector] = runStats.plate[currentSector] || [0, 0, 0];

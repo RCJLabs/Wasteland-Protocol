@@ -179,13 +179,21 @@ module.exports = {
     });
     ok(`the Choir's smog sits on the water and bites twice (${named.smogPlain} -> ${named.smogWater})`,
       named.smogWater === named.smogPlain * 2);
+    // K08 changed what this row can say. The smog's tick goes through mitigate now, and a
+    // resistance is a FLAT subtraction - so on a body with anything in the way the water tick is
+    // not twice the road tick, it is twice the RAW with the same amount taken off once. Doubling
+    // is only visible on a body with nothing in the way, which is what most operators are, so
+    // that is the body this row uses and it says so. The row under it is the new fact and the
+    // more useful one: put a resistance on the same body and the sky takes less.
     const choked = await page.evaluate(() => {
-      const breathe = (w, t) => {
+      const breathe = (w, t, bio) => {
         activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
         currentSector = 3; currentTier = 4;
         forecastWeather = w; forecastTerrain = t;
         initiateCombat('CHOIR', false);
         const ent = activeEntities.find(e => e.isPlayer && e.hp > 0);
+        ent.resistances = { phys: 0, bio: bio || 0, energy: 0 };
+        ent.armor = 0; ent.gridPos = 2;      // out of the front rank, so no ground cover either
         const before = ent.hp;
         applyTurnStartEffects(ent);
         const took = before - ent.hp;
@@ -195,11 +203,17 @@ module.exports = {
       const road = breathe('TOXIC_SMOG', 'OPEN_ROAD');
       const water = breathe('TOXIC_SMOG', 'FLOODED');
       const dry = breathe('CLEAR', 'FLOODED');
+      const masked = breathe('TOXIC_SMOG', 'OPEN_ROAD', 10);
+      const sealed = breathe('TOXIC_SMOG', 'FLOODED', 100);
       __clear();
-      return { road, water, dry };
+      return { road, water, dry, masked, sealed };
     });
-    ok(`and it is the damage that doubles, not just the table (${choked.road} -> ${choked.water} DMG a turn)`,
+    ok(`and it is the damage that doubles, not just the table (${choked.road} -> ${choked.water} DMG a turn, nothing in the way)`,
       choked.road > 0 && choked.water === choked.road * 2 && choked.dry === 0);
+    ok(`a bio resist takes it off the sky the same as off a blow (${choked.road} -> ${choked.masked} with +10 bio)`,
+      choked.masked < choked.road && choked.masked >= 1);
+    ok(`and sealed lungs take nothing at all, on the worst ground there is (${choked.sealed})`,
+      choked.sealed === 0);
     ok(`the Carrion hunt by scent and you cannot see at all (${named.sandPlain} -> ${named.sandNest})`,
       named.sandNest < named.sandPlain);
     ok(`and a storm cannot get into the Beasts' tunnels (${named.sandPlain} -> ${named.sandUnder})`,

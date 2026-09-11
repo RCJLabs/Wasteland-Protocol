@@ -24,6 +24,10 @@ module.exports = {
 
     // A turn under a chosen sky, driven through the engine's own turn-start path, with the
     // ledger read back afterwards. Nothing here computes what the damage ought to be.
+    // K08: the dummies carry `armor` and `resistances` now. The sky's tick goes through mitigate
+    // since K08, so a body without them is not shaped like anything the engine puts on a field -
+    // and these rows are about what the SKY does, so they are set to zero rather than to a
+    // template's numbers: nothing in the way, and the tick arrives whole.
     const tick = await page.evaluate(() => {
       window.__tick = (sector, tier, weather, who) => {
         currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
@@ -32,7 +36,8 @@ module.exports = {
         const ent = who === 'player'
           ? playerRoster.find(c => c.gridPos > 0)
           : { id: 'x1', name: 'Dummy', isPlayer: false, hp: 400, maxHp: 400, cooldowns: {},
-              stunnedTurns: 0, bleedingTurns: 0, oiledTurns: 0, corrodedTurns: 0, armorTurns: 0 };
+              stunnedTurns: 0, bleedingTurns: 0, oiledTurns: 0, corrodedTurns: 0, armorTurns: 0,
+              armor: 0, resistances: { phys: 0, bio: 0, energy: 0 } };
         if (who === 'player') { ent.hp = ent.maxHp = 400; }
         const before = ent.hp;
         applyTurnStartEffects(ent);
@@ -67,7 +72,8 @@ module.exports = {
       currentSector = 1; currentTier = 10; currentWeather = 'TOXIC_SMOG';
       runStats = newRunStats();
       const dummy = () => ({ id: 'x3', name: 'Dummy', isPlayer: false, hp: 400, maxHp: 400,
-        cooldowns: {}, stunnedTurns: 0, bleedingTurns: 0, oiledTurns: 0, corrodedTurns: 0, armorTurns: 0 });
+        cooldowns: {}, stunnedTurns: 0, bleedingTurns: 0, oiledTurns: 0, corrodedTurns: 0, armorTurns: 0,
+              armor: 0, resistances: { phys: 0, bio: 0, energy: 0 } });
       let e = dummy(); applyTurnStartEffects(e);
       const deep = 400 - e.hp;
       const tierBefore = currentTier, sectorBefore = currentSector;
@@ -111,7 +117,8 @@ module.exports = {
         currentSector = 4; currentTier = 10; currentWeather = 'TOXIC_SMOG';
         runStats = newRunStats();
         const ent = { id: 'x2', name: 'Sliver', isPlayer: false, hp, maxHp: 300, cooldowns: {},
-                      stunnedTurns: 0, bleedingTurns: 0, oiledTurns: 0, corrodedTurns: 0, armorTurns: 0 };
+                      stunnedTurns: 0, bleedingTurns: 0, oiledTurns: 0, corrodedTurns: 0, armorTurns: 0,
+              armor: 0, resistances: { phys: 0, bio: 0, energy: 0 } };
         applyTurnStartEffects(ent);
         return { hp: ent.hp, booked: runStats.wxTookFoe || 0 };
       };
@@ -127,5 +134,46 @@ module.exports = {
     const clear = await page.evaluate(() => window.__tick(3, 6, 'CLEAR', 'foe'));
     ok(`a clear sky takes nothing and books no turn (${clear.took} taken, ${clear.turns} turns)`,
       clear.took === 0 && clear.turns === 0);
+
+    // ── K08: the sky is damage of a type, and the ledger can see it ───────────────
+    // It used to be `ent.hp = Math.max(0, ent.hp - dmg)`. The banner said "passive Bio DMG",
+    // the description said everything in it was being poisoned, and nothing in the game could
+    // answer it - not a Gas Mask, not the Hazmat's baked 25, not three Rebreathers stacking a
+    // body past a hundred. K02's damage-type ledger could not see it either, so every "13% of
+    // blows aimed at the squad are bio" figure this repo quoted excluded the largest bio source
+    // in it. Read off the engine: the type comes from the WEATHER table, the arithmetic from
+    // mitigate, and the ledger from runStats.
+    const typed = await page.evaluate(() => {
+      const under = (weather, bio, armor) => {
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+        currentSector = 4; currentTier = 8; currentWeather = weather;
+        runStats = newRunStats();
+        const ent = { id: 'k8', name: 'Lungs', isPlayer: true, hp: 400, maxHp: 400, cooldowns: {},
+                      gridPos: 2, armor: armor || 0,
+                      stunnedTurns: 0, bleedingTurns: 0, oiledTurns: 0, corrodedTurns: 0, armorTurns: 0,
+                      resistances: { phys: 0, bio: bio || 0, energy: 0 } };
+        applyTurnStartEffects(ent);
+        const bag = (runStats.dt && runStats.dt.atSquad) || {};
+        // Flattened rather than handed back raw: a regression that stops booking the tick at all
+        // should make these rows go RED, not make the suite throw on a missing key and take the
+        // rest of the file down with it.
+        const row = bag[Object.keys(bag)[0]] || {};
+        return { took: 400 - ent.hp, types: Object.keys(bag),
+                 hits: row.hits || 0, raw: row.raw || 0, immune: row.immune || 0 };
+      };
+      return { bare: under('TOXIC_SMOG', 0), masked: under('TOXIC_SMOG', 10),
+               sealed: under('TOXIC_SMOG', 100), clear: under('CLEAR', 0),
+               declared: { smog: WEATHER.TOXIC_SMOG.chipType,
+                           shrap: WEATHER.SHRAPNEL_WINDS.shrapnel.type } };
+    });
+    ok(`the smog is declared on the weather table, not at the call site (${typed.declared.smog} / ${typed.declared.shrap})`,
+      typed.declared.smog === 'bio' && typed.declared.shrap === 'phys');
+    ok(`and a turn under it books a ${typed.declared.smog} blow in the damage-type ledger (${typed.bare.types.join(', ') || 'nothing'})`,
+      typed.bare.types.join() === 'bio' && typed.bare.hits === 1 && typed.bare.raw > 0);
+    ok(`a bio resist takes it off the sky (${typed.bare.took} bare, ${typed.masked.took} with +10)`,
+      typed.masked.took < typed.bare.took && typed.masked.took >= 1);
+    ok(`and an immunity stops it dead, still booked as met (${typed.sealed.took} taken, ${typed.sealed.immune} immune)`,
+      typed.sealed.took === 0 && typed.sealed.immune === 1);
+    ok('a clear sky books nothing at all', typed.clear.types.length === 0 && typed.clear.took === 0);
   }
 };

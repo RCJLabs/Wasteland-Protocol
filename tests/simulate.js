@@ -2354,6 +2354,70 @@ const ROOT = path.join(__dirname, '..');
 // --augments defaults to `road` because the greedy scan provably cannot reach half the bench,
 // and --augmax defaults to 1 because that is the number the careers support.
 
+// ── K08: THE SKY SAID BIO DMG AND WAS NOT BIO AT ALL ──────────────────────────────
+// READ THIS BEFORE QUOTING THE DAMAGE-TYPE LEDGER. Every figure this file has carried since K02
+// - "the squad meets bio on 13% of the blows aimed at it", and everything built on top of it -
+// excluded the largest source of bio damage in the game, because that source was not damage of
+// any type at all.
+//
+// TOXIC_SMOG's banner reads "passive Bio DMG to active units". Its description says everything
+// in it is being poisoned, including them. The log says "choked by Smog". And the arithmetic was
+// `ent.hp = Math.max(0, ent.hp - sDmg)` - a raw subtraction that never went near mitigate. A Gas
+// Mask did nothing about it. Neither did the HAZMAT perk Closed Circuit at +40, the Hazmat
+// Specialist's own baked bio 25, or three Sealed Rebreathers stacking a body past a hundred,
+// which the manual promises is a wall. Neither did the bio 25-100 the Choir, the Carrion and the
+// machines carry. It was untyped true damage wearing a bio label, on 19% of all fights.
+//
+// WHY IT WAS FOUND HERE. K07 measured, through the engine's own draw, that no front in the game
+// makes the Gas Mask the right buy - the Insulated Coat wins decisively on Machine Uprising
+// (0.57 x 10 against a Riot Shield's 0.34 x 6) but bio never concentrates anywhere, and even
+// Carrion Bloom at 28% leaves the shield ahead. The reason bio had no home is that its biggest
+// threat was not plumbed into the system the answers live in.
+//
+// THE FIX IS THE ENGINE'S OWN DOOR: the tick goes through mitigate, and books through the same
+// ledger function applyDamageHit uses - which K08 lifted out of applyDamageHit so both callers
+// share one definition rather than one growing a copy. Shrapnel is typed phys for the same
+// reason. The type sits on the WEATHER table so the arithmetic and the manual read one source.
+//
+// WHAT A SQUAD IS ACTUALLY MEETING, six careers an arm against the K07 tree. These rows did not
+// change because the blows changed - they are the same blows. They changed because the ledger
+// can see the sky:
+//
+//                        before        after
+//   phys                  62.7%        47.7%     20.2 sd, separates
+//   bio                   13.7%        31.9%     37.1 sd, separates
+//   energy                23.6%        20.4%      3.0 sd, overlaps
+//
+// BIO WAS NEVER 13%. It is about a third of what the squad meets and always was. Every phase
+// since K02 that reasoned from 13% - K05's sizing of the bench answers, K07's finding that the
+// Gas Mask never wins a front - was reasoning from a number with the biggest term missing.
+// Those conclusions are not overturned by this (the shelf census and the reachability finding
+// stand on their own counts), but the arithmetic under them wants redoing, and that is filed.
+//
+// AND THE SKY GOT MUCH SMALLER, which is the honest cost of making it meet resistances:
+//
+//   damage a turn, both sides    6.87 → 2.76
+//   taken off the squad        221,603 → 125,568   (-43%)
+//   taken off the hostiles     136,071 →  40,497   (-70%)
+//
+// The hostile side falls further because the smog-heavy factions are exactly the ones built to
+// shrug bio off - the machines at bio 100 take nothing now, which is the right answer and a
+// legible one, because K04 put the badge on the field. A squad under smog can see which of them
+// it is working on.
+//
+// THE WALL DID NOT MOVE, at six careers an arm, on a design that settles a gap wider than about
+// nine wins: careers won 47.3 → 49.0 (0.5 sd), wipes 5.45 → 5.44 (0.1), reached sector 7
+// 53.5 → 56.0 (0.8), score 34.3k → 31.3k (0.9), lost for good 511 → 532 (1.4). Every row
+// overlaps. That is worth saying twice: the sky lost 43% of what it was taking off the squad and
+// nothing downstream of it moved, which bounds how much the weather was ever driving.
+//
+// SO THE MAGNITUDE IS NOT RE-CUT HERE, DELIBERATELY. Restoring the sky to its old weight would
+// be a second change on top of a correctness fix, and the pair would land in one number - the
+// exact error this file warns about two records down. The sky is weaker and answerable now
+// rather than heavier and unanswerable, and weaker is the safe direction to be wrong in. What
+// the right weight is, given that a resistance is FLAT and a 2-to-8 tick is small enough for any
+// resistance to erase, is its own question and is filed with these numbers on it.
+
 // ── K07: THE ARMORY IS A DECISION NOW — AND IT ONLY PAYS IF YOU MAKE IT ───────────
 // K06 censused where gear comes from and found nothing a player could aim at: four sources, all
 // rollGear(), a uniform draw over the unheld pool. The Gas Mask reached a run about one time in

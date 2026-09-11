@@ -153,8 +153,16 @@ module.exports = {
     ok(`a fight that lost FLAWLESS, BLITZ and FRUGAL has still lost them (${JSON.stringify(now.log)})`,
       now.log && now.log.hurt === true && now.log.spent === true && now.log.chased === true
       && now.log.turns > BLITZ && now.log.turns === was.log.turns);
+    // K08: this row read `now.log.turns === 9 && was.log.turns === 9`, and 9 is the MEDIAN of the
+    // quantity it judges - K03 measured this exact fight at 9.15 +/- 0.37 and called it the
+    // tightest row in the battery. It went red the moment the sky started meeting resistances,
+    // because a weaker sky makes the same fight a turn longer; it would have gone red on any
+    // other change with the same effect, and it was one battery in ten from red already. What
+    // the row is FOR is that resuming did not add a turn, which is a before-and-after on one
+    // fight and needs no literal at all. The count is still printed, so a phase that moves it a
+    // long way is still visible to anybody reading the line.
     ok(`and resuming did not charge the fight for the turn it came back on (${was.log.turns} -> ${now.log.turns})`,
-      now.log.turns === 9 && was.log.turns === 9);
+      now.log.turns === was.log.turns && was.log.turns > BLITZ);
     ok(`the rank a fallen operator left is still a rank to close (${JSON.stringify(now.vacated)})`,
       JSON.stringify(now.vacated) === JSON.stringify(was.vacated) && was.vacated.length === 1);
     ok('and the momentum already spent on FOCUS and PRESS is still spent on them',

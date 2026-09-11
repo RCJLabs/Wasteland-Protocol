@@ -82,12 +82,20 @@ module.exports = {
         title = btn.title;
         marked = btn.classList.contains('formation-node');
       }
-      const plain = fights.find(n => !n.formation);
+      // K08: this took `fights.find(n => !n.formation)`, which can land on an ELITE - and an
+      // elite's label carries " (ELITE)" after the faction, so the row below went red whenever
+      // the map happened to put one first. A loose patrol is the thing being asserted, so a
+      // loose patrol is what gets picked; the elite label is pinned on its own row instead of
+      // being something this row trips over.
+      const plain = fights.find(n => !n.formation && !n.elite);
       const plainLbl = plain ? document.querySelector(`[data-node="${plain.id}"]`).querySelector('.node-lbl').innerText : null;
+      const eliteN = fights.find(n => !n.formation && n.elite);
+      const eliteLbl = eliteN ? document.querySelector(`[data-node="${eliteN.id}"]`).querySelector('.node-lbl').innerText : null;
       return { fights: fights.length, named: named.length, lbl, title, marked,
                want: withForm ? formationById(withForm.formation).name.toUpperCase() : null,
                note: withForm ? formationById(withForm.formation).note : null,
                plainLbl, plainType: plain ? plain.type : null,
+               eliteLbl, eliteType: eliteN ? eliteN.type : null,
                firstIsPlain: !first.formation };
     });
     ok(`a deep sector's map holds named fights (${node.named} of ${node.fights})`, node.named > 0);
@@ -106,7 +114,10 @@ module.exports = {
       Math.abs(share - rate.want) < 0.08);
     ok('the node carries the formation name, not the faction', node.lbl === node.want);
     ok('and says what it is if you ask', !!node.title && node.title.includes(node.note));
-    ok('a loose patrol still reads as its faction', node.plainLbl === node.plainType);
+    ok(`a loose patrol still reads as its faction (${node.plainLbl || 'none on this map'})`,
+      node.plainLbl === node.plainType);
+    ok(`and an elite says so after it (${node.eliteLbl || 'none on this map'})`,
+      node.eliteLbl === null || node.eliteLbl === `${node.eliteType} (ELITE)`);
     ok('the two are told apart without reading the label', node.marked === true);
 
     // ---- what the node promised is what turns up ----
