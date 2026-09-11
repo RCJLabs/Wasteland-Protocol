@@ -278,8 +278,22 @@ function markScars(ids, rng = Math.random) {
 }
 // What this treatment costs. The Chapel covers the first one of each expedition, and only the
 // first: a building that made every scar free would delete the decision C02 exists to create.
+// M03: AND IT CLIMBS. M01 measured 91-93% of scars treated across 150 runs on both arms: at a
+// flat 120 a scar is a toll rather than a condition, and the situational ones M01 added were
+// being bought off before they got to be situational. The owner's call is that a scar should
+// not be something you can launder.
+//
+// Escalation rather than a cap, because a cap deletes the decision instead of pricing it: the
+// one scar that really hurts is still worth clearing, and clearing all of them is not. The
+// game already prices repeat purchases this way - upgradeCost rides upgradeCount - so this is
+// the house idiom rather than a new rule.
+//
+// Counted per EXPEDITION, not per career: walking out and coming back should reset the price,
+// because the alternative is a career-long debt nobody can read off a screen.
 function scarTreatCost() {
-    return (metaUpgrades.chapel && runStats && !runStats.chapelUsed) ? 0 : SCAR_TREAT_COST;
+    if (metaUpgrades.chapel && runStats && !runStats.chapelUsed) return 0;
+    const paid = (runStats && runStats.scarsTreated) || 0;
+    return SCAR_TREAT_COST * Math.pow(2, Math.min(paid, 5));
 }
 function healScar(charId, scarId) {
     const ch = playerRoster.find(c => c.id === charId);
@@ -287,6 +301,7 @@ function healScar(charId, scarId) {
     const price = scarTreatCost();
     if (!ch || !s || !hasScar(ch, scarId) || scrap < price) return false;
     if (price === 0 && runStats) runStats.chapelUsed = true;
+    else if (runStats) runStats.scarsTreated = (runStats.scarsTreated || 0) + 1;
     scrap -= price;
     ch.scars = ch.scars.filter(id => id !== scarId);
     removeScarStats(ch, s);
@@ -10819,11 +10834,22 @@ function applyTurnStartEffects(ent) {
         // both lands near where it started rather than at one of the two extremes.
         if (hasScar(ent, 'THIN_BLOOD')) b = Math.floor(b * 1.5);
         if (hasTrinket(ent, 'TOURNIQUET')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 2);
-        // The RAW figure, uncapped by what is left of the bar, because that is the unit the
-        // typed ledger books: noteDamageType files calcDmg before mitigate and before the floor
-        // at zero. A denominator assembled out of two different units would be worse than none.
-        noteUntyped(ent.isPlayer ? 'atSquad' : 'atFoe', 'BLEED', b);
-        ent.hp = Math.max(0, ent.hp - b); log(`> ${ent.name} bleeds for ${b}.`, "log-dmg"); spawnFCT(ent.id, `-${b}`, "fct-dmg"); ent.bleedingTurns--; chg = true; if(ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('BLEED'); }
+        // M03: AND THROUGH THE SAME DOOR AS EVERYTHING ELSE. L03 booked this tick without
+        // changing it and left the question open on purpose - bleeding is bleeding, and a Gas
+        // Mask has no obvious business stopping it - because settling a design question as a
+        // side effect of wanting an honest denominator is the wrong way round. Settled now, and
+        // the answer is yes: a bleed is a wound, the codex already says "Armour subtracts from
+        // every hit", and PHYS is what a wound is made of. So plate and a physical resistance
+        // answer it, THIN_BLOOD becomes a scar somebody can armour against, and the untyped bag
+        // L03 built goes empty - which the report states rather than leaving blank.
+        const cut = mitigate(null, ent, b, 'phys', null);
+        noteDamageType(ent.isPlayer ? 'atSquad' : 'atFoe', 'phys', b, cut.rv);
+        ent.bleedingTurns--; chg = true;
+        if (cut.n > 0) {
+            ent.hp = Math.max(0, ent.hp - cut.n);
+            log(`> ${ent.name} bleeds for ${cut.n}.`, "log-dmg"); spawnFCT(ent.id, `-${cut.n}`, "fct-dmg");
+            if (ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('BLEED');
+        } }
     // Bleeding out and choking are deaths too. Now that a unit going down has a voice, dying to
     // a status tick in silence is the odd one out rather than the norm.
     if (wasAlive && ent.hp <= 0) { playSFX(ent.isPlayer ? 'fallen' : 'downed'); if (ent.isPlayer) goDown(ent); }

@@ -5981,6 +5981,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         ut[k].hits += v.hits; ut[k].points += v.points;
       })));
     const typedRaw = (side) => Object.values((acc[side] || {})).reduce((a, v) => a + v.raw, 0);
+    // M03 typed the last unledgered path, so this bag is expected to be EMPTY and the row says
+    // so out loud rather than disappearing. A blank where a number used to be reads as a bug in
+    // the report; "none" reads as the finding it is.
+    if (!Object.keys(ut).length)
+      line('damage the type ledger cannot see', 'none - every path to a bar goes through it');
     ['atSquad', 'atFoe'].forEach(side => {
       const rows = Object.entries(ut).filter(([k]) => k.startsWith(side + '/'));
       if (!rows.length) return;

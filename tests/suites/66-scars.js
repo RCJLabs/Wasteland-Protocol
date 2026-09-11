@@ -414,5 +414,54 @@ module.exports = {
       behavioural: SCAR_POOL.filter(s => !s.hp && !s.dmg && !s.spd).length }));
     ok(`the pool carries ${poolShape.n} scars, ${poolShape.behavioural} of them behavioural rather than a stat`,
       poolShape.n >= 10 && poolShape.behavioural >= 7);
+
+    // ── M03: a scar is not something you can launder ────────────────────────────────
+    // M01 measured 91-93% of scars treated across 150 runs, which made a scar a toll rather
+    // than a condition - and bought off the situational ones before they could be situational.
+    // The price climbs within an expedition now: the one that really hurts is still worth
+    // clearing, all of them is not.
+    const price = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      runStats = newRunStats(); metaUpgrades.chapel = false;
+      const seen = [];
+      for (let i = 0; i < 4; i++) { seen.push(scarTreatCost()); runStats.scarsTreated = i + 1; }
+      // Walking out and coming back resets it - a career-long debt is not readable off a screen.
+      runStats = newRunStats();
+      const afterFreshRun = scarTreatCost();
+      // The Chapel still covers the first of each expedition, and only the first.
+      metaUpgrades.chapel = true; runStats = newRunStats();
+      const chapelFirst = scarTreatCost();
+      runStats.chapelUsed = true;
+      const chapelSecond = scarTreatCost();
+      metaUpgrades.chapel = false;
+      return { seen, afterFreshRun, chapelFirst, chapelSecond, base: SCAR_TREAT_COST };
+    });
+    ok(`the first treatment of an expedition is the base price (${price.seen[0]})`,
+      price.seen[0] === price.base);
+    ok(`and every one after it doubles (${price.seen.join(', ')})`,
+      price.seen[1] === price.base * 2 && price.seen[2] === price.base * 4 && price.seen[3] === price.base * 8);
+    ok(`a fresh expedition starts the price over (${price.afterFreshRun})`,
+      price.afterFreshRun === price.base);
+    ok(`the Chapel still covers the first one and only the first (${price.chapelFirst} then ${price.chapelSecond})`,
+      price.chapelFirst === 0 && price.chapelSecond === price.base);
+
+    // The rows above set runStats.scarsTreated by hand, which tests the FORMULA and not the
+    // wiring - mutation testing removed the line in healScar that increments it and every row
+    // above still passed. This one goes through the real door twice and watches the purse.
+    const climbs = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      runStats = newRunStats(); metaUpgrades.chapel = false;
+      const c = playerRoster.find(x => x.gridPos > 0);
+      c.scars = ['SHELL_SHOCK', 'GUN_SHY'];
+      scrap = 5000;
+      const first = scrap; healScar(c.id, 'SHELL_SHOCK');
+      const paidFirst = first - scrap;
+      const second = scrap; healScar(c.id, 'GUN_SHY');
+      const paidSecond = second - scrap;
+      return { paidFirst, paidSecond, left: (c.scars || []).length, base: SCAR_TREAT_COST };
+    });
+    ok(`treating two in one expedition really does cost more the second time (${climbs.paidFirst} then ${climbs.paidSecond})`,
+      climbs.paidFirst === climbs.base && climbs.paidSecond === climbs.base * 2);
+    ok('and both came off', climbs.left === 0);
   }
 };

@@ -159,6 +159,13 @@ module.exports = {
         const foe = window.__field(() => {
           const f = JSON.parse(JSON.stringify(Object.values(ENEMY_POOL).flat().find(u => u.sig === 'MARTYR')));
           f.id = 'rel'; f.isPlayer = false; f.hp = 2; f.maxHp = 40; f.bleedingTurns = 3; f.sigCd = 0;
+          // M03: bleed meets mitigate now, and mitigate floors at 1 rather than at zero - so a
+          // template carrying armour survives a tick that used to finish it, and this row was
+          // testing the MARTYR sig through a body that no longer died. That is a real change to
+          // the game and not only to the fixture: an armoured body can now outlast a bleed it
+          // previously bled out to. The body is stripped here because the row is about what
+          // happens WHEN a reliquary dies, not about which ones do.
+          f.armor = 0; f.baseArmor = 0; f.resistances = { phys: 0, bio: 0, energy: 0 };
           f.intent = { type: 'ATTACK', icon: 'x' };
           return f;
         });

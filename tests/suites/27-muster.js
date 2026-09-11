@@ -94,6 +94,10 @@ module.exports = {
       const second = hero.hp;
       // SLOW BLEEDER
       ({ hero } = window.__quirkFight('SLOW_BLEEDER'));
+      // M03 sent bleed through mitigate, so a body's ARMOUR now subtracts from the tick and
+      // this row stopped reading the quirk and started reading the class template. Stripped, so
+      // the number is the quirk's doing and nothing else - the L06 lesson, arriving again.
+      window.__bare(hero); hero.quirk = { id: 'SLOW_BLEEDER', name: 'Slow Bleeder' };
       hero.maxHp = 200; hero.hp = 200; hero.bleedingTurns = 2;
       applyTurnStartEffects(hero);
       const bled = 200 - hero.hp;

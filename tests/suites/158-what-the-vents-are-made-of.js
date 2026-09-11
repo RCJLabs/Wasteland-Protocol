@@ -214,37 +214,45 @@ module.exports = {
       derived.typed.length > 0);
     ok('and the manual names exactly those, off the same derivation', derived.named && !derived.untypedNamed);
 
-    // ── L03: bleed is counted, and DELIBERATELY not changed ──────────────────────
-    // The fourth raw subtraction, and the one L02 left alone on purpose: whether a bleed should
-    // meet mitigate, or carry a damage type at all, is a design question - bleeding is bleeding
-    // and a Gas Mask has no obvious business stopping it. What was not defensible was the
-    // instrument being silent about it, so it is BOOKED without being touched. These rows pin
-    // both halves, because "we only added a counter" is exactly the kind of claim that quietly
-    // stops being true.
+    // ── M03: bleed goes through the door too, and the untyped bag is the tripwire ──
+    // L03 booked bleed without changing it and left the typing question for the owner. Answered
+    // yes: a bleed is a wound, the codex says "Armour subtracts from every hit", and phys is
+    // what a wound is made of. These rows replace L03's, which asserted the opposite and failed
+    // the moment the change landed - which is what they were for.
     const bleed = await page.evaluate(() => {
-      const tick = (res) => {
+      const tick = (over) => {
         window.__fresh();
-        const t = window.__bareBody({ resistances: res, maxHp: 400, hp: 400 });
+        const t = window.__bareBody(Object.assign({ maxHp: 400, hp: 400 }, over || {}));
         t.bleedingTurns = 3;
         activeEntities = [t];
         const before = t.hp;
         applyTurnStartEffects(t);
-        const row = ((runStats.ut || {}).atSquad || {}).BLEED || { hits: 0, points: 0 };
-        return { took: before - t.hp, hits: row.hits, points: row.points,
-                 typed: Object.keys((runStats.dt || {}).atSquad || {}) };
+        const bag = (runStats.dt || {}).atSquad || {};
+        return { took: before - t.hp,
+                 typed: Object.keys(bag).filter(k => (bag[k].hits || 0) > 0),
+                 raw: (bag.phys || {}).raw || 0,
+                 untyped: Object.keys((runStats.ut || {}).atSquad || {}) };
       };
-      return { open: tick({ phys: 0, bio: 0, energy: 0 }),
-               sealed: tick({ phys: 100, bio: 100, energy: 100 }),
+      return { open: tick(), armoured: tick({ armor: 10 }),
+               sealed: tick({ resistances: { phys: 100, bio: 0, energy: 0 } }),
                share: Math.floor(400 * 0.08) };
     });
-    ok(`a bleed is booked where the type ledger cannot reach (${bleed.open.hits} tick, ${bleed.open.points} points)`,
-      bleed.open.hits === 1 && bleed.open.points === bleed.open.took);
-    ok('and not as a damage type, because it is not one',
-      bleed.open.typed.length === 0 && bleed.sealed.typed.length === 0);
-    // The row that catches a future phase quietly routing bleed through mitigate while thinking
-    // it is only tidying up: a body immune to all three still bleeds for exactly the same.
-    ok(`a body sealed against everything bleeds for the same (${bleed.open.took} open, ${bleed.sealed.took} sealed)`,
-      bleed.open.took === bleed.sealed.took && bleed.open.took === bleed.share);
+    ok(`a bleed is booked as a damage type now (${bleed.open.typed.join(', ')})`,
+      bleed.open.typed.length === 1 && bleed.open.typed[0] === 'phys');
+    ok(`and the raw figure is the share the engine names (${bleed.open.raw} of ${bleed.share})`,
+      bleed.open.raw === bleed.share);
+    ok(`armour subtracts from it, which is what the manual promised (${bleed.open.took} -> ${bleed.armoured.took})`,
+      bleed.armoured.took === bleed.open.took - 10);
+    ok(`and a body sealed against physical takes nothing from it (${bleed.sealed.took})`,
+      bleed.sealed.took === 0 && bleed.open.took > 0);
+
+    // THE TRIPWIRE. noteUntyped has no callers now, and that is the point: L03 built it to
+    // measure a blind spot, M03 closed the only one it had, and the instrument stays so the
+    // NEXT unledgered path shows up here instead of hiding. A function with no callers is dead
+    // code; a function with no callers and a standing assertion that it stays that way is an
+    // instrument. If this row ever goes red, something started reaching zero around the door.
+    ok(`nothing reaches a bar without the ledger seeing it (${bleed.open.untyped.length} untyped source(s))`,
+      bleed.open.untyped.length === 0 && bleed.armoured.untyped.length === 0);
 
     // ── No path back to a raw subtraction ─────────────────────────────────────────
     // Read off the source, in suite 157's idiom: the defect this suite exists for was a line of
