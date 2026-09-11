@@ -2394,6 +2394,51 @@ const ROOT = path.join(__dirname, '..');
 // --augments defaults to `road` because the greedy scan provably cannot reach half the bench,
 // and --augmax defaults to 1 because that is the number the careers support.
 
+// ── M01: TEN SCARS INSTEAD OF FIVE, AND THE WALL DID NOT NOTICE ─────────────
+// Five situational scars added to five flat ones. Matched pair, 3 x 150 an arm, this file
+// byte-identical on both sides, the before arm a frozen game.js at 5 scars - so the SAME treat
+// policy ran on both and the only difference is the pool.
+//
+//                             before      after     arms (before / after)
+//   runs won of 150               47         54     43 51 47 / 58 58 45     overlap
+//   wipes per run               5.33       5.28     dead flat
+//   grudge commanders % won       44         45     overlap, thousands of fights behind it
+//   nodes cleared, median         77         78     overlap
+//
+// NOTHING ESTABLISHED. Runs won is +6.7 against a floor of ~14 at three careers an arm (K06),
+// so it is inside the noise whatever it looks like; wipes and the commander rate are flat, and
+// the commander rate is a proportion over thousands of fights so it reads at this size. Score
+// moved +10k and must NOT be quoted: the arms overlap wildly and both sit inside the 28.3k to
+// 40.2k band K06's nine-career control measured.
+//
+// TWO ROWS LOOKED LIKE THEY MOVED AND NEITHER SURVIVES INSPECTION, recorded because the next
+// phase to diff this report will see them again:
+//   scars dealt          145 -> 163   [137 143 155] / [148 174 168]   ranges OVERLAP
+//   runs that took none   61 ->  55   [61 62 61]    / [60 48 57]      separate by ONE, on the
+//                                                                     strength of a single arm
+// At n=3 across ~220 rows I07 measured about 25 spurious movers expected under the null. A
+// one-unit separation carried by one arm is that, not a finding.
+//
+// AND A MECHANISM I PROPOSED AND THEN REFUTED, which is the useful part. The story I reached
+// for was that the five new scars carry no stat, so scarFits can never reject them, so the
+// "nothing left that fits" escape hatch in giveScar shrank and more scars landed. Probed
+// directly rather than asserted:
+//
+//   bodies with NO scar available, pool of 5,  carrying 2 :  1 of 2,200
+//   bodies with NO scar available, pool of 10, carrying 2 :  0 of 9,900
+//
+// The escape hatch is used about once in two thousand, so it cannot explain anything. The
+// mechanism is not there, and neither is the effect it was invented to explain.
+//
+// WHAT DID COME BACK SOLID is a census, and it is about the system rather than the pool:
+// 91-93% OF SCARS ARE TREATED, on both arms, at 150 runs. (A 20-run smoke read 81%; the small
+// sample understated it.) With the money the game gives you, a scar is affordable to erase, so
+// it is a scrap tax rather than a condition that shapes a run - and the situational scars M01
+// added are bought off before they get to be situational. Whether that is right is a design
+// question. The arm that would answer the design half - does a policy that READS THE ROAD beat
+// one that just treats what it can afford - is not this one, and the policy here is naive on
+// purpose so it does not smuggle in an answer.
+//
 // ── L03: WHAT THE TYPE LEDGER CANNOT SEE, MEASURED AT LAST ──────────────────
 // noteDamageType has exactly two callers - the damage door and the sky's tick - so every share
 // this file prints for damage by type, K09's soak figures among them, is a share of LEDGERED
