@@ -2433,6 +2433,37 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── M02: THE FIVE FLAT PERKS ARE NOT FILLER. THEY ARE 91% OF THE PROGRESSION ────
+// Filed on the premise that the stat pool was the boring option sitting beside the signatures on
+// the promotion card, and thin at five. The census inverts it. One 150-expedition career:
+//
+//   points spent at the Outpost            7,200
+//     on a stat card                         91%
+//     on a signature                          9%
+//     on a capstone                           0%   (capstones arrive on promotion, 4.04 a run)
+//   why a point became a stat card
+//     no signature was left to buy         3,785
+//     one was open and unaffordable        2,752
+//
+// NINE POINTS IN TEN BECOME A FLAT STAT BUMP, and two-thirds of that is a STRUCTURAL CEILING
+// rather than a preference: signatures are finite per operator and stat cards are not, so once a
+// body has taken the ones its class offers, every remaining point it ever earns is +5 DMG or
+// +25 HP forever. The other third is an economy answer - a signature was open and the purse was
+// short - which is a separate question and a smaller one.
+//
+// So the premise this was filed under is REFUTED, and the real finding is worse than the one it
+// replaced. Five entries is not thin filler beside the interesting track; it is the whole of
+// long-run progression, and all five are the same shape - a number going up. P07 was called
+// "Perks that change the verb" and built the signature track to do exactly that; what it left
+// behind is the thing a career actually spends its points on.
+//
+// WHAT THIS CENSUS CANNOT TELL YOU, stated so the next phase does not read it wrongly: the split
+// between the five (veteran 1336, fortified 1335, swift 1318, honed 1264, hardened 1284) is
+// UNIFORM BY CONSTRUCTION. The harness picks among them with Math.random, so those five numbers
+// say the pool is reached evenly and say nothing whatever about which perk is worth taking. A
+// policy with a preference is the next question and is deliberately not answered here - building
+// the taste and measuring it in one step would have meant the first measurement was of my own.
+//
 // ── M03b: HALF THE BLEED COST RECOVERED, AND SKULLS DID WHAT NO SCRAP PRICE COULD ──
 // Acting on M03's bisect: armour excluded from a bleed (resistances kept), and the treatment
 // price moved from Scrap to Skulls. Same baseline, 3 x 150 each.
@@ -3922,6 +3953,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         const had = c.perkPoints;
         const canBuy = typeof unheldSigsFor === 'function' && typeof sigBuyCost === 'function';
         const open = canBuy ? unheldSigsFor(c) : [];
+        // M02: WHY a point falls through to a stat card, which decides whether 91% is the game or
+        // the policy. Two very different answers: the operator has no signature LEFT to buy
+        // (a structural ceiling - signatures are finite per body, stat cards are not), or it has
+        // one and cannot afford it (an economy question). Counted separately.
+        if (!open.length) stat.sigNoneLeft = (stat.sigNoneLeft || 0) + 1;
+        else if (scrap < sigBuyCost()) stat.sigTooDear = (stat.sigTooDear || 0) + 1;
         if (open.length && scrap >= sigBuyCost()) {
           assignPerk(c.id, open[Math.floor(Math.random() * open.length)].id);
           if (c.perkPoints < had) { stat.sigsBought = (stat.sigsBought || 0) + 1; continue; }
@@ -3933,7 +3970,19 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
           assignPerk(c.id, capstoneFor(c).id);
           if (c.perkPoints < had) { stat.capsBought = (stat.capsBought || 0) + 1; continue; }
         }
-        assignPerk(c.id, PERK_POOL[Math.floor(Math.random() * PERK_POOL.length)].id);
+        // M02: AND THE STAT CARD, WHICH NOTHING HAS EVER COUNTED. The rows above have reported
+        // signatures and capstones since E08b; the five flat perks beside them on the same card
+        // have never appeared in this report at all, so "is the stat pool thin" has never been a
+        // question anyone could answer. The pick is still uniform random - fixing the POLICY is a
+        // separate question from being able to see it, and doing both at once would mean the
+        // first measurement was of my own taste.
+        const pick = PERK_POOL[Math.floor(Math.random() * PERK_POOL.length)].id;
+        assignPerk(c.id, pick);
+        if (c.perkPoints < had) {
+          stat.statsBought = (stat.statsBought || 0) + 1;
+          stat.statPicks = stat.statPicks || {};
+          stat.statPicks[pick] = (stat.statPicks[pick] || 0) + 1;
+        }
         if (c.perkPoints === had) break;
       }
     });
@@ -5203,6 +5252,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   let ALL_FORMATION_IDS = [];
   let FORMATION_FACTION = {};
   let SCAR_IDS = [];
+  let PERK_IDS = [];
   let FINAL_SECTOR_N = 7;
   let ORDER_NAME = '', ORDER_SECTORS = 7;
   page.on('pageerror', e => errors.push(e.message));
@@ -5219,6 +5269,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   FORMATION_FACTION = await page.evaluate(() =>
     Object.fromEntries(Object.entries(FORMATIONS).map(([k, v]) => [k, v.map(f => f.id)])));
   SCAR_IDS = await page.evaluate(() => SCAR_POOL.map(sc => sc.id));
+  PERK_IDS = await page.evaluate(() => PERK_POOL.map(p => p.id));
   FINAL_SECTOR_N = await page.evaluate(() => FINAL_SECTOR);
   const ordSpec = await page.evaluate(id => { const o = orderById(id); return o ? { name: o.name, sectors: o.sectors } : null; }, ORDER);
   ORDER_NAME = ordSpec ? ordSpec.name : ORDER;
@@ -5844,6 +5895,29 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   }
   line('signatures bought at the Outpost', `${mean(nums('sigsBought')).toFixed(1)} per run`);
   line('capstones reached', `${mean(nums('capsTaken')).toFixed(2)} taken on promotion, ${mean(nums('capsBought')).toFixed(2)} bought at the Outpost, per run`);
+  // M02: what the five flat perks actually get. A census - a point either bought a stat card or
+  // it did not - so it reads at any sample size. THE PICK IS UNIFORM RANDOM in this harness, so
+  // the SPLIT below says nothing about which perk is better and everything about whether the
+  // pool is being reached at all; a policy with a preference is the next question, not this one.
+  {
+    const statN = results.reduce((a, r) => a + (r.statsBought || 0), 0);
+    const sigN  = results.reduce((a, r) => a + (r.sigsBought || 0), 0);
+    const capN  = results.reduce((a, r) => a + (r.capsBought || 0), 0);
+    const spent = statN + sigN + capN;
+    line('points spent at the Outpost', spent
+      ? `${spent} — ${Math.round(statN / spent * 100)}% on a stat card, ${Math.round(sigN / spent * 100)}% on a signature, ${Math.round(capN / spent * 100)}% on a capstone`
+      : 'none');
+    const picks = {};
+    results.forEach(r => Object.entries(r.statPicks || {}).forEach(([k, v]) => { picks[k] = (picks[k] || 0) + v; }));
+    const none = results.reduce((a, r) => a + (r.sigNoneLeft || 0), 0);
+    const dear = results.reduce((a, r) => a + (r.sigTooDear || 0), 0);
+    line('  why a point became a stat card', (none + dear)
+      ? `${none} times no signature was left to buy, ${dear} times one was open and unaffordable`
+      : 'it never did');
+    line('  stat cards taken, by name', PERK_IDS.length
+      ? PERK_IDS.map(id => `${id.toLowerCase()} ${picks[id] || 0}`).join(', ')
+      : 'none');
+  }
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   // K06: which pieces, because a total with no names in it cannot say whether the slot is being
   // spent on output or on mitigation - and K05 measured that those are not worth the same.
