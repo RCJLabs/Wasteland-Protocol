@@ -162,7 +162,13 @@ module.exports = {
         window.__perkAvg(cls, traitId, move, setup) / window.__perkAvg(cls, null, move, setup);
       return {
         grudge: gain('BRUISER', 'GRUDGE', 'SCRAP_BLADE', h => { h.hp = 300; }),
-        called: gain('SNIPER', 'CALLED_SHOT', 'QUICK_SHOT', (h, f) => { f[0].markedTurns = 5; }),
+        // M09: the mark has an OWNER now. Called Shot pays the sniper who placed it, wherever it
+        // is cashed, so a mark with no setter is nobody's and pays nothing - which is what this
+        // fixture was accidentally testing before, and it passed because the card used to read
+        // only the target's state.
+        called: gain('SNIPER', 'CALLED_SHOT', 'QUICK_SHOT', (h, f) => { f[0].markedTurns = 5; f[0].markedBy = h.id; }),
+        // And a mark somebody ELSE placed, which the holder must not be paid for.
+        calledOther: gain('SNIPER', 'CALLED_SHOT', 'QUICK_SHOT', (h, f) => { f[0].markedTurns = 5; f[0].markedBy = 'somebody_else'; }),
         throat: gain('HOUND', 'GO_FOR_THE_THROAT', 'FERAL_BITE', (h, f) => { f[0].bleedingTurns = 3; }),
         iron: gain('SHOTGUNNER', 'IRONSIGHTS', 'SLUG_SHOT'),
         pyro: gain('PYROMANIAC', 'PYROPHILIA', 'FLARE_GUN', (h, f) => { f.forEach(x => x.oiledTurns = 3); })
@@ -170,7 +176,8 @@ module.exports = {
     });
     const near = (v, want) => v > want - 0.09 && v < want + 0.09;
     ok(`Grudge pays below half health (x${dmgPerks.grudge.toFixed(2)})`, near(dmgPerks.grudge, 1.15));
-    ok(`Called Shot punishes marks (x${dmgPerks.called.toFixed(2)})`, dmgPerks.called > 1.15);
+    ok(`Called Shot pays on its own mark (x${dmgPerks.called.toFixed(2)})`, near(dmgPerks.called, 1.25));
+    ok(`and not on somebody else's (x${dmgPerks.calledOther.toFixed(2)})`, near(dmgPerks.calledOther, 1.0));
     ok(`Go For The Throat punishes bleeds (x${dmgPerks.throat.toFixed(2)})`, near(dmgPerks.throat, 1.3));
     ok(`Ironsights sharpens the slug (x${dmgPerks.iron.toFixed(2)})`, near(dmgPerks.iron, 1.2));
     ok(`Pyrophilia scales with oiled enemies (x${dmgPerks.pyro.toFixed(2)})`, near(dmgPerks.pyro, 1.3));

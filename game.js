@@ -306,6 +306,46 @@ function noteCover(cover, t, dmg) {
 function enemyFront() {
     return activeEntities.filter(e => !e.isPlayer && e.hp > 0 && !e.burrowed)[0] || null;
 }
+// M09: what a mark is worth to the body that placed it. M06 measured CALLED_SHOT - the SNIPER
+// fork that pays +25% against a marked target - at 1% of its holder's swings, and checked the
+// obvious artefact: the mark IS reachable, SPOTTERS_MARK firing 1,226 times a career. It then
+// EXPLAINED the 1% by saying the sniper is almost never the body that swings at the marked
+// target next. That explanation was asserted, not measured, and it is the whole question.
+//
+// A mark is one-shot: the first damaging move to land on it takes MARK_BONUS and sets the timer
+// to zero, whoever swings. So a sniper spends a turn placing it at 0.4x damage and then has to
+// win the race for its own payoff against the rest of the squad. Three things can happen to a
+// mark and only one of them pays CALLED_SHOT, so all three are counted: the setter cashes it,
+// an ally cashes it, or it ticks out unspent.
+function noteMark(kind, by, target, setter) {
+    if (!runStats) return;
+    const m = runStats.mk = runStats.mk || { set: 0, bySource: {}, cash: 0, byClass: {},
+                                            own: 0, ally: 0, expired: 0, onSquad: 0, called: 0, setByHolder: 0 };
+    if (kind === 'set') {
+        // A mark the Carrion puts on an OPERATOR is a different thing entirely - it steers enemy
+        // targeting and no MARK_BONUS reads it, because that bonus lives in the player's own
+        // resolver. Counted apart so it cannot inflate the denominator CALLED_SHOT is judged on.
+        if (target && target.isPlayer) { m.onSquad++; return; }
+        m.set++;
+        m.bySource[by] = (m.bySource[by] || 0) + 1;
+        // THE DENOMINATOR THE RE-KEY IS JUDGED ON. Without it a career where no sniper took the
+        // fork is indistinguishable from one where the card is broken - both read zero. Counted
+        // at the moment the mark is placed, which is the only moment the holder is knowable.
+        if (hasTrait(setter, 'CALLED_SHOT')) m.setByHolder = (m.setByHolder || 0) + 1;
+    } else if (kind === 'cash') {
+        if (!target || target.isPlayer) return;
+        m.cash++;
+        const cls = (by && by.classType) || 'UNKNOWN';
+        m.byClass[cls] = (m.byClass[cls] || 0) + 1;
+        if (by && target.markedBy && by.id === target.markedBy) m.own++; else m.ally++;
+    } else if (kind === 'called') {
+        if (!target || target.isPlayer) return;
+        m.called = (m.called || 0) + 1;
+    } else if (kind === 'expire') {
+        if (target && target.isPlayer) return;
+        m.expired++;
+    }
+}
 // And what the pool actually hands out, counted where it is handed out. Four sites roll a quirk
 // - the muster, a muster reroll, the Armory's reroll and a recruit signing on - and a census
 // that missed one would read as a pool with a hole in it.
@@ -7829,7 +7869,7 @@ const SIG_PERKS = [
     { id: 'BREACHING_ROUNDS', fork: 'SHOTGUN_SLUG',cls: 'SHOTGUNNER',name: 'Breaching Rounds', desc: 'Slug Shot ignores armour.' },
     { id: 'DOUBLE_TAP', fork: 'SHOTGUN_CLOSE',     cls: 'SHOTGUNNER', name: 'Double Tap',       desc: 'Execute refunds its cooldown on a kill.' },
     { id: 'IRONSIGHTS', fork: 'SHOTGUN_SLUG',     cls: 'SHOTGUNNER', name: 'Ironsights',       desc: 'Slug Shot deals +20%.' },
-    { id: 'CALLED_SHOT', fork: 'SNIPER_MARK',    cls: 'SNIPER',     name: 'Called Shot',      desc: 'This sniper deals +25% to marked targets.' },
+    { id: 'CALLED_SHOT', fork: 'SNIPER_MARK',    cls: 'SNIPER',     name: 'Called Shot',      desc: 'A mark this sniper places lands 25% harder, whoever cashes it.' },
     { id: 'PIERCING_ROUNDS', fork: 'SNIPER_SHOT',cls: 'SNIPER',     name: 'Piercing Rounds',  desc: 'Quick Shot ignores armour.' },
     { id: 'SPOTTER_NETWORK', fork: 'SNIPER_MARK',cls: 'SNIPER',     name: 'Spotter Network',  desc: '+5 momentum whenever a mark is cashed in.' },
     { id: 'PATIENT_HUNTER', fork: 'SNIPER_SHOT', cls: 'SNIPER',     name: 'Patient Hunter',   desc: "Deadeye's long-range bonus rises to 2.1x." },
@@ -10453,6 +10493,27 @@ function overdriveFor(classType) {
 // Anything else striking a marked target still gets the mark's smaller bonus and spends it.
 // DAMAGING_MOVES, which decides what "anything else" means, is derived below beside dealsDamage.
 const MARK_BONUS = 1.5;
+// M09: what a CALLED SHOT is worth, and where it is paid. The card used to read "this sniper
+// deals +25% to marked targets" in the perk layer, which required the sniper to be the body that
+// swings at its own mark - and it fired on 1% of that sniper's swings, the lowest rate of any
+// signature in the game.
+//
+// THE REASON IS TEMPO, NOT TUNING, and an arm was built to prove it rather than argue it. A mark
+// is one-shot: the first damaging move to land takes MARK_BONUS and zeroes the timer, whoever
+// swings. The sniper places it on ITS OWN TURN and then every other body acts before its next
+// one - and MARK_BONUS is exactly what makes that target the obvious thing to hit. Over 150
+// expeditions the squad placed 1,061 marks, cashed 914 of them, and the setter won 83. Nine per
+// cent. With the simulator's targeting taught to steer a CALLED SHOT holder onto its own mark
+// (`--mark own`), that goes to 186 of 1,193 - sixteen per cent - and the reason it stops there
+// is visible in the same run: the steer succeeded 186 times out of the 204 chances it got, from
+// 1,387 marks placed. Playing deliberately does not help because the opportunity is not there.
+//
+// So the card is paid where its own sibling is paid. SPOTTER_NETWORK gives momentum whenever a
+// mark is cashed by ANYBODY; CALLED SHOT now gives damage on the same trigger, off the sniper
+// who placed the mark rather than the body that spends it. The fork becomes a real choice
+// between two currencies on one trigger instead of one live option and one dead one - and the
+// sniper cashing its own mark still gets it, because the setter is then the holder.
+const CALLED_SHOT_MULT = 1.25;
 
 // What an operator's swing lands as. This lived as two inline .includes() checks inside
 // resolveAction, which meant nothing outside that function could ask the question - so the
@@ -11259,7 +11320,7 @@ function applyTurnStartEffects(ent) {
     if (ent.guardTurns > 0) { ent.guardTurns--; chg = true; }
     if (ent.oiledTurns > 0) { ent.oiledTurns--; chg = true; }
     if (ent.corrodedTurns > 0) { ent.corrodedTurns--; chg = true; }
-    if (ent.markedTurns > 0) { ent.markedTurns--; chg = true; }
+    if (ent.markedTurns > 0) { ent.markedTurns--; chg = true; if (ent.markedTurns === 0) noteMark('expire', null, ent); }
     if (ent.blessedTurns > 0) { ent.blessedTurns--; if (ent.blessedTurns === 0) ent.blessed = 0; chg = true; }
     if (chg) renderField();
 }
@@ -11763,7 +11824,7 @@ function resolveAction(targetId) {
             if (target.classType === 'BOSS') applyDamageHit(actEnt, target, actEnt.dmgBase * 4.0, 'phys', null);
             else applyDamageHit(actEnt, target, target.maxHp, 'phys', null, { pierce: true });
         } else if (variant.id === 'OVERWATCH') {
-            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.2, 'phys', null); if (e.hp > 0) { e.markedTurns = 3; spawnFCT(e.id, "MARKED", "fct-status"); } });
+            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.2, 'phys', null); if (e.hp > 0) { e.markedTurns = 3; e.markedBy = actEnt.id; noteMark('set', 'OVERWATCH', e, actEnt); spawnFCT(e.id, "MARKED", "fct-status"); } });
         } else if (variant.id === 'APEX_PREDATOR') {
             actEnt.hp = actEnt.maxHp; applyDamageHit(actEnt, target, actEnt.dmgBase * 2.5, 'bio', null); target.bleedingTurns = 3;
         } else if (variant.id === 'BLOOD_SCENT') {
@@ -11902,7 +11963,6 @@ function resolveAction(targetId) {
             return fires;
         };
         if (sig('GRUDGE', actEnt.hp < actEnt.maxHp / 2)) dmgMult *= 1.15;
-        if (sig('CALLED_SHOT', (target.markedTurns || 0) > 0)) dmgMult *= 1.25;
         // The conjunctions, counted in two parts rather than one: `gate` files whether the
         // holder used the ability, and only then does the state get asked. IRONSIGHTS has no
         // state half at all - the ability IS the whole condition - so it is only a gate.
@@ -11951,11 +12011,20 @@ function resolveAction(targetId) {
         const combo = comboFor(pendingAction, target);
         if (combo) {
             dmgMult *= combo.mult;
-            if (combo.consumes === 'markedTurns' && (target.markedTurns || 0) > 0 && traitOnField('SPOTTER_NETWORK')) addMomentum(5);
+            if (combo.consumes === 'markedTurns' && (target.markedTurns || 0) > 0) {
+                noteMark('cash', actEnt, target);
+                if (traitOnField('SPOTTER_NETWORK')) addMomentum(5);
+            }
             if (combo.consumes) target[combo.consumes] = 0;
             isCombo = true; comboType = `${combo.name}!`;
         } else if ((target.markedTurns || 0) > 0 && DAMAGING_MOVES.includes(pendingAction)) {
-            dmgMult *= MARK_BONUS; target.markedTurns = 0;
+            dmgMult *= MARK_BONUS;
+            // Off the body that PLACED it, which is the whole of M09. activeEntities rather than
+            // playerRoster because a setter who has since fallen is off the roster and still on
+            // the field - the mark they paid a turn for does not stop being theirs.
+            const spotter = activeEntities.find(e => e.isPlayer && e.id === target.markedBy);
+            if (hasTrait(spotter, 'CALLED_SHOT')) { dmgMult *= CALLED_SHOT_MULT; noteMark('called', spotter, target); }
+            noteMark('cash', actEnt, target); target.markedTurns = 0;
             if (traitOnField('SPOTTER_NETWORK')) addMomentum(5);
             isCombo = true; comboType = 'MARKED!';
         }
@@ -12029,10 +12098,10 @@ function resolveAction(targetId) {
         if (pendingAction === 'SLUG_SHOT' && hasMod(actEnt, 'INCENDIARY_SLUGS') && target.hp > 0) { target.oiledTurns = Math.max(target.oiledTurns, 2); setTimeout(() => spawnFCT(target.id, "OILED", "fct-weak"), 400); }
         if (pendingAction === 'SCRAP_BLADE' && hasMod(actEnt, 'JAGGED_EDGE') && target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns, 2); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400); }
         if (pendingAction === 'ACID_FLASK') { target.corrodedTurns = 3; log(`> ${target.name}'s plating is corroding!`, "log-dmg"); setTimeout(() => spawnFCT(target.id, "CORRODED", "fct-weak"), 400); }
-        if (pendingAction === 'SPOTTERS_MARK') { target.markedTurns = hasMod(actEnt, 'SPOTTING_SCOPE') ? 4 : 3; log(`> ${target.name} is marked.`, "log-status"); setTimeout(() => spawnFCT(target.id, "MARKED", "fct-status"), 400);
+        if (pendingAction === 'SPOTTERS_MARK') { target.markedTurns = hasMod(actEnt, 'SPOTTING_SCOPE') ? 4 : 3; target.markedBy = actEnt.id; noteMark('set', 'SPOTTERS_MARK', target, actEnt); log(`> ${target.name} is marked.`, "log-status"); setTimeout(() => spawnFCT(target.id, "MARKED", "fct-status"), 400);
             if (hasCap(actEnt, 'CAP_RANGE_CARD')) {
                 const behind = livingEnemies[dist + 1];
-                if (behind && behind.hp > 0) { behind.markedTurns = Math.max(behind.markedTurns || 0, target.markedTurns);
+                if (behind && behind.hp > 0) { behind.markedBy = actEnt.id; noteMark('set', 'SPOTTERS_MARK', behind, actEnt); behind.markedTurns = Math.max(behind.markedTurns || 0, target.markedTurns);
                     log(`> ${behind.name} is on the card too.`, 'log-status'); setTimeout(() => spawnFCT(behind.id, 'MARKED', 'fct-status'), 500); }
             } }
         if (pendingAction === 'RIP_AND_TEAR' && target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns, 3); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400); }
@@ -13075,7 +13144,7 @@ function executeEnemyAi(enemy) {
             // She learned which one of you goes down first, and told everything else.
             const mark = [...validTargets].sort((a, b) => (a.hp / a.maxHp) - (b.hp / b.maxHp))[0];
             if (mark) {
-                mark.markedTurns = Math.max(mark.markedTurns || 0, 2);
+                mark.markedTurns = Math.max(mark.markedTurns || 0, 2); noteMark('set', 'CARRION_CALL', mark);
                 activeEntities.filter(e => !e.isPlayer && e.hp > 0).forEach(e => { e.lockOn = mark.id; });
                 log(`> ${enemy.name} marks ${mark.name}. Everything out there turns to look.`, 'log-dmg');
                 spawnFCT(mark.id, 'MARKED', 'fct-weak'); playSFX('beast');
@@ -13458,7 +13527,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
-    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, noteReach, noteFront, noteHaul, noteCover, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, hasTrait, traitOnField,
+    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, noteReach, noteFront, noteHaul, noteCover, noteMark, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, MARK_BONUS, CALLED_SHOT_MULT, hasTrait, traitOnField,
     PERK_DMG_FLAT, PERK_DMG_MULT, PERK_SPD, PERK_MAXHP, PERK_HP_FLAT,
     perkStacks, perkDmgFlat, perkDmgMult, syncRankPerks, syncAllRankPerks, bankPerkStack, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,

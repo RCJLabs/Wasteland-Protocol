@@ -2433,6 +2433,87 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── M09: THE SNIPER LOSES THE RACE FOR ITS OWN MARK, AND ALWAYS WILL ───────────
+// M06's last open finding. CALLED SHOT paid the SNIPER +25% against a marked target and fired on
+// 1% of that sniper's swings - the lowest rate of any signature in the game. M06 checked the
+// obvious artefact and ruled it out: the mark IS reachable, SPOTTERS_MARK firing over a thousand
+// times a career. It then EXPLAINED the 1% by saying the sniper is almost never the body that
+// swings at the marked target next. That explanation was asserted, not measured. It is right.
+//
+// WHAT HAPPENS TO A MARK, over 150 expeditions:
+//
+//   placed on a hostile                 1,061      every one from SPOTTERS_MARK
+//   cashed before it ran out              914      86%
+//   ran out unspent                        25      2%
+//   cashed by the body that PLACED it      83      9%
+//   cashed by an ally                     831      91%
+//   who cashed them      bruiser 247, shotgunner 203, scavenger 152, SNIPER 83, medic 80, ...
+//
+// THE CAUSE IS TEMPO AND IT IS STRUCTURAL. A mark is one-shot - the first damaging move to land
+// takes MARK_BONUS and zeroes the timer, whoever swings - and the sniper places it on ITS OWN
+// TURN, so every other body acts before its next one. MARK_BONUS is exactly what makes that
+// target the obvious thing to hit, so the sniper's setup is what sends the squad at it. The card
+// asked its holder to win a race that its own ability is designed to lose.
+//
+// PROVED WITH AN ARM RATHER THAN ARGUED, because "the policy just does not do it" is the D05,
+// D06, D07 and I05 mistake and this file has made it four times. `--mark own` teaches the
+// targeting to steer a CALLED SHOT holder onto its own mark; `blind` is the old behaviour and
+// stays the default so every earlier career is comparable.
+//
+//                                          blind          --mark own
+//   marks placed                           1,061               1,387
+//   cashed                                   914               1,193
+//   cashed by the setter                 83 (9%)           186 (16%)
+//   CALLED SHOT's rate                        1%                  2%
+//   holder steered onto its own mark           -                 204
+//
+// SIXTEEN PER CENT IS THE CEILING, AND THE SAME RUN SAYS WHY: the steer succeeded 186 times out
+// of the 204 chances it got, from 1,387 marks placed. It is not that the policy tries and fails.
+// It is that by the sniper's next turn the mark is already spent. Deliberate play recovers seven
+// points and then stops.
+//
+// SO THE CARD IS PAID WHERE ITS OWN SIBLING IS PAID. SPOTTER_NETWORK, the other half of the same
+// fork, gives momentum whenever a mark is cashed BY ANYBODY. CALLED SHOT now gives damage on
+// that same trigger, off the sniper who placed the mark rather than the body that spends it -
+// so the fork is two currencies on one trigger instead of one live option and one dead one, and
+// a sniper cashing its own mark still gets it, because then the setter IS the holder.
+//
+//   of its holder's marks, the share that now pays it      51 of 54      94%
+//   what it was before                                                    9%
+//
+// THE WALL, three 150-expedition careers an arm, differing only in where the card is paid:
+//
+//                            base (paid on the swing)   head (paid on the mark)
+//   runs that ended the road           19 / 8 / 17              16 / 18 / 11
+//                      mean                   14.7                      15.0
+//   wipes per run      mean                   6.47                      6.43
+//                                    6.45/6.33/6.64            6.24/6.39/6.65
+//   cashes that paid it                          0        855 of 3,176 (27%)
+//
+// THE WALL IS UNMOVED and the card is alive. +0.3 wins against the noise floor K06 measured at
+// about fourteen for three careers an arm, 0.05 wipes, and the two arms' spreads sitting inside
+// each other. What moved is reach: nothing at all on the base arm's cash site - it paid in the
+// perk layer, on 1% of its holder's swings - against better than a quarter of every mark the
+// squad cashes. A card that contributed approximately zero now contributes something, and the
+// game did not notice, which is the right outcome for fixing dead content rather than tuning
+// live content. The base arm's 8-win career is worth naming rather than smoothing: three careers
+// an arm cannot resolve a gap this size and the spread is the reason the rule exists.
+//
+// AND I MADE THE SAME INSTRUMENT MISTAKE FOR THE THIRD ITEM RUNNING. M07 found a missing key
+// reading NaN and fixed the class in nums(). M08's per-card accumulator hand-listed its keys and
+// dropped one. M09's mark accumulator listed `called` and `setByHolder` in the SUM and not in
+// the SEED, so `undefined + n` came out NaN, `|| 0` turned it into a clean zero, and a working
+// card read as "no sniper on the road took that fork" for three runs before I stopped believing
+// it. A zero is worse than a NaN because it is believable. The seed is the schema now - the sum
+// walks Object.keys(SEED) - and suite 166 holds that shape rather than the values.
+//
+// THE OTHER THING I DID TWICE: solved a problem this repo had already solved, worse. M08b's
+// first counter sat inside mitigate, which the threat forecast calls four times over, when the
+// type ledger was already sitting at the three places damage lands. M09's first fixture compared
+// single swings, which came back 45/70/49/54/56 on arms that differ in nothing, when suite 29's
+// __perkAvg had averaged twelve swings for exactly this reason since P07. Read how it was done
+// before re-deriving it.
+//
 // ── M08b: THE CODE WAS RIGHT AND THE DOCUMENTATION WAS WRONG ───────────────────
 // M08 left this open. TERRAIN's legend said frontCover applied to "whoever stands in the front
 // rank, whichever side they are on", and mitigate reads `t.gridPos === 1` - which M08 proved no
@@ -3531,6 +3612,18 @@ const SCAR_POLICY = flag('scars', 'treat');
 // rather than the game's, which is the trap M02 named when it declined to fix the policy and
 // the census in one step.
 const PERK_POLICY = flag('perks', 'random');
+// M09: whether the targeting knows a mark exists. CALLED_SHOT pays its holder +25% against a
+// marked target, and M06 measured it at 1% of that sniper's swings. The mark is reachable -
+// 1,061 placed over 150 expeditions, 86% of them cashed - but the SETTER cashes only 9%, because
+// pickFoe below takes a finishable foe or the biggest threat and has never consulted a mark.
+// That 9% is therefore what happens BY ACCIDENT, and a player holding the card would simply
+// shoot the thing they just marked. So it is an arm rather than a reading: `blind` is the old
+// behaviour and stays the default so every career measured before this is comparable, and `own`
+// has a CALLED_SHOT holder take its own mark when one is standing. It encodes the decision and
+// nothing else - no re-ranking of anybody else's targets, because routing the whole squad off
+// the mark would be measuring my own taste rather than the card, which is the trap M04's `fit`
+// arm was written to avoid.
+const MARK_POLICY = flag('mark', 'blind');
 // The bench holds a job for the expedition and this file never gave one out, so a lever a real
 // player can take for free at the muster - QUARTERMASTER for one more material a salvage, FIELD
 // MEDIC for a camp that heals for more, SCOUT so the route does not close behind you - has
@@ -3805,7 +3898,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -4566,6 +4659,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     const pickFoe = mv => {
       const reachable = foes.filter(f => !soft(mv, f));
       const pool = reachable.length ? reachable : foes;
+      // M09's arm. Only the holder, only its OWN mark, and only when that mark is still standing
+      // and reachable with the move in hand - so what this measures is "can the card's holder get
+      // to it if it tries", which is the question the blind arm cannot answer.
+      if (markPolicy === 'own' && typeof hasTrait === 'function' && hasTrait(actor, 'CALLED_SHOT')) {
+        const mine = pool.find(f => (f.markedTurns || 0) > 0 && f.markedBy === actor.id);
+        if (mine) { stat.markTaken = (stat.markTaken || 0) + 1; return mine; }
+      }
       const kill = pool.filter(finishable).sort((a, b) => a.hp - b.hp)[0];
       if (kill) return kill;
       return pool.slice().sort((a, b) => threat(b) - threat(a))[0] || foes[0];
@@ -5701,6 +5801,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.frt = runStats.frt || {};           // and the same split per card that reads it
   stat.hl = runStats.hl || null;           // and the haul, which is the one verb that sets it up
   stat.cv = runStats.cv || null;           // M08b: what the ground's front cover is reaching
+  stat.mk = runStats.mk || null;           // M09: every mark placed, cashed and run out
   stat.qkDrawn = runStats.qkDrawn || {};   // and what the pool actually handed out
   stat.ut = runStats.ut || {};   // L03: the damage the type ledger cannot see
   // K05: what came out of the materials bag and by which door, plus what was still sitting in
@@ -5843,7 +5944,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -6717,6 +6818,57 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     };
     show('taken', 'TAKES', "its own front rank - the read that exists");
     show('dealt', 'DEALS', "the enemy front - the read the legend promises and mitigate does not make");
+  }
+  // ── M09: who cashes the mark ───────────────────────────────────────────────────────────
+  // CALLED_SHOT pays the SNIPER +25% against a marked target and M06 measured it at 1% of that
+  // sniper's swings. The mark is reachable - SPOTTERS_MARK fires over a thousand times a career
+  // - so the question is not whether it exists but who gets to it. A mark is one-shot, and the
+  // body that placed it spent a turn at 0.4x damage to do so, then has to beat its own squad to
+  // the payoff. Three outcomes, all counted, because only one of them pays the card.
+  {
+    // THE THIRD TIME THIS EXACT BUG HAS SHIPPED IN THIS FILE. M07 found it in nums() and fixed
+    // the class there; M08's per-card accumulator hand-listed its keys and dropped one, printing
+    // NaN; and this one listed `called` and `setByHolder` in the SUM and not in the SEED, so
+    // `undefined + n` came out NaN, `|| 0` turned it into a clean-looking zero, and a working
+    // card read as "no sniper took that fork" for three runs. A zero is worse than a NaN because
+    // it is believable. So no hand-written key list at all: the seed IS the schema, the sum walks
+    // it, and a counter the engine adds without touching this line is a loud missing key rather
+    // than a quiet nothing.
+    const SEED = { set: 0, cash: 0, own: 0, ally: 0, expired: 0, onSquad: 0, called: 0, setByHolder: 0 };
+    const m = results.reduce((a, x) => {
+      if (!x.mk) return a;
+      Object.keys(SEED).forEach(k => { a[k] += Number(x.mk[k]) || 0; });
+      ['bySource', 'byClass'].forEach(bag => Object.entries(x.mk[bag] || {})
+        .forEach(([k, v]) => { a[bag][k] = (a[bag][k] || 0) + v; }));
+      return a;
+    }, { ...SEED, bySource: {}, byClass: {} });
+    if (m.set) {
+      const pc = (n, d) => d ? Math.round(n / d * 100) + '%' : '0%';
+      const named = bag => Object.entries(bag).sort((x, y) => y[1] - x[1])
+        .map(([k, v]) => `${k.toLowerCase()} ${v}`).join(', ');
+      line('marks placed on a hostile', `${m.set} (${named(m.bySource)})`);
+      line('  of those, cashed before they ran out', `${m.cash} (${pc(m.cash, m.set)}), ${m.expired} expired (${pc(m.expired, m.set)})`);
+      // THE ROW M06 ASSERTED AND DID NOT MEASURE. A mark cashed by an ally is a mark the setter
+      // paid a turn for and somebody else spent - which is the whole of CALLED SHOT's problem if
+      // it holds, and a refutation of M06's explanation if it does not.
+      line('  and cashed by the body that placed it', `${m.own} of ${m.cash} (${pc(m.own, m.cash)}), an ally took ${m.ally} (${pc(m.ally, m.cash)})`);
+      line('  which class cashed them', named(m.byClass) || 'nobody');
+      // M09's re-key, read where it is now paid. CALLED SHOT used to sit in the perk layer and
+      // fire only when the sniper itself swung at the mark - 1% of its holder's swings. It is
+      // paid off the SETTER now, so its reach is the cash count rather than the 9-16% of it the
+      // setter could win, and this line is what says whether that landed.
+      line('  placed by a CALLED SHOT holder', `${m.setByHolder || 0} of ${m.set} (${pc(m.setByHolder || 0, m.set)})` +
+        (m.setByHolder ? '' : ' - so a zero on the next line is an absent fork, not a broken card'));
+      line('  cashes that paid CALLED SHOT', m.called
+        ? `${m.called} of ${m.cash} (${pc(m.called, m.cash)}) - the holder's marks, cashed by anybody`
+        : 'none - no sniper on the road took that fork');
+      // How often the arm actually fired, so its result cannot be read as "the policy tried and
+      // failed" when the truth might be "the policy never had a holder to try with".
+      const took = results.reduce((a, x) => a + (Number(x.markTaken) || 0), 0);
+      line('  times the holder was steered onto its own mark', took
+        ? `${took} (--mark own)` : 'none - the blind arm, which never consults a mark');
+      if (m.onSquad) line('  marks the Carrion put on an operator', `${m.onSquad} - a different mark, steering enemy fire rather than paying a bonus`);
+    }
   }
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   // K06: which pieces, because a total with no names in it cannot say whether the slot is being

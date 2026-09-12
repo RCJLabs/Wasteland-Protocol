@@ -28,10 +28,29 @@ module.exports = {
       return { asked, unknown: asked.filter(id => !pool.includes(id)),
                dupes: asked.filter((id, i) => asked.indexOf(id) !== i) };
     });
+    // Seven, not eight: M09 took CALLED_SHOT out of this layer. It used to ask whether the
+    // TARGET was marked, which required the sniper to be the body that swung at its own mark -
+    // 1% of its holder's swings, the lowest rate in the game, because a mark is one-shot and the
+    // squad cashes it first. It is paid at the mark itself now, off the body that placed it, so
+    // it is no longer a condition asked of a swing and does not belong in this census. The row
+    // below is what stops that being a way to lose a signature quietly.
     ok(`the resolver asks after ${named.asked.length} signatures by name (${named.asked.map(i => i.toLowerCase()).join(', ')})`,
-      named.asked.length >= 8);
+      named.asked.length >= 7);
     ok(`and every one of them is a signature that exists (${named.unknown.length} unknown${named.unknown.length ? ': ' + named.unknown.join(', ') : ''})`,
       named.unknown.length === 0);
+    // THE ROW THAT MAKES THE COUNT ABOVE SAFE TO LOWER. A signature leaving this layer has to
+    // arrive somewhere else and still be counted; otherwise "asks after 7" is indistinguishable
+    // from a card that was deleted by accident.
+    const rehomed = await page.evaluate(async () => {
+      const src = await (await fetch('game.js')).text();
+      const at = src.indexOf('dmgMult *= MARK_BONUS;');
+      return { paid: /hasTrait\(spotter, 'CALLED_SHOT'\)/.test(src.slice(at, at + 600)),
+               booked: /noteMark\('called'/.test(src),
+               inPool: SIG_PERKS.some(p => p.id === 'CALLED_SHOT') };
+    });
+    ok('CALLED_SHOT left this layer for the mark it is paid on, and is still in the pool',
+      rehomed.inPool && rehomed.paid);
+    ok('and is still counted where it moved to', rehomed.booked);
     ok(`each asked once, so no rate is two conditions added together (${named.dupes.length} repeated)`,
       named.dupes.length === 0);
 
@@ -51,7 +70,7 @@ module.exports = {
                counted: lines.filter(l => /(?:sig|gate)\('/.test(l) && /dmgMult \*=/.test(l)).length };
     });
     ok(`${layer.counted} conditional signatures in the perk layer go through the counter`,
-      layer.counted >= 8);
+      layer.counted >= 7);
     ok(`and none is left reading hasTrait straight into the multiplier (${layer.uncounted.length} uncounted${
         layer.uncounted.length ? ': ' + layer.uncounted.join(' | ') : ''})`,
       layer.uncounted.length === 0);
