@@ -142,6 +142,15 @@ module.exports = {
       snap.saved = Store.get(BASE_SAVE_KEY + currentSlot) || '';
       const raw = JSON.parse(snap.saved || '{}');
       snap.savedLive = !!(raw.combat && (raw.combat.queueIds || []).length > 0);
+      // M08b/#193: who is standing on the line, and who the save says is. loseOperator takes
+      // the fallen off playerRoster and LEAVES THE BODY ON THE FIELD - yoursDown says so and
+      // renderField draws it 'dead settled' - so the snapshot names somebody no roster can hand
+      // back. Six saves in six, before this was fixed: combat.playerIds said [p1,p2] while the
+      // save's own roster held [p2..p7], and the corpse was gone after a reload.
+      snap.field = activeEntities.filter(e => e.isPlayer).map(e => e.id);
+      snap.rosterIds = playerRoster.map(c => c.id);
+      snap.orphans = snap.field.filter(id => !snap.rosterIds.includes(id));
+      snap.carried = ((raw.combat && raw.combat.fallen) || []).map(f => f.id);
       return snap;
     });
     ok('the save the probe took has a live fight in it', was.savedLive === true);
@@ -165,11 +174,46 @@ module.exports = {
                // the queue length and the screen separate "never came back" from "came back and
                // finished". Costs one evaluate that was already happening.
                why: { pending: !!pendingCombat, queue: turnQueue.length, screen: currentScreen,
-                      standing: activeEntities.filter(e => e.hp > 0).length } };
+                      standing: activeEntities.filter(e => e.hp > 0).length },
+               field: activeEntities.filter(e => e.isPlayer).map(e => e.id),
+               rosterIds: playerRoster.map(c => c.id) };
     }, was.saved);
     ok(`the fight comes back up at all${now.resumed ? '' : ` (queue ${now.why.queue}, ${
         now.why.standing} standing, on ${now.why.screen}, pendingCombat ${now.why.pending})`}`,
       now.resumed === true);
+    // ── #193: the body the roster cannot hand back ──────────────────────────────
+    // A fallen operator is off playerRoster by design and on the field by design, which makes
+    // them the one thing a snapshot cannot restore by id alone. Carried whole instead, the way
+    // `enemies` already are and for the same reason.
+    ok(`the save names ${was.orphans.length} operator(s) its own roster no longer holds (${was.orphans.join(', ') || 'none'})`,
+      was.orphans.length === 1);
+    ok(`and carries the body rather than only the id (${was.carried.join(', ') || 'none'})`,
+      JSON.stringify(was.carried) === JSON.stringify(was.orphans));
+    // THE ROW THAT WOULD CATCH THE REGRESSION. Before the fix this came back one short and
+    // nothing said so - resumeCombat's .filter(Boolean) drops what it cannot resolve in silence.
+    ok(`so the line comes back whole, in the order it went down in (${was.field.join(',')} -> ${now.field.join(',')})`,
+      JSON.stringify(now.field) === JSON.stringify(was.field));
+    ok('with the fallen still off the roster, which is where the dead belong',
+      !now.rosterIds.includes(was.orphans[0]) && now.field.includes(was.orphans[0]));
+    // And a save written before the field existed. The comment on buildCombatSnapshot claims
+    // this is the migrateRelics idiom, so it is exercised rather than asserted: the key is cut
+    // out of the bytes and the load has to come back with a fight rather than a throw. It loses
+    // the corpse, which is the behaviour every save on disk already has.
+    const older = await page.evaluate(saved => {
+      const blob = JSON.parse(saved);
+      delete blob.combat.fallen;
+      currentSlot = 1;
+      Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify(blob));
+      let threw = null;
+      try { loadGameState(); if (pendingCombat) resumeCombat(pendingCombat); }
+      catch (e) { threw = e.message; }
+      return { threw, resumed: combatActive,
+               field: activeEntities.filter(e => e.isPlayer).map(e => e.id) };
+    }, was.saved);
+    ok(`a save from before the body was carried still loads (${older.threw || 'no throw'})`,
+      older.threw === null && older.resumed === true);
+    ok(`and comes back one short, the way it always did (${older.field.join(',')})`,
+      older.field.length === was.field.length - 1 && !older.field.includes(was.orphans[0]));
     ok(`the handicaps signed for are still signed for (${now.contracts.join(', ')})`,
       JSON.stringify(now.contracts) === JSON.stringify(was.contracts) && was.contracts.length === 3);
     ok(`so NO FALLBACK still means no fallback (${was.regroups} -> ${now.regroups})`,

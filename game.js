@@ -6890,7 +6890,12 @@ function continueGame() {
 // damage keeps landing on the live roster objects rather than on detached copies.
 function resumeCombat(c) {
     COMBAT_STATE.forEach(f => { f.set(f.load(c[f.key])); });
-    let players = (c.playerIds || []).map(id => playerRoster.find(p => p.id === id)).filter(Boolean);
+    // Resolved off the roster first and the carried bodies second, in the ORDER THE SAVE KEPT -
+    // renderField draws the line in activeEntities order, so rebuilding the living and then
+    // appending the dead would put the corpse in the wrong place instead of losing it.
+    let players = (c.playerIds || []).map(id =>
+        playerRoster.find(p => p.id === id) || (c.fallen || []).find(f => f && f.id === id)
+    ).filter(Boolean);
     activeEntities = [...players, ...(c.enemies || [])];
     turnQueue = (c.queueIds || []).map(id => activeEntities.find(e => e.id === id)).filter(Boolean);
     bondSavesUsed = new Set(c.bondSaves || []);
@@ -6953,6 +6958,19 @@ function buildCombatSnapshot() {
     const out = {
         activeIndex,
         playerIds: activeEntities.filter(e => e.isPlayer).map(e => e.id),
+        // The bodies the ROSTER can no longer hand back. loseOperator takes the fallen off
+        // playerRoster and deliberately leaves them on the field - yoursDown says so in as many
+        // words, and renderField draws them 'dead settled' for the rest of the fight - so a
+        // snapshot that names them by id alone names something nothing can resolve. Measured
+        // before this existed: six saves in six, combat.playerIds said [p1,p2] while the save's
+        // own roster held [p2..p7], and resumeCombat's .filter(Boolean) dropped p1 without a
+        // word. The corpse was on the line before the reload and gone after it.
+        //
+        // Carried whole, exactly like `enemies` and for exactly the same reason: a body on the
+        // field that no roster owns has to travel with the fight or not at all. A save written
+        // before this field existed has no `fallen` key, resolves nobody extra, and behaves the
+        // way it did - which is the migrateRelics idiom this file uses everywhere else.
+        fallen: activeEntities.filter(e => e.isPlayer && e.fallen),
         enemies: activeEntities.filter(e => !e.isPlayer),
         queueIds: turnQueue.map(e => e.id)
     };
