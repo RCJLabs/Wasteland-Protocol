@@ -2433,6 +2433,57 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── M06: THE SIGNATURE CONDITIONS, AND THE ONES THIS HARNESS CANNOT SEE ────────
+// The promotion screen has two halves. M02 measured the split - 91% of perk points buy a stat
+// card, 9% buy a signature - M04 took the stat cards apart and found three of five conditions
+// barely firing, M05 did the quirks and found one holding on 98% of swings and its partner on
+// 2%. Eight signatures carry a condition of the same shape and none had ever been counted.
+//
+// Two 150-expedition careers. FIVE ASK ABOUT THE WORLD:
+//
+//                                                    career 1        career 2
+//   SLACK_LINE   the target is the enemy front      66%  890/1356   72% 1555/2153
+//   TRENCH_FOOT  standing in the front rank         61% 1445/2383   42%  677/1597
+//   CATALYST     the target is corroded             53%  368/688    56% 1001/1795
+//   GRUDGE       this body is under half health     11% 1130/10162  10% 1059/11018
+//   CALLED_SHOT  the target is marked                1%   32/3484    1%   35/3612
+//
+// SLACK LINE IS THE THIRD CARD IN A ROW TO DESCRIBE A COMMON STATE AS IF IT WERE A RARE ONE.
+// PACK HUNTER measured 98%, DUELIST 75-79%, and this is 66-72% - all three word themselves as a
+// position you take up, and all three are simply where the fight usually is. That is now a
+// pattern in this game's content rather than three separate accidents.
+//
+// CALLED SHOT at 1% is the low one, and it is a real finding rather than an artefact: the mark
+// it needs is reachable, SPOTTERS_MARK being fired 1,226 times in a career. The Sniper holding
+// the signature is just almost never the body that swings at the marked target next.
+//
+// AND THREE ARE A CONJUNCTION - a named ability AND a state - WHICH IS WHERE THIS INSTRUMENT
+// RUNS OUT. Counted in two parts, because one rate over both cannot say which half failed:
+//
+//                            holder reached for it        of those, the state held
+//   GO_FOR_THE_THROAT        18%, 16%                     28%, 17%
+//   SHRAPNEL_LOAD             2%,  1%                     48%, 66%
+//   IRONSIGHTS                1%,  1%                     (the ability IS the condition)
+//
+// THE GATE IS WHAT FAILS, NOT THE CONDITION. When a Scavenger does fire the Pipe Rifle the
+// target is armoured about half the time - SHRAPNEL LOAD is well conditioned. Its holder just
+// does not fire it: basic attacks are 4.4-4.7% of every move this harness makes, because the
+// move ranking in this file scores anything with a cooldown above anything without one. So a
+// signature keyed to a basic attack is nearly invisible HERE, and that is a fact about the
+// policy driving the swing rather than about the game. D06 was filed as "Rad Shot has never
+// been fired" and had to be voided when the cause turned out to be this file; the split exists
+// so that mistake is not available to make again.
+//
+// MY OWN NUMBER FOR THAT WAS WRONG TWICE BEFORE IT SETTLED, which is worth writing down. Read
+// off individual rows it looked like 0.1% - that is one move's share, not the category's. A
+// twelve-run smoke then said 13.7%, which was a small sample. Two full careers say 4.4-4.7%,
+// and that is the figure. A share read off a row of a table is not the share of the table.
+//
+// NO DIAL MOVES ON THIS COMMIT. The census is the deliverable, the same order M05 used and M04
+// paid for getting wrong. What it leaves open is one question the instrument cannot answer as
+// it stands: whether a player reaches for a basic attack more often than this harness does, and
+// therefore whether the three gated signatures are content or decoration.
+//
 // ── M05b: THE PAIR REBUILT, AND THE RATES LANDED WHERE THE PROBE SAID ──────────
 // M05 measured PACK HUNTER at 97-98% and LONER at 1-3% - one condition read from two sides, so
 // one quirk was an unconditional bonus in disguise and the other was dead. Nine candidate
@@ -5423,6 +5474,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.plate = runStats.plate || {};
   stat.dt = runStats.dt || {};
   stat.qk = runStats.qk || {};             // M05: every quirk condition, asked and answered
+  stat.sg = runStats.sg || {};             // M06: and every signature condition beside them
+  stat.sgGate = runStats.sgGate || {};     // the ability half of the three that are a conjunction
   stat.qkDrawn = runStats.qkDrawn || {};   // and what the pool actually handed out
   stat.ut = runStats.ut || {};   // L03: the damage the type ledger cannot see
   // K05: what came out of the materials bag and by which door, plus what was still sitting in
@@ -5480,6 +5533,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   let FORMATION_FACTION = {};
   let SCAR_IDS = [];
   let PERK_IDS = [], QUIRK_IDS = [], CONDITIONAL_QUIRKS = [], STAT_QUIRKS = [];
+  let CONDITIONAL_SIGS = [], MOVE_GATED_SIGS = [], BASIC_ATTACKS = [];
+  let SIG_SHAPES = { applied: 0, moveGated: 0, other: 0, total: 0 };
   let FINAL_SECTOR_N = 7;
   let ORDER_NAME = '', ORDER_SECTORS = 7;
   page.on('pageerror', e => errors.push(e.message));
@@ -5504,6 +5559,39 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // numbers. These have no runtime read and counting them as "never fired" would be a lie.
   STAT_QUIRKS = await page.evaluate(() =>
     QUIRK_POOL.filter(q => q.dmg || q.hp || q.spd).map(q => q.id));
+  // M06: the conditional signatures, read off the resolver the same way the conditional quirks
+  // are - the ids the `sig` dispatcher names ARE the set, so the census cannot fall behind a
+  // signature that gains or loses a condition.
+  CONDITIONAL_SIGS = await page.evaluate(async () => {
+    const src = await (await fetch('game.js')).text();
+    return [...src.matchAll(/sig\('([A-Z_]+)'/g)].map(m => m[1]);
+  });
+  // Which of those ask "which ability was this" rather than "what is true": read off the
+  // condition the resolver actually passes, so a signature that gains or drops a move gate
+  // moves between the two lists without anybody remembering to edit one.
+  MOVE_GATED_SIGS = await page.evaluate(async () => {
+    const src = await (await fetch('game.js')).text();
+    return [...src.matchAll(/gate\('([A-Z_]+)'/g)].map(m => m[1]);
+  });
+  // The no-cooldown opener of every class, read off the ability table rather than listed here.
+  BASIC_ATTACKS = await page.evaluate(() =>
+    [...new Set(Object.values(ABILITIES).flat().filter(a => !a.cd && a.act !== 'self').map(a => a.move))]);
+  // And the shape of the rest of the pool, so the eight are never read as the whole of it.
+  SIG_SHAPES = await page.evaluate(async () => {
+    const src = await (await fetch('game.js')).text();
+    const cond = new Set([...src.matchAll(/sig\('([A-Z_]+)'/g)].map(m => m[1]));
+    let applied = 0, moveGated = 0, other = 0;
+    SIG_PERKS.forEach(p => {
+      if (cond.has(p.id)) return;
+      if (p.apply) { applied++; return; }
+      // A move-gated signature is named on a line that also names a pendingAction or a deck
+      // move; anything else is read some other way (traitOnField, a cooldown, a reach).
+      const lines = src.split('\n').filter(l => l.includes(`'${p.id}'`) && !/^\s*\{ id:/.test(l));
+      if (lines.some(l => /pendingAction|cooldowns\.|livingEnemies|bleedingTurns|oiledTurns/.test(l))) moveGated++;
+      else other++;
+    });
+    return { applied, moveGated, other, total: SIG_PERKS.length };
+  });
   // Which of them carry a condition, also read off the engine: quirkDmgMult is the one place
   // a quirk is asked a question, so the ids it names ARE the conditional set.
   CONDITIONAL_QUIRKS = await page.evaluate(async () => {
@@ -6225,6 +6313,57 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       : 'none');
     const dead = flat.filter(id => drawn[id] && !(qk[id] || {}).fired);
     if (dead.length) line('  drawn and never once fired', dead.map(i => i.toLowerCase()).join(', '));
+  }
+  // ── M06: the signature conditions, which are the other half of the promotion screen ────
+  // M02 measured that 9% of perk points buy a signature and 91% buy a stat card; M04 then found
+  // three of the five stat conditions barely firing. Eight signatures carry a condition of the
+  // same shape and none had ever been counted. Same ledger, same order: census before dial.
+  {
+    const sg = {};
+    results.forEach(r => Object.entries(r.sg || {}).forEach(([k, v]) => {
+      const row = sg[k] = sg[k] || { seen: 0, fired: 0 };
+      row.seen += v.seen; row.fired += v.fired;
+    }));
+    // TWO KINDS OF LOW NUMBER, and reporting them in one list would hide which is which. A
+    // STATE condition asks about the world - is this body hurt, is that target marked - so a low
+    // rate means the state does not happen. A MOVE-GATED one asks which ability was used, so a
+    // low rate means the holder picked something else, which is D06's question and not M04's.
+    // Split off the resolver's own text rather than by a list here.
+    const pct = ([k, v]) => `${k.toLowerCase()} ${Math.round(v.fired / v.seen * 100)}% (${v.fired}/${v.seen})`;
+    const by = (want) => Object.entries(sg).filter(([k]) => MOVE_GATED_SIGS.includes(k) === want)
+      .sort((a, b) => b[1].fired / b[1].seen - a[1].fired / a[1].seen);
+    line('signature conditions that ask about the world, how often each held', by(false).length
+      ? by(false).map(pct).join(', ') : 'none asked');
+    line('  and the ones gated on using one ability, how often its holder used it', by(true).length
+      ? by(true).map(pct).join(', ') : 'none asked');
+    const gates = {};
+    results.forEach(r => Object.entries(r.sgGate || {}).forEach(([k, v]) => {
+      const row = gates[k] = gates[k] || { seen: 0, fired: 0 };
+      row.seen += v.seen; row.fired += v.fired;
+    }));
+    const gateRows = Object.entries(gates).sort((a, b) => b[1].fired / b[1].seen - a[1].fired / a[1].seen);
+    line('  how often the holder reached for the ability those are gated on', gateRows.length
+      ? gateRows.map(pct).join(', ') : 'none');
+    // THE LIMIT THIS INSTRUMENT HAS, printed rather than left for somebody to infer: those gates
+    // are the basic attacks, and this file's move policy scores anything with a cooldown above
+    // them, so they are a fraction of a percent of all moves. A low rate there is a fact about
+    // the harness, not about the game - which is the D06 mistake, and it is named here so the
+    // next reader does not make it again.
+    const moves = {};
+    results.forEach(r => Object.entries(r.moves || {}).forEach(([k, v]) => { moves[k] = (moves[k] || 0) + v; }));
+    const allMoves = Object.values(moves).reduce((a, b) => a + b, 0);
+    const basics = BASIC_ATTACKS.reduce((a, m) => a + (moves[m] || 0), 0);
+    line('  and how much of this harness ever swings a basic attack at all', allMoves
+      ? `${basics} of ${allMoves} moves (${(basics / allMoves * 100).toFixed(1)}%) - so a signature gated on one is barely reachable here`
+      : 'no moves');
+    const quiet = CONDITIONAL_SIGS.filter(id => !(sg[id] || {}).seen && !(gates[id] || {}).seen);
+    if (quiet.length) line('  never asked at all', quiet.map(i => i.toLowerCase()).join(', '));
+    // How the other thirty-two are shaped, so the eight are read as a SLICE of the pool rather
+    // than as the pool. Read off the engine: a signature either writes the sheet when it is
+    // bought, changes what one named ability does, or asks a question at the moment of use.
+    line('  the pool behind them', `${SIG_SHAPES.applied} write the sheet when bought, ${
+      SIG_SHAPES.moveGated} change one named ability, ${CONDITIONAL_SIGS.length} ask a question, ${
+      SIG_SHAPES.other} are read some other way, of ${SIG_SHAPES.total}`);
   }
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   // K06: which pieces, because a total with no names in it cannot say whether the slot is being

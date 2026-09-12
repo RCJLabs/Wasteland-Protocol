@@ -163,13 +163,30 @@ function hasQuirk(ent, id) { return !!(ent && ent.isPlayer && ent.quirk && ent.q
 //
 // Counted at the READ rather than in a list kept here, so a quirk that stops being reachable
 // shows up as a rate going to zero rather than as a line nobody remembered to update.
-function noteQuirk(id, fired) {
+function noteCond(bag, id, fired) {
     if (!runStats || !id) return;
-    runStats.qk = runStats.qk || {};
-    const row = runStats.qk[id] = runStats.qk[id] || { seen: 0, fired: 0 };
+    const book = runStats[bag] = runStats[bag] || {};
+    const row = book[id] = book[id] || { seen: 0, fired: 0 };
     row.seen++;
     if (fired) row.fired++;
 }
+function noteQuirk(id, fired) { noteCond('qk', id, fired); }
+// M06: the same ledger for the signature perks, which are the other half of the promotion
+// screen. M04 did the stat cards and found three of five conditions barely firing; M05 did the
+// quirks and found one firing on 98% of swings and its partner on 2%. Eight signatures carry a
+// condition of the same shape and not one of them has ever been counted. Two are already
+// suspect from measurements taken for other reasons: SLACK LINE reads dist === 0, which M04
+// measured at 81% of all swings, and TRENCH FOOT reads the front rank, which M05's candidate
+// probe measured at about a third of them.
+function noteSig(id, fired) { noteCond('sg', id, fired); }
+// Three of the eight are a CONJUNCTION - a named ability AND a state - and one rate over both
+// cannot say which half failed. So the gate is counted separately: how often the holder reached
+// for that ability at all, and then, of those, how often the state was true. The distinction is
+// not academic. The gate moves are the basic attacks, and the harness fires those on about one
+// move in a thousand because its ranking prefers anything with a cooldown - so a single blended
+// rate would have read as dead content when what it measures is the policy driving the swing.
+// D06 was filed on exactly that mistake and had to be voided.
+function noteSigGate(id, used) { noteCond('sgGate', id, used); }
 // And what the pool actually hands out, counted where it is handed out. Four sites roll a quirk
 // - the muster, a muster reroll, the Armory's reroll and a recruit signing on - and a census
 // that missed one would read as a pool with a hole in it.
@@ -11716,14 +11733,33 @@ function resolveAction(targetId) {
         dmgMult *= quirkDmgMult(actEnt, target, dist);
         dmgMult *= perkDmgMult(actEnt, effReach);
         dmgMult *= bondDmgMult(actEnt);
-        if (hasTrait(actEnt, 'GRUDGE') && actEnt.hp < actEnt.maxHp / 2) dmgMult *= 1.15;
-        if (hasTrait(actEnt, 'CALLED_SHOT') && (target.markedTurns || 0) > 0) dmgMult *= 1.25;
-        if (hasTrait(actEnt, 'SHRAPNEL_LOAD') && pendingAction === 'PIPE_RIFLE' && target.armor > 0) dmgMult *= 1.2;
-        if (hasTrait(actEnt, 'GO_FOR_THE_THROAT') && pendingAction === 'FERAL_BITE' && (target.bleedingTurns || 0) > 0) dmgMult *= 1.3;
-        if (hasTrait(actEnt, 'IRONSIGHTS') && pendingAction === 'SLUG_SHOT') dmgMult *= 1.2;
-        if (hasTrait(actEnt, 'TRENCH_FOOT') && actEnt.gridPos === 1) dmgMult *= 1.2;
-        if (hasTrait(actEnt, 'CATALYST') && (target.corrodedTurns || 0) > 0) dmgMult *= 1.25;
-        if (hasTrait(actEnt, 'SLACK_LINE') && dist === 0) dmgMult *= 1.25;
+        // M06: counted at the read, in the idiom quirkDmgMult already uses - `sig` returns what
+        // `hasTrait(...) && condition` returned and files the pair on the way past, so a body
+        // that does not hold the signature is never counted as having failed its condition.
+        const sig = (id, fires) => {
+            if (!hasTrait(actEnt, id)) return false;
+            noteSig(id, fires);
+            return fires;
+        };
+        if (sig('GRUDGE', actEnt.hp < actEnt.maxHp / 2)) dmgMult *= 1.15;
+        if (sig('CALLED_SHOT', (target.markedTurns || 0) > 0)) dmgMult *= 1.25;
+        // The conjunctions, counted in two parts rather than one: `gate` files whether the
+        // holder used the ability, and only then does the state get asked. IRONSIGHTS has no
+        // state half at all - the ability IS the whole condition - so it is only a gate.
+        const gate = (id, used, state) => {
+            if (!hasTrait(actEnt, id)) return false;
+            noteSigGate(id, used);
+            if (!used) return false;
+            if (state === undefined) return true;
+            noteSig(id, state);
+            return state;
+        };
+        if (gate('SHRAPNEL_LOAD', pendingAction === 'PIPE_RIFLE', target.armor > 0)) dmgMult *= 1.2;
+        if (gate('GO_FOR_THE_THROAT', pendingAction === 'FERAL_BITE', (target.bleedingTurns || 0) > 0)) dmgMult *= 1.3;
+        if (gate('IRONSIGHTS', pendingAction === 'SLUG_SHOT')) dmgMult *= 1.2;
+        if (sig('TRENCH_FOOT', actEnt.gridPos === 1)) dmgMult *= 1.2;
+        if (sig('CATALYST', (target.corrodedTurns || 0) > 0)) dmgMult *= 1.25;
+        if (sig('SLACK_LINE', dist === 0)) dmgMult *= 1.25;
         snap('perks, quirks & bonds');
         // OLD GUARD, on its own line: a doctrine the player is paying a whole run's
         // composition for should be visible in the arithmetic rather than folded into
@@ -13250,7 +13286,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
-    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteQuirk, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, hasTrait, traitOnField,
+    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, hasTrait, traitOnField,
     PERK_DMG_FLAT, PERK_DMG_MULT, PERK_SPD, PERK_MAXHP, PERK_HP_FLAT,
     perkStacks, perkDmgFlat, perkDmgMult, syncRankPerks, syncAllRankPerks, bankPerkStack, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
