@@ -2433,6 +2433,46 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── M04b: THE RE-CUT LANDS THE WALL BACK, AND MATCHING FINALLY MEASURES ─────────
+// The first cut's conditions were re-keyed onto the two axes that are genuinely about the
+// operator - the verb it carries and the rank it is deployed in - with max health left as max
+// health and one card, FORTIFIED, left asking nothing. Two more arms, three 150-expedition
+// careers each, against the same base measured earlier in the same session:
+//
+//                                          runs won            mean    wipes/run          mean
+//   base       pre-M04, the five flat cards  36, 41, 30        35.7    5.51 5.68 5.79      5.66
+//   cut 1      blind pick                    25, 16, 18        19.7    6.41 6.65 6.46      6.51
+//   cut 1      matched pick                  22, 18, 29        23.0    6.49 6.37 6.25      6.37
+//   re-cut     blind pick                    28, 21, 26        25.0    5.95 6.39 6.51      6.28
+//   re-cut     matched pick                  35, 33, 36        34.7    5.84 5.77 5.94      5.85
+//
+// THE WALL IS BACK WHERE IT WAS for a player who matches the card to the body: 34.7 against a
+// 35.7 baseline is a difference of one win, far inside K06's floor, and the wipes overlap
+// (base 5.51-5.79, re-cut fit 5.77-5.94). The sixteen-win regression the first cut cost is gone.
+//
+// AND THE QUESTION M04 EXISTS FOR IS ANSWERED. Matched 34.7 against blind 25.0 is 9.7 wins,
+// which at three careers an arm is suggestive rather than settled on the win count - but the
+// wipes separate cleanly, 3 against 3 with no overlap at all (5.77-5.94 against 5.95-6.51), and
+// this file's own header calls wipes the stable figure. Matching a card to the body it is
+// offered to is worth roughly ten wins of a career and half a wipe a run.
+//
+// That gap did not exist before M04 and could not: the old five were identical on every body, so
+// there was nothing for a policy to get right. The first cut could not measure it either, for a
+// different reason - its `fit` set counted HONED as suiting any backline body while HONED keyed
+// on the TARGET's distance, so one of the three cards it picked from was nearly dead and the two
+// arms came out 19.7 against 23.0, inside the floor. The unanswered reading filed with cut 1 is
+// now answered, and the reason it was unanswerable was the same defect the cards had.
+//
+// WHAT THE TWO ARMS ARE, so neither is read as "the" number: blind is the floor - every point
+// spent on whatever the shuffle offered - and matched is the ceiling, a player who reads every
+// card against the body in front of them and never once takes the wrong one. A real player sits
+// between 25.0 and 34.7. The blind arm alone still beats the first cut by about five wins, so
+// the re-cut is not only better for somebody paying attention.
+//
+// The census moved with it: a blind pick lands on a body that meets the condition 60% of the
+// time, up from the 57% the first cut managed, and both are read against FORTIFIED asking
+// nothing - which is three cards in five fitting any body before judgement is applied at all.
+//
 // ── M04: THE CARDS READ THE OPERATOR, AND THREE OF THE FIVE CONDITIONS BARELY FIRE ──
 // M04 made the five training cards situational and this is what it cost. Five arms, three
 // 150-expedition careers each, all measured in one session on one machine:
