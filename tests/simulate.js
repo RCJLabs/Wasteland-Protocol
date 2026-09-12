@@ -2433,6 +2433,43 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── M05b: THE PAIR REBUILT, AND THE RATES LANDED WHERE THE PROBE SAID ──────────
+// M05 measured PACK HUNTER at 97-98% and LONER at 1-3% - one condition read from two sides, so
+// one quirk was an unconditional bonus in disguise and the other was dead. Nine candidate
+// replacements were counted over 24,804 swings BEFORE anything was written, which killed the
+// whole "the squad is in trouble" family at a stroke (half-down 1%, last standing 2%, isolated
+// 2%) and left three live ones: an ally on both sides 27%, only one foe left 30%, the foes
+// outnumber us 14%. The pair was rebuilt on the two of those that are genuine opposites.
+//
+// WHAT THE PROBE PREDICTED AND WHAT PLAY DELIVERED, three 150-expedition careers after:
+//
+//                     before          probe said   measured in play
+//   PACK_HUNTER     98%, 97%             27%       24%, 31%, 35%
+//   LONER            3%,  1%             14%       15%, 13%, 12%
+//
+// Both land on the probe. And the three conditions NOBODY TOUCHED are the control that says the
+// instrument is reading the change rather than the weather: FIRST_BLOOD 18-19% before and 17%
+// three times after, CLOSER 18-20% and 17-18%, DUELIST 75-79% and 76-78%.
+//
+// THE WALL, against the pooled default arm - five careers of it, because M04b's blind-pick arm
+// and M05's two census careers were run on the same configuration and are the same measurement:
+//
+//                       runs won                    mean    wipes                      mean
+//   before   28, 21, 26, 17, 21                     22.6    5.95 6.39 6.51 6.41 6.37    6.33
+//   after    19, 20, 15                             18.0    6.52 6.59 6.73              6.61
+//
+// The win count is UNMOVED: 4.6 wins apart, well inside K06's floor for arms of this size. The
+// wipes are a hair higher and the ranges only just clear each other - 6.51 against 6.52, which
+// is a hundredth of a wipe and five careers against three. THAT IS NOT A SEPARATION and it is
+// written down as suggestive rather than measured, because the temptation to read it as one is
+// exactly what L05 was.
+//
+// It also points the right way for the right reason, which is worth saying because it is the
+// arithmetic the change was sized on: PACK HUNTER fell from about 14.7 points of average damage
+// (98% of a 15% bonus) to about 9 (30% of 30%), and LONER rose from about 0.5 to about 5.2. Net,
+// a point of average damage lost across two quirks in a pool of fifteen - so a squad that is a
+// shade softer, and a lethality reading a shade higher, is what this should look like.
+//
 // ── M05: THE QUIRK POOL, COUNTED FOR THE FIRST TIME ────────────────────────────
 // Fifteen quirks, five of them carrying a condition, and until this phase nothing in this file
 // had ever counted one. M04 is why that was worth fixing before anything else: it shipped five
