@@ -126,6 +126,14 @@ module.exports = {
       const f = await fit(w, h);
       ok(`at ${w} wide the badges arrive (${f.bare.badges} bare, ${f.badged.badges} badged)`,
         f.bare.badges === 0 && f.badged.badges === 3);
+      // This row reads close to its bound on a noise sweep and is NOT: the M04 sweep put it at
+      // 2.8 sd below <= 24 over twenty-four batteries, and the numbers behind that are 14
+      // whenever the field renders at full scale and about 4 when fitField shrinks the cards for
+      // a crowded enemy row. The spread is bimodal and one-sided - nothing ever sits above the
+      // mode - so a two-sided standard deviation against a one-sided upper bound reads room
+      // running out at the top where none is. Left where it is deliberately; the bound is a
+      // layout fact (a badge row, not a second card) rather than a number fitted to a
+      // measurement, and widening it to please the sweep would cost the row its meaning.
       const grew = f.badged.cards.map((c, i) => c.h - f.bare.cards[i].h);
       ok(`and cost the card a row rather than a screen (${grew.join(', ')}px taller at ${w})`,
         grew.length === 3 && grew.every(d => d > 0 && d <= 24));

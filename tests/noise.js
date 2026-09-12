@@ -38,6 +38,38 @@
 // needs samples before it settles. Twenty resolves a 3 sd margin comfortably and is what the K03
 // sweep used; ten will find the rows already firing and not much else.
 
+// ── WHAT THE M04 SWEEP FOUND, AND WHAT IT GOT WRONG ────────────────────────────────────
+// Twenty-four batteries on the tree at 161ad13. 4,376 assertions, 341 printing a number that
+// moves, 35 of those joined to a bound. NOTHING WENT RED across the sweep - which is itself a
+// result, because the run was started to identify a row that had failed once in seven batteries
+// the day before. One in thirty-one and not reproduced in twenty-four: it stays unidentified,
+// and is recorded here rather than quietly forgotten.
+//
+// The closest headroom it reported is worth writing down because THE READING IS WRONG, and in a
+// way the next sweep will reproduce:
+//
+//   2.8 sd  155  badge row growth  <= 24  measured 11.50 +/- 4.42, seen 4 to 14
+//   3.1 sd  155  same row, 400 wide <= 24 measured 12.33 +/- 3.81, seen 4 to 14
+//
+// The value is 14 whenever the field renders at full scale and drops to about 4 when fitField
+// shrinks the cards for a crowded enemy row. So the distribution is bimodal and ONE-SIDED: the
+// maximum observed in twenty-four batteries is exactly the mode, and nothing ever sits above it.
+// A standard deviation is two-sided, so pairing it with a one-sided upper bound reads a spread
+// that only ever goes DOWN as if it were room running out at the top. There is no upward risk
+// here at all, and widening the bound would be a change made to satisfy an instrument rather
+// than the game.
+//
+// This is the limit the header above already names - "the pairing of a bound to a printed number
+// is a GUESS" - showing up one level further in: the pairing was right and the STATISTIC was the
+// wrong one for the shape. A sweep that reports a one-sided quantity against a one-sided bound
+// should be read by its observed range first and its sd second.
+//
+// The other three inside 5 sd were all checked and all are deliberate, each already carrying the
+// comment that says so: 128's two purse rows read `>= 2000` against a purse seeded at exactly
+// 2000 precisely so the payout roll is not in them (K03 changed those from `> 2000`), and
+// 28-gear's rate band is documented as a wide sanity band around the dial, there to catch a
+// gross move rather than to measure one, because sixty fights cannot resolve a rate.
+
 // ── WHAT THE FIRST SWEEP FOUND ─────────────────────────────────────────────────────────
 // Twenty batteries, 4154 assertions, 315 of them printing a number that moves between runs.
 // One went red during the sweep itself; twelve more sat inside five standard deviations of
