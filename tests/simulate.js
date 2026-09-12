@@ -2433,6 +2433,67 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── M04: THE CARDS READ THE OPERATOR, AND THREE OF THE FIVE CONDITIONS BARELY FIRE ──
+// M04 made the five training cards situational and this is what it cost. Five arms, three
+// 150-expedition careers each, all measured in one session on one machine:
+//
+//                                                   runs won              mean   wipes/run   mean
+//   base      pre-M04, the five flat cards          36, 41, 30            35.7   5.51 5.68 5.79  5.66
+//   random    M04 as shipped, blind pick            25, 16, 18            19.7   6.41 6.65 6.46  6.51
+//   fit       M04 as shipped, matched pick          22, 18, 29            23.0   6.49 6.37 6.25  6.37
+//   diagdef   M04 offence, the OLD two HP cards     28, 32, 28            29.3   6.17 6.46 6.13  6.25
+//   fixpct    M04, defence as a 10%/stack cut       19, 21, 11            17.0   6.55 6.58 6.55  6.56
+//
+// M04 AS SHIPPED COSTS ABOUT SIXTEEN WINS OF A CAREER. base -> random is 16.0, which clears
+// K06's floor for two arms of three (~14); every other pairwise gap here sits under it and is
+// suggestive only. The wipes column is the one to read, because this file's own header calls it
+// the stable figure: base's three careers are 5.51-5.79 and every M04 arm's nine are 6.13-6.65,
+// a clean separation with no overlap at all. The squad is measurably more fragile.
+//
+// WHY, MEASURED RATHER THAN REASONED. A probe on the resolver counted what each of the five
+// conditions actually does, over 14,559 player swings in 25 expeditions:
+//
+//   VETERAN    body at half health or better       81% of swings
+//   SWIFT      thrower standing off the front rank  68%
+//   HARDENED   thrower standing in the front rank   32%
+//   FORTIFIED  body under half health               19%
+//   HONED      target further off than arm's reach  21%
+//
+// HONED IS THE ONE THAT MATTERS AND THE ERROR IN IT IS STRUCTURAL, NOT A PRICE. "Further off
+// than arm's reach" is not a property of the operator at all: dist is the target's index in the
+// living-enemy list, so it is a property of whichever foe the targeting picked, and 81% of every
+// swing in the game lands on the front of the enemy line. HONED was the only multiplicative
+// offence axis a player has against enemies that scale exponentially, it used to be always on,
+// and M04 converted it to a card that pays on one swing in five. The whole design rested on an
+// assumption about how often a condition fires that was never measured - which is D05, D06 and
+// K06 exactly, committed here rather than found here.
+//
+// The verb's OWN reach, which IS a body property - the Medic carries a pistol and the Bruiser a
+// blade - fires on 60% of swings. That is the condition HONED should have had.
+//
+// AND THE RANK-KEYED CARDS WERE NEVER AN UPTIME PROBLEM. 32% is the share of swings thrown from
+// rank 1, which is how much of the line stands there - not the uptime for a body that TAKES
+// HARDENED, which stands there permanently and has it on always. So doubling those two for
+// "conditionality" was a buff, not compensation, and their loss is entirely the CURRENCY: the
+// old cards were +25 HP and +10% max HP, compounding, and M04 made both a flat -6 off each
+// blow. diagdef isolates it - putting only those two back recovers 19.7 -> 29.3 of the 35.7,
+// about ten of the sixteen wins, leaving roughly six on HONED.
+//
+// THE REPAIR I EXPECTED TO WORK DOES NOT, WHICH IS WHY IT IS IN THE TABLE. fixpct keeps the
+// conditions and restores a MULTIPLICATIVE defensive axis - 10% off each blow per stack,
+// 0.9^n, which cannot reach invulnerability the way a flat cut cannot either. It measured 17.0,
+// no better than the 19.7 it was meant to fix. A 10% cut at these uptimes is simply worth less
+// than compounding max health, and the number that would break even is large enough to be its
+// own design question. Tried and refuted before being proposed, not after.
+//
+// WHAT THIS DOES NOT SETTLE, and must not be read as settling: whether matching a card to a
+// body pays. random 19.7 against fit 23.0 is inside the floor, and the wipes are 6.51 against
+// 6.37 - indistinguishable either way. But the fit policy was built on the same wrong
+// assumption as the cards: it treats HONED as fitting any backline body, and HONED fires on 21%
+// of swings whatever rank threw them. One of the three cards in its backline set was nearly
+// dead. So this arm says nothing about the value of matching, and the question has to be re-run
+// once the conditions are repaired. Reported as unanswered rather than as a null.
+//
 // ── M02: THE FIVE FLAT PERKS ARE NOT FILLER. THEY ARE 91% OF THE PROGRESSION ────
 // Filed on the premise that the stat pool was the boring option sitting beside the signatures on
 // the promotion card, and thin at five. The census inverts it. One 150-expedition career:
