@@ -2433,6 +2433,61 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── M07: THE MOVE POLICY IS SOUND. THE INSTRUMENT WAS NOT, AND THE NUMBER BARELY MOVED ──
+// Filed on a suspicion: M06 ended with basic attacks at "4.4-4.7% of moves" and could not say
+// what it meant, and that looked far too low for a squad whose abilities cool down in two to
+// four turns. If the harness was refusing to swing a basic attack, every damage figure in this
+// file was measuring a robot rather than a player - which is D05, D06, D07 and I05 in a row.
+//
+// THE SUSPICION IS REFUTED. Two 150-expedition careers:
+//
+//                                                   career 1        career 2
+//   turns the squad took                             133,869         145,633
+//   tactics bought without spending a turn            36,187          39,450
+//   turns that got as far as the ranking                  78%             77%
+//   abilities off cooldown when it did    0 up:            7%              6%
+//                                         1 up:           29%             26%
+//                                         2 up:           46%             47%
+//                                         3 up:           18%             22%
+//   basic attacks, of the turns with a ranking to do     6.4%            5.7%
+//                  of every turn                         5.0%            4.4%
+//   of those, thrown with nothing else up                 64%             55%
+//
+// THE HAND IS ALMOST NEVER EMPTY - six or seven turns in a hundred - and two or three specials
+// are up on two turns in three. So a basic attack at one turn in twenty is not a policy refusing
+// to swing; it is a deck whose cooldowns are short enough that something is nearly always ready.
+// Better than half of the basic attacks thrown are forced, and the rest are the resist term
+// doing its job. A competent player would do the same thing. No dial moves and none should.
+//
+// THE INSTRUMENT WAS WRONG IN THREE WAYS ALL THE SAME, and all three are fixed:
+//
+//   1. THE DENOMINATOR WAS NOT TURNS. stat.moves counts a bought tactic beside an ability, and
+//      a tactic is free - buy() does not return and the actor still picks a move. Better than a
+//      fifth of that tally never cost anybody a turn. turnsPlayer had counted turns correctly
+//      since F10 and no readout had ever divided by it.
+//   2. THE NUMERATOR CAME OFF A NARROWER PATH than the denominator. Basic attacks are picked by
+//      the ranking, and the ranking only runs on the turns no earlier case claimed - about four
+//      in five. A ranking-path count over every turn understates it.
+//   3. A COUNTER NO RUN TOUCHED READ AS NaN, because nums() returned undefined for a missing key
+//      and the sums built on it propagated that. It only surfaces the day a run scores zero, and
+//      then it reads as a broken report rather than as a missing initialiser. nums() coerces now,
+//      which fixes the class rather than the instance.
+//
+// AND THE CORRECTED NUMBER IS ALMOST THE SAME ONE: 4.4-5.0% of turns against M06's 4.4-4.7% of
+// moves. Three bugs, and the figure moved by half a point. What changed is that it can now be
+// READ - a share against a named denominator, with the forced half separated from the chosen
+// half - and reading it is what refuted the premise. A number being right is not the same as a
+// number being interpretable, and only the second kind settles anything.
+//
+// MY OWN SMOKES WERE OFF BY THREE TIMES, THREE TIMES RUNNING. Twelve-run samples during this
+// phase said 13.7%, then 12.0%, then 13.4%; the settled figure is 4.4-5.0%. The header of this
+// file has said "150+ before believing anything" since the beginning and it is still the most
+// expensive line in it to ignore. A smoke is for checking a readout prints, not for reading.
+//
+// WHAT THIS SETTLES FOR M06: its three move-gated signatures are hard to reach because of the
+// GAME. They are attached to the basic attack, and the basic attack is what you swing when you
+// have nothing better - which is one turn in twenty, because you nearly always do.
+//
 // ── M06: THE SIGNATURE CONDITIONS, AND THE ONES THIS HARNESS CANNOT SEE ────────
 // The promotion screen has two halves. M02 measured the split - 91% of perk points buy a stat
 // card, 9% buy a signature - M04 took the stat cards apart and found three of five conditions
@@ -3629,7 +3684,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, field: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  affixes: {}, champions: 0, eliteUnits: 0, affixedUnits: 0,
-                 promotions: 0, promoEmpty: 0, held: 0, turnsPlayer: 0, sigsTaken: 0, sigsBought: 0, capsTaken: 0, capsBought: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
+                 promotions: 0, promoEmpty: 0, held: 0, turnsPlayer: 0, ranked: 0, basicPicked: 0, basicForced: 0, freeActions: 0, sigsTaken: 0, sigsBought: 0, capsTaken: 0, capsBought: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
                  extracted: false, walkedAt: 0, formations: {}, factionFights: {}, loose: 0, doctrine: null, doctrineKept: false,
@@ -4405,6 +4460,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       spendTactic(id);
       if (momentum === before) return false;
       stat.moves[id] = (stat.moves[id] || 0) + 1;
+      // M07: a tactic is bought and the turn CARRIES ON - buy() does not return, and the actor
+      // still picks a move below. Counting it in stat.moves beside things that end a turn is
+      // what made M06's basic-attack share unreadable, so the free ones are tallied apart.
+      stat.freeActions = (stat.freeActions || 0) + 1;
       if (onFloor) { stat.saves++; stat.barSaves++; }
       return true;
     };
@@ -4595,6 +4654,29 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // would re-run pickFoe - which forecasts every foe on the field - O(n log n) times a
       // turn instead of once a move, and this file is slow enough already.
       chosen = usable.map(a => [rank(a), a]).sort((x, y) => y[0] - x[0]).map(x => x[1])[0] || deck[0];
+      // M07: what this ranking was actually choosing between. M06 ended on a figure it could not
+      // interpret - basic attacks at 4.4-4.7% of "moves" - and the first thing wrong with it was
+      // the denominator: stat.moves counts tactic purchases, which are FREE and do not consume
+      // the turn, beside actions that do. STIM alone is a fifth of that total. turnsPlayer has
+      // been the honest denominator all along and no readout used it.
+      //
+      // The second thing is that a share cannot say whether the basic attack was a CHOICE. The
+      // deck is already filtered to what is off cooldown, so a basic attack wins either because
+      // nothing else was up, or because everything else was soft or resisted against this board.
+      // Those are opposite findings and the share conflates them, so both are counted here: how
+      // deep the hand was, and whether the pick was forced.
+      // Counted here too, and not skipped: this block is only reached when none of the earlier
+      // cases claimed the turn - a combo, a rescue, a guard, a vent. Dividing a numerator that
+      // only exists on THIS path by every turn the squad took is the same error M06 made with
+      // the move tally, one level down, so the path has its own denominator.
+      stat.ranked = (stat.ranked || 0) + 1;
+      const special = usable.filter(a => a.cd).length;
+      stat.handDepth = stat.handDepth || {};
+      stat.handDepth[Math.min(special, 4)] = (stat.handDepth[Math.min(special, 4)] || 0) + 1;
+      if (chosen && !chosen.cd) {
+        stat.basicPicked = (stat.basicPicked || 0) + 1;
+        if (!special) stat.basicForced = (stat.basicForced || 0) + 1;
+      }
     }
     if (!target) target = pickFoe(chosen.move);
     if (chosen.act === 'self') { stat.moves[chosen.move] = (stat.moves[chosen.move] || 0) + 1; executeSelfAction(chosen.move); return true; }
@@ -5624,7 +5706,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   }
 
   const n = results.length;
-  const nums = key => results.map(r => r[key]).sort((a, b) => a - b);
+  // M07: a counter a run never touched comes back undefined here, and every sum built on it
+  // then reads NaN - which only shows up on the day some run happens to score zero, and reads
+  // as a broken report rather than as a missing initialiser. Every key this is asked for is a
+  // numeric tally, so an absent one IS zero. Coerced once, here, rather than relying on each
+  // new counter remembering to declare itself in newRunStats.
+  const nums = key => results.map(r => Number(r[key]) || 0).sort((a, b) => a - b);
   const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
   const pct = (a, p) => a[Math.min(a.length - 1, Math.floor(a.length * p))];
   // How wide that median actually is at the sample size taken. Every bad balance claim in this
@@ -6225,6 +6312,32 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // no longer a hole. The share is of PLAYER turns, which is the denominator that hole was in.
   {
     const tot = a => a.reduce((x, y) => x + y, 0);
+    // M07: the basic attack, against the denominator that is actually a turn. M06 reported
+    // 4.4-4.7% and could not say what it meant; this says what was in the hand when the choice
+    // was made, and whether there was a choice at all.
+    {
+      const turns = tot(nums('turnsPlayer'));
+      const picked = tot(nums('basicPicked')), forced = tot(nums('basicForced'));
+      const free = tot(nums('freeActions'));
+      const moves = results.reduce((a, r) => a + Object.values(r.moves || {}).reduce((x, y) => x + y, 0), 0);
+      line('turns the squad actually took', `${turns}, plus ${free} tactics bought without spending one`);
+      const ranked = tot(nums('ranked'));
+      line('  turns that got as far as the ranking', turns
+        ? `${ranked} of ${turns} (${Math.round(ranked / turns * 100)}%) - the rest were claimed by a combo, a rescue, a guard or a vent`
+        : 'none');
+      line('  basic attacks, of the turns that had a ranking to do', ranked
+        ? `${picked} of ${ranked} (${(picked / ranked * 100).toFixed(1)}%), which is ${(picked / turns * 100).toFixed(1)}% of all turns and ${(picked / moves * 100).toFixed(1)}% of the move tally M06 read`
+        : 'none');
+      line('  and how many of those had any choice', picked
+        ? `${forced} of ${picked} (${Math.round(forced / picked * 100)}%) were thrown with nothing else off cooldown`
+        : 'none');
+      const depth = {};
+      results.forEach(r => Object.entries(r.handDepth || {}).forEach(([k, v]) => { depth[k] = (depth[k] || 0) + v; }));
+      const dTot = Object.values(depth).reduce((a, b) => a + b, 0);
+      line('  abilities off cooldown when the choice was made', dTot
+        ? Object.keys(depth).sort().map(k => `${k === '4' ? '4+' : k}: ${Math.round(depth[k] / dTot * 100)}%`).join(', ')
+        : 'none');
+    }
     const h = tot(nums('held')), t = tot(nums('turnsPlayer'));
     line('turns held, nothing else to press', t
       ? `${h} of ${t} player turns (${(100 * h / t).toFixed(2)}%), skipped outright before F10`
