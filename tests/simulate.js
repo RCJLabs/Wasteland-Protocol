@@ -2433,6 +2433,94 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── M08: ONE CONDITION, TWO CARDS, AND ONLY ONE OF THEM WAS THE PROBLEM ────────
+// M05 and M06 each ended on a card reading `dist === 0` and calling it a position taken up:
+// DUELIST "+15% DMG against the enemy front" at 75-79% of its holder's swings, SLACK LINE "+25%
+// against whatever stands at the enemy front" at 66-72%. Filed as one finding - two pieces of
+// content describing a common state as a rare one. They turned out to be two different cards
+// that happen to share a sentence.
+//
+// FIRST, WHAT "THE ENEMY FRONT" REFERS TO. `dist` is the target's index in the living-enemy
+// list, not a rank, and I spent a probe assuming the card meant a rank and the engine had lost
+// it. It has not: THERE ARE NO ENEMY RANKS. All eight sites that write gridPos write it to a
+// playerRoster member, no enemy constructor sets one, and 134 hostiles built across five
+// factions, four depths, both node kinds and the boss path carry gridPos undefined every time.
+// The squad has a three-rank formation; the enemy side is an ordered list. Both cards implement
+// the only reading available, and my probe was right where I suspected it of being broken.
+//
+// SECOND, WHAT THE RATE IS MADE OF - 79,162 swings over 120 expeditions:
+//
+//   swings that landed on the front                    79%
+//   with only one foe standing                         29%   nobody chose anything
+//   with two or more up, how many still took the front 70%   of 56,509
+//   the same, if the target were drawn at random       39%
+//
+// So the preference is real and it is not the harness's: the simulator's targeting takes a
+// finishable foe or the biggest threat and never consults position. The front is simply where
+// the fight tells you to swing. WHICH MEANS THE CONDITION CANNOT BE MADE RARE BY MOVING A
+// THRESHOLD - even a player picking at random fires it 29% + 71%x39% = 57% of the time. The
+// problem was the question, not the dial.
+//
+// THIRD, THE SPLIT, which is the whole finding:
+//
+//                        of its holder's swings   against a line   hauled there by the squad
+//   DUELIST         80%            of 6,013                 72%                          1%
+//   SLACK LINE      66%            of 1,025                 57%                         30%
+//   every swing     79%            of 79,162                70%                           -
+//
+//   DUELIST rides the baseline exactly. Beside its own pool - PACK HUNTER 16%, LONER 10%, FIRST
+//   BLOOD 16%, CLOSER 17% - it is a 5x outlier, and at +15% on 80% it paid about +12% expected
+//   damage against their +4.0 to +4.8%. The mildest-looking card on the sheet was the strongest
+//   in play by nearly three times. PREMISE CONFIRMED.
+//
+//   SLACK LINE does not. It fires BELOW the population rate, and a third of its firings land on
+//   something the squad put there: Drag Line, Set The Hook and Iron Barb all call haulForward,
+//   which is counted here for the first time. Over a full 150-expedition career - 101,358 swings,
+//   2,245 haul attempts, 934 of them moving somebody - the hauled share reads 37%, higher than
+//   the 30% of the 120-run sample above, so if anything the short sample understated it. This is
+//   a class card paired with its own class's verb. PREMISE REFUTED, and re-keying it would have
+//   broken the one pairing in this pool that demonstrably works.
+//
+// SO ONE CARD CHANGED. DUELIST now reads what its name always promised - one of them left
+// standing - which the census puts at 29%, against the pool's 10-17%, priced at +25% for an
+// expected +7.3%. Still the pool's strongest, deliberately: a card that has to wait for the end
+// of a fight is worth less than its expected damage says.
+//
+// THE WALL, three 150-expedition careers an arm, differing only in DUELIST's condition and price:
+//
+//                                  base (the front, +15%)      head (one left, +25%)
+//   the condition held on                 78 / 80 / 77%              30 / 28 / 28%
+//   runs that ended the road              24 / 15 / 17               16 / 25 / 19
+//                          mean                   18.7                       20.0
+//   wipes per run           mean                   6.42                       6.31
+//                                          6.29/6.39/6.59             6.24/6.08/6.60
+//
+// THE WALL IS UNMOVED. The win gap is +1.3 in the new card's favour against a noise floor K06
+// measured at about fourteen wins for three careers an arm, and the wipe gap is 0.12 with the
+// arms' spreads sitting inside each other. Neither is a result; the correct reading is that a
+// card whose expected damage fell from +12% to +7.3% cost this game nothing measurable, because
+// it is one quirk of fifteen on one body rather than five cards every operator banks. M04 is
+// the contrast and the reason this was measured at all: the same shape of change, applied to
+// the progression cards, cost sixteen wins.
+//
+// AND THE RE-KEY LANDED ON THE PROBE. The census predicted 29% from swings-with-one-foe-left;
+// the shipped card fires at 28-30% across three careers. Same as M05b - a condition designed
+// against a measured rate arrives at that rate. Do not read the rest of the pool's movement
+// between these careers as anything: PACK HUNTER reads 19/31/34% on the base arm alone, which
+// is the draw varying, not the change.
+//
+// WHAT I GOT WRONG ON THE WAY, both worth the same lesson. I read "no rank" off my own probe and
+// nearly filed it as an engine defect before checking the source - the D06 mistake, aimed at my
+// own instrument this time. And the per-card accumulator went to production with a missing key
+// and printed NaN, which is the exact bug M07 fixed in nums() one item earlier, in a different
+// function. Fixing the instance is not fixing the class; the accumulator sums Object.keys now.
+//
+// WHAT IS STILL OPEN: mitigate's ruins front-cover read is `t.gridPos === 1` with no isPlayer
+// guard, and TERRAIN documents frontCover as applying "whichever side they are on". Since no
+// hostile has a rank, it has never applied to one - so one ground is quietly pro-player and
+// another quietly anti-player, both against the stated intent. Suite 164 pins it. Not fixed
+// here: it is a terrain question with its own difficulty cost and belongs in its own item.
+//
 // ── M07: THE MOVE POLICY IS SOUND. THE INSTRUMENT WAS NOT, AND THE NUMBER BARELY MOVED ──
 // Filed on a suspicion: M06 ended with basic attacks at "4.4-4.7% of moves" and could not say
 // what it meant, and that looked far too low for a squad whose abilities cool down in two to
@@ -5558,6 +5646,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.qk = runStats.qk || {};             // M05: every quirk condition, asked and answered
   stat.sg = runStats.sg || {};             // M06: and every signature condition beside them
   stat.sgGate = runStats.sgGate || {};     // the ability half of the three that are a conjunction
+  stat.rch = runStats.rch || null;         // M08: how far off the target was, and how many were up
+  stat.frt = runStats.frt || {};           // and the same split per card that reads it
+  stat.hl = runStats.hl || null;           // and the haul, which is the one verb that sets it up
   stat.qkDrawn = runStats.qkDrawn || {};   // and what the pool actually handed out
   stat.ut = runStats.ut || {};   // L03: the damage the type ledger cannot see
   // K05: what came out of the materials bag and by which door, plus what was still sitting in
@@ -6477,6 +6568,68 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     line('  the pool behind them', `${SIG_SHAPES.applied} write the sheet when bought, ${
       SIG_SHAPES.moveGated} change one named ability, ${CONDITIONAL_SIGS.length} ask a question, ${
       SIG_SHAPES.other} are read some other way, of ${SIG_SHAPES.total}`);
+  }
+  // ── M08: what "the enemy front" is worth as a condition ────────────────────────────────
+  // DUELIST and SLACK LINE both read dist === 0 and both call it a position you take up. The
+  // raw share says 66-79%. But dist is an INDEX into the living-enemy list, so it is 0 by force
+  // whenever one foe is left - and the share cannot tell a choice from an arithmetic
+  // inevitability. Conditioned on how many were still standing, it can.
+  //
+  // The rank reading was checked and ruled out: hostiles carry no gridPos anywhere in the
+  // engine, so "the enemy front" has no other referent to mean. The index IS the front.
+  {
+    const r = { atFront: 0, swings: 0, byStanding: {}, frontByStanding: {} };
+    results.forEach(x => {
+      if (!x.rch) return;
+      r.atFront += x.rch.atFront; r.swings += x.rch.swings;
+      Object.entries(x.rch.byStanding).forEach(([k, v]) => { r.byStanding[k] = (r.byStanding[k] || 0) + v; });
+      Object.entries(x.rch.frontByStanding).forEach(([k, v]) => { r.frontByStanding[k] = (r.frontByStanding[k] || 0) + v; });
+    });
+    if (r.swings) {
+      line('swings that landed on the enemy front', `${r.atFront} of ${r.swings} (${Math.round(r.atFront / r.swings * 100)}%)`);
+      line('  how much of the line was still up when they landed',
+        Object.keys(r.byStanding).sort().map(k =>
+          `${k === '5' ? '5+' : k}: ${Math.round(r.byStanding[k] / r.swings * 100)}%`).join(', '));
+      // THE ROW THAT SETTLES IT. With one foe left the front is the only thing there is, so
+      // those swings say nothing about whether anybody chose it. Two or more standing is where
+      // the condition is a condition at all - and the blind rate is what the same swings would
+      // have scored if the target were drawn at random from the living, which is the only
+      // baseline that can tell a preference from a coincidence.
+      const many = Object.keys(r.byStanding).filter(k => +k >= 2);
+      const manyTot = many.reduce((a, k) => a + r.byStanding[k], 0);
+      const manyFront = many.reduce((a, k) => a + (r.frontByStanding[k] || 0), 0);
+      const blind = many.reduce((a, k) => a + r.byStanding[k] / +k, 0);
+      line('  and of the swings with a choice of target, how many took the front', manyTot
+        ? `${manyFront} of ${manyTot} (${Math.round(manyFront / manyTot * 100)}%) against ${
+            Math.round(blind / manyTot * 100)}% if the target were drawn at random from the living`
+        : 'none had a choice');
+    }
+  }
+  // And the same split per card, which is what a re-key would move. A card firing on a lone
+  // survivor is being paid for arithmetic; a card firing against a line is being paid for a
+  // target the holder picked.
+  {
+    const f = {};
+    results.forEach(x => Object.entries(x.frt || {}).forEach(([id, row]) => {
+      // Every key listed, and every read coerced. M07 lost a reading to exactly this: an
+      // accumulator missing one field a later probe added, carrying NaN all the way to the page.
+      const t = f[id] = f[id] || { seen: 0, fired: 0, seenLine: 0, firedLine: 0, firedHauled: 0 };
+      Object.keys(t).forEach(k => { t[k] += Number(row[k]) || 0; });
+    }));
+    Object.keys(f).sort().forEach(id => {
+      const t = f[id];
+      if (!t.seen) return;
+      const pct = (a, b) => b ? Math.round(a / b * 100) + '%' : 'n/a';
+      line(`  ${id}`, `fires on ${pct(t.fired, t.seen)} of its holder's ${t.seen} swings; ` +
+        `against a line of two or more, ${pct(t.firedLine, t.seenLine)} of ${t.seenLine}; ` +
+        `${pct(t.fired - t.firedLine, t.fired)} of its firings were a lone survivor; ` +
+        `${pct(t.firedHauled, t.fired)} were against something the squad hauled there`);
+    });
+    const h = results.reduce((a, x) => x.hl ? { tried: a.tried + x.hl.tried, moved: a.moved + x.hl.moved } : a,
+                             { tried: 0, moved: 0 });
+    line('  the haul', h.tried
+      ? `${h.tried} attempted, ${h.moved} moved something (${Math.round(h.moved / h.tried * 100)}%) - the rest were already at the front`
+      : 'NEVER ATTEMPTED - the harness cannot reach the one verb that sets this condition up');
   }
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   // K06: which pieces, because a total with no names in it cannot say whether the slot is being

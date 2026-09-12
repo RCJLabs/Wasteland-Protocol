@@ -125,20 +125,65 @@ module.exports = {
       // declines it. The first draft used a body with no quirk at all, which returns before the
       // counter is reached - so it proved nothing, and mutation testing said so.
       hero.quirk = { id: 'STURDY', name: 'STURDY' };
-      quirkDmgMult(hero, foe, 0);
+      quirkDmgMult(hero, foe);
       const none = JSON.parse(JSON.stringify(runStats.qk));
-      // DUELIST, asked twice and answered differently: dist 0 is the enemy front, dist 2 is not.
+      // DUELIST, asked twice and answered differently: one foe standing is a duel, two is not.
       hero.quirk = { id: 'DUELIST', name: 'DUELIST' };
-      const near = quirkDmgMult(hero, foe, 0);
-      const far = quirkDmgMult(hero, foe, 2);
-      return { none, duelist: runStats.qk.DUELIST, near, far };
+      const alone = quirkDmgMult(hero, foe);
+      activeEntities = [hero, foe, window.__dummy({ id: 'q1', hp: 400, maxHp: 400 })];
+      const crowd = quirkDmgMult(hero, foe);
+      return { none, duelist: runStats.qk.DUELIST, alone, crowd };
     });
     ok('a body carrying a different quirk is never counted as having missed these',
       Object.keys(counted.none).length === 0);
     ok(`DUELIST asked twice and answered once (${counted.duelist.fired} of ${counted.duelist.seen})`,
       counted.duelist.seen === 2 && counted.duelist.fired === 1);
-    ok(`and the count did not change what the quirk pays (x${counted.near.toFixed(2)} at the front, x${counted.far.toFixed(2)} behind it)`,
-      counted.near > 1 && counted.far === 1);
+    ok(`and the count did not change what the quirk pays (x${counted.alone.toFixed(2)} one-on-one, x${counted.crowd.toFixed(2)} against two)`,
+      counted.alone > 1 && counted.crowd === 1);
+
+    // ── M08: what DUELIST is a duel WITH ─────────────────────────────────────────
+    // It used to read `dist === 0` - the target is the first foe still standing - and M08
+    // measured that at 80% of its holder's swings against a pool whose other four conditions sit
+    // at 10-17%. The rate was not fixable by threshold: 29% of all swings have one foe left, and
+    // even a player picking targets at random fires "the front" 57% of the time. So the question
+    // changed rather than the dial. These rows pin the new one and prove the old one is gone:
+    // the count must not move with WHICH foe is hit, only with HOW MANY are up.
+    const duel = await page.evaluate(() => {
+      const probe = (n, hit) => {
+        window.__clearField();
+        const hero = window.__bare(playerRoster.find(c => c.gridPos > 0));
+        hero.gridPos = 2; hero.hp = hero.maxHp = 900;
+        hero.quirk = { id: 'DUELIST', name: 'DUELIST' };
+        const foes = [];
+        for (let i = 0; i < n; i++) foes.push(window.__dummy({ id: `d${i}`, hp: 400, maxHp: 400 }));
+        activeEntities = [hero, ...foes];
+        return quirkDmgMult(hero, foes[hit]);
+      };
+      // A corpse is not an opponent, so a line of three with two down is still a duel.
+      const dead = (() => {
+        window.__clearField();
+        const hero = window.__bare(playerRoster.find(c => c.gridPos > 0));
+        hero.gridPos = 2; hero.hp = hero.maxHp = 900;
+        hero.quirk = { id: 'DUELIST', name: 'DUELIST' };
+        const live = window.__dummy({ id: 'dl', hp: 400, maxHp: 400 });
+        const down = [window.__dummy({ id: 'dd0', hp: 0, maxHp: 400 }),
+                      window.__dummy({ id: 'dd1', hp: 0, maxHp: 400 })];
+        activeEntities = [hero, ...down, live];
+        return quirkDmgMult(hero, live);
+      })();
+      return { one: probe(1, 0), twoFront: probe(2, 0), twoBack: probe(2, 1), three: probe(3, 0), dead,
+               mult: DUELIST_MULT };
+    });
+    ok(`one left standing pays (x${duel.one.toFixed(2)})`, duel.one === duel.mult && duel.mult > 1);
+    ok(`two standing pays nothing, whichever of them is hit (x${duel.twoFront.toFixed(2)} front, x${duel.twoBack.toFixed(2)} behind)`,
+      duel.twoFront === 1 && duel.twoBack === 1);
+    // THE ROW THAT WOULD CATCH A REVERT. Under the old condition twoFront would pay and twoBack
+    // would not; under the new one neither does. Asserting they are EQUAL is what makes this a
+    // guard on the question rather than on the answer.
+    ok('and the card no longer reads which foe was hit at all',
+      duel.twoFront === duel.twoBack && duel.three === 1);
+    ok(`a corpse is not an opponent - two down and one up is still a duel (x${duel.dead.toFixed(2)})`,
+      duel.dead === duel.mult);
 
     // ── The pair that used to share one condition ────────────────────────────────
     // PACK_HUNTER and LONER read the SAME neighbour test from opposite sides, and M05's census
@@ -164,7 +209,7 @@ module.exports = {
         const read = (id) => {
           hero.quirk = { id, name: id };
           runStats.qk = {};
-          quirkDmgMult(hero, hostiles[0], 0);
+          quirkDmgMult(hero, hostiles[0]);
           return (runStats.qk[id] || {}).fired || 0;
         };
         return { pack: read('PACK_HUNTER'), loner: read('LONER') };
@@ -211,7 +256,7 @@ module.exports = {
         const read = (id) => {
           hero.quirk = { id, name: id };
           runStats.qk = {};
-          quirkDmgMult(hero, foes[0], 0);
+          quirkDmgMult(hero, foes[0]);
           return (runStats.qk[id] || {}).fired || 0;
         };
         return { loner: read('LONER'), pack: read('PACK_HUNTER') };

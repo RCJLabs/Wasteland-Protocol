@@ -74,7 +74,16 @@ module.exports = {
         packOneSide: ratio('PACK_HUNTER', (hero) => { hero.gridPos = 2; mates(hero, 1, [1]); }),
         pack: ratio('PACK_HUNTER', (hero) => { hero.gridPos = 2; mates(hero, 2, [1, 3]); }),
         firstBlood: ratio('FIRST_BLOOD'),
-        duelist: ratio('DUELIST')
+        // M08 re-keyed DUELIST from "the target is the enemy front" - which the census measured
+        // at 80% of its holder's swings, five times anything else in this pool - to what its
+        // name promised. So the fixture's default, one operator against a whole raiding party,
+        // is now the OFF arm, and clearing the field down to one opponent is the ON arm.
+        duelistCrowd: ratio('DUELIST'),
+        duelist: ratio('DUELIST', (hero, foes) => {
+          const alone = foes[0];
+          foes.slice(1).forEach(f => { f.hp = 0; });
+          activeEntities = [hero, alone]; turnQueue = [hero, alone]; activeIndex = 0;
+        })
       };
     });
     const near = (v, want) => v > want - 0.08 && v < want + 0.08;
@@ -87,7 +96,9 @@ module.exports = {
       near(fired.packOneSide, 1.0));
     ok(`and +30% with one on both sides (x${fired.pack.toFixed(2)})`, near(fired.pack, 1.3));
     ok(`FIRST BLOOD punishes unhurt targets (x${fired.firstBlood.toFixed(2)})`, near(fired.firstBlood, 1.3));
-    ok(`DUELIST works the enemy front (x${fired.duelist.toFixed(2)})`, near(fired.duelist, 1.15));
+    ok(`DUELIST pays +25% one-on-one (x${fired.duelist.toFixed(2)})`, near(fired.duelist, 1.25));
+    ok(`and nothing while the rest of the line is still up (x${fired.duelistCrowd.toFixed(2)}), which is what it used to pay for`,
+      near(fired.duelistCrowd, 1.0));
 
     const defensive = await page.evaluate(() => {
       // THICK HIDE, measured against the same operator without it - innate resistance

@@ -142,7 +142,7 @@ const QUIRK_POOL = [
     { id: 'SECOND_WIND',name: 'SECOND WIND',desc: 'Once per fight, survives a killing blow at 1 HP', dmg: 0, hp: 0, spd: 0 },
     { id: 'SLOW_BLEEDER', name: 'SLOW BLEEDER', desc: 'Bleeding hurts them half as much', dmg: 0, hp: 0, spd: 0 },
     { id: 'OVERCHARGED',name: 'OVERCHARGED',desc: '+10 momentum when they land a combo', dmg: 0, hp: 0, spd: 0 },
-    { id: 'DUELIST',    name: 'DUELIST',    desc: '+15% DMG against the enemy front', dmg: 0, hp: 0, spd: 0 }
+    { id: 'DUELIST',    name: 'DUELIST',    desc: '+25% DMG while only one enemy is left standing', dmg: 0, hp: 0, spd: 0 }
 ];
 
 function hasQuirk(ent, id) { return !!(ent && ent.isPlayer && ent.quirk && ent.quirk.id === id); }
@@ -152,9 +152,10 @@ function hasQuirk(ent, id) { return !!(ent && ent.isPlayer && ent.quirk && ent.q
 // the reason that is worth a ledger rather than a reading of the source: it shipped five perk
 // cards whose conditions were designed and not measured, and three of the five turned out to
 // fire so rarely that the change cost sixteen wins of a career. The condition that broke it -
-// "the target is further off than arm's reach" - is the exact complement of DUELIST's, which
-// has sat in this pool since P05 describing itself as situational. 81% of swings land on the
-// front of the enemy line, so DUELIST is very close to an unconditional +15%.
+// "the target is further off than arm's reach" - was the exact complement of the one DUELIST
+// used to carry, and M08 measured that one at 80% and re-keyed it. The suspicion below was
+// right and it took three items to settle: a pool nobody counts drifts to whatever was easiest
+// to write.
 //
 // That is a suspicion, not a finding, and this is what turns one into the other. Two counts per
 // quirk: SEEN, the times a body holding it was in a position for the question to be asked, and
@@ -187,6 +188,87 @@ function noteSig(id, fired) { noteCond('sg', id, fired); }
 // rate would have read as dead content when what it measures is the policy driving the swing.
 // D06 was filed on exactly that mistake and had to be voided.
 function noteSigGate(id, used) { noteCond('sgGate', id, used); }
+// M08: two pieces of content read `dist === 0` and call it a position taken up - DUELIST
+// "+15% DMG against the enemy front" in the quirk pool, SLACK LINE "+25% against whatever
+// stands at the enemy front" in the signatures - and M05 and M06 measured them at 75-79% and
+// 66-72%. The same condition, in two pools, common both times. They turned out to be two
+// different cards with the same words on them, and only one of them was the problem.
+//
+// WHAT "THE ENEMY FRONT" REFERS TO, since `dist` is the target's INDEX in the living-enemy list
+// rather than a rank. It is the only referent available: hostiles carry no gridPos at all. Every
+// one of the nine sites that writes gridPos writes it to a playerRoster member - the muster
+// cycle, assignSlot, SHORT_HANDED, REPOSITION (which guards target.isPlayer), and DRAG_DOWN both
+// when it forecasts and when it fires - and no enemy constructor sets one. A run of 12836 swings
+// agreed: not one target carried a rank. The squad has a three-rank formation and the enemy side
+// is an ordered list, so "the enemy front" means the first one still standing, and both cards
+// implement exactly that. (One read of the rank is NOT guarded and so silently never fires for a
+// hostile - the ruins' front cover in mitigate, which TERRAIN documents as applying "whichever
+// side they are on". Filed separately; it is a terrain question, not a card question.)
+//
+// WHAT THE RATE IS MADE OF, measured over 79,162 swings of 120 expeditions. 79% of all swings
+// land on the front. 29% of swings have one foe left, where the front is the only thing there
+// is and nobody chose anything. Of the 71% with a choice, 70% still took the front - against 39%
+// if the target were drawn at random from the living, so the preference is real and it is not
+// the harness's: the simulator's targeting takes a finishable foe or the biggest threat and
+// never consults position. The front is simply where the fight tells you to swing.
+//
+// WHICH MEANS THE CONDITION CANNOT BE MADE RARE. Even a player picking at random fires it 29% +
+// 71%x39% = 57% of the time. There is no threshold on "the front" below that, so the problem was
+// never the dial - it was the question.
+//
+// AND THE TWO CARDS ANSWER IT DIFFERENTLY:
+//
+//   DUELIST      80% of its holder's 6013 swings; 1% of those against something the squad
+//                hauled to the front. It rides the baseline entirely. Beside its own pool -
+//                PACK HUNTER 16%, LONER 10%, FIRST BLOOD 16%, CLOSER 17% - it is a 5x outlier,
+//                and at +15% on 80% it pays about +12% expected damage against their +4.0 to
+//                +4.8%. The mildest-looking card on the sheet was the strongest in play by
+//                nearly three times. PREMISE CONFIRMED, and re-keyed below.
+//
+//   SLACK LINE   66% of its holder's 1025 swings - BELOW the 79% population rate - and 30% of
+//                its firings land on something the squad hauled there. That is the harpooner's
+//                own kit: Drag Line, Set The Hook and Iron Barb all call haulForward, which
+//                moves a foe to the front, and the haul fires 1685 times a sample and actually
+//                moves something on 52% of them. A third of this card is set up by the class
+//                it belongs to. PREMISE REFUTED - it is a synergy, and re-keying it would break
+//                the pairing that is demonstrably working. Left exactly as it was.
+//
+// DUELIST is re-keyed to the reading its name already promised: one of them left standing, which
+// is what a duel is. 29% by the census above, against the pool's 10-17%, priced at +25% for an
+// expected +7.3% - still the pool's strongest, deliberately, because a card that has to wait for
+// the end of a fight is worth less than its expected damage says. The instrument below stays: it
+// is what told the two cards apart, and it is the control SLACK LINE is read against.
+function noteReach(dist, standing) {
+    if (!runStats || !(standing > 0)) return;
+    const r = runStats.rch = runStats.rch || { atFront: 0, swings: 0, byStanding: {}, frontByStanding: {} };
+    const k = Math.min(standing, 5);
+    r.swings++;
+    r.byStanding[k] = (r.byStanding[k] || 0) + 1;
+    if (dist === 0) r.frontByStanding[k] = (r.frontByStanding[k] || 0) + 1, r.atFront++;
+}
+// SLACK LINE is a HARPOONER card, and the harpooner is the one class that can PUT something at
+// the enemy front: Drag Line hauls it, Set The Hook hauls it, Iron Barb hauls it. So its rate is
+// not necessarily the population's rate wearing a class badge - it could be a synergy the holder
+// sets up, which would be a card earning its 80% rather than riding it. The two readings are
+// told apart by counting the haul: how often the squad moves something to the front, and how
+// many of the card's firings land on something it moved there.
+function noteHaul(moved) {
+    if (!runStats) return;
+    const h = runStats.hl = runStats.hl || { tried: 0, moved: 0 };
+    h.tried++;
+    if (moved) h.moved++;
+}
+// And the same split per card, which is the number the decision hangs on: of the swings where
+// one of these fires, how many had a line to be the front OF. A lone survivor is the front by
+// arithmetic, and a card that pays for it is paying for nothing the holder did.
+function noteFront(id, dist, standing, hauled) {
+    if (!runStats || !id) return;
+    const book = runStats.frt = runStats.frt || {};
+    const row = book[id] = book[id] || { seen: 0, fired: 0, seenLine: 0, firedLine: 0, firedHauled: 0 };
+    row.seen++;
+    if (dist === 0) { row.fired++; if (hauled) row.firedHauled++; }
+    if (standing >= 2) { row.seenLine++; if (dist === 0) row.firedLine++; }
+}
 // And what the pool actually hands out, counted where it is handed out. Four sites roll a quirk
 // - the muster, a muster reroll, the Armory's reroll and a recruit signing on - and a census
 // that missed one would read as a pool with a hole in it.
@@ -572,7 +654,8 @@ function unequipGear(charId, slot) {
 // against enemies around you, at 27% and 14% instead of 98% and 2%.
 const PACK_MULT = 1.3;    // an ally standing in both adjacent ranks
 const LONER_MULT = 1.4;   // the foes outnumber what is left of the squad
-function quirkDmgMult(actEnt, target, dist) {
+const DUELIST_MULT = 1.25; // one of them left, which is what a duel is
+function quirkDmgMult(actEnt, target) {
     if (!actEnt || !actEnt.isPlayer || !actEnt.quirk) return 1;
     let m = 1;
     const flanked = [actEnt.gridPos - 1, actEnt.gridPos + 1].every(p =>
@@ -592,7 +675,7 @@ function quirkDmgMult(actEnt, target, dist) {
     if (on('LONER', against > standing)) m *= LONER_MULT;
     if (on('FIRST_BLOOD', !!target && target.hp === target.maxHp)) m *= 1.3;
     if (on('CLOSER', !!target && target.hp < target.maxHp * 0.3)) m *= 1.25;
-    if (on('DUELIST', dist === 0)) m *= 1.15;
+    if (on('DUELIST', against === 1)) m *= DUELIST_MULT;
     return m;
 }
 
@@ -10032,6 +10115,12 @@ const ABILITIES = {
 const REACH_PENALTY = { 2: 0.85, 3: 0.6 };
 const RANK_LABELS = { 1: 'FRONT', 2: 'MID', 3: 'BACK' };
 const DEPTH_PENALTY = 0.65;
+// M08: FRONT_RANKS is not a rank and REACH_PENALTY is. The squad has three ranks and carries
+// gridPos; the enemy side has no ranks at all - no constructor gives a hostile a gridPos and
+// nothing assigns one later - so `dist` is an INDEX into the living enemies and FRONT_RANKS
+// means "the first two still standing". Both sides being described with the same word is what
+// sent M08 looking for an enemy formation that does not exist, so it is named here rather than
+// renamed everywhere: the constant is read by the codex text, four call sites and two suites.
 const FRONT_RANKS = 2;
 
 // ── Dossiers: operator mastery ──────────────────────────────────────────────────────────
@@ -10184,7 +10273,7 @@ function reachMult(move, attacker, dist) {
 
 // Two separate things cost a melee swing damage, and they are surfaced separately: the attacker's
 // own rank costs the same against every target, so it belongs on the button, while reaching past
-// the enemy front rank depends on which one is picked, so it belongs on that target.
+// the front of the enemy line depends on which one is picked, so it belongs on that target.
 function reachNote(move, attacker, dist) {
     const m = reachMult(move, attacker, dist);
     return m < 1 ? `-${Math.round((1 - m) * 100)}%` : null;
@@ -10345,9 +10434,15 @@ function haulForward(ent) {
     if (!ent || ent.isPlayer) return false;
     const foes = activeEntities.filter(e => !e.isPlayer);
     const at = foes.indexOf(ent);
-    if (at <= HAUL_TO) return false;
+    if (at <= HAUL_TO) { noteHaul(false); return false; }
     foes.splice(at, 1); foes.splice(HAUL_TO, 0, ent);
     activeEntities = [...activeEntities.filter(e => e.isPlayer), ...foes];
+    // Who is at the front BECAUSE the squad put them there, which is the half of SLACK LINE's
+    // rate that would be earned. Exclusive by construction: hauling anybody in front of the last
+    // one hauled makes the older claim untrue, so the flag moves with the position.
+    foes.forEach(e => { if (e !== ent) e.hauledIn = false; });
+    ent.hauledIn = true;
+    noteHaul(true);
     return true;
 }
 
@@ -11730,7 +11825,7 @@ function resolveAction(targetId) {
         snap('ability');
         if (momentumFocus > 0) { dmgMult *= 1.3; momentumFocus = 0; spawnFCT(actEnt.id, 'FOCUSED', 'fct-combo'); }
         snap('focus');
-        dmgMult *= quirkDmgMult(actEnt, target, dist);
+        dmgMult *= quirkDmgMult(actEnt, target);
         dmgMult *= perkDmgMult(actEnt, effReach);
         dmgMult *= bondDmgMult(actEnt);
         // M06: counted at the read, in the idiom quirkDmgMult already uses - `sig` returns what
@@ -11759,7 +11854,9 @@ function resolveAction(targetId) {
         if (gate('IRONSIGHTS', pendingAction === 'SLUG_SHOT')) dmgMult *= 1.2;
         if (sig('TRENCH_FOOT', actEnt.gridPos === 1)) dmgMult *= 1.2;
         if (sig('CATALYST', (target.corrodedTurns || 0) > 0)) dmgMult *= 1.25;
+        if (hasTrait(actEnt, 'SLACK_LINE')) noteFront('SLACK_LINE', dist, livingEnemies.length, !!target.hauledIn);
         if (sig('SLACK_LINE', dist === 0)) dmgMult *= 1.25;
+        noteReach(dist, livingEnemies.length);
         snap('perks, quirks & bonds');
         // OLD GUARD, on its own line: a doctrine the player is paying a whole run's
         // composition for should be visible in the arithmetic rather than folded into
@@ -13286,7 +13383,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
-    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, hasTrait, traitOnField,
+    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, noteReach, noteFront, noteHaul, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, hasTrait, traitOnField,
     PERK_DMG_FLAT, PERK_DMG_MULT, PERK_SPD, PERK_MAXHP, PERK_HP_FLAT,
     perkStacks, perkDmgFlat, perkDmgMult, syncRankPerks, syncAllRankPerks, bankPerkStack, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
