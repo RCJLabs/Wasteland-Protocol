@@ -1,24 +1,28 @@
 // M04. M02's census settled what these five cards are: 91% of every perk point the game ever
-// spends goes on one of them. They are not filler beside the signatures - they ARE long-run
-// progression, and they were five flat bumps that landed identically on every body. VETERAN was
-// worth exactly as much to the Bruiser holding the line as to the Medic standing behind it, so
-// the promotion screen was an ordering rather than a decision, and the ordering never changed
-// from one operator to the next.
+// spends goes on one of them. They are not filler beside the signatures, they ARE long-run
+// progression, and they were five flat bumps that landed identically on every body.
 //
-// They read the operator now. A perk is permanent per-operator though - unlike a scar, which M01
-// made situational and which can be treated - so the condition must not be the sector or the
-// sky: a card you cannot re-pick when the road turns would be a trap, not a choice. Each keys on
-// the body's own job on the line, set at the Outpost and legible on the card you decide from:
+// THE FIRST CUT OF THIS COST SIXTEEN WINS OF A CAREER and the reason is the shape of the rows
+// below. A probe counted how often each condition fired over 14,559 player swings, and three of
+// five barely did. Two things came out of it, and both are asserted here:
 //
-//   VETERAN / FORTIFIED   how it lives:    unhurt, or hanging on.        Opposed.
-//   SWIFT   / HARDENED    where it stands: off the front rank, or on it. Opposed.
-//   HONED                 what it reaches: anything not already in arm's reach.
+//   1. A CONDITION HAS TO BE A PROPERTY OF THE BODY. HONED first keyed on "the target is further
+//      off than arm's reach", and `dist` is the target's index in the living-enemy list - a fact
+//      about whichever foe the targeting picked, not about the operator. 81% of swings land on
+//      the front of the enemy line, so the only multiplicative offence axis in the game went
+//      from always-on to one swing in five. The verb's own reach fires on 60% and IS a body
+//      property: a Medic carries a pistol, a Bruiser carries a blade.
 //
-// THE ROWS ALL GO THROUGH THE ENGINE, not through the helpers. D05, D06 and K06 were each the
-// same defect three times over - content measured by a harness that could not reach the decision
-// - so a swing is a swing here (resolveAction, with the randomness in baseDmg pinned), a blow
-// taken goes through mitigate, and SWIFT is read off the turn queue initiateCombat actually
-// builds. The helpers are named too, but only where a row needs to say WHY a figure moved.
+//   2. MAX HEALTH HAS TO STAY MAX HEALTH. Turning the two HP cards into a flat cut off each blow
+//      cost ten of the sixteen wins, and the multiplicative repair measured no better. Health
+//      carries BETWEEN fights, so it is buffer no per-hit cut gives back. It is gated on the
+//      deployed rank instead - a state that only changes at the Outpost, where stats may move.
+//
+// THE ROWS GO THROUGH THE ENGINE, not through the helpers: a swing is resolveAction with the
+// baseDmg roll pinned, SWIFT is read off the queue initiateCombat builds, and the rank cards are
+// driven by assignSlot, the button the player actually presses. D05, D06 and K06 were each
+// content measured by a harness that could not reach the decision, and the first cut of M04 was
+// the same mistake made one layer up - a condition nothing had measured the firing rate of.
 module.exports = {
   name: 'Five cards that fit a body',
   run: async ({ page, ok, base, engineUp }) => {
@@ -26,16 +30,16 @@ module.exports = {
     await engineUp(page);
 
     await page.evaluate(() => {
-      // A staged line, built from the shared helpers so this file does not become the 46th
-      // hand-rolled fixture suite 159 is counting. The hero is bared - no quirk, no gear, no
-      // traits - so the only thing separating two arms is the stack under test.
+      // A staged line from the shared helpers, so this file is not the 46th hand-rolled fixture
+      // suite 159 counts. The hero is bared - no quirk, gear or traits - so the only thing
+      // between two arms is the stack under test.
       window.__m04 = (cls, over) => {
         currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
         window.__clearField();
         activeDoctrine = null;
         const hero = window.__bare(playerRoster.find(c => c.classType === cls));
         hero.gridPos = 1; hero.dmgBase = 100; hero.maxHp = 9999; hero.hp = 9999;
-        hero.stunnedTurns = 0; hero.perkStacks = {};
+        hero.stunnedTurns = 0; hero.perkStacks = {}; hero.rankPerked = { hp: 0, spd: 0 };
         Object.keys(hero.cooldowns || {}).forEach(k => { hero.cooldowns[k] = 0; });
         const foes = [0, 1, 2].map(i => window.__dummy(
           { id: 'e' + i, gridPos: i + 1, hp: 1e7, maxHp: 1e7 }));
@@ -44,13 +48,12 @@ module.exports = {
         Object.assign(hero, over || {});
         return { hero, foes };
       };
-      // baseDmg carries a 0-5 roll. Pinned for the swing only - staging a new game needs its
-      // randomness - so two arms differ by the perk and by nothing else. K03's whole finding was
-      // assertions sitting inside their own noise; this one is not allowed to have any.
-      window.__swing = (cls, move, dist, over) => {
+      // baseDmg carries a 0-5 roll, pinned for the swing only - staging a new game needs its
+      // randomness. K03's finding was assertions sitting inside their own noise; these have none.
+      window.__swing = (cls, move, over) => {
         const { foes } = window.__m04(cls, over);
         activeIndex = 0; combatActive = true; pendingAction = move;
-        const t = foes[dist], before = t.hp;
+        const t = foes[0], before = t.hp;
         const roll = Math.random;
         Math.random = () => 0;
         try { resolveAction(t.id); } finally { Math.random = roll; }
@@ -58,86 +61,128 @@ module.exports = {
       };
     });
 
-    // ── The card says what it wants, because you cannot take it back ─────────────
-    // A situational effect the player cannot read before choosing is a trap rather than a
-    // decision, and these are permanent. Both surfaces that show a stat card are checked: the
-    // field promotion, and the Outpost's picker, which shows the short label alone.
+    // ── Four cards name a condition, and the fifth deliberately does not ─────────
     const cards = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const shelf = buyableFor(playerRoster[0]);
       return PERK_POOL.map(p => ({ id: p.id, label: p.label, desc: p.desc || '',
         offered: (shelf.find(b => b.id === p.id) || {}).label }));
     });
-    ok(`all five stat cards carry a condition in the label (${cards.map(c => c.label).join(' · ')})`,
-      cards.length === 5 && cards.every(c => /\(.*,/.test(c.label)));
-    ok('and a sentence saying what it is, distinct per card',
+    const conditional = cards.filter(c => /\(.*,/.test(c.label));
+    ok(`four of five cards carry their condition in the label (${conditional.map(c => c.id).join(', ')})`,
+      cards.length === 5 && conditional.length === 4);
+    // The plain card is the point, not an omission: four conditional cards and no plain one
+    // would mean a screen that can only offer an uncommitted body a mismatch, and a perk is
+    // permanent. There has to be something to take when the answer is "not yet".
+    ok(`and exactly one asks nothing (${cards.find(c => !/\(.*,/.test(c.label)).label})`,
+      cards.filter(c => !/\(.*,/.test(c.label)).length === 1);
+    ok('every card says what it wants in a sentence, distinct per card',
       cards.every(c => c.desc.length > 20) && new Set(cards.map(c => c.desc)).size === 5);
     ok('and the Outpost picker shows the same label the promotion screen does',
       cards.every(c => c.offered === c.label));
 
-    // ── VETERAN: pays on the swing, and only while the body is unhurt ────────────
-    const vet = await page.evaluate(() => {
-      const base = window.__swing('MEDIC', 'PISTOL', 1, {});
-      const unhurt = window.__swing('MEDIC', 'PISTOL', 1, { perkStacks: { VETERAN: 1 } });
-      const two = window.__swing('MEDIC', 'PISTOL', 1, { perkStacks: { VETERAN: 2 } });
-      const hurt = window.__swing('MEDIC', 'PISTOL', 1, { perkStacks: { VETERAN: 1 }, hp: 100 });
-      return { base, unhurt, two, hurt, step: PERK_DMG_FLAT };
+    // ── The verb axis: VETERAN swings, HONED shoots ──────────────────────────────
+    // Two different bodies because a class carries one kind of deck, which is exactly what makes
+    // this a body property rather than a turn-by-turn accident. Each is compared against itself.
+    const verb = await page.evaluate(() => ({
+      step: PERK_DMG_FLAT, mult: PERK_DMG_MULT,
+      meleeBase:  window.__swing('BRUISER', 'SCRAP_BLADE', {}),
+      meleeVet:   window.__swing('BRUISER', 'SCRAP_BLADE', { perkStacks: { VETERAN: 1 } }),
+      meleeVet2:  window.__swing('BRUISER', 'SCRAP_BLADE', { perkStacks: { VETERAN: 2 } }),
+      meleeHoned: window.__swing('BRUISER', 'SCRAP_BLADE', { perkStacks: { HONED: 3 } }),
+      shotBase:   window.__swing('MEDIC', 'PISTOL', {}),
+      shotHoned:  window.__swing('MEDIC', 'PISTOL', { perkStacks: { HONED: 1 } }),
+      shotHoned2: window.__swing('MEDIC', 'PISTOL', { perkStacks: { HONED: 2 } }),
+      shotVet:    window.__swing('MEDIC', 'PISTOL', { perkStacks: { VETERAN: 3 } })
+    }));
+    ok(`VETERAN pays on a blade (${verb.meleeBase} -> ${verb.meleeVet}), and stacks (${verb.meleeVet2})`,
+      verb.meleeVet > verb.meleeBase && verb.meleeVet2 > verb.meleeVet);
+    ok(`and three stacks of it do nothing at all on a pistol (${verb.shotVet}, same as ${verb.shotBase})`,
+      verb.shotVet === verb.shotBase && verb.shotBase > 0);
+    ok(`HONED pays on a pistol (${verb.shotBase} -> ${verb.shotHoned}) and compounds (${verb.shotHoned2})`,
+      verb.shotHoned === Math.floor(verb.shotBase * verb.mult)
+      && verb.shotHoned2 === Math.floor(verb.shotBase * verb.mult * verb.mult));
+    ok(`and three stacks of it do nothing on a blade (${verb.meleeHoned}, same as ${verb.meleeBase})`,
+      verb.meleeHoned === verb.meleeBase && verb.meleeBase > 0);
+    // The flat card has to reach the splash and follow-up hits the way `dmgBase += 5` did -
+    // several of those are figured off baseDmg with no multiplier on them at all. Asserted by
+    // where it is added rather than by a second swing, because the AoE verbs vary by class.
+    const flatReach = await page.evaluate(async () => {
+      const src = await (await fetch('game.js')).text();
+      return /baseDmg = actEnt\.dmgBase \+ perkDmgFlat\(actEnt, effReach\)/.test(src);
     });
-    ok(`VETERAN adds its number to a real swing (${vet.base} -> ${vet.unhurt})`,
-      vet.unhurt === vet.base + vet.step);
-    ok(`and stacks (${vet.base} -> ${vet.two} on two)`, vet.two === vet.base + 2 * vet.step);
-    ok(`and pays nothing once the body is under half health (${vet.hurt}, same as ${vet.base})`,
-      vet.hurt === vet.base);
+    ok('VETERAN goes into baseDmg, so it still reaches the splash and follow-up hits', flatReach);
 
-    // ── HONED: the edge that wants room ─────────────────────────────────────────
-    // A ranged verb, so the reach multiplier is 1 in both arms and the only thing between them
-    // is the distance HONED reads. DUELIST pays at dist 0, where this does not - they are exact
-    // complements rather than two names for the same bonus.
-    const honed = await page.evaluate(() => {
-      const farBase = window.__swing('MEDIC', 'PISTOL', 1, {});
-      const far = window.__swing('MEDIC', 'PISTOL', 1, { perkStacks: { HONED: 1 } });
-      const nearBase = window.__swing('MEDIC', 'PISTOL', 0, {});
-      const near = window.__swing('MEDIC', 'PISTOL', 0, { perkStacks: { HONED: 1 } });
-      const twice = window.__swing('MEDIC', 'PISTOL', 1, { perkStacks: { HONED: 2 } });
-      return { farBase, far, nearBase, near, twice, mult: PERK_DMG_MULT };
+    // ── The rank axis: driven through the button the player presses ──────────────
+    const rank = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      const c = playerRoster.find(p => p.gridPos > 0);
+      c.perkStacks = { HARDENED: 2, SWIFT: 2 }; c.rankPerked = { hp: 0, spd: 0 };
+      assignSlot(c.id, 0);
+      const benched = { hp: c.maxHp, spd: c.speed };
+      assignSlot(c.id, 1);
+      const front = { hp: c.maxHp, spd: c.speed };
+      assignSlot(c.id, 3);
+      const back = { hp: c.maxHp, spd: c.speed };
+      assignSlot(c.id, 1);
+      const frontAgain = { hp: c.maxHp, spd: c.speed };
+      // Reconciled, not incremented: shuffling the line twenty times must not drift the sheet.
+      for (let i = 0; i < 20; i++) { assignSlot(c.id, 1); assignSlot(c.id, 3); assignSlot(c.id, 1); }
+      return { benched, front, back, frontAgain, settled: { hp: c.maxHp, spd: c.speed },
+               pct: PERK_MAXHP, step: PERK_SPD };
     });
-    ok(`HONED lands on anything out of arm's reach (${honed.farBase} -> ${honed.far})`,
-      honed.far === Math.floor(honed.farBase * honed.mult));
-    ok(`and compounds the way the old percentage did (${honed.twice} on two stacks)`,
-      honed.twice === Math.floor(honed.farBase * honed.mult * honed.mult));
-    ok(`and pays nothing at arm's reach (${honed.near}, same as ${honed.nearBase})`,
-      honed.near === honed.nearBase && honed.nearBase > 0);
+    ok(`HARDENED pays only in the front rank (${rank.back.hp} HP behind the line, ${rank.front.hp} in it)`,
+      rank.front.hp > rank.back.hp && rank.back.hp === rank.benched.hp);
+    ok(`and it compounds rather than adding twice (two stacks is ${
+        Math.round((rank.front.hp / rank.back.hp - 1) * 1000) / 10}%, not ${Math.round(rank.pct * 200)}%)`,
+      Math.abs(rank.front.hp / rank.back.hp - Math.pow(1 + rank.pct, 2)) < 0.01);
+    ok(`SWIFT pays anywhere but the front rank (${rank.back.spd} SPD behind, ${rank.front.spd} in front)`,
+      rank.back.spd === rank.front.spd + 2 * rank.step);
+    ok(`moving out and back restores the same sheet, exactly (${rank.front.hp}/${rank.front.spd} -> ${rank.frontAgain.hp}/${rank.frontAgain.spd})`,
+      rank.frontAgain.hp === rank.front.hp && rank.frontAgain.spd === rank.front.spd);
+    ok(`and sixty more rank changes do not drift it (${rank.settled.hp} HP, ${rank.settled.spd} SPD)`,
+      rank.settled.hp === rank.front.hp && rank.settled.spd === rank.front.spd);
 
-    // ── FORTIFIED and HARDENED: flat off every blow, through mitigate ────────────
-    const soak = await page.evaluate(() => {
-      const take = (over) => {
-        const { hero } = window.__m04('BRUISER', over);
-        return mitigate(null, hero, 100, 'phys', null).n;
+    // Moving somebody out of the front rank takes their HARDENED health back off, and a body
+    // standing at full is then carrying more hp than it has maxHp - which every bar, every
+    // percentage and every "is this operator hurt" read in the engine would then get wrong.
+    // Mutation testing found this one: dropping the clamp survived every other row here.
+    const clamp = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      const c = playerRoster.find(p => p.gridPos > 0);
+      c.perkStacks = { HARDENED: 4 }; c.rankPerked = { hp: 0, spd: 0 };
+      assignSlot(c.id, 1);
+      c.hp = c.maxHp;
+      const full = c.maxHp;
+      assignSlot(c.id, 3);
+      return { full, hp: c.hp, maxHp: c.maxHp };
+    });
+    ok(`a body moved off the front rank loses the health and does not end up over its own cap ` +
+       `(${clamp.full} -> ${clamp.hp} of ${clamp.maxHp})`,
+      clamp.maxHp < clamp.full && clamp.hp === clamp.maxHp);
+
+    // The other direction: buying health hands over the health, the way `c.maxHp += 25; c.hp +=
+    // 25` always did. Without it an operator at full who buys a health card reads as wounded the
+    // moment they bought it, and the one who is hurt gets a bigger cap and none of the benefit.
+    const granted = await page.evaluate(() => {
+      const buy = (atFull) => {
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+        const c = playerRoster.find(p => p.gridPos > 0);
+        c.traits = []; c.perkStacks = {}; c.rankPerked = { hp: 0, spd: 0 }; c.perkPoints = 1;
+        assignSlot(c.id, 1);
+        c.hp = atFull ? c.maxHp : Math.floor(c.maxHp / 2);
+        const hp0 = c.hp, max0 = c.maxHp;
+        assignPerk(c.id, 'HARDENED');
+        return { gained: c.maxHp - max0, healed: c.hp - hp0, full: c.hp === c.maxHp };
       };
-      return {
-        step: PERK_SOAK,
-        bare:       take({}),
-        fortUnhurt: take({ perkStacks: { FORTIFIED: 1 } }),
-        fortHurt:   take({ perkStacks: { FORTIFIED: 1 }, hp: 100 }),
-        fortTwo:    take({ perkStacks: { FORTIFIED: 2 }, hp: 100 }),
-        hardFront:  take({ perkStacks: { HARDENED: 1 }, gridPos: 1 }),
-        hardBack:   take({ perkStacks: { HARDENED: 1 }, gridPos: 3 }),
-        // No number of stacks can make a body untouchable - mitigate's own max(1, ...) floor.
-        // That is why neither of these could be a percentage, and the row says so out loud.
-        buried:     take({ perkStacks: { HARDENED: 40 }, gridPos: 1 })
-      };
+      return { whole: buy(true), hurt: buy(false) };
     });
-    ok(`FORTIFIED pays nothing while the body is whole (${soak.fortUnhurt} of 100)`,
-      soak.fortUnhurt === soak.bare && soak.bare === 100);
-    ok(`and takes its number off once it is under half (${soak.fortHurt} of 100)`,
-      soak.fortHurt === 100 - soak.step);
-    ok(`stacking linearly (${soak.fortTwo} of 100 on two)`, soak.fortTwo === 100 - 2 * soak.step);
-    ok(`HARDENED holds the front rank (${soak.hardFront} of 100) and nowhere else (${soak.hardBack})`,
-      soak.hardFront === 100 - soak.step && soak.hardBack === 100);
-    ok(`and forty stacks still cannot make a body untouchable (${soak.buried} of 100)`,
-      soak.buried === 1);
+    ok(`a full body that buys HARDENED stays full (+${granted.whole.gained} HP, +${granted.whole.healed} healed)`,
+      granted.whole.gained > 0 && granted.whole.healed === granted.whole.gained && granted.whole.full);
+    ok(`and a hurt one gets the same health, still hurt (+${granted.hurt.gained} HP, +${granted.hurt.healed} healed)`,
+      granted.hurt.healed === granted.hurt.gained && !granted.hurt.full);
 
-    // ── SWIFT: read off the queue initiateCombat actually builds ─────────────────
+    // SWIFT has to be visible where the turn order is actually decided, not only on the card.
     const order = await page.evaluate(() => {
       const first = (stacks, pos) => {
         currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
@@ -145,9 +190,9 @@ module.exports = {
         const line = playerRoster.filter(c => c.gridPos > 0).sort((a, b) => a.gridPos - b.gridPos);
         const a = line[0], b = line[1];
         a.speed = 10; b.speed = 12;
-        a.perkStacks = stacks ? { SWIFT: stacks } : {};
-        b.perkStacks = {};
-        a.gridPos = pos; b.gridPos = 2;
+        a.perkStacks = stacks ? { SWIFT: stacks } : {}; a.rankPerked = { hp: 0, spd: 0 };
+        b.perkStacks = {}; b.rankPerked = { hp: 0, spd: 0 };
+        assignSlot(b.id, 2); assignSlot(a.id, pos);
         initiateCombat('RAIDERS', false);
         return turnQueue.findIndex(e => e.id === a.id) < turnQueue.findIndex(e => e.id === b.id);
       };
@@ -159,142 +204,135 @@ module.exports = {
     ok('SWIFT off the front rank moves it ahead of the faster one', order.swiftBack);
     ok('and the same card in the front rank does not', !order.swiftFront);
 
-    // ── The two pairs are opposed, which is what makes them a choice ─────────────
-    // Nothing about a body should ever have both halves of a pair live at once: that would make
-    // taking both strictly better than taking two of either, and the pair stops being a fork.
-    const opposed = await page.evaluate(() => {
-      const probe = (hp, pos) => {
-        const { hero } = window.__m04('BRUISER', { hp, gridPos: pos,
-          perkStacks: { VETERAN: 1, FORTIFIED: 1, SWIFT: 1, HARDENED: 1 } });
-        return { vet: perkDmgFlat(hero) > 0, fort: perkHurt(hero),
-                 swift: perkSpeed(hero) > 0, hard: hero.gridPos === 1 };
-      };
-      const rows = [[9999, 1], [9999, 3], [100, 1], [100, 3]].map(([hp, p]) => probe(hp, p));
-      return { rows,
-        health: rows.every(r => r.vet !== r.fort),
-        rank: rows.every(r => r.swift !== r.hard),
-        everyCornerReached: new Set(rows.map(r => `${r.vet}${r.swift}`)).size === 4 };
+    // ── A reposition mid-fight does not rewrite anyone's max health ──────────────
+    // The reason the rank cards read the DEPLOYED rank. REPOSITION swaps gridPos during a fight,
+    // and a health bar that jumps when two operators trade places is the exact thing that made
+    // the first cut of this reach for a per-hit cut instead - which cost ten wins.
+    // Driven through REPOSITION itself, not by writing gridPos by hand: the hand-written version
+    // proves nothing, because it only shows that a raw assignment does not sync. Mutation testing
+    // caught that - adding a sync call inside the REPOSITION branch survived the earlier row.
+    const shuffle = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      window.__clearField(); activeDoctrine = null;
+      const line = playerRoster.filter(p => p.gridPos > 0).sort((a, b) => a.gridPos - b.gridPos);
+      const a = line[0], b = line[1];
+      [a, b].forEach(c => { c.perkStacks = {}; c.rankPerked = { hp: 0, spd: 0 }; });
+      a.perkStacks = { HARDENED: 3 };
+      assignSlot(b.id, 2); assignSlot(a.id, 1);
+      const before = { a: a.maxHp, b: b.maxHp, rank: a.gridPos };
+      const foe = window.__dummy({ id: 'z0', hp: 1e6, maxHp: 1e6 });
+      activeEntities = [a, b, foe]; turnQueue = [a, b, foe];
+      activeIndex = 0; combatActive = true; pendingAction = 'REPOSITION';
+      resolveAction(b.id);
+      return { before, after: { a: a.maxHp, b: b.maxHp, rank: a.gridPos },
+               banked: a.rankPerked.hp };
     });
-    ok('VETERAN and FORTIFIED are never both live on one body', opposed.health);
-    ok('nor SWIFT and HARDENED', opposed.rank);
-    ok('and all four corners of the two axes are reachable, so neither is vacuous',
-      opposed.everyCornerReached);
+    ok(`REPOSITION really does move the operator out of the front rank (${shuffle.before.rank} -> ${shuffle.after.rank})`,
+      shuffle.before.rank === 1 && shuffle.after.rank !== 1);
+    ok(`and neither health bar moves when it does (${shuffle.before.a} -> ${shuffle.after.a}, ${shuffle.before.b} -> ${shuffle.after.b})`,
+      shuffle.after.a === shuffle.before.a && shuffle.after.b === shuffle.before.b
+      && shuffle.banked > 0);
+
+    // ── FORTIFIED asks nothing, wherever it stands ───────────────────────────────
+    const plain = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      const c = playerRoster.find(p => p.gridPos > 0);
+      c.traits = []; c.perkStacks = {}; c.rankPerked = { hp: 0, spd: 0 }; c.perkPoints = 2;
+      const before = c.maxHp;
+      assignPerk(c.id, 'FORTIFIED');
+      const front = (assignSlot(c.id, 1), c.maxHp);
+      const back = (assignSlot(c.id, 3), c.maxHp);
+      assignPerk(c.id, 'FORTIFIED');
+      return { before, front, back, twice: c.maxHp, step: PERK_HP_FLAT };
+    });
+    ok(`FORTIFIED pays the same in any rank (${plain.before} -> ${plain.front} front, ${plain.back} back)`,
+      plain.front === plain.before + plain.step && plain.back === plain.front);
+    ok(`and a second one adds again (${plain.twice})`, plain.twice === plain.before + 2 * plain.step);
 
     // ── An operator promoted before M04 is not paid twice ────────────────────────
-    // The old cards wrote the sheet at purchase. A save from before this carries the raised
-    // dmgBase AND the trait id, so a live read off `traits` would hand it the bonus a second
-    // time. The stacks are their own field, written only where a card is granted under the new
-    // rules - this row is the one that would go red if that ever became a traits read.
+    // The old cards wrote the sheet at purchase, so a save from before this carries the raised
+    // dmgBase AND the trait id. A live read off `traits` would hand it the bonus a second time.
     const legacy = await page.evaluate(() => {
       const { hero } = window.__m04('MEDIC', {});
       hero.traits = ['VETERAN', 'VETERAN', 'HONED', 'SWIFT', 'FORTIFIED', 'HARDENED'];
-      delete hero.perkStacks;
-      return { flat: perkDmgFlat(hero), mult: perkDmgMult(hero, 2),
-               spd: perkSpeed(Object.assign(hero, { gridPos: 3 })), soak: perkSoak(hero),
-               held: hero.traits.length };
+      delete hero.perkStacks; delete hero.rankPerked;
+      const hp0 = hero.maxHp, spd0 = hero.speed;
+      hero.gridPos = 1; syncRankPerks(hero);
+      return { flat: perkDmgFlat(hero, 'melee'), mult: perkDmgMult(hero, 'ranged'),
+               hp: hero.maxHp - hp0, spd: hero.speed - spd0, held: hero.traits.length };
     });
     ok(`an operator carrying ${legacy.held} old trait ids and no stacks is paid nothing new ` +
-       `(+${legacy.flat} DMG, x${legacy.mult}, +${legacy.spd} SPD, -${legacy.soak} taken)`,
-      legacy.flat === 0 && legacy.mult === 1 && legacy.spd === 0 && legacy.soak === 0);
+       `(+${legacy.flat} DMG, x${legacy.mult}, +${legacy.hp} HP, +${legacy.spd} SPD)`,
+      legacy.flat === 0 && legacy.mult === 1 && legacy.hp === 0 && legacy.spd === 0);
 
     // ── Both doors that grant a card bank a stack ────────────────────────────────
     // E08's defect was two spend paths that knew different things. There are still two - the
     // field promotion and the Outpost's picker - and they go through one function now.
     const doors = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
-      const c = playerRoster[0];
-      c.traits = []; c.perkStacks = {}; c.perkPoints = 1;
-      const sheetBefore = { dmg: c.dmgBase, hp: c.maxHp, spd: c.speed };
+      const c = playerRoster.find(p => p.gridPos > 0);
+      c.traits = []; c.perkStacks = {}; c.rankPerked = { hp: 0, spd: 0 }; c.perkPoints = 1;
+      assignSlot(c.id, 3);
+      const spd0 = c.speed;
       assignPerk(c.id, 'SWIFT');
       const viaOutpost = perkStacks(c, 'SWIFT');
+      const paidAtOnce = c.speed - spd0;
       c.perkPoints = 1;
       pendingPerkOffers = [{ charId: c.id, options: ['HARDENED', 'VETERAN', 'HONED'], shown: true }];
       takePerkOffer(0);
-      return { viaOutpost, viaOffer: perkStacks(c, 'HARDENED'),
-               traits: c.traits.slice(), sheetBefore,
-               sheetAfter: { dmg: c.dmgBase, hp: c.maxHp, spd: c.speed } };
+      return { viaOutpost, paidAtOnce, viaOffer: perkStacks(c, 'HARDENED'),
+               traits: c.traits.slice(), step: PERK_SPD };
     });
     ok(`the Outpost picker banks a stack (SWIFT x${doors.viaOutpost})`, doors.viaOutpost === 1);
-    ok(`and so does the field promotion (HARDENED x${doors.viaOffer})`, doors.viaOffer === 1);
+    ok(`and it takes effect without waiting for the next rank change (+${doors.paidAtOnce} SPD)`,
+      doors.paidAtOnce === doors.step);
+    ok(`the field promotion banks one too (HARDENED x${doors.viaOffer})`, doors.viaOffer === 1);
     ok(`both still record the trait, which the tally and the dossier read (${doors.traits.join(', ')})`,
       doors.traits.join(',') === 'SWIFT,HARDENED');
-    ok(`and neither writes the sheet any more (DMG ${doors.sheetAfter.dmg}, HP ` +
-       `${doors.sheetAfter.hp}, SPD ${doors.sheetAfter.spd}, all unmoved)`,
-      JSON.stringify(doors.sheetAfter) === JSON.stringify(doors.sheetBefore));
 
     // ── The stacks survive a save, which is the whole of long-run progression ────
-    // E10's finding was a save that forgot things. This field IS the training half of an
-    // operator's career now - if it did not round-trip, every reload would wipe 91% of every
-    // perk point ever spent and the sheet would show nothing missing, because the sheet is no
-    // longer where it lives.
+    // E10's finding was a save that forgot things. This field IS the training half of a career
+    // now: without the round-trip every reload would wipe 91% of every perk point ever spent.
     const saved = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
-      const c = playerRoster[0];
-      c.traits = []; c.perkStacks = {}; c.perkPoints = 3;
-      ['VETERAN', 'VETERAN', 'HONED'].forEach(id => assignPerk(c.id, id));
-      const before = JSON.stringify(c.perkStacks);
+      const c = playerRoster.find(p => p.gridPos > 0);
+      c.traits = []; c.perkStacks = {}; c.rankPerked = { hp: 0, spd: 0 }; c.perkPoints = 3;
+      assignSlot(c.id, 1);
+      ['HARDENED', 'HARDENED', 'HONED'].forEach(id => assignPerk(c.id, id));
+      const before = JSON.stringify(c.perkStacks), hp = c.maxHp, banked = c.rankPerked.hp;
       saveGameState();
       playerRoster = [];
       loadGameState();
       const back = playerRoster.find(p => p.id === c.id);
-      return { before, after: JSON.stringify(back.perkStacks),
-               vet: perkStacks(back, 'VETERAN'), honed: perkStacks(back, 'HONED') };
+      return { before, after: JSON.stringify(back.perkStacks), hp, hpAfter: back.maxHp,
+               banked, bankedAfter: (back.rankPerked || {}).hp,
+               hard: perkStacks(back, 'HARDENED'), honed: perkStacks(back, 'HONED') };
     });
     ok(`the stacks come back off a save exactly as they went in (${saved.after})`,
-      saved.after === saved.before && saved.vet === 2 && saved.honed === 1);
-
-    // ── What the two opposed pairs actually guarantee ────────────────────────────
-    // Written first as "the front rank has fewer cards that fit it", which the rows below
-    // refuted: it does not. The opposition is what does the work - one half of each pair is
-    // live in every state a body can be in, so EXACTLY two of the four keyed cards are paying
-    // on any operator at any moment, and no promotion screen is ever dead for the body it is
-    // offered to. What changes between bodies is WHICH two, and that is the decision.
-    //
-    // HONED is deliberately outside this: it is the one card whose condition is not about the
-    // body at all but about what the body is shooting at, so it is counted separately rather
-    // than folded in and miscounted, which is exactly what the first draft of this row did.
-    const spread = await page.evaluate(() => {
-      const live = (pos, hp) => {
-        const { hero } = window.__m04('BRUISER', { gridPos: pos, hp,
-          perkStacks: { VETERAN: 1, FORTIFIED: 1, SWIFT: 1, HONED: 1, HARDENED: 1 } });
-        return { keyed: [['VETERAN', perkDmgFlat(hero) > 0], ['FORTIFIED', perkHurt(hero)],
-                         ['SWIFT', perkSpeed(hero) > 0], ['HARDENED', hero.gridPos === 1]]
-                   .filter(([, on]) => on).map(([id]) => id),
-                 honedFar: perkDmgMult(hero, 1) > 1, honedNear: perkDmgMult(hero, 0) > 1 };
-      };
-      return { front: live(1, 9999), frontHurt: live(1, 100),
-               back: live(3, 9999), backHurt: live(3, 100) };
-    });
-    const states = [['front rank, whole', 'front'], ['front rank, hurt', 'frontHurt'],
-                    ['behind the line, whole', 'back'], ['behind the line, hurt', 'backHurt']];
-    ok(`exactly two of the four keyed cards pay in every state a body can be in (${
-        states.map(([n, k]) => `${n}: ${spread[k].keyed.join('+')}`).join('; ')})`,
-      states.every(([, k]) => spread[k].keyed.length === 2));
-    ok('and the four sets are all different, so which two you get is the choice',
-      new Set(states.map(([, k]) => spread[k].keyed.slice().sort().join(','))).size === 4);
-    ok('HONED sits outside the four - the same in either rank, decided by what it shoots at',
-      states.every(([, k]) => spread[k].honedFar && !spread[k].honedNear));
+      saved.after === saved.before && saved.hard === 2 && saved.honed === 1);
+    ok(`and so does what the rank paid, so a reload cannot double or drop it (${saved.banked} HP banked, sheet ${saved.hpAfter})`,
+      saved.hpAfter === saved.hp && saved.bankedAfter === saved.banked && saved.banked > 0);
 
     // ── None of it reaches a hostile ─────────────────────────────────────────────
-    // Every read is gated on isPlayer, and a hostile carrying the same field would otherwise
-    // pick up a mitigation nothing in the bestiary names. Forced on rather than assumed off.
+    // perkDmgMult is named here rather than left to the others: it is the one read with no
+    // isPlayer check of its own, leaning entirely on the one inside perkStacks. Mutation testing
+    // found that - dropping the gate from perkStacks alone survived every other row.
     const foe = await page.evaluate(() => {
-      const d = window.__dummy({ perkStacks: { VETERAN: 3, HARDENED: 3, FORTIFIED: 3, SWIFT: 3 },
-                                 gridPos: 1, hp: 10, maxHp: 400 });
+      // Every one of the five, HONED included: perkDmgMult is the read with no gate of its own,
+      // so a fixture missing the card IT looks at cannot catch the gate going missing. Mutation
+      // testing found exactly that - the first version of this row omitted HONED and survived.
+      const d = window.__dummy({ perkStacks: { VETERAN: 3, HONED: 3, HARDENED: 3, SWIFT: 3, FORTIFIED: 3 },
+                                 gridPos: 1, hp: 400, maxHp: 400 });
       window.__clearField(); activeEntities = [d];
-      // perkDmgMult is named here rather than left to the others: it is the ONE read with no
-      // isPlayer check of its own, leaning entirely on the one inside perkStacks. Mutation
-      // testing found that - dropping the gate from perkStacks alone survived every other row,
-      // because each of them carries its own.
-      return { soak: perkSoak(d), flat: perkDmgFlat(d), spd: perkSpeed(d),
-               mult: perkDmgMult(d, 2), stacks: perkStacks(d, 'VETERAN'),
-               carried: Object.keys(d.perkStacks || {}).length,
-               took: mitigate(null, d, 100, 'phys', null).n };
+      const hp0 = d.maxHp, spd0 = d.speed;
+      syncRankPerks(d);
+      return { flat: perkDmgFlat(d, 'melee'), mult: perkDmgMult(d, 'ranged'),
+               hp: d.maxHp - hp0, spd: d.speed - spd0,
+               carried: Object.keys(d.perkStacks || {}).length };
     });
-    ok(`the fixture really does put the field on the hostile (${foe.carried} stat perks in it)`,
-      foe.carried === 4);
-    ok(`and it gets none of it (${foe.took} of 100 taken, x${foe.mult} dealt)`,
-      foe.soak === 0 && foe.flat === 0 && foe.spd === 0 && foe.mult === 1
-      && foe.stacks === 0 && foe.took === 100);
+    ok(`the fixture really does put all five on the hostile (${foe.carried} stat perks in it)`,
+      foe.carried === 5);
+    ok(`and it gets none of it (+${foe.flat} DMG, x${foe.mult}, +${foe.hp} HP, +${foe.spd} SPD)`,
+      foe.flat === 0 && foe.mult === 1 && foe.hp === 0 && foe.spd === 0);
   }
 };

@@ -60,29 +60,25 @@ module.exports = {
     ok('but does not pop the interrupt - nothing was left to decide', exhausted.pending === 0);
 
     // ── The banked point is genuinely spendable, through the Outpost's existing menu ────
-    // M04 moved what a stat card does: it no longer writes dmgBase at purchase, it banks a stack
-    // that the swing reads live while the operator is at half health or better. So the proof the
+    // M04 moved what a stat card does: VETERAN no longer writes dmgBase at purchase, it banks a
+    // stack the swing reads live while this operator is holding a melee weapon. So the proof the
     // point was really spent is the stack and the trait, and the payoff is measured where it now
-    // lands - on the figure, with the same body hurt and unhurt.
+    // lands - on the figure, with the same body swinging a blade and firing a shot.
     const spend = await page.evaluate(() => {
       const c = playerRoster.find(p => p.classType === 'MEDIC');
       const before = c.dmgBase;
       assignPerk(c.id, 'VETERAN');
-      c.hp = c.maxHp;
-      const unhurt = perkDmgFlat(c);
-      c.hp = 1;
-      const hurt = perkDmgFlat(c);
-      c.hp = c.maxHp;
-      return { spent: c.perkPoints, dmgBase: c.dmgBase, before, unhurt, hurt,
+      return { spent: c.perkPoints, dmgBase: c.dmgBase, before,
+               melee: perkDmgFlat(c, 'melee'), ranged: perkDmgFlat(c, 'ranged'),
                stacks: perkStacks(c, 'VETERAN'), step: PERK_DMG_FLAT,
                held: (c.traits || []).includes('VETERAN') };
     });
     ok(`the point silently banked is spendable exactly like a declined one ` +
        `(perkPoints now ${spend.spent}, VETERAN x${spend.stacks} banked)`,
       spend.spent === 0 && spend.stacks === 1 && spend.held);
-    ok(`and it pays on the swing rather than on the sheet (+${spend.unhurt} DMG unhurt, ` +
-       `+${spend.hurt} at one health, sheet still ${spend.dmgBase})`,
-      spend.unhurt === spend.step && spend.hurt === 0 && spend.dmgBase === spend.before);
+    ok(`and it pays on the swing rather than on the sheet (+${spend.melee} DMG on a blade, ` +
+       `+${spend.ranged} on a shot, sheet still ${spend.dmgBase})`,
+      spend.melee === spend.step && spend.ranged === 0 && spend.dmgBase === spend.before);
 
     // ── Partial exhaustion: one fork spent, one still open, still worth a screen ────────
     // E07 gave each class two forks of two, so "unheld" is fork-shaped now: taking either half

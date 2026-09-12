@@ -33,24 +33,25 @@ module.exports = {
     const stacking = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const c = playerRoster[0];
-      c.perkPoints = 10; c.traits = []; c.perkStacks = {};
+      c.perkPoints = 10; c.traits = []; c.perkStacks = {}; c.rankPerked = { hp: 0, spd: 0 };
+      assignSlot(c.id, 1);
       const dmg0 = c.dmgBase, hp0 = c.maxHp;
       for (let i = 0; i < 5; i++) assignPerk(c.id, 'HONED');
       for (let i = 0; i < 5; i++) assignPerk(c.id, 'HARDENED');
-      c.gridPos = 1; c.hp = c.maxHp;
       return { dmg0, dmgAfter: c.dmgBase, hp0, hpAfter: c.maxHp,
                honed: perkStacks(c, 'HONED'), hardened: perkStacks(c, 'HARDENED'),
-               mult: perkDmgMult(c, 2), soak: perkSoak(c), step: PERK_SOAK,
-               expectedCompound: Math.pow(PERK_DMG_MULT, 5) };
+               mult: perkDmgMult(c, 'ranged'),
+               expectedMult: Math.pow(PERK_DMG_MULT, 5),
+               expectedHp: Math.pow(1 + PERK_MAXHP, 5) };
     });
-    ok(`a stat card no longer writes the sheet (${stacking.dmg0} DMG, ${stacking.hp0} HP, both unmoved)`,
-      stacking.dmgAfter === stacking.dmg0 && stacking.hpAfter === stacking.hp0);
+    ok(`the damage card pays on the swing, not on the sheet (${stacking.dmg0} DMG, unmoved)`,
+      stacking.dmgAfter === stacking.dmg0);
     ok(`five picks bank five stacks (HONED x${stacking.honed}, HARDENED x${stacking.hardened})`,
       stacking.honed === 5 && stacking.hardened === 5);
-    ok(`percentage perks still compound (x${stacking.mult.toFixed(2)} at reach)`,
-      Math.abs(stacking.mult - stacking.expectedCompound) < 1e-9 && stacking.mult > 2);
-    ok(`flat soak stacks linearly (${stacking.soak} off every blow held in the front rank)`,
-      stacking.soak === 5 * stacking.step);
+    ok(`percentage perks still compound (x${stacking.mult.toFixed(2)} on a ranged verb)`,
+      Math.abs(stacking.mult - stacking.expectedMult) < 1e-9 && stacking.mult > 1.7);
+    ok(`health perks compound too, held in the front rank (${stacking.hp0} -> ${stacking.hpAfter} HP)`,
+      Math.abs(stacking.hpAfter / stacking.hp0 - stacking.expectedHp) < 0.02);
 
     const migrated = await page.evaluate(() => {
       const roster = [{ id: 'x', trait: 'VETERAN', perkPoints: 1 }, { id: 'y', trait: null }];

@@ -507,35 +507,48 @@ function quirkDmgMult(actEnt, target, dist) {
     return m;
 }
 
-// ── M04: the five stat cards, made situational ──────────────────────────────────────────
-// M02's census said these five are 91% of every perk point the game ever spends - they are
-// not filler beside the signatures, they ARE long-run progression. And they were five flat
-// bumps that landed identically on every body: VETERAN was worth exactly as much to the
-// Bruiser holding the line as to the Scout standing behind it, so the promotion screen was
-// an ordering rather than a decision, and the ordering never changed from one operator to
-// the next.
+// ── M04: the five stat cards, made situational - and then re-cut on the measurement ─────
+// M02's census said these five are 91% of every perk point the game ever spends: they are not
+// filler beside the signatures, they ARE long-run progression. And they were five flat bumps
+// that landed identically on every body, so the promotion screen was an ordering rather than a
+// decision, and the ordering never changed from one operator to the next.
 //
-// They read the operator now, in the idiom M01 used on the scar pool. A perk is permanent
-// per-operator though, where a scar can be treated - you cannot re-pick one when the road
-// turns - so the condition must not be the sector or the sky. Situational on the WEATHER
-// would be a trap, not a choice. Each of the five keys on the body's own job on the line,
-// which is set at the Outpost and legible on the card you are deciding from:
+// THE FIRST CUT OF THIS COST SIXTEEN WINS OF A CAREER, and the reason is written into the shape
+// of what is here now. A probe counted how often each condition actually fired, over 14,559
+// player swings, and three of the five almost never did. The two findings that matter:
 //
-//   VETERAN / FORTIFIED   how it lives:  unhurt, or hanging on.        Opposed.
-//   SWIFT   / HARDENED    where it stands: off the front rank, or on it. Opposed.
-//   HONED                 what it reaches: anything not already in arm's reach.
+//   1. A CONDITION HAS TO BE A PROPERTY OF THE BODY. HONED's first condition was "the target is
+//      further off than arm's reach", and `dist` is the target's index in the living-enemy
+//      list - a fact about whichever foe the targeting picked, not about the operator holding
+//      the card. 81% of every swing in the game lands on the front of the enemy line, so the
+//      only multiplicative offence axis the player has went from always-on to one swing in
+//      five. The verb's OWN reach is a body property - a Medic carries a pistol, a Bruiser
+//      carries a blade - and fires on 60%. That is the axis it should have been on.
 //
-// Sized at roughly double the flat card it replaces while its condition holds and nothing at
-// all while it does not, so a matched card beats the old bump and a mismatched one is wasted.
-// That gap is the decision. Under the old five it was zero by construction, which is why the
-// thing worth measuring here is the spread between picking at random and picking to fit -
-// not the wall. M02 also established the harness picks uniformly, so the random arm is what
-// ships first and any claim about WHICH card is better needs a taste policy behind it.
-const PERK_DMG_FLAT = 10;    // VETERAN,   per stack, added to the swing
-const PERK_DMG_MULT = 1.2;   // HONED,     per stack, compounding as the old percentage did
-const PERK_SPD      = 6;     // SWIFT,     per stack, on the turn order
-const PERK_SOAK     = 6;     // FORTIFIED and HARDENED, per stack, off every blow taken
-const PERK_HURT     = 0.5;   // the health line both halves of VETERAN/FORTIFIED read
+//   2. MAX HEALTH HAS TO STAY MAX HEALTH. The first cut turned +25 HP and +10% max HP into a
+//      flat cut off each blow, on the reasoning that health cannot be conditional without the
+//      bar jumping mid-fight. Restoring only those two recovered ten of the sixteen wins, and
+//      the multiplicative repair that looked obvious - a share off each blow instead of a flat
+//      number - measured no better than the thing it was meant to fix. Health is not just a
+//      per-hit quantity here: it carries BETWEEN fights, so it is buffer a percentage cut never
+//      gives back. The way to make it conditional is to gate it on a state that only changes at
+//      the Outpost, which is where stats are allowed to move.
+//
+// So the axes are the two that are genuinely about the operator, each an opposed pair, plus one
+// card that asks nothing:
+//
+//   VETERAN / HONED       the verb it carries:  a blade, or something with reach.
+//   HARDENED / SWIFT      where it is deployed: the front rank, or behind it.
+//   FORTIFIED             nothing. The card for a body you have not committed to a job.
+//
+// Keeping one unconditional card is deliberate rather than a leftover. Four conditional cards
+// and no plain one would mean a screen that can only offer a body a mismatch, and a perk is
+// permanent - there has to be something to take when the answer is "not yet".
+const PERK_DMG_FLAT = 6;     // VETERAN,   per stack, added to the swing on a melee verb
+const PERK_DMG_MULT = 1.12;  // HONED,     per stack, compounding, on a ranged verb
+const PERK_MAXHP    = 0.12;  // HARDENED,  per stack, compounding, in the front rank
+const PERK_SPD      = 4;     // SWIFT,     per stack, deployed off the front rank
+const PERK_HP_FLAT  = 25;    // FORTIFIED, per stack, wherever it stands
 
 // Stat perks are repeatable, so a situational one has to know how many times it was taken and
 // hasTrait only answers whether. The count cannot come from `traits` either: a save written
@@ -546,41 +559,54 @@ const PERK_HURT     = 0.5;   // the health line both halves of VETERAN/FORTIFIED
 function perkStacks(ent, id) {
     return (ent && ent.isPlayer && ent.perkStacks && ent.perkStacks[id]) || 0;
 }
-function perkHurt(ent) { return ent.hp < ent.maxHp * PERK_HURT; }
-// VETERAN: the steady hand. Flat, and it goes into baseDmg rather than the multiplier chain
-// so it reaches the splash and follow-up hits exactly as `dmgBase += 5` used to.
-function perkDmgFlat(ent) {
-    if (!ent || !ent.isPlayer || perkHurt(ent)) return 0;
+// VETERAN: the hand that swings. Flat, and it goes into baseDmg rather than the multiplier
+// chain so it reaches the splash and follow-up hits exactly as `dmgBase += 5` used to - several
+// of those are figured off baseDmg with no multiplier at all.
+function perkDmgFlat(ent, reach) {
+    if (!ent || !ent.isPlayer || reach !== 'melee') return 0;
     return perkStacks(ent, 'VETERAN') * PERK_DMG_FLAT;
 }
-// HONED: an edge that wants room. dist 0 is arm's reach, which is where DUELIST pays instead -
-// the two are exact complements rather than a duplicate, and never both apply.
-function perkDmgMult(actEnt, dist) {
+// HONED: the edge on something with reach. effReach, not the move's row in MOVE_REACH - F09's
+// finding was that those two disagree for a bayoneted Pipe Rifle, and the resolver already
+// works out which one this operator is actually holding.
+function perkDmgMult(actEnt, reach) {
     const n = perkStacks(actEnt, 'HONED');
-    return (n && dist > 0) ? Math.pow(PERK_DMG_MULT, n) : 1;
+    return (n && reach === 'ranged') ? Math.pow(PERK_DMG_MULT, n) : 1;
 }
-// SWIFT: read where the turn order is read, so the roster card keeps showing the body's own
-// speed instead of a number that is only true in two ranks out of three.
-function perkSpeed(ent) {
-    if (!ent || !ent.isPlayer || ent.gridPos === 1) return 0;
-    return perkStacks(ent, 'SWIFT') * PERK_SPD;
+// HARDENED and SWIFT are stats on the sheet, not live reads, because max health cannot be a
+// live read and the measurement says that currency is the one that carries. They are
+// RECONCILED rather than incremented: this works out what the body should be carrying for its
+// current rank and stacks, takes off exactly what it is carrying, and puts the right amount on.
+// Idempotent - calling it twice costs nothing and a missed call is repaired by the next one,
+// which matters because six different places in this engine write gridPos.
+//
+// The rank it reads is the DEPLOYED rank, so an in-fight reposition does not rewrite anyone's
+// max health mid-fight; the swap is reconciled the next time the Outpost touches the line,
+// which is where the bar is allowed to move.
+function syncRankPerks(char) {
+    if (!char || !char.isPlayer) return;
+    const had = char.rankPerked || { hp: 0, spd: 0 };
+    char.maxHp -= had.hp; char.speed -= had.spd;
+    const hpStacks  = char.gridPos === 1 ? perkStacks(char, 'HARDENED') : 0;
+    const spdStacks = char.gridPos > 1 ? perkStacks(char, 'SWIFT') : 0;
+    const hp  = hpStacks ? Math.ceil(char.maxHp * (Math.pow(1 + PERK_MAXHP, hpStacks) - 1)) : 0;
+    const spd = spdStacks * PERK_SPD;
+    char.maxHp += hp; char.speed += spd;
+    // A grant that grew hands over the difference, the way `c.hp += g` did; one that shrank
+    // just clamps. Nobody is healed by being moved out of the front rank and back again.
+    if (hp > had.hp) char.hp += hp - had.hp;
+    char.hp = Math.max(0, Math.min(char.hp, char.maxHp));
+    char.rankPerked = { hp, spd };
 }
-// FORTIFIED and HARDENED, both a flat cut off the incoming figure - the THICK_HIDE shape.
-// Neither could stay a max-health bump: health cannot be conditional without the bar jumping
-// mid-fight. Flat soak stacks linearly, and mitigate's own max(1, ...) floor means no number
-// of stacks can make a body untouchable, which a percentage cut would.
-function perkSoak(ent) {
-    if (!ent || !ent.isPlayer) return 0;
-    let n = 0;
-    if (perkHurt(ent)) n += perkStacks(ent, 'FORTIFIED');
-    if (ent.gridPos === 1) n += perkStacks(ent, 'HARDENED');
-    return n * PERK_SOAK;
-}
+function syncAllRankPerks() { (playerRoster || []).forEach(syncRankPerks); }
 // One door for banking a stat card, because two screens grant one - the field promotion and
 // the Outpost's picker. E08's defect was those two paths knowing different things.
 function bankPerkStack(char, id) {
     char.perkStacks = char.perkStacks || {};
     char.perkStacks[id] = (char.perkStacks[id] || 0) + 1;
+    // FORTIFIED asks nothing, so it is written straight onto the sheet the way it always was.
+    if (id === 'FORTIFIED') { char.maxHp += PERK_HP_FLAT; char.hp += PERK_HP_FLAT; }
+    syncRankPerks(char);
 }
 
 // ── Bonds ───────────────────────────────────────────────────────────────────────────────
@@ -712,16 +738,16 @@ function bondLineFor(char) {
 // quirkDmgMult for why each condition is the one it is. No entry carries `apply` any more:
 // a stat card no longer writes the sheet, it is banked as a stack and read live.
 const PERK_POOL = [
-    { id: 'VETERAN',   label: `VETERAN (+${PERK_DMG_FLAT} DMG, unhurt)`,
-      desc: `+${PERK_DMG_FLAT} damage while at half health or better. Steady hands.` },
-    { id: 'FORTIFIED', label: `FORTIFIED (-${PERK_SOAK} TAKEN, hurt)`,
-      desc: `Takes ${PERK_SOAK} less from every blow while below half health. Hard to finish.` },
+    { id: 'VETERAN',   label: `VETERAN (+${PERK_DMG_FLAT} DMG, melee)`,
+      desc: `+${PERK_DMG_FLAT} damage on every swing of a melee weapon. Nothing on a ranged one.` },
+    { id: 'HONED',     label: `HONED (+${Math.round((PERK_DMG_MULT - 1) * 100)}% DMG, ranged)`,
+      desc: `+${Math.round((PERK_DMG_MULT - 1) * 100)}% damage on everything fired at range. Nothing swung by hand.` },
+    { id: 'HARDENED',  label: `HARDENED (+${Math.round(PERK_MAXHP * 100)}% MAX HP, front rank)`,
+      desc: `+${Math.round(PERK_MAXHP * 100)}% max health while deployed in the front rank, and none of it anywhere else.` },
     { id: 'SWIFT',     label: `SWIFT (+${PERK_SPD} SPD, off the front)`,
-      desc: `+${PERK_SPD} speed anywhere but the front rank.` },
-    { id: 'HONED',     label: `HONED (+${Math.round((PERK_DMG_MULT - 1) * 100)}% DMG, at reach)`,
-      desc: `+${Math.round((PERK_DMG_MULT - 1) * 100)}% damage against anything not already in arm's reach.` },
-    { id: 'HARDENED',  label: `HARDENED (-${PERK_SOAK} TAKEN, front rank)`,
-      desc: `Takes ${PERK_SOAK} less from every blow while holding the front rank.` }
+      desc: `+${PERK_SPD} speed while deployed behind the front rank.` },
+    { id: 'FORTIFIED', label: `FORTIFIED (+${PERK_HP_FLAT} HP)`,
+      desc: `+${PERK_HP_FLAT} max health, wherever this operator stands and whatever it carries.` }
 ];
 
 // A commander's passive is stored as an id on its pool entry; this is what that id means.
@@ -2938,7 +2964,7 @@ const CODEX = [
     // for the same reason the scar page is driven off SCAR_POOL: a hand-copied list drifts.
     { id: 'PROMOTIONS', title: 'FIELD PROMOTIONS', body: () => [
         'A level-up offers three perks on the spot: class signatures that change what an ability does, and repeatable training. Banking the point keeps it for the Outpost instead.',
-        'Training stacks, but a card pays nothing at all while its condition is off. Two of the five read how an operator lives, two read where it stands, and one reads what it is shooting at - so the card that fits the bruiser holding your front rank is the wrong card for the shooter behind it. Signatures and training both stay on an operator for good: pick for the job that operator is going to keep doing.',
+        'Training stacks, and four of the five pay nothing at all while their condition is off. Two read the weapon an operator carries - one rewards a blade, the other something with reach - and two read where it is deployed, one for the front rank and one for behind it. The fifth asks nothing and is the card to take when you have not decided what a body is for. Signatures and training both stay on an operator for good, so pick for the job that operator is going to keep doing.',
         ...PERK_POOL.map(p => `${p.label.split(' (')[0]} \u2014 ${p.desc}`),
         ...SIG_PERKS.map(p => `${p.name} (${p.cls}) \u2014 ${p.desc}`)
     ] },
@@ -4868,6 +4894,7 @@ function closeRanks() {
         const next = bench.find(keeps) || (activeDoctrine && !doctrineBroken ? null : bench[0]);
         if (!next) return;
         next.gridPos = pos;
+        syncRankPerks(next);
         filled.push(next.name);
         log(`> ${next.name} steps up into the ${(RANK_LABELS[pos] || '').toLowerCase()} rank.`, 'log-status');
     });
@@ -6480,6 +6507,7 @@ function musterRank(charId) {
     }
     if (next !== 0 && playerRoster.filter(c => c.gridPos > 0 && c.id !== charId).length >= cap) next = 0;
     ch.gridPos = next;
+    syncRankPerks(ch);
     // A job is a bench job. Putting its holder on the line gives it up, and says so rather
     // than leaving a card claiming somebody in the front rank is out scouting.
     if (next !== 0 && benchJob && benchJob.charId === ch.id) benchJob = null;
@@ -7540,7 +7568,7 @@ function installAugment(charId, type) {
 function assignSlot(charId, newSlot) {
     // Short Handed is a condition for the whole expedition, not just its first node.
     if (hasContract('SHORT_HANDED') && newSlot === 3) { activePosSelector = null; renderOutpost(); return; }
-    let char = playerRoster.find(c => c.id === charId); let oldSlot = char.gridPos; if (newSlot > 0) { let existingChar = playerRoster.find(c => c.gridPos === newSlot && c.id !== charId); if (existingChar) existingChar.gridPos = oldSlot; } char.gridPos = newSlot; activePosSelector = null; checkDoctrine(); saveGameState(); renderOutpost(); }
+    let char = playerRoster.find(c => c.id === charId); let oldSlot = char.gridPos; if (newSlot > 0) { let existingChar = playerRoster.find(c => c.gridPos === newSlot && c.id !== charId); if (existingChar) { existingChar.gridPos = oldSlot; syncRankPerks(existingChar); } } char.gridPos = newSlot; syncRankPerks(char); activePosSelector = null; checkDoctrine(); saveGameState(); renderOutpost(); }
 // ── Signature perks ─────────────────────────────────────────────────────────────────────
 // A level-up used to bank a point spent later on a flat stat. It is a moment now: three perks
 // offered on the spot, mixing the stat perks with class signatures that change what an
@@ -10394,7 +10422,7 @@ function initiateCombat(nodeType, isEliteNode) {
     if (openForm) firePrompt('FORMATION');
     if (activeEntities.some(e => !e.isPlayer && sigOf(e))) firePrompt('SIGNATURE');
     // The Lead-Lined Coat weighs on the turn order without touching the sheet.
-    const queueSpeed = e => e.speed + perkSpeed(e) - (e.isPlayer && hasRelic('LEAD_LINED_COAT') ? coatDrag() : 0);
+    const queueSpeed = e => e.speed - (e.isPlayer && hasRelic('LEAD_LINED_COAT') ? coatDrag() : 0);
     turnQueue = [...activeEntities].sort((a, b) => queueSpeed(b) - queueSpeed(a));
     activeIndex = 0;
     // Second Watch hands the opening turn to whichever enemy is fastest, however quick the squad is.
@@ -11555,7 +11583,10 @@ function resolveAction(targetId) {
     } else {
         let atkType = damageTypeOf(pendingAction);
         let tuneUpBonus = tuneUpBattles > 0 ? 4 : 0;
-        let baseDmg = actEnt.dmgBase + perkDmgFlat(actEnt) + tuneUpBonus + Math.floor(Math.random() * 6); 
+        // M04: hoisted, because VETERAN and HONED both key on which kind of weapon this
+        // operator is actually holding and baseDmg is figured before the reach layer runs.
+        const effReach = moveReachFor(pendingAction, actEnt);
+        let baseDmg = actEnt.dmgBase + perkDmgFlat(actEnt, effReach) + tuneUpBonus + Math.floor(Math.random() * 6); 
         let dmgMult = 1.0; let isCombo = false; let comboType = '';
         // The breakdown is recorded as the real chain runs rather than worked out again
         // afterwards, so what the player is shown cannot disagree with what happened.
@@ -11599,7 +11630,7 @@ function resolveAction(targetId) {
         if (momentumFocus > 0) { dmgMult *= 1.3; momentumFocus = 0; spawnFCT(actEnt.id, 'FOCUSED', 'fct-combo'); }
         snap('focus');
         dmgMult *= quirkDmgMult(actEnt, target, dist);
-        dmgMult *= perkDmgMult(actEnt, dist);
+        dmgMult *= perkDmgMult(actEnt, effReach);
         dmgMult *= bondDmgMult(actEnt);
         if (hasTrait(actEnt, 'GRUDGE') && actEnt.hp < actEnt.maxHp / 2) dmgMult *= 1.15;
         if (hasTrait(actEnt, 'CALLED_SHOT') && (target.markedTurns || 0) > 0) dmgMult *= 1.25;
@@ -11626,7 +11657,6 @@ function resolveAction(targetId) {
         // Where the two of them are standing, and what they are standing on. This used to keep
         // its own copy of the rank arithmetic; it reads the same one the deck and the forecast
         // do, so ground cannot apply to the button's estimate and not to the swing.
-        const effReach = moveReachFor(pendingAction, actEnt);
         const reach = effReach === 'melee'
             ? groundReach((REACH_PENALTY[actEnt.gridPos] || 1) * (dist >= FRONT_RANKS ? DEPTH_PENALTY : 1))
             : 1;
@@ -11877,9 +11907,6 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
         && attacker.range === 'melee') cd = Math.floor(cd * 0.8);
     if (hasRelic('CHEM_ETCHER') && !t.isPlayer && (t.corrodedTurns || 0) > 0) cd = Math.floor(cd * 1.25);
     if (hasQuirk(t, 'THICK_HIDE')) cd = Math.max(1, cd - 3);
-    // M04: FORTIFIED while hurt and HARDENED in the front rank, both flat off the figure.
-    const soak = perkSoak(t);
-    if (soak > 0) cd = Math.max(1, cd - soak);
     // Ruins are cover for whoever is standing in them, and the front rank is where the cover is.
     // ...unless the sky has filled the cover: gas pools in exactly the low ground you crouch in.
     if (t.gridPos === 1 && ground().frontCover && !w.noCover) cd = Math.max(1, Math.floor(cd * ground().frontCover));
@@ -13135,8 +13162,8 @@ globalThis.WP = {
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
     INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField,
-    PERK_DMG_FLAT, PERK_DMG_MULT, PERK_SPD, PERK_SOAK, PERK_HURT,
-    perkStacks, perkHurt, perkDmgFlat, perkDmgMult, perkSpeed, perkSoak, bankPerkStack, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
+    PERK_DMG_FLAT, PERK_DMG_MULT, PERK_SPD, PERK_MAXHP, PERK_HP_FLAT,
+    perkStacks, perkDmgFlat, perkDmgMult, syncRankPerks, syncAllRankPerks, bankPerkStack, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
     ELITE_AFFIXES, affixById, affixesOn, hasAffix, LIGHT_ORDER_HP, VETERAN_RANK,
     AUGMENTS, AUGMENT_SLOTS, augmentById, augmentsOn, augmentSlotsLeft, canAugment, MATERIAL_KINDS, damageTypeOf, BIO_MOVES, ENERGY_MOVES, bladeBite, collectorPrice, magnetPay, salvageBonus, coatDrag, meshRanks, cooldownStep, operatorCardHtml, motionOff, applyTextScale, applyVolumes, audioState, sfxVol, ambVol, volName, cycleVol, VOL_STEPS, VOL_NAMES, MOTION_MODES, TEXT_STEPS, cycleSfx, cycleAmbience, cycleMotion, cycleTextScale, updateSettingsUI, flashClass, triggerHitFlash, spawnFCT, fxLayer, FX_TRANSIENT, pulseIntent, playAttackAnim, armPortraitFallback, armFieldRefit, PORTRAIT_FALLBACK, sigOf, hasSig, enemyDmgMult, venomDose, carrionStanding, TEEMING_FLOOR, portraitFor, fireOverwatch, bestiaryEntry, noteBestiary, noteKill, raiseBody, hasMet, firePrompt, renderPrompt, dismissPrompt, disablePrompts, promptSeen, PROMPTS, mitigate, forecastFor, threatBoard, explainHtml, renderExplain, openExplain, closeExplain, bestiaryRoster, bestiaryRecord, unlockDepth, typeNameOf, dossierHtml, renderDossier, openDossier, closeDossier, chronicleKey, careerKey, readChronicle, readCareer, writeChronicle, epitaphFor, latestEpitaph, renderChronicle, masteryXp, masteryRank, noteMastery, quirkPoolFor, deckFor, MASTERY_RANKS, MASTERY_TITLES, CLASS_QUIRKS, FOURTH_ABILITIES, PROTOCOLS, unlockedProtocols, protocolMult, protocolName, bossOrder,

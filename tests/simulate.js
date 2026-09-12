@@ -4053,20 +4053,23 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         // have never appeared in this report at all, so "is the stat pool thin" has never been a
         // question anyone could answer.
         //
-        // M04: and now the pick is a decision, so there is a policy. `random` is M02's arm, kept
-        // as the default so those records stay comparable. `fit` narrows to the cards this body
-        // will be meeting the condition of MOST OF THE TIME and then still picks uniformly
-        // inside that set, so it encodes duration and not a ranking.
+        // M04: the pick is a decision now, so there is a policy. `random` is M02's arm, kept as
+        // the default so those records stay comparable. `fit` narrows to the cards whose
+        // condition this body meets and still picks uniformly inside that set, so it encodes the
+        // condition and not a ranking - deciding which of the five is strongest and measuring
+        // that would be measuring my own taste rather than the game's.
         //
-        // Rank is what it reads, because rank is the one thing the player sets deliberately and
-        // it drives the other conditions through how hard the body gets hit: an operator holding
-        // the front rank has HARDENED on permanently and spends much of a fight under half
-        // health, which is FORTIFIED; one standing behind the line has SWIFT on permanently, is
-        // usually whole, which is VETERAN, and is usually shooting at something further off than
-        // arm's reach, which is HONED. Suite 160 measures the instantaneous version of this and
-        // it is exactly two of four live in every state - the durations are what differ, which
-        // is what a policy has to pick on and an assertion cannot.
-        const fits = c.gridPos === 1 ? ['HARDENED', 'FORTIFIED'] : ['SWIFT', 'VETERAN', 'HONED'];
+        // Both axes are read off the body rather than off the fight, which is the correction the
+        // first cut of M04 needed: its `fit` set counted HONED as suiting any backline body, and
+        // HONED then keyed on the TARGET's distance, which fired on 21% of swings whatever rank
+        // threw them. One of the three cards it was picking from was nearly dead, which is why
+        // that arm could not answer the question it was built for. Rank and deck are both
+        // decided at the Outpost and hold for as long as the player leaves them alone.
+        const fits = [
+          c.gridPos === 1 ? 'HARDENED' : 'SWIFT',
+          carriesMelee(c) ? 'VETERAN' : 'HONED',
+          'FORTIFIED'                       // asks nothing, so it fits every body
+        ];
         const from = perkPolicy === 'fit' ? fits : PERK_POOL.map(p => p.id);
         const pick = from[Math.floor(Math.random() * from.length)];
         // Whether the card bought was one this body will meet the condition of, counted under
@@ -6020,6 +6023,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     line('  bought for a body that meets the condition', statN
       ? `${fitN} of ${statN} (${Math.round(fitN / statN * 100)}%), policy ${PERK_POLICY}`
       : `none, policy ${PERK_POLICY}`);
+    // M04: FORTIFIED asks nothing, so it counts as fitting every body and a blind pick is right
+    // three times in five before any judgement is applied. The row above is read against that,
+    // not against zero.
   }
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   // K06: which pieces, because a total with no names in it cannot say whether the slot is being

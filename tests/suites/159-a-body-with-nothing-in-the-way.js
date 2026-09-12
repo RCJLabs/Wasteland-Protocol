@@ -43,8 +43,9 @@ module.exports = {
     // Read off the engine's source rather than listed here. A second hand-written list of what
     // mitigate consults would be the F03 defect - a copy of engine logic living in a test.
     const cover = await page.evaluate(async () => {
-      const src = await (await fetch('game.js')).text();
-      const at = src.indexOf('function mitigate(');
+      const engineSrc = await (await fetch('game.js')).text();
+      const scan = (src, entry) => {
+      const at = src.indexOf('function ' + entry + '(');
       // The function body, balanced-brace scanned so a later function cannot leak in.
       let d = 0, i = src.indexOf('{', at), end = i;
       for (; end < src.length; end++) {
@@ -107,19 +108,42 @@ module.exports = {
           queue.push({ fbody: bodyOf(fat), param: next, fn, depth: depth + 1 });
         }
       }
+      return { target, read, resolved: resolved.sort(), deepest };
+      };
+      const live = scan(engineSrc, 'mitigate');
+      // The resolver, run against a source it cannot have been tuned to: a body handed down
+      // two levels, where the field that matters is spelled only at the bottom. This is what
+      // the depth assertion is FOR - gating it on the engine's current shape meant the row
+      // went red the moment a mitigation moved out of mitigate, which is not a defect, and
+      // went green on a one-level resolver whenever the engine happened to be shallow.
+      const fake = [
+        'function mitigate(attacker, t, calcDmg, atkType, abilityStr) {',
+        '  let rv = t.resistances; if (outer(t)) rv = 0; return rv;',
+        '}',
+        'function outer(a) { return a.shallowField && inner(a); }',
+        'function inner(b) { return b.deepField > 0; }'
+      ].join('\n');
+      const probe = scan(fake, 'mitigate');
       const known = new Set([].concat(window.__BARE_FIELDS, window.__FIELD_FIELDS,
                                       window.__STRUCTURAL_FIELDS));
-      return { target, read: [...read].sort(), resolved: resolved.sort(), deepest,
-               unaccounted: [...read].filter(f => !known.has(f)).sort(),
-               listedNotRead: [...window.__BARE_FIELDS].filter(f => !read.has(f)).sort() };
+      return { target: live.target, read: [...live.read].sort(),
+               resolved: live.resolved, deepest: live.deepest,
+               probeRead: [...probe.read].sort(), probeDeep: probe.deepest,
+               unaccounted: [...live.read].filter(f => !known.has(f)).sort(),
+               listedNotRead: [...window.__BARE_FIELDS].filter(f => !live.read.has(f)).sort() };
     });
     ok(`mitigate's target is read for ${cover.read.length} fields (${cover.target}.${cover.read.join(`, ${cover.target}.`)})`,
       cover.read.length > 5);
-    // The depth is the thing that went wrong once, so it is asserted rather than assumed: a
-    // resolver that opens one level and stops is a hand-written list again for everything
-    // below that level. Each hand is printed with the depth it was reached at.
-    ok(`the body is followed through ${cover.resolved.length} hands, ${cover.deepest} deep (${cover.resolved.join(', ')})`,
-      cover.resolved.length >= 4 && cover.deepest >= 2);
+    // The depth is the thing that went wrong once - M04 put a mitigation two levels down, behind
+    // a predicate that spelled none of the field itself, and a one-level resolver was green on
+    // a field no fixture stripped. So transitivity is asserted against a SYNTHETIC source the
+    // resolver cannot have been fitted to, rather than against whatever the engine's current
+    // shape happens to be: the engine is allowed to get shallower without turning this red.
+    ok(`the body is followed through ${cover.resolved.length} hands in mitigate, ${cover.deepest} deep (${cover.resolved.join(', ')})`,
+      cover.resolved.length >= 3);
+    ok(`and through two hands on a source built to need it (${cover.probeRead.join(', ')}, ${cover.probeDeep} deep)`,
+      cover.probeDeep >= 2 && cover.probeRead.includes('deepField')
+      && cover.probeRead.includes('shallowField') && cover.probeRead.includes('resistances'));
     ok(`and every one is stripped, cleared or named structural (${cover.unaccounted.length} unaccounted${cover.unaccounted.length ? ': ' + cover.unaccounted.join(', ') : ''})`,
       cover.unaccounted.length === 0);
     // The other direction is a warning rather than a failure: a field can be worth stripping
