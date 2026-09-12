@@ -2433,6 +2433,38 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── M03b: HALF THE BLEED COST RECOVERED, AND SKULLS DID WHAT NO SCRAP PRICE COULD ──
+// Acting on M03's bisect: armour excluded from a bleed (resistances kept), and the treatment
+// price moved from Scrap to Skulls. Same baseline, 3 x 150 each.
+//
+//                            before    M03 armour applied    M03b armour excluded
+//   runs won of 150            44.3           27.3                  36.0        42 45 46 / 23 29 30 / 31 44 33
+//   wipes per run              5.27           6.21                  5.86
+//   grudge commanders % won      44             36                    40
+//   wipes at tier ten           704            830                   786
+//   % of scars treated           90             87                    67
+//
+// THE ARMOUR EXCLUSION RECOVERED ABOUT HALF, and all four difficulty rows agree on the
+// direction. The useful statement is about what can be RESOLVED rather than about the halfway
+// point: M03's gap to baseline was -17 wins, which cleared K06's ~14 floor with ranges
+// separating completely, and was therefore established. M03b's gap is -8.3 with the ranges
+// overlapping (42-46 against 31-44), which is INSIDE the floor. So M03b is no longer
+// distinguishable from the pre-M03 tree at this sample size, where M03 plainly was.
+//
+// That is NOT the same as "fully recovered" and must not be quoted as it. The remaining -8.3
+// could be real and this instrument cannot see it; six careers an arm would settle it if the
+// question ever matters enough. The M03b win arm is also wide - 31, 44, 33 - so its own mean is
+// softer than the others here.
+//
+// WHAT IS ESTABLISHED, cleanly: SKULLS DID WHAT NO SCRAP PRICE COULD. 90% of scars treated on
+// the baseline, 87% at a doubling Scrap price - a null - and 67% once the currency became the
+// one that does not regenerate. The ranges separate completely (87-92 against 66-69) over
+// 160-173 scars a career, so this reads at the sample size. A third of scars now stick.
+//
+// AND TWO-THIRDS STILL DO NOT, which is worth saying plainly rather than declaring victory at
+// 67%. The lever works and is now pointed the right way; whether 67% is low enough is a design
+// question, and the dial is SCAR_TREAT_SKULLS rather than any new mechanism.
+//
 // ── M01: TEN SCARS INSTEAD OF FIVE, AND THE WALL DID NOT NOTICE ─────────────
 // Five situational scars added to five flat ones. Matched pair, 3 x 150 an arm, this file
 // byte-identical on both sides, the before arm a frozen game.js at 5 scars - so the SAME treat
