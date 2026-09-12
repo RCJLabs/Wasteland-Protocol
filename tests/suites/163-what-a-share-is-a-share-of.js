@@ -81,6 +81,36 @@ module.exports = {
     ok(`takeTurn counts a turn on ${turns.increments} paths out of it`, turns.increments >= 2);
     ok('including the one where there was nothing to press', turns.heldPath);
 
+    // ── M-audit: the same defect three times, and then the class ────────────────
+    // M07 fixed this in nums(): a key a run never touched read as undefined, `a + undefined`
+    // came out NaN, and the sums built on it carried that to the page. M08's per-card
+    // accumulator then hand-listed its keys and dropped one. M09's mark ledger listed two keys
+    // in the SUM and not the SEED - `|| 0` turned the NaN into a believable zero and a working
+    // card read as absent for three runs. The audit found five accumulators still carrying that
+    // shape, three of which did not coerce at all.
+    //
+    // The cause every time is a key list kept somewhere other than the thing it counts, so the
+    // fix is to have no key list: one fold walks whatever the run actually carried. These rows
+    // hold that, because a helper nobody is required to use is a convention rather than a fix.
+    const fold = sim.slice(sim.indexOf('const foldStats ='), sim.indexOf('const nums = key =>'));
+    ok('there is one fold, and it walks what the run carried rather than a declared list',
+      /Object\.entries\(from\)\.forEach/.test(fold) && !/\['\w+', '\w+'/.test(fold));
+    ok('it sums numbers, recurses into bags, and carries _-prefixed labels instead of adding them',
+      /typeof v === 'number'/.test(fold) && /foldStats\(into\[k\] = into\[k\] \|\| \{\}, v\)/.test(fold)
+      && /k\[0\] === '_'/.test(fold));
+    // THE ROW THAT STOPS THE FOURTH TIME. Every per-run census the report adds up goes through
+    // it; a new one that hand-rolls its own loop is what this catches.
+    const folded = (sim.match(/foldAll\('/g) || []).length;
+    ok(`${folded} censuses are accumulated through it`, folded >= 8);
+    const handRolled = sim.split('\n')
+      .filter(l => /\.(seen|fired|tried|moved|atFront|swings|blows|hitDmg) \+=/.test(l) && !/foldStats/.test(l));
+    ok(`and none is still hand-rolled (${handRolled.length}${handRolled.length ? ': ' + handRolled[0].trim().slice(0, 60) : ''})`,
+      handRolled.length === 0);
+    // A ground's multiplier is a label that lives in a counted bag, so the engine marks it and
+    // the fold carries it. Three careers of x0.8 must not read as x2.4.
+    ok('the one label inside a counted bag is marked so the fold does not add it up',
+      /_mult: cover\.mult/.test(fs.readFileSync(path.join(__dirname, '..', '..', 'game.js'), 'utf8')));
+
     // ── The report says which denominator each figure used ──────────────────────
     // The rule this phase exists to enforce, as an assertion on the output rather than a note:
     // a percentage whose denominator is not named is a percentage nobody can check.

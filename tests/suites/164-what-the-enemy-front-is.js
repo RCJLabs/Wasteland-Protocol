@@ -171,8 +171,11 @@ module.exports = {
       /stat\.rch = runStats\.rch/.test(sim) && /stat\.frt = runStats\.frt/.test(sim) && /stat\.hl = runStats\.hl/.test(sim));
     ok('and prints the random-draw baseline beside the measured share, which is what makes it readable',
       /if the target were drawn at random from the living/.test(sim));
-    ok('the per-card accumulator sums every key it declares rather than a hand-written list',
-      /Object\.keys\(t\)\.forEach\(k => \{ t\[k\] \+= Number\(row\[k\]\) \|\| 0; \}\)/.test(sim));
+    // M08 fixed this accumulator by having it walk its own seed's keys. The M-audit went further
+    // and gave every census one shared fold with no key list at all, because five more were
+    // carrying the same shape - suite 163 holds the fold itself.
+    ok('the per-card census is accumulated by the shared fold, not by a list of its own',
+      /const f = foldAll\('frt'\)/.test(sim));
     ok('and says so plainly when the harness never reached the haul at all',
       /NEVER ATTEMPTED - the harness cannot reach the one verb/.test(sim));
 

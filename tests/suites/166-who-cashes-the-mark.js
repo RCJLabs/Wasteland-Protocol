@@ -193,8 +193,11 @@ module.exports = {
     // printed NaN, and M09's first cut listed two keys in the SUM and not the SEED - so a working
     // card read as a clean zero for three runs. A zero is worse than a NaN because it is
     // believable. The seed is the schema now, and this row is what stops the fourth time.
-    ok('the mark accumulator sums the keys its seed declares rather than a hand-written list',
-      /const SEED = \{ set: 0,/.test(sim) && /Object\.keys\(SEED\)\.forEach\(k => \{ a\[k\] \+= Number/.test(sim));
+    // The M-audit took this further: there is no per-census key list at all now, one fold walks
+    // what the run carried. Suite 163 holds the fold itself; this row holds that the mark census
+    // is one of the things going through it.
+    ok('the mark census is accumulated by the shared fold, not by a list of its own',
+      /const m = foldStats\(\{ set: 0,/.test(sim) && /foldAll\('mk'\)/.test(sim));
     ok('and the report names the holder denominator beside the payout, so a zero can be read',
       /placed by a CALLED SHOT holder/.test(sim) && /an absent fork, not a broken card/.test(sim));
     ok('the arm that steers a holder onto its own mark exists and is not the default',

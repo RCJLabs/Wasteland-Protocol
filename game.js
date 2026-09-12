@@ -295,8 +295,11 @@ function noteCover(cover, t, dmg) {
     const on = t && t.isPlayer ? cover.onRank1 : cover.onFront;
     row.blows++; row.dmg += dmg;
     if (on) { row.hit++; row.hitDmg += dmg; }
+    // `_mult` rather than `mult`: the report's fold sums every number it finds and carries the
+    // underscore-prefixed ones instead, because a ground's multiplier is a label and three
+    // careers of 0.8 do not make 2.4.
     const g = row.byGround[currentTerrain] = row.byGround[currentTerrain] ||
-              { mult: cover.mult, blows: 0, dmg: 0, hit: 0, hitDmg: 0 };
+              { _mult: cover.mult, blows: 0, dmg: 0, hit: 0, hitDmg: 0 };
     g.blows++; g.dmg += dmg;
     if (on) { g.hit++; g.hitDmg += dmg; }
 }
@@ -11775,6 +11778,16 @@ function resolveAction(targetId) {
         const variant = pair.find(o => o.id === pendingOverdrive) || overdriveFor(cls);
         // First use is the choice: the class fights the rest of the run with this one.
         if (!odChoices[cls] && pair.some(o => o.id === variant.id)) odChoices[cls] = variant.id;
+        // M-audit: WHICH of the two, counted. Every class has a pair and overdriveFor falls back
+        // to pair[0] when nothing has chosen - and the line above then locks that in for the rest
+        // of the run. P02 was a whole phase about overdrive CHOICE, and no reading in this
+        // project has ever come off the second half of one.
+        if (runStats) {
+            runStats.od = runStats.od || {};
+            const at = pair.findIndex(o => o.id === variant.id);
+            const row = runStats.od[variant.id] = runStats.od[variant.id] || { fired: 0, _at: at, _cls: cls };
+            row.fired++;
+        }
         pendingOverdrive = null;
         momentum = 0; addMomentum(0); playSFX('overdrive'); triggerGlitch();
         log(`> ${actEnt.name} unleashed ${variant.name}!`, "log-combo");

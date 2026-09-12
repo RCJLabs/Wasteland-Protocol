@@ -2433,6 +2433,50 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── M-AUDIT: TWO THINGS THIS FILE COULD NOT SEE, AND DID NOT SAY SO ────────────
+// M01-M09 and four b-items are done. Audited the way F03, H and L were, and the two findings
+// are the same kind: a reading the instrument could not make, reported as though it had.
+//
+// ONE. HALF THE OVERDRIVES HAVE NEVER FIRED HERE. Every class carries a PAIR and keeps the
+// first one it ever uses for the rest of the run. overdriveFor falls back to pair[0] when
+// nothing has chosen, and this file never chose - `odChoices` appeared nowhere in it. Measured:
+//
+//   overdrives fired over 40 expeditions        175
+//   of them, the first of their pair            175
+//   of them, the second                           0
+//   distinct variants reached              9 of 18
+//
+// P02 WAS A PHASE CALLED "MOMENTUM WORTH SPENDING - TACTICS AND OVERDRIVE CHOICE", and no
+// reading in this project has ever come off the second half of one. It surfaced through M09:
+// the mark census listed SPOTTERS_MARK as the only source of a mark in 150 expeditions, and
+// OVERWATCH - the sniper's second overdrive, which marks everything it hits - should have been
+// the other. It was not rare. It was unreachable.
+//
+// `--overdrive second` opens it, set AFTER confirmNewGame because that zeroes odChoices - the
+// first cut set it before and the arm silently did nothing, which is this phase's signature
+// mistake one more time. On the same sample it reads 0 vs 77, and all nine that had never fired
+// do: siegebreaker, backburner, booby trap, scatterstorm, triage protocol, overwatch, last
+// charge, blood scent, clean room. WHICH HALF IS BETTER IS NOT MEASURED HERE - that is a
+// measurement and this is the door it needs. `first` stays the default so every career on
+// record is still comparable.
+//
+// TWO. THE CENSUS ACCUMULATORS KEPT THEIR KEY LISTS APART FROM THEIR SEEDS, and the mismatch
+// shipped three items running: M07 in nums(), M08's per-card ledger, M09's mark ledger. The
+// audit found five more carrying that shape - rch, hl, cv, qk, sg/sgGate - of which three did
+// not coerce at all, so a missing key would have reached the page as a bare NaN rather than a
+// believable zero. All nine censuses go through one fold now, and it has no key list: it walks
+// what the run actually carried, sums numbers, recurses into bags, and carries `_`-prefixed
+// labels rather than adding them up. A counter added to a note* function in game.js now arrives
+// in the report without this file being edited, which is the only version of this fix that
+// closes the class rather than the instance.
+//
+// WHAT THE AUDIT DID NOT FIND, stated because an audit that only reports hits is not an audit:
+// all nine note* censuses are reached in a normal run; the M-phase's move-gated signatures
+// (IRONSIGHTS 0%, SHRAPNEL_LOAD 3%) are explained by M07 rather than open, because both sit on
+// their class's cooldown-free first ability and this harness throws those on about one turn in
+// twenty; and no M-phase header claim was found stale beyond the ones M08 and M09 already
+// superseded in place.
+//
 // ── M09: THE SNIPER LOSES THE RACE FOR ITS OWN MARK, AND ALWAYS WILL ───────────
 // M06's last open finding. CALLED SHOT paid the SNIPER +25% against a marked target and fired on
 // 1% of that sniper's swings - the lowest rate of any signature in the game. M06 checked the
@@ -3624,6 +3668,17 @@ const PERK_POLICY = flag('perks', 'random');
 // the mark would be measuring my own taste rather than the card, which is the trap M04's `fit`
 // arm was written to avoid.
 const MARK_POLICY = flag('mark', 'blind');
+// M-audit: WHICH HALF OF EACH OVERDRIVE PAIR. Every class has two and takes the first one it
+// ever fires for the rest of the run; overdriveFor falls back to pair[0] when nothing has
+// chosen, and this file has never chosen - `odChoices` appears nowhere in it. Measured: 175
+// overdrives fired over 40 expeditions, every one of them the first of its pair, nine of
+// eighteen variants reached. P02 was a phase called "momentum worth spending - tactics and
+// OVERDRIVE CHOICE" and no reading in this project has ever come off the second half of one.
+//
+// `first` is what every career before this ran and stays the default so those records hold.
+// `second` takes the other half for every class, which is the arm that makes the other nine
+// reachable at all. It moves no dial: it is the same door P02 built, opened from this side.
+const OVERDRIVE_POLICY = flag('overdrive', 'first');
 // The bench holds a job for the expedition and this file never gave one out, so a lever a real
 // player can take for free at the muster - QUARTERMASTER for one more material a salvage, FIELD
 // MEDIC for a camp that heals for more, SCOUT so the route does not close behind you - has
@@ -3898,7 +3953,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -4025,6 +4080,14 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   }
   ascension = Math.min(rungPolicy, PROTOCOLS.length);
   confirmNewGame(difficulty);
+  // M-audit: AFTER confirmNewGame, which zeroes odChoices - the first cut set it before and the
+  // arm silently did nothing, which is the same shape as every other harness bug this phase
+  // found. Set here rather than at the fire site because odChoices is exactly what the engine's
+  // own prompt writes, so this is the player's door rather than a back one.
+  if (odPolicy === 'second') {
+    odChoices = Object.fromEntries(Object.entries(OVERDRIVES)
+      .filter(([, pair]) => pair.length > 1).map(([cls, pair]) => [cls, pair[1].id]));
+  }
   stat.contractMult = runStats.contractMult;
   stat.frontsSeen.push(sectorFront);
 
@@ -5802,6 +5865,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.hl = runStats.hl || null;           // and the haul, which is the one verb that sets it up
   stat.cv = runStats.cv || null;           // M08b: what the ground's front cover is reaching
   stat.mk = runStats.mk || null;           // M09: every mark placed, cashed and run out
+  stat.od = runStats.od || {};             // M-audit: which half of each overdrive pair fired
+  stat.odPairs = Object.keys(OVERDRIVES || {}).length;   // read in the page; the report has no OVERDRIVES
   stat.qkDrawn = runStats.qkDrawn || {};   // and what the pool actually handed out
   stat.ut = runStats.ut || {};   // L03: the damage the type ledger cannot see
   // K05: what came out of the materials bag and by which door, plus what was still sitting in
@@ -5944,7 +6009,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -5955,6 +6020,30 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // as a broken report rather than as a missing initialiser. Every key this is asked for is a
   // numeric tally, so an absent one IS zero. Coerced once, here, rather than relying on each
   // new counter remembering to declare itself in newRunStats.
+  // ── M-audit: one fold for every census this file adds up ───────────────────────────────
+  // The same defect shipped three items running and a fourth was one edit away. M07 found a
+  // missing key reading NaN and fixed the class in nums(); M08's per-card accumulator hand-listed
+  // its keys and dropped one; M09's mark ledger listed two keys in the SUM and not in the SEED,
+  // so `undefined + n` came out NaN, `|| 0` turned it into a believable zero, and a working card
+  // read as absent for three runs. The audit then found five accumulators carrying that shape -
+  // rch, hl, cv, qk, sg/sgGate - of which three did not even coerce, so a missing key would have
+  // reached the page as a bare NaN.
+  //
+  // The cause is always the same: a key list maintained somewhere other than the thing it counts.
+  // So there is no key list. This walks what the RUN actually carried - numbers are summed,
+  // nested bags are folded key by key - which means a counter added to a note* function in
+  // game.js arrives in the report without this file being edited at all. A key beginning with
+  // `_` is a label rather than a count (a ground's multiplier, say) and is carried, not added.
+  const foldStats = (into, from) => {
+    if (!from || typeof from !== 'object') return into;
+    Object.entries(from).forEach(([k, v]) => {
+      if (k[0] === '_') { if (into[k] === undefined) into[k] = v; return; }
+      if (typeof v === 'number') into[k] = (Number(into[k]) || 0) + v;
+      else if (v && typeof v === 'object') foldStats(into[k] = into[k] || {}, v);
+    });
+    return into;
+  };
+  const foldAll = key => results.reduce((a, r) => foldStats(a, r[key]), {});
   const nums = key => results.map(r => Number(r[key]) || 0).sort((a, b) => a - b);
   const mean = a => a.reduce((x, y) => x + y, 0) / a.length;
   const pct = (a, p) => a[Math.min(a.length - 1, Math.floor(a.length * p))];
@@ -6630,14 +6719,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // fired so rarely that the change cost sixteen wins. A condition's firing rate is the first
   // fact about it, not the last.
   {
-    const qk = {}, drawn = {};
-    results.forEach(r => {
-      Object.entries(r.qk || {}).forEach(([k, v]) => {
-        const row = qk[k] = qk[k] || { seen: 0, fired: 0 };
-        row.seen += v.seen; row.fired += v.fired;
-      });
-      Object.entries(r.qkDrawn || {}).forEach(([k, v]) => { drawn[k] = (drawn[k] || 0) + v; });
-    });
+    const qk = foldAll('qk'), drawn = foldAll('qkDrawn');
     const ids = QUIRK_IDS.length ? QUIRK_IDS : Object.keys(drawn);
     const total = Object.values(drawn).reduce((a, b) => a + b, 0);
     line('quirks drawn from the pool', total
@@ -6676,11 +6758,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // three of the five stat conditions barely firing. Eight signatures carry a condition of the
   // same shape and none had ever been counted. Same ledger, same order: census before dial.
   {
-    const sg = {};
-    results.forEach(r => Object.entries(r.sg || {}).forEach(([k, v]) => {
-      const row = sg[k] = sg[k] || { seen: 0, fired: 0 };
-      row.seen += v.seen; row.fired += v.fired;
-    }));
+    const sg = foldAll('sg');
     // TWO KINDS OF LOW NUMBER, and reporting them in one list would hide which is which. A
     // STATE condition asks about the world - is this body hurt, is that target marked - so a low
     // rate means the state does not happen. A MOVE-GATED one asks which ability was used, so a
@@ -6693,11 +6771,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       ? by(false).map(pct).join(', ') : 'none asked');
     line('  and the ones gated on using one ability, how often its holder used it', by(true).length
       ? by(true).map(pct).join(', ') : 'none asked');
-    const gates = {};
-    results.forEach(r => Object.entries(r.sgGate || {}).forEach(([k, v]) => {
-      const row = gates[k] = gates[k] || { seen: 0, fired: 0 };
-      row.seen += v.seen; row.fired += v.fired;
-    }));
+    const gates = foldAll('sgGate');
     const gateRows = Object.entries(gates).sort((a, b) => b[1].fired / b[1].seen - a[1].fired / a[1].seen);
     line('  how often the holder reached for the ability those are gated on', gateRows.length
       ? gateRows.map(pct).join(', ') : 'none');
@@ -6731,13 +6805,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // The rank reading was checked and ruled out: hostiles carry no gridPos anywhere in the
   // engine, so "the enemy front" has no other referent to mean. The index IS the front.
   {
-    const r = { atFront: 0, swings: 0, byStanding: {}, frontByStanding: {} };
-    results.forEach(x => {
-      if (!x.rch) return;
-      r.atFront += x.rch.atFront; r.swings += x.rch.swings;
-      Object.entries(x.rch.byStanding).forEach(([k, v]) => { r.byStanding[k] = (r.byStanding[k] || 0) + v; });
-      Object.entries(x.rch.frontByStanding).forEach(([k, v]) => { r.frontByStanding[k] = (r.frontByStanding[k] || 0) + v; });
-    });
+    const r = foldStats({ atFront: 0, swings: 0, byStanding: {}, frontByStanding: {} },
+                        foldAll('rch'));
     if (r.swings) {
       line('swings that landed on the enemy front', `${r.atFront} of ${r.swings} (${Math.round(r.atFront / r.swings * 100)}%)`);
       line('  how much of the line was still up when they landed',
@@ -6762,13 +6831,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // survivor is being paid for arithmetic; a card firing against a line is being paid for a
   // target the holder picked.
   {
-    const f = {};
-    results.forEach(x => Object.entries(x.frt || {}).forEach(([id, row]) => {
-      // Every key listed, and every read coerced. M07 lost a reading to exactly this: an
-      // accumulator missing one field a later probe added, carrying NaN all the way to the page.
-      const t = f[id] = f[id] || { seen: 0, fired: 0, seenLine: 0, firedLine: 0, firedHauled: 0 };
-      Object.keys(t).forEach(k => { t[k] += Number(row[k]) || 0; });
-    }));
+    const f = foldAll('frt');
     Object.keys(f).sort().forEach(id => {
       const t = f[id];
       if (!t.seen) return;
@@ -6778,8 +6841,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         `${pct(t.fired - t.firedLine, t.fired)} of its firings were a lone survivor; ` +
         `${pct(t.firedHauled, t.fired)} were against something the squad hauled there`);
     });
-    const h = results.reduce((a, x) => x.hl ? { tried: a.tried + x.hl.tried, moved: a.moved + x.hl.moved } : a,
-                             { tried: 0, moved: 0 });
+    const h = foldStats({ tried: 0, moved: 0 }, foldAll('hl'));
     line('  the haul', h.tried
       ? `${h.tried} attempted, ${h.moved} moved something (${Math.round(h.moved / h.tried * 100)}%) - the rest were already at the front`
       : 'NEVER ATTEMPTED - the harness cannot reach the one verb that sets this condition up');
@@ -6792,15 +6854,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // symmetric read would govern, and one blended figure answers neither. The first draft of this
   // block was that blended figure and it read 6% where the resolver's own census says 79%.
   {
-    const acc = { taken: null, dealt: null };
-    results.forEach(x => Object.entries(x.cv || {}).forEach(([dir, row]) => {
-      const a = acc[dir] = acc[dir] || { blows: 0, dmg: 0, hit: 0, hitDmg: 0, byGround: {} };
-      ['blows', 'dmg', 'hit', 'hitDmg'].forEach(k => { a[k] += Number(row[k]) || 0; });
-      Object.entries(row.byGround || {}).forEach(([id, g]) => {
-        const r = a.byGround[id] = a.byGround[id] || { mult: g.mult, blows: 0, dmg: 0, hit: 0, hitDmg: 0 };
-        ['blows', 'dmg', 'hit', 'hitDmg'].forEach(k => { r[k] += Number(g[k]) || 0; });
-      });
-    }));
+    const acc = foldAll('cv');
     const pc = (n, d) => d ? Math.round(n / d * 100) + '%' : '0%';
     const show = (dir, what, who) => {
       const a = acc[dir];
@@ -6811,8 +6865,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         const g = a.byGround[id];
         // The shipped effect on this half, in damage: what the multiplier does to the share it
         // reaches. Signed, so the two grounds do not look like the same finding.
-        const moved = Math.round(g.hitDmg * (g.mult - 1));
-        line(`  ${id} (x${g.mult})`, `${g.hitDmg} of ${g.dmg} (${pc(g.hitDmg, g.dmg)}) over ${g.blows} blows` +
+        const moved = Math.round(g.hitDmg * (g._mult - 1));
+        line(`  ${id} (x${g._mult})`, `${g.hitDmg} of ${g.dmg} (${pc(g.hitDmg, g.dmg)}) over ${g.blows} blows` +
           `, worth ${moved > 0 ? '+' : ''}${moved} damage`);
       });
     };
@@ -6834,14 +6888,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // it is believable. So no hand-written key list at all: the seed IS the schema, the sum walks
     // it, and a counter the engine adds without touching this line is a loud missing key rather
     // than a quiet nothing.
-    const SEED = { set: 0, cash: 0, own: 0, ally: 0, expired: 0, onSquad: 0, called: 0, setByHolder: 0 };
-    const m = results.reduce((a, x) => {
-      if (!x.mk) return a;
-      Object.keys(SEED).forEach(k => { a[k] += Number(x.mk[k]) || 0; });
-      ['bySource', 'byClass'].forEach(bag => Object.entries(x.mk[bag] || {})
-        .forEach(([k, v]) => { a[bag][k] = (a[bag][k] || 0) + v; }));
-      return a;
-    }, { ...SEED, bySource: {}, byClass: {} });
+    const m = foldStats({ set: 0, cash: 0, own: 0, ally: 0, expired: 0, onSquad: 0,
+                          called: 0, setByHolder: 0, bySource: {}, byClass: {} }, foldAll('mk'));
     if (m.set) {
       const pc = (n, d) => d ? Math.round(n / d * 100) + '%' : '0%';
       const named = bag => Object.entries(bag).sort((x, y) => y[1] - x[1])
@@ -6868,6 +6916,24 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       line('  times the holder was steered onto its own mark', took
         ? `${took} (--mark own)` : 'none - the blind arm, which never consults a mark');
       if (m.onSquad) line('  marks the Carrion put on an operator', `${m.onSquad} - a different mark, steering enemy fire rather than paying a bonus`);
+    }
+  }
+  // ── M-audit: which half of each overdrive pair this file has ever fired ────────────────
+  // Every class has two overdrives and takes the first one it ever uses for the rest of the run.
+  // overdriveFor falls back to pair[0] when nothing has chosen, and nothing in THIS file ever
+  // chooses - `odChoices` does not appear in it. So the second half of every pair may never have
+  // been measured at all, which would make P02's "momentum worth choosing" a reading of one arm.
+  {
+    const od = foldAll('od');
+    const rows = Object.entries(od).sort((a, b) => b[1].fired - a[1].fired);
+    const firsts = rows.filter(([, v]) => v._at === 0).reduce((a, [, v]) => a + v.fired, 0);
+    const seconds = rows.filter(([, v]) => v._at === 1).reduce((a, [, v]) => a + v.fired, 0);
+    const pairs = Math.max(...results.map(r => Number(r.odPairs) || 0), 0);
+    if (rows.length) {
+      line('overdrives fired', `${firsts + seconds} across ${rows.length} of ${pairs * 2} variants`);
+      line('  the first of the pair against the second', `${firsts} vs ${seconds}` +
+        (seconds ? '' : ' - THE SECOND HALF OF EVERY PAIR HAS NEVER FIRED HERE'));
+      line('  by variant', rows.map(([k, v]) => `${k.toLowerCase()}${v._at ? '(2nd)' : ''} ${v.fired}`).join(', '));
     }
   }
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
