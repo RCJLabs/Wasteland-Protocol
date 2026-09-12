@@ -65,32 +65,61 @@ module.exports = {
       // hasScar, and walked straight through it. So they are RESOLVED instead - any function
       // called with the target as its first argument is opened up and read for what IT reads off
       // its own first parameter.
-      const helpers = new Set();
-      let h; const call = new RegExp('([A-Za-z_$][\\w$]*)\\(\\s*' + target + '\\s*[,)]', 'g');
-      while ((h = call.exec(body))) helpers.add(h[1]);
-      helpers.forEach(fn => {
-        const fat = src.indexOf('function ' + fn + '(');
-        if (fat < 0) return;
-        const fsig = src.slice(fat, src.indexOf(')', fat));
-        const param = fsig.split('(')[1].split(',')[0].trim();
-        if (!param) return;
-        let fd = 0, fi = src.indexOf('{', fat), fend = fi;
-        for (; fend < src.length; fend++) {
-          if (src[fend] === '{') fd++;
-          else if (src[fend] === '}') { fd--; if (!fd) break; }
+      //
+      // TRANSITIVELY, which the first version of that resolver was not: it opened one level and
+      // stopped, so a predicate that passes the body on to ANOTHER predicate hid everything the
+      // second one read. M04 walked through exactly that gap - mitigate calls perkSoak(t), and
+      // perkSoak spells only ent.isPlayer and ent.gridPos itself before handing ent to
+      // perkStacks, where the new field actually lives. One level deep, the guard was green on
+      // a mitigation whose field no fixture stripped. So it is a worklist now, following the
+      // body through as many hands as it is passed through, each function visited once.
+      const bodyOf = (at) => {
+        let d = 0, i = src.indexOf('{', at), end = i;
+        for (; end < src.length; end++) {
+          if (src[end] === '{') d++;
+          else if (src[end] === '}') { d--; if (!d) break; }
         }
-        const fbody = src.slice(fi, fend);
+        return src.slice(i, end);
+      };
+      const seen = new Set();
+      const queue = [{ fbody: body, param: target, fn: null, depth: 0 }];
+      const resolved = [];
+      let deepest = 0;
+      while (queue.length) {
+        const { fbody, param, fn: from, depth } = queue.shift();
+        // Recorded HERE, on the way in, not where the call was spotted - the row below reports
+        // what was actually opened and read, and a resolver that stops short has to be able to
+        // say so. An earlier draft counted the call site instead, which made the row read the
+        // same whether the body was followed or not, and the mutation it exists to catch
+        // survived it.
+        if (from) { resolved.push(`${from}@${depth}`); deepest = Math.max(deepest, depth); }
         const fre = new RegExp('\\b' + param + '\\.([A-Za-z_$][\\w$]*)', 'g');
         let fm; while ((fm = fre.exec(fbody))) read.add(fm[1]);
-      });
+        const call = new RegExp('([A-Za-z_$][\\w$]*)\\(\\s*' + param + '\\s*[,)]', 'g');
+        let h; while ((h = call.exec(fbody))) {
+          const fn = h[1];
+          if (seen.has(fn)) continue;
+          seen.add(fn);
+          const fat = src.indexOf('function ' + fn + '(');
+          if (fat < 0) continue;
+          const next = src.slice(fat, src.indexOf(')', fat)).split('(')[1].split(',')[0].trim();
+          if (!next) continue;
+          queue.push({ fbody: bodyOf(fat), param: next, fn, depth: depth + 1 });
+        }
+      }
       const known = new Set([].concat(window.__BARE_FIELDS, window.__FIELD_FIELDS,
                                       window.__STRUCTURAL_FIELDS));
-      return { target, read: [...read].sort(),
+      return { target, read: [...read].sort(), resolved: resolved.sort(), deepest,
                unaccounted: [...read].filter(f => !known.has(f)).sort(),
                listedNotRead: [...window.__BARE_FIELDS].filter(f => !read.has(f)).sort() };
     });
     ok(`mitigate's target is read for ${cover.read.length} fields (${cover.target}.${cover.read.join(`, ${cover.target}.`)})`,
       cover.read.length > 5);
+    // The depth is the thing that went wrong once, so it is asserted rather than assumed: a
+    // resolver that opens one level and stops is a hand-written list again for everything
+    // below that level. Each hand is printed with the depth it was reached at.
+    ok(`the body is followed through ${cover.resolved.length} hands, ${cover.deepest} deep (${cover.resolved.join(', ')})`,
+      cover.resolved.length >= 4 && cover.deepest >= 2);
     ok(`and every one is stripped, cleared or named structural (${cover.unaccounted.length} unaccounted${cover.unaccounted.length ? ': ' + cover.unaccounted.join(', ') : ''})`,
       cover.unaccounted.length === 0);
     // The other direction is a warning rather than a failure: a field can be worth stripping

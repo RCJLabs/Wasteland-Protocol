@@ -3081,6 +3081,23 @@ const DRAFT = flag('draft', 'line');
 // M01: whether the Outpost ever takes a scar off. `off` is the behaviour every career before
 // M01 ran with, kept so those records stay comparable.
 const SCAR_POLICY = flag('scars', 'treat');
+// M04 made the five training cards situational, and M02 had already established that this file
+// picks among them uniformly at random. Under the OLD five that was harmless - every card was
+// worth the same on every body, so there was nothing for a policy to get right. Under the new
+// five a random pick buys a card whose condition this operator will often not meet, which is a
+// different game from the one a player plays.
+//
+// So there are two arms, and the GAP BETWEEN THEM is the measurement M04 is actually for: how
+// much is it worth to match the card to the body. Under the old five that gap was zero by
+// construction. `random` is the default and stays the baseline, so every career measured before
+// M04 is still comparable; `fit` is the arm that reads the decision.
+//
+// `fit` encodes THE CONDITION AND NOTHING ELSE - it narrows to the cards whose condition this
+// body meets and then still picks uniformly inside that set. It is deliberately not a ranking:
+// deciding which of the five is strongest and measuring that would be measuring my own taste
+// rather than the game's, which is the trap M02 named when it declined to fix the policy and
+// the census in one step.
+const PERK_POLICY = flag('perks', 'random');
 // The bench holds a job for the expedition and this file never gave one out, so a lever a real
 // player can take for free at the muster - QUARTERMASTER for one more material a salvage, FIELD
 // MEDIC for a camp that heals for more, SCOUT so the route does not close behind you - has
@@ -3355,7 +3372,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -3973,10 +3990,27 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         // M02: AND THE STAT CARD, WHICH NOTHING HAS EVER COUNTED. The rows above have reported
         // signatures and capstones since E08b; the five flat perks beside them on the same card
         // have never appeared in this report at all, so "is the stat pool thin" has never been a
-        // question anyone could answer. The pick is still uniform random - fixing the POLICY is a
-        // separate question from being able to see it, and doing both at once would mean the
-        // first measurement was of my own taste.
-        const pick = PERK_POOL[Math.floor(Math.random() * PERK_POOL.length)].id;
+        // question anyone could answer.
+        //
+        // M04: and now the pick is a decision, so there is a policy. `random` is M02's arm, kept
+        // as the default so those records stay comparable. `fit` narrows to the cards this body
+        // will be meeting the condition of MOST OF THE TIME and then still picks uniformly
+        // inside that set, so it encodes duration and not a ranking.
+        //
+        // Rank is what it reads, because rank is the one thing the player sets deliberately and
+        // it drives the other conditions through how hard the body gets hit: an operator holding
+        // the front rank has HARDENED on permanently and spends much of a fight under half
+        // health, which is FORTIFIED; one standing behind the line has SWIFT on permanently, is
+        // usually whole, which is VETERAN, and is usually shooting at something further off than
+        // arm's reach, which is HONED. Suite 160 measures the instantaneous version of this and
+        // it is exactly two of four live in every state - the durations are what differ, which
+        // is what a policy has to pick on and an assertion cannot.
+        const fits = c.gridPos === 1 ? ['HARDENED', 'FORTIFIED'] : ['SWIFT', 'VETERAN', 'HONED'];
+        const from = perkPolicy === 'fit' ? fits : PERK_POOL.map(p => p.id);
+        const pick = from[Math.floor(Math.random() * from.length)];
+        // Whether the card bought was one this body will meet the condition of, counted under
+        // BOTH arms - so the random arm reports its own hit rate rather than leaving it modelled.
+        if (fits.includes(pick)) stat.statFit = (stat.statFit || 0) + 1;
         assignPerk(c.id, pick);
         if (c.perkPoints < had) {
           stat.statsBought = (stat.statsBought || 0) + 1;
@@ -5281,7 +5315,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -5895,10 +5929,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   }
   line('signatures bought at the Outpost', `${mean(nums('sigsBought')).toFixed(1)} per run`);
   line('capstones reached', `${mean(nums('capsTaken')).toFixed(2)} taken on promotion, ${mean(nums('capsBought')).toFixed(2)} bought at the Outpost, per run`);
-  // M02: what the five flat perks actually get. A census - a point either bought a stat card or
-  // it did not - so it reads at any sample size. THE PICK IS UNIFORM RANDOM in this harness, so
-  // the SPLIT below says nothing about which perk is better and everything about whether the
-  // pool is being reached at all; a policy with a preference is the next question, not this one.
+  // M02: what the five training cards actually get. A census - a point either bought a stat card
+  // or it did not - so it reads at any sample size. M04 then made the five situational and gave
+  // this harness a policy (--perks), so the split below is read against the policy that produced
+  // it: under `random` it still says nothing about which card is better, only that the pool is
+  // being reached; under `fit` it is the shape of the decision, not a ranking.
   {
     const statN = results.reduce((a, r) => a + (r.statsBought || 0), 0);
     const sigN  = results.reduce((a, r) => a + (r.sigsBought || 0), 0);
@@ -5917,6 +5952,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     line('  stat cards taken, by name', PERK_IDS.length
       ? PERK_IDS.map(id => `${id.toLowerCase()} ${picks[id] || 0}`).join(', ')
       : 'none');
+    // M04: the one row that says whether the cards bought were cards this body could use. Under
+    // `random` it is the hit rate of picking blind, which is the thing `fit` is measured against;
+    // under `fit` it is 100% by construction and the row is a check on the policy, not a finding.
+    const fitN = results.reduce((a, r) => a + (r.statFit || 0), 0);
+    line('  bought for a body that meets the condition', statN
+      ? `${fitN} of ${statN} (${Math.round(fitN / statN * 100)}%), policy ${PERK_POLICY}`
+      : `none, policy ${PERK_POLICY}`);
   }
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   // K06: which pieces, because a total with no names in it cannot say whether the slot is being

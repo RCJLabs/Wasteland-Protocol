@@ -132,7 +132,7 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
       //   STRUCTURAL - read by mitigate but not a mitigation; a body still has to be somebody
       window.__BARE_FIELDS = ['resistances', 'armor', 'baseArmor', 'plate', 'quirk', 'weaponMod',
         'trinket', 'traits', 'sig', 'venom', 'venomStacks', 'corrodedTurns', 'oiledTurns',
-        'wardId', 'wardSoak', 'escortId', 'escortArmor', 'revenantWard', 'scars'];
+        'wardId', 'wardSoak', 'escortId', 'escortArmor', 'revenantWard', 'scars', 'perkStacks'];
       window.__FIELD_FIELDS = ['gridPos'];
       window.__STRUCTURAL_FIELDS = ['isPlayer', 'hp', 'maxHp', 'id', 'name'];
 
@@ -151,6 +151,9 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
         // time. Suite 159 caught it as an unaccounted field on the commit that introduced it,
         // which is the whole reason that suite exists.
         ent.scars = [];
+        // M04 put FORTIFIED and HARDENED inside mitigate, which made a banked stat perk a
+        // mitigation. 159 named it - two levels down, once its resolver was made transitive.
+        ent.perkStacks = null;
         return ent;
       };
 

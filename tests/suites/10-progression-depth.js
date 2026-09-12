@@ -26,20 +26,31 @@ module.exports = {
     ok('the same perk can be taken more than once', perks.traits.filter(t => t === 'VETERAN').length === 2);
     ok('the tally reads back compactly', /VETERAN x2/.test(perks.summary) && /FORTIFIED/.test(perks.summary));
 
+    // M04: a stat card no longer writes the sheet. It banks a stack that is read live, and only
+    // where its condition holds - so dmgBase and maxHp, which these rows used to watch, are
+    // exactly the two numbers that stopped moving. What has to hold instead is that the stacks
+    // accumulate and that the payoff still compounds the way the old percentages did.
     const stacking = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       const c = playerRoster[0];
-      c.perkPoints = 10; c.traits = [];
+      c.perkPoints = 10; c.traits = []; c.perkStacks = {};
       const dmg0 = c.dmgBase, hp0 = c.maxHp;
       for (let i = 0; i < 5; i++) assignPerk(c.id, 'HONED');
-      const dmgAfter = c.dmgBase;
       for (let i = 0; i < 5; i++) assignPerk(c.id, 'HARDENED');
-      return { dmg0, dmgAfter, hp0, hpAfter: c.maxHp,
-               flat: dmgAfter - dmg0, expectedCompound: Math.round(dmg0 * Math.pow(1.1, 5)) };
+      c.gridPos = 1; c.hp = c.maxHp;
+      return { dmg0, dmgAfter: c.dmgBase, hp0, hpAfter: c.maxHp,
+               honed: perkStacks(c, 'HONED'), hardened: perkStacks(c, 'HARDENED'),
+               mult: perkDmgMult(c, 2), soak: perkSoak(c), step: PERK_SOAK,
+               expectedCompound: Math.pow(PERK_DMG_MULT, 5) };
     });
-    ok(`percentage perks compound (${stacking.dmg0} -> ${stacking.dmgAfter} DMG)`,
-      stacking.dmgAfter >= stacking.expectedCompound - 2);
-    ok(`health perks compound too (${stacking.hp0} -> ${stacking.hpAfter} HP)`, stacking.hpAfter > stacking.hp0 * 1.5);
+    ok(`a stat card no longer writes the sheet (${stacking.dmg0} DMG, ${stacking.hp0} HP, both unmoved)`,
+      stacking.dmgAfter === stacking.dmg0 && stacking.hpAfter === stacking.hp0);
+    ok(`five picks bank five stacks (HONED x${stacking.honed}, HARDENED x${stacking.hardened})`,
+      stacking.honed === 5 && stacking.hardened === 5);
+    ok(`percentage perks still compound (x${stacking.mult.toFixed(2)} at reach)`,
+      Math.abs(stacking.mult - stacking.expectedCompound) < 1e-9 && stacking.mult > 2);
+    ok(`flat soak stacks linearly (${stacking.soak} off every blow held in the front rank)`,
+      stacking.soak === 5 * stacking.step);
 
     const migrated = await page.evaluate(() => {
       const roster = [{ id: 'x', trait: 'VETERAN', perkPoints: 1 }, { id: 'y', trait: null }];

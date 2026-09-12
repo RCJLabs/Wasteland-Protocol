@@ -251,8 +251,16 @@ module.exports = {
     // ---- the manual has the page ----
     const codex = await page.evaluate(() => {
       const text = CODEX.find(e => e.id === 'PROMOTIONS').body().join(' ');
-      return SIG_PERKS.every(p => text.includes(p.name));
+      return { sigs: SIG_PERKS.every(p => text.includes(p.name)),
+               // M04: the five training cards each pay only in a condition, and a perk is
+               // permanent - so the page that explains promotions has to name them. It said
+               // "training is a flat stat you can take again" and listed none of them, which
+               // stopped being true on the commit that made them situational.
+               stats: PERK_POOL.every(p => text.includes(p.desc)),
+               named: PERK_POOL.filter(p => text.includes(p.label.split(' (')[0])).length };
     });
-    ok('the field manual lists every signature', codex);
+    ok('the field manual lists every signature', codex.sigs);
+    ok(`and every training card, with what it wants (${codex.named} of ${5})`,
+      codex.stats && codex.named === 5);
   }
 };
