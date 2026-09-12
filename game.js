@@ -147,6 +147,38 @@ const QUIRK_POOL = [
 
 function hasQuirk(ent, id) { return !!(ent && ent.isPlayer && ent.quirk && ent.quirk.id === id); }
 
+// ── M05: the quirk pool, counted ────────────────────────────────────────────────────────
+// Fifteen quirks and nothing has ever counted one. Five of them carry a CONDITION, and M04 is
+// the reason that is worth a ledger rather than a reading of the source: it shipped five perk
+// cards whose conditions were designed and not measured, and three of the five turned out to
+// fire so rarely that the change cost sixteen wins of a career. The condition that broke it -
+// "the target is further off than arm's reach" - is the exact complement of DUELIST's, which
+// has sat in this pool since P05 describing itself as situational. 81% of swings land on the
+// front of the enemy line, so DUELIST is very close to an unconditional +15%.
+//
+// That is a suspicion, not a finding, and this is what turns one into the other. Two counts per
+// quirk: SEEN, the times a body holding it was in a position for the question to be asked, and
+// FIRED, the times the answer was yes. For the ones that ask nothing the two are equal and the
+// number is the D06 question instead - whether the thing has ever happened at all.
+//
+// Counted at the READ rather than in a list kept here, so a quirk that stops being reachable
+// shows up as a rate going to zero rather than as a line nobody remembered to update.
+function noteQuirk(id, fired) {
+    if (!runStats || !id) return;
+    runStats.qk = runStats.qk || {};
+    const row = runStats.qk[id] = runStats.qk[id] || { seen: 0, fired: 0 };
+    row.seen++;
+    if (fired) row.fired++;
+}
+// And what the pool actually hands out, counted where it is handed out. Four sites roll a quirk
+// - the muster, a muster reroll, the Armory's reroll and a recruit signing on - and a census
+// that missed one would read as a pool with a hole in it.
+function noteQuirkDrawn(q) {
+    if (!runStats || !q || !q.id) return;
+    runStats.qkDrawn = runStats.qkDrawn || {};
+    runStats.qkDrawn[q.id] = (runStats.qkDrawn[q.id] || 0) + 1;
+}
+
 // ── Scars ────────────────────────────────────────────────────────────────────────────────
 // Going down had no memory. The clock ran, somebody stopped it or nobody did, and either way
 // the operator walked into the next fight exactly as they walked into the last one. Measured
@@ -499,11 +531,20 @@ function quirkDmgMult(actEnt, target, dist) {
     let m = 1;
     const neighbour = activeEntities.some(e => e.isPlayer && e.hp > 0 && e.id !== actEnt.id &&
         Math.abs(e.gridPos - actEnt.gridPos) === 1);
-    if (hasQuirk(actEnt, 'PACK_HUNTER') && neighbour) m *= 1.15;
-    if (hasQuirk(actEnt, 'LONER') && !neighbour) m *= 1.2;
-    if (hasQuirk(actEnt, 'FIRST_BLOOD') && target && target.hp === target.maxHp) m *= 1.3;
-    if (hasQuirk(actEnt, 'CLOSER') && target && target.hp < target.maxHp * 0.3) m *= 1.25;
-    if (hasQuirk(actEnt, 'DUELIST') && dist === 0) m *= 1.15;
+    // M05: the condition is counted at the moment it is asked. `on` returns what the old
+    // `hasQuirk(...) && condition` returned, and notes the pair on the way past - so a body
+    // without the quirk is not counted as having failed its condition, which would make every
+    // rate read as near zero.
+    const on = (id, fires) => {
+        if (!hasQuirk(actEnt, id)) return false;
+        noteQuirk(id, fires);
+        return fires;
+    };
+    if (on('PACK_HUNTER', neighbour)) m *= 1.15;
+    if (on('LONER', !neighbour)) m *= 1.2;
+    if (on('FIRST_BLOOD', !!target && target.hp === target.maxHp)) m *= 1.3;
+    if (on('CLOSER', !!target && target.hp < target.maxHp * 0.3)) m *= 1.25;
+    if (on('DUELIST', dist === 0)) m *= 1.15;
     return m;
 }
 
@@ -6526,7 +6567,7 @@ function musterReroll(charId) {
     ch.maxHp -= ch.quirk.hp; ch.dmgBase -= ch.quirk.dmg; ch.speed -= ch.quirk.spd;
     const pool = quirkPoolFor(ch.classType).filter(q => q.id !== ch.quirk.id);
     const q = pool[Math.floor(Math.random() * pool.length)];
-    ch.quirk = q; ch.maxHp += q.hp; ch.dmgBase += q.dmg; ch.speed += q.spd;
+    ch.quirk = q; noteQuirkDrawn(q); ch.maxHp += q.hp; ch.dmgBase += q.dmg; ch.speed += q.spd;
     ch.hp = Math.min(ch.maxHp, Math.max(1, ch.hp + q.hp));
     musterRerolls--; playSFX('click');
     // A reroll spends one of two and rewrites an operator's quirk, health, damage and speed.
@@ -6623,7 +6664,7 @@ function buildNewRun(diff) {
         let q = qPool[Math.floor(qRng() * qPool.length)];
         const fourth = FOURTH_ABILITIES[p.classType];
         p.benchedMove = fourth ? fourth.move : null;
-        p.quirk = q; p.maxHp += q.hp; p.hp = p.maxHp; p.dmgBase += q.dmg; p.speed += q.spd;
+        p.quirk = q; noteQuirkDrawn(q); p.maxHp += q.hp; p.hp = p.maxHp; p.dmgBase += q.dmg; p.speed += q.spd;
         p.level = metaUpgrades.startLevel; p.perkPoints = metaUpgrades.startLevel - 1; p.xpToNext = Math.floor(100 * Math.pow(XP_CURVE, metaUpgrades.startLevel - 1)); 
         if (hasContract('GLASS')) { p.maxHp = Math.max(1, Math.floor(p.maxHp * 0.75)); p.hp = p.maxHp; }
     });
@@ -8497,6 +8538,7 @@ function signOnRecruit() {
     ch.hp = Math.max(1, Math.floor(ch.maxHp * RECRUIT_HEALTH));
     const pool = quirkPoolFor(ch.classType);
     ch.quirk = pool.length ? pool[Math.floor(Math.random() * pool.length)] : null;
+    noteQuirkDrawn(ch.quirk);
     if (ch.quirk) { ch.maxHp += ch.quirk.hp; ch.dmgBase += ch.quirk.dmg; ch.speed += ch.quirk.spd; ch.hp = Math.min(ch.hp, ch.maxHp); }
     const par = recruitLevelPar();
     // The 1.5 that used to be here is the curve XP_CURVE replaced, and its own comment says why:
@@ -8707,7 +8749,7 @@ function shopRerollQuirk(charId) {
     ch.maxHp -= ch.quirk.hp; ch.dmgBase -= ch.quirk.dmg; ch.speed -= ch.quirk.spd;
     const pool = quirkPoolFor(ch.classType).filter(q => q.id !== ch.quirk.id);
     const q = pool[Math.floor(Math.random() * pool.length)];
-    ch.quirk = q; ch.maxHp += q.hp; ch.dmgBase += q.dmg; ch.speed += q.spd;
+    ch.quirk = q; noteQuirkDrawn(q); ch.maxHp += q.hp; ch.dmgBase += q.dmg; ch.speed += q.spd;
     ch.hp = Math.min(ch.hp, ch.maxHp);
     scrap -= it.price; it.sold = true; shopRerollPick = false;
     playSFX('heal'); saveGameState(); renderShop();
@@ -10964,7 +11006,7 @@ function applyTurnStartEffects(ent) {
     if (ent.bleedingTurns > 0) { let b = Math.max(1, Math.floor(ent.maxHp * 0.08));
         if (ent.isPlayer && hasRelic('FIELD_DRESSING')) b = Math.max(1, Math.floor(b / 2));
         if (ent.isPlayer && relicSetActive('Field Surgery')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 1);
-        if (hasQuirk(ent, 'SLOW_BLEEDER')) b = Math.max(1, Math.floor(b / 2));
+        if (hasQuirk(ent, 'SLOW_BLEEDER')) { noteQuirk('SLOW_BLEEDER', true); b = Math.max(1, Math.floor(b / 2)); }
         // M01 THIN BLOOD: the other end of SLOW BLEEDER, and read after it so a body carrying
         // both lands near where it started rather than at one of the two extremes.
         if (hasScar(ent, 'THIN_BLOOD')) b = Math.floor(b * 1.5);
@@ -11711,7 +11753,7 @@ function resolveAction(targetId) {
         playAttackAnim(actEnt, target, pendingAction);
         if (isCombo) {
             log(`> COMBO ACTIVATED: ${comboType}`, "log-combo"); playSFX('combo'); 
-            if (hasQuirk(actEnt, 'OVERCHARGED')) addMomentum(10);
+            if (hasQuirk(actEnt, 'OVERCHARGED')) { noteQuirk('OVERCHARGED', true); addMomentum(10); }
             setTimeout(() => spawnFCT(target.id, comboType, "fct-combo"), 200); 
             checkBountyProgress('COMBO'); addMomentum(25); triggerShake();
         }
@@ -11906,7 +11948,7 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     if (hasDoctrine('NO_HANDS') && t.isPlayer && t.gridPos === 1 && attacker && !attacker.isPlayer
         && attacker.range === 'melee') cd = Math.floor(cd * 0.8);
     if (hasRelic('CHEM_ETCHER') && !t.isPlayer && (t.corrodedTurns || 0) > 0) cd = Math.floor(cd * 1.25);
-    if (hasQuirk(t, 'THICK_HIDE')) cd = Math.max(1, cd - 3);
+    if (hasQuirk(t, 'THICK_HIDE')) { noteQuirk('THICK_HIDE', true); cd = Math.max(1, cd - 3); }
     // Ruins are cover for whoever is standing in them, and the front rank is where the cover is.
     // ...unless the sky has filled the cover: gas pools in exactly the low ground you crouch in.
     if (t.gridPos === 1 && ground().frontCover && !w.noCover) cd = Math.max(1, Math.floor(cd * ground().frontCover));
@@ -12147,8 +12189,11 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
     // resolveAction, so the splash half of an area move, the second blow of HARRY, an
     // Entrenched bayonet's follow-up and every overdrive paid nothing. Here it is one hit, one
     // heal, wherever the hit came from - the same move F05 made for the death ledger.
-    if (attacker && attacker.isPlayer && attacker.quirk && attacker.quirk.id === 'VAMPIRIC'
+    // M05: this spelled hasQuirk out by hand - the one quirk read in the engine that a search
+    // for quirk reads would not have found. Same predicate, named.
+    if (hasQuirk(attacker, 'VAMPIRIC')
         && netDmg > 0 && attacker.hp > 0 && attacker.hp < attacker.maxHp) {
+        noteQuirk('VAMPIRIC', true);
         attacker.hp = Math.min(attacker.maxHp, attacker.hp + 2);
         spawnFCT(attacker.id, "+2", "fct-heal");
     }
@@ -12168,6 +12213,7 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
     if (target.isPlayer && target.hp > 0 && target.hp < target.maxHp * 0.35 && canWithdraw()) firePrompt('WITHDRAW');
     // Second Wind: once per fight, a killing blow leaves them standing at 1.
     if (target.hp <= 0 && hasQuirk(target, 'SECOND_WIND') && !target.secondWindUsed) {
+        noteQuirk('SECOND_WIND', true);
         target.secondWindUsed = true; target.hp = 1;
         log(`> ${target.name} refuses to go down!`, 'log-heal');
         spawnFCT(target.id, 'SECOND WIND', 'fct-heal'); playSFX('heal', 1.2);
@@ -13064,6 +13110,7 @@ function checkWinState() {
             scrap += 10; log(`> ${e.name} strips 10 extra Scrap.`, 'log-heal');
         });
         activeEntities.filter(e => hasQuirk(e, 'SCRAP_RAT') && e.hp > 0).forEach(e => {
+            noteQuirk('SCRAP_RAT', true);
             const m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)];
             materials[m]++; log(`> ${e.name} pockets 1 ${m.toUpperCase()}.`, 'log-heal');
         });
@@ -13161,7 +13208,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
-    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, quirkDmgMult, hasTrait, traitOnField,
+    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteQuirk, noteQuirkDrawn, quirkDmgMult, hasTrait, traitOnField,
     PERK_DMG_FLAT, PERK_DMG_MULT, PERK_SPD, PERK_MAXHP, PERK_HP_FLAT,
     perkStacks, perkDmgFlat, perkDmgMult, syncRankPerks, syncAllRankPerks, bankPerkStack, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,

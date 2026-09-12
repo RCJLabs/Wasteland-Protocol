@@ -2433,6 +2433,56 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── M05: THE QUIRK POOL, COUNTED FOR THE FIRST TIME ────────────────────────────
+// Fifteen quirks, five of them carrying a condition, and until this phase nothing in this file
+// had ever counted one. M04 is why that was worth fixing before anything else: it shipped five
+// perk cards whose conditions were designed and then measured, three of the five fired so
+// rarely that the change cost sixteen wins of a career, and the condition that broke it - "the
+// target is further off than arm's reach" - is the exact complement of DUELIST's, which has
+// described itself as situational since this pool was written. So: count first.
+//
+// Two 150-expedition careers, 1,253 and 1,262 quirks drawn, all fifteen reachable and every one
+// of the ten with a runtime effect firing at least once. How often each condition HELD, of the
+// times a body holding that quirk was asked:
+//
+//                                                   career 1        career 2
+//   PACK_HUNTER  an ally in the next rank          98% 5721/5814   97% 4503/4630
+//   DUELIST      the target is the enemy front     75% 3927/5212   79% 6514/8218
+//   CLOSER       the target is below 30%           18% 1287/7115   20% 1255/6348
+//   FIRST_BLOOD  the target is unhurt              18% 1107/6214   19% 1243/6499
+//   LONER        no ally in the next rank           3%  182/5955    1%   65/4520
+//
+// PACK HUNTER IS NOT A SITUATIONAL QUIRK. It pays on 97-98% of every swing its holder takes,
+// because the condition is "somebody stands in the rank next to you" and a three-deep line is
+// three adjacent ranks: rank 2 neighbours both, ranks 1 and 3 neighbour rank 2, and nobody is
+// ever alone unless the squad has been thinned. Its card says "+15% DMG with an ally in the
+// next rank", which reads as something you arrange. You never have to.
+//
+// AND LONER IS THE SAME FACT FROM THE OTHER SIDE. It reads the identical test negated, so it
+// fires on 1-3% and its +20% headline is worth about four tenths of a percent in play - against
+// RECKLESS in the same pool, which is +5 DMG on every swing forever. The two are not a pair of
+// choices. They are one card that is nearly always on and one that is nearly never, and that
+// was invisible while nothing counted.
+//
+// FIRST BLOOD AND CLOSER ARE HEALTHY and worth saying so, because a census that only names what
+// is broken teaches the wrong lesson. 18-20% each, an opener and a finisher on the same axis,
+// firing at rates that are close to each other and far from both extremes.
+//
+// DUELIST at 75-79% is milder than PACK HUNTER but is still mostly on. Worth noting against the
+// separate probe M04 ran, which measured dist === 0 at 81% of ALL player swings: the two
+// numbers are different populations - every swing against swings by DUELIST holders - and they
+// agree to a few points, which is the cross-check.
+//
+// WHAT IS NOT BROKEN, stated because it was the thing this phase was filed to look for: nothing
+// in the pool is unreachable. All fifteen were drawn in both careers, and every quirk with a
+// runtime effect fired - VAMPIRIC 3,414 and 5,519, THICK_HIDE 182,859 and 189,321, SECOND_WIND
+// 252 and 204, SLOW_BLEEDER 943 and 702, SCRAP_RAT 1,195 and 1,399, OVERCHARGED 299 and 191.
+// The four pure stat quirks have no runtime read at all and correctly report none: RECKLESS is
+// written onto the sheet the moment it is rolled and has nothing to fire.
+//
+// NO DIAL MOVES ON THIS COMMIT. The census is the deliverable and the fix is a separate
+// question, which is the order M04 got wrong and paid for.
+//
 // ── M04b: THE RE-CUT LANDS THE WALL BACK, AND MATCHING FINALLY MEASURES ─────────
 // The first cut's conditions were re-keyed onto the two axes that are genuinely about the
 // operator - the verb it carries and the rank it is deployed in - with max health left as max
@@ -5335,6 +5385,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.wxShrFoe = runStats.wxShrFoe || {};
   stat.plate = runStats.plate || {};
   stat.dt = runStats.dt || {};
+  stat.qk = runStats.qk || {};             // M05: every quirk condition, asked and answered
+  stat.qkDrawn = runStats.qkDrawn || {};   // and what the pool actually handed out
   stat.ut = runStats.ut || {};   // L03: the damage the type ledger cannot see
   // K05: what came out of the materials bag and by which door, plus what was still sitting in
   // it when the run ended. The leftover is read off `materials` rather than derived, because
@@ -5390,7 +5442,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   let ALL_FORMATION_IDS = [];
   let FORMATION_FACTION = {};
   let SCAR_IDS = [];
-  let PERK_IDS = [];
+  let PERK_IDS = [], QUIRK_IDS = [], CONDITIONAL_QUIRKS = [], STAT_QUIRKS = [];
   let FINAL_SECTOR_N = 7;
   let ORDER_NAME = '', ORDER_SECTORS = 7;
   page.on('pageerror', e => errors.push(e.message));
@@ -5408,6 +5460,28 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     Object.fromEntries(Object.entries(FORMATIONS).map(([k, v]) => [k, v.map(f => f.id)])));
   SCAR_IDS = await page.evaluate(() => SCAR_POOL.map(sc => sc.id));
   PERK_IDS = await page.evaluate(() => PERK_POOL.map(p => p.id));
+  // Read off the engine rather than listed here - a hand-kept copy of a content pool in this
+  // file is the F03 defect, and the whole point of the census is that it cannot fall behind.
+  QUIRK_IDS = await page.evaluate(() => QUIRK_POOL.map(q => q.id));
+  // The ones whose whole effect is a stat written at the muster, read off the pool's own
+  // numbers. These have no runtime read and counting them as "never fired" would be a lie.
+  STAT_QUIRKS = await page.evaluate(() =>
+    QUIRK_POOL.filter(q => q.dmg || q.hp || q.spd).map(q => q.id));
+  // Which of them carry a condition, also read off the engine: quirkDmgMult is the one place
+  // a quirk is asked a question, so the ids it names ARE the conditional set.
+  CONDITIONAL_QUIRKS = await page.evaluate(async () => {
+    const src = await (await fetch('game.js')).text();
+    const at = src.indexOf('function quirkDmgMult(');
+    let d = 0, i = src.indexOf('{', at), end = i;
+    for (; end < src.length; end++) {
+      if (src[end] === '{') d++;
+      else if (src[end] === '}') { d--; if (!d) break; }
+    }
+    const body = src.slice(i, end);
+    const out = []; const re = /on\('([A-Z_]+)'/g; let m;
+    while ((m = re.exec(body))) out.push(m[1]);
+    return out;
+  });
   FINAL_SECTOR_N = await page.evaluate(() => FINAL_SECTOR);
   const ordSpec = await page.evaluate(id => { const o = orderById(id); return o ? { name: o.name, sectors: o.sectors } : null; }, ORDER);
   ORDER_NAME = ordSpec ? ordSpec.name : ORDER;
@@ -6066,6 +6140,54 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // M04: FORTIFIED asks nothing, so it counts as fitting every body and a blind pick is right
     // three times in five before any judgement is applied. The row above is read against that,
     // not against zero.
+  }
+  // ── M05: the quirk pool, which nothing has ever counted ────────────────────────────────
+  // Fifteen quirks, five of them carrying a condition, and no readout in this file had ever
+  // named one. The order matters and is the M04 lesson: this ships BEFORE anything is changed,
+  // because M04 designed five conditions and measured them afterwards, and three of the five
+  // fired so rarely that the change cost sixteen wins. A condition's firing rate is the first
+  // fact about it, not the last.
+  {
+    const qk = {}, drawn = {};
+    results.forEach(r => {
+      Object.entries(r.qk || {}).forEach(([k, v]) => {
+        const row = qk[k] = qk[k] || { seen: 0, fired: 0 };
+        row.seen += v.seen; row.fired += v.fired;
+      });
+      Object.entries(r.qkDrawn || {}).forEach(([k, v]) => { drawn[k] = (drawn[k] || 0) + v; });
+    });
+    const ids = QUIRK_IDS.length ? QUIRK_IDS : Object.keys(drawn);
+    const total = Object.values(drawn).reduce((a, b) => a + b, 0);
+    line('quirks drawn from the pool', total
+      ? `${total} across ${ids.length} in the pool, ${ids.filter(id => !drawn[id]).length} never drawn`
+      : 'none');
+    const never = ids.filter(id => !drawn[id]);
+    if (never.length) line('  never drawn', never.map(i => i.toLowerCase()).join(', '));
+    // The conditional five, which are the whole reason this block exists. `seen` counts the
+    // times a body holding the quirk swung; `fired` the times the condition held.
+    const asked = ids.filter(id => (qk[id] || {}).seen && CONDITIONAL_QUIRKS.includes(id));
+    line('  conditional quirks, how often the condition held', asked.length
+      ? asked.map(id => `${id.toLowerCase()} ${Math.round(qk[id].fired / qk[id].seen * 100)}% (${qk[id].fired}/${qk[id].seen})`).join(', ')
+      : 'none asked');
+    const quiet = CONDITIONAL_QUIRKS.filter(id => !(qk[id] || {}).seen);
+    if (quiet.length) line('  and never asked at all', quiet.map(i => i.toLowerCase()).join(', '));
+    // Three kinds in this pool, not two, and the first draft of this block got it wrong: it
+    // listed the pure stat quirks as "drawn but never did anything", which is false. RECKLESS is
+    // +5 DMG and -15 HP written onto the sheet the moment it is rolled - it has no runtime read
+    // to count because it does not need one. Split off the pool's own dmg/hp/spd rather than by
+    // a list kept here, so a quirk that gains or loses a stat moves between the groups on its own.
+    const statOnly = ids.filter(id => STAT_QUIRKS.includes(id));
+    line('  written onto the sheet at the muster, nothing to fire', statOnly.length
+      ? statOnly.map(id => `${id.toLowerCase()} ${drawn[id] || 0} drawn`).join(', ')
+      : 'none');
+    // The ones that ask nothing and DO have a moment: the count is D06's question rather than
+    // M04's - not how often a condition held, but whether the thing has ever happened at all.
+    const flat = ids.filter(id => !CONDITIONAL_QUIRKS.includes(id) && !STAT_QUIRKS.includes(id));
+    line('  quirks that ask nothing, times they did something', flat.length
+      ? flat.map(id => `${id.toLowerCase()} ${(qk[id] || {}).fired || 0}`).join(', ')
+      : 'none');
+    const dead = flat.filter(id => drawn[id] && !(qk[id] || {}).fired);
+    if (dead.length) line('  drawn and never once fired', dead.map(i => i.toLowerCase()).join(', '));
   }
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   // K06: which pieces, because a total with no names in it cannot say whether the slot is being
