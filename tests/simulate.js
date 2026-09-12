@@ -2433,6 +2433,57 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── M08b: THE CODE WAS RIGHT AND THE DOCUMENTATION WAS WRONG ───────────────────
+// M08 left this open. TERRAIN's legend said frontCover applied to "whoever stands in the front
+// rank, whichever side they are on", and mitigate reads `t.gridPos === 1` - which M08 proved no
+// hostile ever satisfies. It looked like a missing guard. It is a wrong sentence.
+//
+// The legend was wrong TWICE. It also said "takes less", and the two grounds carrying the field
+// point opposite ways: RUINS at 0.8 is cover, FLOODED WORKS at 1.2 is exposure. No single verb
+// describes it, which is a decent sign nobody had read the line against the table under it.
+//
+// WHAT IT IS WORTH, over 150 expeditions, split by direction because the two halves have
+// different denominators and one blended figure answers neither question:
+//
+//   what the squad TAKES on those grounds     85,541 of 227,488 (38%) at its own front rank
+//     FLOODED x1.2   +8,671        RUINS x0.8   -8,437        net  +234  - a wash
+//   what it would DEAL under symmetry        464,723 of 689,412 (67%) at the enemy front
+//     FLOODED x1.2  +38,215        RUINS x0.8  -54,730        net -16,515 - one way only
+//
+// THE SHIPPED RULE IS VERY NEARLY NEUTRAL - the two grounds cancel to 0.1% of what the squad
+// takes on them - and SYMMETRY WOULD NOT BE, because the squad's damage CONCENTRATES on one
+// target (67-70%, M08's census) while what it takes spreads across three ranks (38%). A
+// front-rank rule always bites the attacker harder than the defender. That is structural: no
+// wording of the rule makes it neutral.
+//
+// AND THE DESIGN REASON, which is what actually settles it rather than the arithmetic. The
+// squad's ranks are a formation committed to at the Outpost and paid for. The enemy's "front" is
+// index 0 of the living, and haulForward lets the squad shuffle it mid-fight - 2,245 attempts a
+// career, moving somebody on about half. Under a symmetric RUINS the harpooner's entire kit
+// would be dragging foes INTO cover, and SLACK LINE's +25% against the enemy front would be half
+// cancelled by the commonest ground it stands on. Cover that attaches to a queue position the
+// ATTACKER controls is incoherent. So the legend and both banners were rewritten to say whose
+// front rank they mean - which is what the two backline grounds already did - and no dial moved.
+//
+// I FILED THIS WRONG AND THE MEASUREMENT CORRECTED ME. M08 filed it as "one ground is quietly
+// pro-player and the other quietly anti-player". True of each ground alone; false of the pair,
+// which cancel to +234 of 227,488. A finding about a portfolio that is only ever checked one
+// holding at a time is not checked.
+//
+// TWO INSTRUMENT BUGS, both found by numbers that could not be true:
+//
+//   1. THE FIRST DRAFT COUNTED INSIDE MITIGATE and read the squad TAKING SIX TIMES what it
+//      dealt. mitigate is called five times over by things that are not blows - four forecast
+//      paths in threatBoard, which price every enemy's intent against every target every turn,
+//      and the resist probe the roster card renders with. The figure goes back with the result
+//      now and is booked at the three places damage is actually applied: applyDamageHit, the sky
+//      tick and the bleed tick. The existing type ledger already sat at those three; I should
+//      have looked at where it sat before choosing where to put mine.
+//   2. __dummy GAVE EVERY TEST HOSTILE gridPos: 1 - a body the engine never builds. So it
+//      silently satisfied the one unguarded gridPos read in mitigate, and any fixture standing a
+//      dummy on RUINS was measuring a rule that does not apply to it. Removed; nothing else in
+//      4479 assertions depended on it, which is the good outcome and also the worrying one.
+//
 // ── M08: ONE CONDITION, TWO CARDS, AND ONLY ONE OF THEM WAS THE PROBLEM ────────
 // M05 and M06 each ended on a card reading `dist === 0` and calling it a position taken up:
 // DUELIST "+15% DMG against the enemy front" at 75-79% of its holder's swings, SLACK LINE "+25%
@@ -5649,6 +5700,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.rch = runStats.rch || null;         // M08: how far off the target was, and how many were up
   stat.frt = runStats.frt || {};           // and the same split per card that reads it
   stat.hl = runStats.hl || null;           // and the haul, which is the one verb that sets it up
+  stat.cv = runStats.cv || null;           // M08b: what the ground's front cover is reaching
   stat.qkDrawn = runStats.qkDrawn || {};   // and what the pool actually handed out
   stat.ut = runStats.ut || {};   // L03: the damage the type ledger cannot see
   // K05: what came out of the materials bag and by which door, plus what was still sitting in
@@ -6630,6 +6682,41 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     line('  the haul', h.tried
       ? `${h.tried} attempted, ${h.moved} moved something (${Math.round(h.moved / h.tried * 100)}%) - the rest were already at the front`
       : 'NEVER ATTEMPTED - the harness cannot reach the one verb that sets this condition up');
+  }
+  // ── M08b: what front cover actually covers ─────────────────────────────────────────────
+  // TERRAIN documents frontCover as applying to "whoever stands in the front rank, whichever side
+  // they are on". mitigate reads t.gridPos === 1, and no hostile has a gridPos - so it has only
+  // ever applied to the squad. Read in both DIRECTIONS, because they have different denominators:
+  // what the squad takes is what the existing read governs, what the squad deals is what a
+  // symmetric read would govern, and one blended figure answers neither. The first draft of this
+  // block was that blended figure and it read 6% where the resolver's own census says 79%.
+  {
+    const acc = { taken: null, dealt: null };
+    results.forEach(x => Object.entries(x.cv || {}).forEach(([dir, row]) => {
+      const a = acc[dir] = acc[dir] || { blows: 0, dmg: 0, hit: 0, hitDmg: 0, byGround: {} };
+      ['blows', 'dmg', 'hit', 'hitDmg'].forEach(k => { a[k] += Number(row[k]) || 0; });
+      Object.entries(row.byGround || {}).forEach(([id, g]) => {
+        const r = a.byGround[id] = a.byGround[id] || { mult: g.mult, blows: 0, dmg: 0, hit: 0, hitDmg: 0 };
+        ['blows', 'dmg', 'hit', 'hitDmg'].forEach(k => { r[k] += Number(g[k]) || 0; });
+      });
+    }));
+    const pc = (n, d) => d ? Math.round(n / d * 100) + '%' : '0%';
+    const show = (dir, what, who) => {
+      const a = acc[dir];
+      if (!a || !a.blows) return;
+      line(`front cover: of the damage the squad ${what} on those grounds`,
+        `${a.hitDmg} of ${a.dmg} (${pc(a.hitDmg, a.dmg)}) lands on ${who}, over ${a.blows} blows`);
+      Object.keys(a.byGround).sort().forEach(id => {
+        const g = a.byGround[id];
+        // The shipped effect on this half, in damage: what the multiplier does to the share it
+        // reaches. Signed, so the two grounds do not look like the same finding.
+        const moved = Math.round(g.hitDmg * (g.mult - 1));
+        line(`  ${id} (x${g.mult})`, `${g.hitDmg} of ${g.dmg} (${pc(g.hitDmg, g.dmg)}) over ${g.blows} blows` +
+          `, worth ${moved > 0 ? '+' : ''}${moved} damage`);
+      });
+    };
+    show('taken', 'TAKES', "its own front rank - the read that exists");
+    show('dealt', 'DEALS', "the enemy front - the read the legend promises and mitigate does not make");
   }
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   // K06: which pieces, because a total with no names in it cannot say whether the slot is being

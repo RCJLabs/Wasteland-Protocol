@@ -74,17 +74,18 @@ module.exports = {
     ok(`and not one of them carries a rank (gridPos is ${ranks.kinds.join('/')})`,
       ranks.kinds.length === 1 && ranks.kinds[0] === 'undefined');
 
-    // ── Which makes one terrain read dead, and the codex says it should not be ──
-    // Filed rather than fixed here: it is a terrain question with its own difficulty cost, and
-    // this row exists so it cannot be quietly forgotten. If somebody guards or re-keys that
-    // line, this row is what tells them the doc above it was the reason.
+    // ── Which made one terrain read dead, and the codex said it should not be ──
+    // Filed open by M08 and settled by M08b: the ruins' front cover is the one gridPos test in
+    // mitigate with no isPlayer guard, and TERRAIN used to document it as applying to both sides.
+    // It does not and it should not - suite 165 holds the measurement and the reasoning. These
+    // two rows stay because they are what found it: the guard pattern, and the doc agreeing.
     const cover = src.slice(src.indexOf('let ac = ('), src.indexOf('// Every dose the Vatborn takes'));
-    ok('the ruins front-cover read is the one gridPos test in mitigate with no isPlayer guard',
-      /if \(t\.gridPos === 1 && ground\(\)\.frontCover/.test(cover)
+    ok('the ruins front-cover read is still the one gridPos test in mitigate with no isPlayer guard',
+      /onRank1: t\.gridPos === 1/.test(cover)
       && /t\.isPlayer && t\.gridPos <= meshRanks\(\)/.test(cover)
       && /t\.isPlayer && t\.gridPos === 1/.test(cover));
-    ok('and TERRAIN still documents it as applying to both sides, which it cannot',
-      /frontCover whoever stands in the front rank takes less, whichever side they are on/.test(src));
+    ok('and TERRAIN now says whose front rank it means rather than claiming both sides',
+      /a multiplier on what YOUR OWN front rank takes/.test(src));
 
     // ── DUELIST asks how many, not which ────────────────────────────────────────
     const duel = await page.evaluate(() => {

@@ -269,6 +269,43 @@ function noteFront(id, dist, standing, hauled) {
     if (dist === 0) { row.fired++; if (hauled) row.firedHauled++; }
     if (standing >= 2) { row.seenLine++; if (dist === 0) row.firedLine++; }
 }
+// M08b: frontCover is documented as "whoever stands in the front rank takes less, whichever side
+// they are on" and mitigate reads it as `t.gridPos === 1`, which M08 established no hostile ever
+// satisfies. So it has only ever applied to the squad. Two grounds carry it and they point in
+// opposite directions - RUINS at 0.8 is cover, FLOODED WORKS at 1.2 is exposure - which means one
+// of them is a quiet player buff and the other a quiet player nerf, both against the stated rule.
+//
+// Before anything moves, how much is actually at stake. Counted per blow while a frontCover
+// ground is in force: the blows the current read catches, the blows a symmetric read would catch,
+// and the damage through each. M08's census says 79% of the squad's swings land on the enemy
+// front, so symmetry is not a rounding change on the outgoing side and the two directions have to
+// be weighed separately rather than assumed to cancel.
+// Split by DIRECTION, because the two halves have different denominators and mixing them is how
+// M07, D05 and M06 each went wrong. What the squad TAKES is what the current read governs; what
+// the squad DEALS is what a symmetric read would govern. A single "blows under a cover ground"
+// figure answers neither question, and the first draft of this counter was exactly that figure.
+function noteCover(cover, t, dmg) {
+    if (!runStats || !cover) return;
+    const c = runStats.cv = runStats.cv || {};
+    const key = t && t.isPlayer ? 'taken' : 'dealt';
+    const row = c[key] = c[key] || { blows: 0, dmg: 0, hit: 0, hitDmg: 0, byGround: {} };
+    // Each side is asked about the read that governs IT: the squad about its own front rank,
+    // which is the read mitigate makes, and the hostiles about the enemy front, which is the
+    // read the legend promises and mitigate does not make.
+    const on = t && t.isPlayer ? cover.onRank1 : cover.onFront;
+    row.blows++; row.dmg += dmg;
+    if (on) { row.hit++; row.hitDmg += dmg; }
+    const g = row.byGround[currentTerrain] = row.byGround[currentTerrain] ||
+              { mult: cover.mult, blows: 0, dmg: 0, hit: 0, hitDmg: 0 };
+    g.blows++; g.dmg += dmg;
+    if (on) { g.hit++; g.hitDmg += dmg; }
+}
+// The enemy's front, defined once. The resolver's `dist === 0` means index 0 of the living
+// non-burrowed hostiles, and a second definition that drifted from it would make the two halves
+// of this measurement incomparable.
+function enemyFront() {
+    return activeEntities.filter(e => !e.isPlayer && e.hp > 0 && !e.burrowed)[0] || null;
+}
 // And what the pool actually hands out, counted where it is handed out. Four sites roll a quirk
 // - the muster, a muster reroll, the Armory's reroll and a recruit signing on - and a census
 // that missed one would read as a pool with a hole in it.
@@ -1831,7 +1868,15 @@ const WEATHER_CHANCE = 0.4;
 //   reach      a flat multiplier on every melee swing, however well positioned
 //   ranged     a flat multiplier on every ranged attack, both sides
 //   aoe        a multiplier on anything that lands on more than one body
-//   frontCover whoever stands in the front rank takes less, whichever side they are on
+//   frontCover a multiplier on what YOUR OWN front rank takes - below 1 it is cover, above 1 it
+//              is exposure. One-sided on purpose, and M08b is the measurement behind that: this
+//              line used to read "whichever side they are on", which was wrong twice over (one
+//              of the two grounds carrying it makes the front rank take MORE) and which nothing
+//              in the engine had ever done. The squad's ranks are a formation committed to at
+//              the Outpost; the enemy's "front" is index 0 of the living, and haulForward lets
+//              the squad shuffle it mid-fight. Cover that attaches to a queue position the
+//              ATTACKER controls is incoherent - under a symmetric RUINS the harpooner's whole
+//              kit would be dragging foes into cover - so it attaches to the formation only.
 //   backline   how much harder the enemy leans past your front rank when it picks a target
 const TERRAIN = {
     OPEN_ROAD:  { name: 'OPEN ROAD', short: 'ROAD', dot: 'tr-road',
@@ -1846,16 +1891,16 @@ const TERRAIN = {
                   ranged: 1.15, reach: 0.8, backline: 2,
                   banner: '\u25B3 OPEN FLATS: ranged +15%, melee -20%, your back rank is exposed \u25B3' },
     RUINS:      { name: 'RUINS', short: 'RUINS', dot: 'tr-ruins',
-                  desc: 'Broken concrete in every direction. The front rank has something to stand behind, a blast has somewhere to stop, and nobody has a clean line at anything.',
+                  desc: 'Broken concrete in every direction. Your front rank has something to stand behind, a blast has somewhere to stop, and nobody has a clean line at anything.',
                   frontCover: 0.8, ranged: 0.9, aoe: 0.75,
-                  banner: '\u25A6 RUINS: front rank -20%, ranged -10%, area attacks -25% \u25A6' },
+                  banner: '\u25A6 RUINS: your front rank -20%, ranged -10%, area attacks -25% \u25A6' },
     // The Choir and the Carrion had no ground of their own - they borrowed tunnels and ruins
     // off the Mech and the Beasts, so two of five factions fought nowhere in particular. A
     // faction that reads as a place is the other half of what a named formation does.
     FLOODED:    { name: 'FLOODED WORKS', short: 'WATER', dot: 'tr-flooded',
                   desc: 'Ankle-deep in a drowned refinery. Nothing to brace against, blades drag through it, and whatever goes off carries across the water.',
                   reach: 0.85, aoe: 1.25, frontCover: 1.2,
-                  banner: '\u2248 FLOODED WORKS: melee -15%, area attacks +25%, the front rank has nothing to stand behind \u2248' },
+                  banner: '\u2248 FLOODED WORKS: melee -15%, area attacks +25%, your front rank has nothing to stand behind \u2248' },
     NEST:       { name: 'THE NEST', short: 'NEST', dot: 'tr-nest',
                   desc: 'Chitin underfoot and egg-cases to the ceiling. They are packed in tight enough to catch a blast properly - and they know the floor better than you do.',
                   aoe: 1.35, ranged: 0.9, backline: 2,
@@ -11141,6 +11186,7 @@ function applyTurnStartEffects(ent) {
     const skyHit = (type, raw, cause, cls) => {
         const cut = mitigate(null, ent, raw, type, null);
         noteDamageType(ent.isPlayer ? 'atSquad' : 'atFoe', type, raw, cut.rv);
+        noteCover(cut.cover, ent, cut.n);
         if (cut.n <= 0) return;
         const _b = ent.hp;
         ent.hp = Math.max(0, ent.hp - cut.n);
@@ -11175,6 +11221,7 @@ function applyTurnStartEffects(ent) {
         // L03 built goes empty - which the report states rather than leaving blank.
         const cut = mitigate(null, ent, b, 'phys', 'BLEED');
         noteDamageType(ent.isPlayer ? 'atSquad' : 'atFoe', 'phys', b, cut.rv);
+        noteCover(cut.cover, ent, cut.n);
         ent.bleedingTurns--; chg = true;
         if (cut.n > 0) {
             ent.hp = Math.max(0, ent.hp - cut.n);
@@ -12126,7 +12173,16 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     if (hasQuirk(t, 'THICK_HIDE')) { noteQuirk('THICK_HIDE', true); cd = Math.max(1, cd - 3); }
     // Ruins are cover for whoever is standing in them, and the front rank is where the cover is.
     // ...unless the sky has filled the cover: gas pools in exactly the low ground you crouch in.
-    if (t.gridPos === 1 && ground().frontCover && !w.noCover) cd = Math.max(1, Math.floor(cd * ground().frontCover));
+    // M08b: what the ground's front cover reached, handed back with the figure rather than counted
+    // here. mitigate is called five times over by things that are not blows - four forecast paths
+    // in threatBoard and the resist probe the roster card renders with - so a ledger kept at this
+    // line counts damage nobody ever took. The first draft of this counter did exactly that and
+    // read the squad taking six times what it dealt. Only applyDamageHit knows a blow landed.
+    let cover = null;
+    if (ground().frontCover && !w.noCover) {
+        cover = { mult: ground().frontCover, onRank1: t.gridPos === 1, onFront: enemyFront() === t };
+        if (cover.onRank1) cd = Math.max(1, Math.floor(cd * cover.mult));
+    }
     // Every dose the Vatborn takes is another split seam: it hits harder and it takes more.
     if (t.venomStacks > 0) cd = Math.floor(cd * (1 + (t.venom ? t.venom.taken : 0.12) * t.venomStacks));
     // Teeming: a Carrion is only hard to kill while the rest of the pile is standing. Picking
@@ -12156,7 +12212,7 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     // and not what was taken off. ASHFALL adds 2 to every unit and an escort adds 20, so the
     // one surface that answers "why did that number happen" was crediting the escort's plate
     // to nobody. The soaked TOTAL was always right; it is the breakdown that was short.
-    return { n, rv, ac };
+    return { n, rv, ac, cover };
 }
 
 // ── F05: one ledger for a body ──────────────────────────────────────────────────────────
@@ -12330,9 +12386,10 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
     // by armour and a resistance. It still comes through here so the blow keeps its ledger:
     // the kill, the contracts, the bestiary, the Tally, the card that explains it.
     const pierce = !!(opts && opts.pierce);
-    const figure = t => pierce ? { n: Math.max(1, t.hp), rv: 0, ac: 0 }
+    const figure = t => pierce ? { n: Math.max(1, t.hp), rv: 0, ac: 0, cover: null }
                                : mitigate(attacker, t, calcDmg, atkType, abilityStr);
-    let { n: netDmg, rv: resistValue, ac: armourTaken } = figure(target);
+    let { n: netDmg, rv: resistValue, ac: armourTaken, cover } = figure(target);
+    noteCover(cover, target, netDmg);
     // File the whole story of this number: what it started as, what bent it, what soaked it.
     const filed = { attacker: attacker.name, target: target.name, raw: calcDmg,
                     trace: (hitTrace || []).slice(), atkType, abilityStr };
@@ -13383,7 +13440,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
-    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, noteReach, noteFront, noteHaul, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, hasTrait, traitOnField,
+    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, noteReach, noteFront, noteHaul, noteCover, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, hasTrait, traitOnField,
     PERK_DMG_FLAT, PERK_DMG_MULT, PERK_SPD, PERK_MAXHP, PERK_HP_FLAT,
     perkStacks, perkDmgFlat, perkDmgMult, syncRankPerks, syncAllRankPerks, bankPerkStack, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,

@@ -155,9 +155,21 @@ module.exports = {
       return { contracts: [...activeContracts], regroups: totalRegroups(), carry: canCarry(),
                mult: runStats.contractMult, names: contractNames(),
                log: fightLog ? { ...fightLog } : null, vacated: [...vacatedRanks],
-               focus: momentumFocus, press: pressExtra, bg: combatBgFile, resumed: combatActive };
+               focus: momentumFocus, press: pressExtra, bg: combatBgFile, resumed: combatActive,
+               // M08b: carried so the row below can SAY WHY when it goes red. This assertion has
+               // flaked twice since K09 narrowed it, both times inside a full battery and never
+               // once in 25 runs of this suite alone - so it is load-dependent and a bare red
+               // line tells the next person nothing. resumeCombat leaves combatActive false on
+               // exactly one path (an empty turnQueue, which renders the map instead) and sets
+               // it true on the other before calling processTurn, which can end the fight - so
+               // the queue length and the screen separate "never came back" from "came back and
+               // finished". Costs one evaluate that was already happening.
+               why: { pending: !!pendingCombat, queue: turnQueue.length, screen: currentScreen,
+                      standing: activeEntities.filter(e => e.hp > 0).length } };
     }, was.saved);
-    ok('the fight comes back up at all', now.resumed === true);
+    ok(`the fight comes back up at all${now.resumed ? '' : ` (queue ${now.why.queue}, ${
+        now.why.standing} standing, on ${now.why.screen}, pendingCombat ${now.why.pending})`}`,
+      now.resumed === true);
     ok(`the handicaps signed for are still signed for (${now.contracts.join(', ')})`,
       JSON.stringify(now.contracts) === JSON.stringify(was.contracts) && was.contracts.length === 3);
     ok(`so NO FALLBACK still means no fallback (${was.regroups} -> ${now.regroups})`,

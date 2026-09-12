@@ -167,7 +167,14 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
       // to stop traps.
       window.__dummy = (over) => Object.assign(window.__bare({
         id: 'dummy1', name: 'Dummy', isPlayer: false, classType: 'RAIDER', range: 'melee',
-        hp: 400, maxHp: 400, speed: 1, dmgBase: 10, scale: 1, hpDrop: 0, gridPos: 1,
+        // M08b: NO gridPos. This used to read `gridPos: 1` and that is a body the engine never
+        // builds - 134 hostiles across five factions, four depths, both node kinds and the boss
+        // path all carry it undefined, because gridPos is the squad's formation and the enemy
+        // side is an ordered list. A dummy carrying one silently satisfies every `t.gridPos === 1`
+        // read in mitigate, which is the ruins' front cover, so a fixture standing a dummy on
+        // RUINS was measuring a rule that does not apply to it. Pass one in `over` to position a
+        // PLAYER-side body deliberately; a hostile should not have one.
+        hp: 400, maxHp: 400, speed: 1, dmgBase: 10, scale: 1, hpDrop: 0,
         cooldowns: {}, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, markedTurns: 0,
         intent: { type: 'ATTACK', icon: '#' }
       }), over || {});
