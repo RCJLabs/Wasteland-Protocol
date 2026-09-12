@@ -133,8 +133,8 @@ const QUIRK_POOL = [
     { id: 'STURDY',     name: 'STURDY',     desc: '+20 HP, -2 SPD', dmg: 0, hp: 20, spd: -2 },
     { id: 'VAMPIRIC',   name: 'VAMPIRIC',   desc: 'Heals 2 on every hit they land', dmg: 0, hp: 0, spd: 0 },
     { id: 'LETHARGIC',  name: 'LETHARGIC',  desc: '+8 DMG, -3 SPD', dmg: 8, hp: 0, spd: -3 },
-    { id: 'PACK_HUNTER',name: 'PACK HUNTER',desc: '+15% DMG with an ally in the next rank', dmg: 0, hp: 0, spd: 0 },
-    { id: 'LONER',      name: 'LONER',      desc: '+20% DMG with no ally in the next rank', dmg: 0, hp: 0, spd: 0 },
+    { id: 'PACK_HUNTER',name: 'PACK HUNTER',desc: '+30% DMG with an ally standing on both sides of them', dmg: 0, hp: 0, spd: 0 },
+    { id: 'LONER',      name: 'LONER',      desc: '+40% DMG while the enemy outnumbers what is left of the squad', dmg: 0, hp: 0, spd: 0 },
     { id: 'SCRAP_RAT',  name: 'SCRAP RAT',  desc: '+1 material after fights they survive', dmg: 0, hp: 0, spd: 0 },
     { id: 'FIRST_BLOOD',name: 'FIRST BLOOD',desc: '+30% DMG against unhurt targets', dmg: 0, hp: 0, spd: 0 },
     { id: 'CLOSER',     name: 'CLOSER',     desc: '+25% DMG against targets below 30%', dmg: 0, hp: 0, spd: 0 },
@@ -526,11 +526,42 @@ function unequipGear(charId, slot) {
 }
 
 // The formation- and target-reading quirks, resolved where the damage is figured.
+//
+// M05b: PACK HUNTER and LONER used to read one test from two sides - "somebody stands in the
+// rank next to you" - and M05's census measured what that was worth: the condition held on
+// 97-98% of PACK HUNTER's swings and 1-3% of LONER's. A three-deep line is three adjacent
+// ranks, so nobody is ever alone unless the squad has been thinned, and it almost never is
+// while still swinging. One quirk was an unconditional +15% wearing a condition; the other was
+// a +20% headline worth four tenths of a percent.
+//
+// NINE CANDIDATE CONDITIONS WERE COUNTED BEFORE ANY OF THIS WAS WRITTEN, over 24,804 swings,
+// and the result killed most of them:
+//
+//   full line still standing   96%      none within two ranks   2%
+//   any foe already hurt       86%      last one standing       2%
+//   only one foe left          30%      half the line down      1%
+//   an ally on BOTH sides      27%
+//   this body under half       17%
+//   the foes outnumber us      14%
+//
+// THE WHOLE "THE SQUAD IS IN TROUBLE" FAMILY IS DEAD CONTENT IN THIS GAME. Half-down, last
+// standing and isolated all land at 1-2%, and the reason is the same one that broke LONER: a
+// squad that is losing badly stops swinging shortly afterwards, so a condition about being in
+// trouble is only ever asked in the few turns before the fight ends. No re-keying of "alone"
+// was going to save LONER - that was worth knowing before trying three of them.
+//
+// So the pair is rebuilt on the two live conditions that are genuine opposites: an ally on
+// either side of you, or more enemies standing than the squad has left. Friends around you
+// against enemies around you, at 27% and 14% instead of 98% and 2%.
+const PACK_MULT = 1.3;    // an ally standing in both adjacent ranks
+const LONER_MULT = 1.4;   // the foes outnumber what is left of the squad
 function quirkDmgMult(actEnt, target, dist) {
     if (!actEnt || !actEnt.isPlayer || !actEnt.quirk) return 1;
     let m = 1;
-    const neighbour = activeEntities.some(e => e.isPlayer && e.hp > 0 && e.id !== actEnt.id &&
-        Math.abs(e.gridPos - actEnt.gridPos) === 1);
+    const flanked = [actEnt.gridPos - 1, actEnt.gridPos + 1].every(p =>
+        activeEntities.some(e => e.isPlayer && e.hp > 0 && e.gridPos === p));
+    const standing = activeEntities.filter(e => e.isPlayer && e.hp > 0 && e.gridPos > 0).length;
+    const against = activeEntities.filter(e => !e.isPlayer && e.hp > 0).length;
     // M05: the condition is counted at the moment it is asked. `on` returns what the old
     // `hasQuirk(...) && condition` returned, and notes the pair on the way past - so a body
     // without the quirk is not counted as having failed its condition, which would make every
@@ -540,8 +571,8 @@ function quirkDmgMult(actEnt, target, dist) {
         noteQuirk(id, fires);
         return fires;
     };
-    if (on('PACK_HUNTER', neighbour)) m *= 1.15;
-    if (on('LONER', !neighbour)) m *= 1.2;
+    if (on('PACK_HUNTER', flanked)) m *= PACK_MULT;
+    if (on('LONER', against > standing)) m *= LONER_MULT;
     if (on('FIRST_BLOOD', !!target && target.hp === target.maxHp)) m *= 1.3;
     if (on('CLOSER', !!target && target.hp < target.maxHp * 0.3)) m *= 1.25;
     if (on('DUELIST', dist === 0)) m *= 1.15;
@@ -7951,6 +7982,17 @@ function migrateTraits(roster) {
         // Scars are earned and never rolled, so a save written before they existed has none;
         // anything in the list whose id has since gone is dropped rather than left inert.
         c.scars = Array.isArray(c.scars) ? c.scars.filter(id => scarById(id)) : [];
+        // M05b: a quirk is stored as the whole pool object, so an operator rolled before a
+        // rewording carries the old promise on its card while hasQuirk - which matches on id -
+        // applies the new rule. That is the M03 defect exactly: a surface left saying something
+        // the engine stopped doing. The WORDS are re-resolved from the pool by id and nothing
+        // else is, because the stats were applied to the sheet when the quirk was rolled and
+        // re-resolving those would either double them or silently drop them.
+        if (c.quirk && c.quirk.id) {
+            const live = QUIRK_POOL.find(q => q.id === c.quirk.id)
+                      || Object.values(CLASS_QUIRKS || {}).find(q => q && q.id === c.quirk.id);
+            if (live) { c.quirk.name = live.name; c.quirk.desc = live.desc; }
+        }
     });
     return roster;
 }
@@ -13208,7 +13250,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
-    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteQuirk, noteQuirkDrawn, quirkDmgMult, hasTrait, traitOnField,
+    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteQuirk, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, hasTrait, traitOnField,
     PERK_DMG_FLAT, PERK_DMG_MULT, PERK_SPD, PERK_MAXHP, PERK_HP_FLAT,
     perkStacks, perkDmgFlat, perkDmgMult, syncRankPerks, syncAllRankPerks, bankPerkStack, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,

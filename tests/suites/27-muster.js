@@ -55,22 +55,37 @@ module.exports = {
         h2.hero.dmgBase = 100;
         return withQuirk / window.__quirkSwing(h2.foes[0]);
       };
-      return {
-        loner: ratio('LONER'),
-        packAlone: ratio('PACK_HUNTER'),
-        pack: ratio('PACK_HUNTER', (h) => {
-          const ally = playerRoster.find(x => x.classType === 'MEDIC');
-          ally.gridPos = 2; ally.hp = ally.maxHp;
+      // M05b rebuilt this pair on conditions that fire. PACK HUNTER wants an ally on BOTH
+      // sides - which the census measured at 27% against the old test's 98% - and LONER wants
+      // the enemy to outnumber what is left of the squad, at 14% against the old 2%. So the
+      // fixtures are the two shapes those name: flanked, and outnumbered.
+      // The fixture's own default is one operator against a whole raiding party, so LONER's new
+      // condition is already true there - the arms are the other way round from what they look
+      // like. Standing the rest of the squad up beside them is what turns it OFF.
+      const mates = (hero, count, at) => playerRoster.filter(x => x.id !== hero.id)
+        .slice(0, count).forEach((ally, i) => {
+          ally.gridPos = at ? at[i] : i + 2; ally.hp = ally.maxHp = 800;
           activeEntities.push(ally); turnQueue.push(ally);
-        }),
+        });
+      return {
+        lonerOut: ratio('LONER'),
+        lonerEven: ratio('LONER', (hero) => mates(hero, 8)),
+        packAlone: ratio('PACK_HUNTER'),
+        packOneSide: ratio('PACK_HUNTER', (hero) => { hero.gridPos = 2; mates(hero, 1, [1]); }),
+        pack: ratio('PACK_HUNTER', (hero) => { hero.gridPos = 2; mates(hero, 2, [1, 3]); }),
         firstBlood: ratio('FIRST_BLOOD'),
         duelist: ratio('DUELIST')
       };
     });
     const near = (v, want) => v > want - 0.08 && v < want + 0.08;
-    ok(`LONER pays with nobody beside them (x${fired.loner.toFixed(2)})`, near(fired.loner, 1.2));
+    ok(`LONER pays +40% while the enemy outnumbers what is left (x${fired.lonerOut.toFixed(2)})`,
+      near(fired.lonerOut, 1.4));
+    ok(`and nothing once the squad stands up beside them (x${fired.lonerEven.toFixed(2)})`,
+      near(fired.lonerEven, 1.0));
     ok('PACK HUNTER pays nothing alone', near(fired.packAlone, 1.0));
-    ok(`and +15% with an ally in the next rank (x${fired.pack.toFixed(2)})`, near(fired.pack, 1.15));
+    ok(`nor with an ally on one side only (x${fired.packOneSide.toFixed(2)}), which is what it used to pay for`,
+      near(fired.packOneSide, 1.0));
+    ok(`and +30% with one on both sides (x${fired.pack.toFixed(2)})`, near(fired.pack, 1.3));
     ok(`FIRST BLOOD punishes unhurt targets (x${fired.firstBlood.toFixed(2)})`, near(fired.firstBlood, 1.3));
     ok(`DUELIST works the enemy front (x${fired.duelist.toFixed(2)})`, near(fired.duelist, 1.15));
 

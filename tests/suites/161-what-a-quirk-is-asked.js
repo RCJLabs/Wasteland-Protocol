@@ -140,36 +140,124 @@ module.exports = {
     ok(`and the count did not change what the quirk pays (x${counted.near.toFixed(2)} at the front, x${counted.far.toFixed(2)} behind it)`,
       counted.near > 1 && counted.far === 1);
 
-    // ── The pair that shares one condition ───────────────────────────────────────
-    // PACK_HUNTER and LONER read the same neighbour test from opposite sides, so on any given
-    // swing exactly one of them would pay. Asserted because it is what makes the census reading
-    // of the two a single fact rather than two: whatever rate one fires at, the other is its
-    // complement, and a pool cannot hold both as live choices unless that rate is near half.
+    // ── The pair that used to share one condition ────────────────────────────────
+    // PACK_HUNTER and LONER read the SAME neighbour test from opposite sides, and M05's census
+    // is what that was worth: 98% and 2%. A three-deep line is three adjacent ranks, so nobody
+    // is ever alone. M05b split them onto two conditions that are genuinely different questions
+    // - who is beside you, and how many are in front of you - and these rows are the guard on
+    // that: they must no longer be complements, because a complementary pair is one fact.
     const pair = await page.evaluate(() => {
-      const probe = (alone) => {
+      const probe = (mates, foes) => {
         currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
         window.__clearField();
         const line = playerRoster.filter(c => c.gridPos > 0).sort((a, b) => a.gridPos - b.gridPos);
         const hero = window.__bare(line[0]);
-        hero.gridPos = 1; hero.hp = hero.maxHp = 900;
-        const mate = window.__bare(line[1]);
-        mate.gridPos = 2; mate.hp = alone ? 0 : 500; mate.maxHp = 500;
-        const foe = window.__dummy({ id: 'q0', hp: 400, maxHp: 400 });
-        activeEntities = [hero, mate, foe];
+        hero.gridPos = 2; hero.hp = hero.maxHp = 900;
+        const beside = mates.map((pos, i) => {
+          const m = window.__bare(line[i + 1]);
+          m.gridPos = pos; m.hp = m.maxHp = 500;
+          return m;
+        });
+        const hostiles = [];
+        for (let i = 0; i < foes; i++) hostiles.push(window.__dummy({ id: 'q' + i, hp: 400, maxHp: 400 }));
+        activeEntities = [hero, ...beside, ...hostiles];
         const read = (id) => {
           hero.quirk = { id, name: id };
           runStats.qk = {};
-          quirkDmgMult(hero, foe, 0);
+          quirkDmgMult(hero, hostiles[0], 0);
           return (runStats.qk[id] || {}).fired || 0;
         };
         return { pack: read('PACK_HUNTER'), loner: read('LONER') };
       };
-      return { together: probe(false), alone: probe(true) };
+      return { flankedAndEven: probe([1, 3], 2),     // both sides held, not outnumbered
+               flankedAndOut:  probe([1, 3], 9),     // both sides held AND outnumbered
+               oneSide:        probe([1], 1),        // an ally, but only on one side
+               aloneAndEven:   probe([], 1) };       // nobody beside, nobody spare either
     });
-    ok(`with the next rank standing, PACK HUNTER pays and LONER does not (${pair.together.pack}/${pair.together.loner})`,
-      pair.together.pack === 1 && pair.together.loner === 0);
-    ok(`with it down, the other way round (${pair.alone.pack}/${pair.alone.loner})`,
-      pair.alone.pack === 0 && pair.alone.loner === 1);
+    ok(`an ally on both sides pays PACK HUNTER and nothing else (${pair.flankedAndEven.pack}/${pair.flankedAndEven.loner})`,
+      pair.flankedAndEven.pack === 1 && pair.flankedAndEven.loner === 0);
+    ok(`an ally on one side pays neither, which is the change (${pair.oneSide.pack}/${pair.oneSide.loner})`,
+      pair.oneSide.pack === 0 && pair.oneSide.loner === 0);
+    ok(`being outnumbered pays LONER (${pair.flankedAndOut.loner}) and standing alone against one does not (${pair.aloneAndEven.loner})`,
+      pair.flankedAndOut.loner === 1 && pair.aloneAndEven.loner === 0);
+    // THE POINT OF THE SPLIT, as an assertion rather than a comment: there is now a state where
+    // BOTH pay and a state where NEITHER does. Under the old pair neither was reachable, because
+    // one condition was the other's negation and exactly one always held.
+    ok(`and the two are no longer one fact - both pay at once here (${pair.flankedAndOut.pack}/${pair.flankedAndOut.loner}), neither there (${pair.aloneAndEven.pack}/${pair.aloneAndEven.loner})`,
+      pair.flankedAndOut.pack === 1 && pair.flankedAndOut.loner === 1
+      && pair.aloneAndEven.pack === 0 && pair.aloneAndEven.loner === 0);
+
+    // LONER counts what is LEFT of the squad, not what was deployed - which is most of the point
+    // of it. A body on the floor is not standing between anybody and anything, so it has to stop
+    // counting the moment it goes down. Mutation testing found this: dropping the health filter
+    // from the count survived every row above, because none of them had a casualty in it.
+    const casualty = await page.evaluate(() => {
+      const probe = (down) => {
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+        window.__clearField();
+        const line = playerRoster.filter(c => c.gridPos > 0);
+        const hero = window.__bare(line[0]);
+        hero.gridPos = 2; hero.hp = hero.maxHp = 900;
+        const mates = [1, 3].map((pos, i) => {
+          const m = window.__bare(line[i + 1]);
+          m.gridPos = pos; m.maxHp = 500; m.hp = i < down ? 0 : 500;
+          return m;
+        });
+        const foes = [0, 1, 2].map(i => window.__dummy({ id: 'f' + i, hp: 400, maxHp: 400 }));
+        activeEntities = [hero, ...mates, ...foes];
+        // Both halves of the pair read "is this body still up", so both are probed on the same
+        // field: a casualty turns LONER on and PACK HUNTER off, and each direction has to be
+        // measured or one of them keeps counting the dead.
+        const read = (id) => {
+          hero.quirk = { id, name: id };
+          runStats.qk = {};
+          quirkDmgMult(hero, foes[0], 0);
+          return (runStats.qk[id] || {}).fired || 0;
+        };
+        return { loner: read('LONER'), pack: read('PACK_HUNTER') };
+      };
+      return { whole: probe(0), oneDown: probe(1), twoDown: probe(2) };
+    });
+    ok(`three standing against three does not pay LONER (${casualty.whole.loner}), and does pay PACK HUNTER (${casualty.whole.pack})`,
+      casualty.whole.loner === 0 && casualty.whole.pack === 1);
+    ok(`the moment one is on the floor LONER pays (${casualty.oneDown.loner}, ${casualty.twoDown.loner} with two down)`,
+      casualty.oneDown.loner === 1 && casualty.twoDown.loner === 1);
+    ok(`and PACK HUNTER stops, because a body on the floor is not standing beside anybody (${casualty.oneDown.pack})`,
+      casualty.oneDown.pack === 0 && casualty.twoDown.pack === 0);
+
+    // ── An operator rolled before a rewording does not carry the old promise ─────
+    // A quirk is stored as the whole pool object, not as an id, so a save written before M05b
+    // carries "+15% DMG with an ally in the next rank" on the card while hasQuirk - which
+    // matches on id - applies the new rule. That is the M03 defect exactly: a surface left
+    // saying something the engine stopped doing. The WORDS are re-resolved on load; the stats
+    // deliberately are not, because those were applied to the sheet when the quirk was rolled
+    // and re-resolving them would either double them or silently drop them.
+    const worded = await page.evaluate(() => {
+      const live = QUIRK_POOL.find(q => q.id === 'PACK_HUNTER');
+      const roster = [{ id: 'x', traits: [], hp: 80, maxHp: 80, dmgBase: 20, speed: 9,
+                        quirk: { id: 'PACK_HUNTER', name: 'PACK HUNTER',
+                                 desc: '+15% DMG with an ally in the next rank',
+                                 dmg: 0, hp: 0, spd: 0 } },
+                     { id: 'y', traits: [], hp: 80, maxHp: 80,
+                        quirk: { id: 'RECKLESS', name: 'RECKLESS', desc: 'stale words',
+                                 dmg: 5, hp: -15, spd: 0 } },
+                     { id: 'z', traits: [], hp: 80, maxHp: 80, quirk: null }];
+      const out = migrateTraits(JSON.parse(JSON.stringify(roster)));
+      const reck = QUIRK_POOL.find(q => q.id === 'RECKLESS');
+      return { desc: out[0].quirk.desc, want: live.desc,
+               stats: JSON.stringify([out[0].quirk.dmg, out[0].quirk.hp, out[0].quirk.spd]),
+               reckDesc: out[1].quirk.desc, reckWant: reck.desc,
+               // The stored stats are left exactly as the save had them.
+               reckStats: JSON.stringify([out[1].quirk.dmg, out[1].quirk.hp, out[1].quirk.spd]),
+               noQuirk: out[2].quirk };
+    });
+    ok(`a quirk rolled before the rewording reads the current promise ("${worded.desc}")`,
+      worded.desc === worded.want && !/next rank/.test(worded.desc));
+    ok(`and so does one whose words were never the point ("${worded.reckDesc}")`,
+      worded.reckDesc === worded.reckWant);
+    ok(`while the stats the save banked are left alone (${worded.reckStats})`,
+      worded.reckStats === '[5,-15,0]' && worded.stats === '[0,0,0]');
+    ok('and an operator with no quirk is not given one', worded.noQuirk === null);
 
     // ── Every draw site files what it drew ───────────────────────────────────────
     // Four places roll a quirk - the muster, a muster reroll, the Armory's reroll and a recruit
