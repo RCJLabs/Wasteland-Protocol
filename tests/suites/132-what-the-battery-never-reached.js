@@ -9,7 +9,7 @@
 // the runner: it can be driven with crafted input here.
 const path = require('path');
 const fs = require('fs');
-const { stripComments, namesIn, untouchedExports } = require('../coverage');
+const { stripComments, namesIn, untouchedExports, deadState } = require('../coverage');
 
 module.exports = {
   name: 'What the battery never reached',
@@ -106,5 +106,31 @@ module.exports = {
     const afterName = untouchedExports([pretend], sources.concat([pretend + '();']));
     ok(`naming a symbol is all it takes to count as reached (${beforeName.length} → ${afterName.length})`,
       beforeName.length === 1 && afterName.length === 0);
+
+    // ── N05/N06: and the same question one level in - state nothing reads ────────
+    // An export nobody names is untested; a field nobody reads is dead. The N-audit found two by
+    // hand: boss.learnedSig, which looked like the missing half of C09 and turned out to be a
+    // copy of a field that already answered the question, and ent.deathPlayed, a one-shot guard
+    // reset before it was ever written. L02's aura.type was the same shape and sat in the engine
+    // for four letter-series before anybody looked. Found by a scan, so the scan ships.
+    const engine = fs.readFileSync(path.join(__dirname, '..', '..', 'game.js'), 'utf8');
+    // The authoritative cooldown list, off the same `cd:` the deck and the sim read. A cooldown
+    // key is written by name and read as cooldowns[a.cd], which is a dynamic read this scan
+    // cannot see - deriving the list from the tables rather than allowing the pattern keeps the
+    // exception exactly as wide as the game actually is.
+    const cds = [...new Set([...engine.matchAll(/cd:\s*'(\w+)'/g)].map(m => m[1]))];
+    ok(`the cooldown keys come off the ability tables, not a pattern (${cds.length})`, cds.length > 20);
+    const dead = deadState(engine, cds);
+    ok(`no field is written onto a body and read by nothing${dead.length ? ': ' + dead.join(', ') : ''}`,
+      dead.length === 0);
+    // And the scan can see one when there is one, driven with crafted input rather than trusted.
+    ok('a field written and never read is found',
+      deadState('function f(e) { e.ghostField = 1; }', []).join() === 'ghostField');
+    ok('and one that is read is not',
+      deadState('function f(e) { e.ghostField = 1; if (e.ghostField) g(); }', []).length === 0);
+    // The chain case, which this scan got wrong on its first run: the read sat one line above the
+    // write and the regex had consumed the middle token before it could see the tail.
+    ok('including when the read is the tail of a chain (el.dataset.x)',
+      deadState('function f(el) { if (el.dataset.mark) return; el.dataset.mark = 1; }', []).length === 0);
   }
 };

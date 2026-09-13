@@ -10158,8 +10158,15 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
         // rather than something more.
         const learned = learnedMove(b, g);
         if (learned) {
+            // N05: `boss.learnedSig = learned.sig` sat here beside this line and was read
+            // nowhere - in the engine, the report or the suites. It looked like the missing half
+            // of C09 ("commanders that change, not just harden"): something wanting to say THIS
+            // ONE IS LEARNED, with the reader never written. Measured instead of assumed, and it
+            // is not that. NO COMMANDER IN BOSS_POOL CARRIES A SIGNATURE OF ITS OWN - all eight
+            // have only a `learned` block, and this is the single line in the file that ever
+            // assigns boss.sig. So on a commander a signature IS the learned move, `sig`
+            // already answers the question, and the copy carried nothing. Deleted.
             boss.sig = learned.sig;
-            boss.learnedSig = learned.sig;
             boss.intents = tradeIntents(b.intents, learned.replaces);
         }
         if (b.final) boss.isFinal = true;
@@ -12615,7 +12622,12 @@ function noteKill(victim, by = {}) {
 function raiseBody(ent, share) {
     if (!ent) return false;
     ent.hp = Math.max(1, Math.floor(ent.maxHp * share));
-    ent.deathPlayed = false; ent.bloomed = false; ent.martyred = false; ent.tallied = false;
+    // N06: `ent.deathPlayed = false` was reset here beside the three real one-shot flags and was
+    // never set true and never read - a guard reset before it was written and then never written.
+    // Nothing was broken behind it: both death sounds are gated on the transition (applyDamageHit
+    // early-returns on a body already at zero, and the tick's is `wasAlive && hp <= 0`), so a
+    // raised body's second death already plays once without a flag to remember the first.
+    ent.bloomed = false; ent.martyred = false; ent.tallied = false;
     ent.stunnedTurns = 0; clearBleed(ent);
     return true;
 }
