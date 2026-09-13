@@ -78,9 +78,23 @@ module.exports = {
     ok(`a recruit-blind random walk offers the node ${pc(spread.blind)}% of the time it is ` +
        `generated (over ${spread.blind.has} recruit-carrying sectors)`,
       spread.blind.offered / spread.blind.has > 0.6);
+    // THE ROW PRINTS THE QUANTITY IT JUDGES, which it did not until the N-sweep went looking for
+    // it. tests/noise.js measures the spread of every NUMBER an assertion prints; this one
+    // printed the aware rate and judged the DIFFERENCE between the two walks, so twenty
+    // batteries could say nothing about the thing that actually fires. That is the limit
+    // noise.js names in its own header with 76-bench, and this is the first row to close it.
+    //
+    // Reconstructed by hand off the kept runs, the difference is mean 0.0099, sd 0.0095, max
+    // 0.0340 against this bound - a spread 96% of its own mean, which is where noise.js's WIDEST
+    // list lives and exactly what that list says it is for: "a rate whose standard deviation is a
+    // large share of its own mean is a rate that will eventually walk into whatever bound it is
+    // judged by, even where the bound is on some quantity derived from it that no join can see".
+    // It will not reach the HEADROOM list - the bound sits 3.35 sd out and the pairing filter
+    // drops anything further than 0.75 of the bound's own magnitude, which is every healthy row.
+    const gap = Math.abs(spread.aware.offered / spread.aware.has - spread.blind.offered / spread.blind.has);
     ok(`a squad that always takes it when available cannot do better without help ` +
-       `(${pc(spread.aware)}%, same ceiling as the blind walk)`,
-      Math.abs(spread.aware.offered / spread.aware.has - spread.blind.offered / spread.blind.has) < 0.05);
+       `(${pc(spread.aware)}% against ${pc(spread.blind)}%, a gap of ${gap.toFixed(4)})`,
+      gap < 0.05);
     ok(`the Scout bench job removes the ceiling entirely (${pc(spread.scout)}%)`,
       spread.scout.offered === spread.scout.has);
 

@@ -165,22 +165,52 @@ module.exports = {
                mult: runStats.contractMult, names: contractNames(),
                log: fightLog ? { ...fightLog } : null, vacated: [...vacatedRanks],
                focus: momentumFocus, press: pressExtra, bg: combatBgFile, resumed: combatActive,
-               // M08b: carried so the row below can SAY WHY when it goes red. This assertion has
-               // flaked twice since K09 narrowed it, both times inside a full battery and never
-               // once in 25 runs of this suite alone - so it is load-dependent and a bare red
-               // line tells the next person nothing. resumeCombat leaves combatActive false on
-               // exactly one path (an empty turnQueue, which renders the map instead) and sets
-               // it true on the other before calling processTurn, which can end the fight - so
-               // the queue length and the screen separate "never came back" from "came back and
-               // finished". Costs one evaluate that was already happening.
-               why: { pending: !!pendingCombat, queue: turnQueue.length, screen: currentScreen,
-                      standing: activeEntities.filter(e => e.hp > 0).length },
+               // M08b carried these so the row below could SAY WHY when it went red, and its
+               // reading of resumeCombat was right: combatActive is left alone on exactly one
+               // path (an empty turnQueue, which renders the map instead) and set true on the
+               // other before calling processTurn, WHICH CAN END THE FIGHT. #209 confirmed that
+               // second half by construction, on the sister row below rather than on this one -
+               // put its last standing operator on 1 hp and it goes red 1 run in 8, reading "no
+               // throw" with the queue four deep and the screen still on combat. So the flake
+               // was never a failure to come back; it was a fight that came back and was lost on
+               // the turn it came back on. This row resumes with the carried body still in the
+               // save and so has one or two operators up rather than one - less exposed to the
+               // same thing, not immune to it, which is why it takes the same fix.
+               //
+               // screen: currentScreen was printing `undefined` - currentScreen is a FUNCTION,
+               // and JSON.stringify drops it. A diagnostic that has been live since M08b and
+               // never once printed the field it was added for.
+               why: { pending: !!pendingCombat, queue: turnQueue.length, screen: currentScreen(),
+                      standing: activeEntities.filter(e => e.hp > 0).length,
+                      oursUp: activeEntities.filter(e => e.isPlayer && e.hp > 0).length,
+                      foesUp: activeEntities.filter(e => !e.isPlayer && e.hp > 0).length },
                field: activeEntities.filter(e => e.isPlayer).map(e => e.id),
                rosterIds: playerRoster.map(c => c.id) };
     }, was.saved);
+    // ASSERT WHAT IT MEANS. "The fight comes back up" is turnQueue resolving non-empty - that is
+    // the one thing resumeCombat's early return does not do, and it is what this row exists to
+    // catch. combatActive was a proxy for it and a leaky one, because a resumed fight that ends on
+    // its own first turn is a fight that came back. Measured over eleven instrumented runs: the
+    // queue resolves 3-5 deep every time, and empty only when forced, so the discriminator is
+    // sharp.
+    //
+    // The wipe clause is the game's own rule, not an escape hatch. If a side is down, combatActive
+    // being false is the correct state, and the alternative is a test that demands the engine
+    // leave a finished fight running. Both sides, because a resumed turn can as easily kill the
+    // last hostile; that direction is not observed, it is the same code path.
+    //
+    // queue > 0 is EXACT for the real code, not approximate: the bail is `if (turnQueue.length ===
+    // 0) { renderMap(); return; }` and turnQueue is assigned above it, so a non-empty queue means
+    // the bail was not taken. The screen is carried as well because it is the bail's only other
+    // signature, and it catches a second early return if anyone adds one below the first - stated
+    // as "not the map" rather than "the combat screen", so it does not also demand that a fight
+    // which ended on its resumed turn still be showing the field when we look.
+    const back = (w, resumed) => w.queue > 0 && w.screen !== 'screen-map'
+                                 && (resumed === true || w.oursUp === 0 || w.foesUp === 0);
     ok(`the fight comes back up at all${now.resumed ? '' : ` (queue ${now.why.queue}, ${
-        now.why.standing} standing, on ${now.why.screen}, pendingCombat ${now.why.pending})`}`,
-      now.resumed === true);
+        now.why.standing} standing, ${now.why.oursUp} of ours against ${now.why.foesUp}, on ${
+        now.why.screen}, pendingCombat ${now.why.pending})`}`,
+      back(now.why, now.resumed));
     // ── #193: the body the roster cannot hand back ──────────────────────────────
     // A fallen operator is off playerRoster by design and on the field by design, which makes
     // them the one thing a snapshot cannot restore by id alone. Carried whole instead, the way
@@ -199,19 +229,54 @@ module.exports = {
     // this is the migrateRelics idiom, so it is exercised rather than asserted: the key is cut
     // out of the bytes and the load has to come back with a fight rather than a throw. It loses
     // the corpse, which is the behaviour every save on disk already has.
+    // #209. THIS ROW WENT RED TWICE UNDER A FULL BATTERY and never once in isolation - 19 of 19
+    // and then 20 of 20 across the N-sweep, against two sightings in about thirty batteries.
+    // Both times the message read "no throw", so the half that failed was `resumed`.
+    //
+    // IT IS NOT THE setTimeout(nextTurn) RACE this file describes sixty lines up. That one is
+    // real and it is why a save and its read-back share one evaluate - but it cannot be this:
+    // the load, the resume and the read of combatActive below are a single SYNCHRONOUS evaluate
+    // and a queued turn cannot fire inside one. The N-sweep's record attributed this row to that
+    // race and was wrong to.
+    //
+    // The cause, established by construction rather than waited for: resumeCombat ends with
+    // processTurn(), which runs the resumed turn INSIDE the same synchronous call. Put the last
+    // standing operator on 1 hp and a hostile's resumed turn kills them, the squad is wiped, and
+    // combatActive is false before the evaluate returns - 1 run in 8, reading "no throw", queue
+    // four deep, screen still on combat. Which is the failure exactly as it was seen.
+    //
+    // And the fixture sits right on that edge already. Over three unforced runs p2 - the only
+    // operator still up once the carried body is deleted - loaded at 0, 50 and 70 hp. It arrives
+    // ALREADY DEAD one run in three. A squad of one at arbitrary health, taking a hostile's turn
+    // the moment it resumes, is not a stable thing to demand stay standing.
+    //
+    // So the same fix as the row sixty lines up, for the same reason: assert that the fight came
+    // back, which is the queue resolving, and let combatActive be what it is.
     const older = await page.evaluate(saved => {
       const blob = JSON.parse(saved);
       delete blob.combat.fallen;
       currentSlot = 1;
       Store.set(BASE_SAVE_KEY + currentSlot, JSON.stringify(blob));
-      let threw = null;
-      try { loadGameState(); if (pendingCombat) resumeCombat(pendingCombat); }
-      catch (e) { threw = e.message; }
-      return { threw, resumed: combatActive,
+      let threw = null, hadPending = null;
+      const why = { pending: false, queue: 0, screen: null, oursUp: 0, foesUp: 0 };
+      try {
+        loadGameState();
+        hadPending = !!pendingCombat;
+        if (pendingCombat) resumeCombat(pendingCombat);
+        // Read AFTER the resume, because the resolved queue is the thing: queueIds is what the
+        // save asked for, turnQueue is what resolved, and deleting `fallen` above is precisely
+        // what makes those two differ. currentScreen is a function - called, not referenced.
+        why.pending = !!pendingCombat; why.queue = turnQueue.length; why.screen = currentScreen();
+        why.oursUp = activeEntities.filter(e => e.isPlayer && e.hp > 0).length;
+        why.foesUp = activeEntities.filter(e => !e.isPlayer && e.hp > 0).length;
+      } catch (e) { threw = e.message; }
+      return { threw, resumed: combatActive, hadPending, why,
                field: activeEntities.filter(e => e.isPlayer).map(e => e.id) };
     }, was.saved);
-    ok(`a save from before the body was carried still loads (${older.threw || 'no throw'})`,
-      older.threw === null && older.resumed === true);
+    ok(`a save from before the body was carried still loads (${older.threw || 'no throw'}`
+       + (older.resumed ? '' : `, ended on resume: ${older.why.queue} queued, ${older.why.oursUp}`
+          + ` up against ${older.why.foesUp}, on ${older.why.screen}`) + ')',
+      older.threw === null && older.hadPending === true && back(older.why, older.resumed));
     ok(`and comes back one short, the way it always did (${older.field.join(',')})`,
       older.field.length === was.field.length - 1 && !older.field.includes(was.orphans[0]));
     ok(`the handicaps signed for are still signed for (${now.contracts.join(', ')})`,

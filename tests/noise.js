@@ -79,17 +79,42 @@
 // would be worse here because the instrument says the row is fine.
 //
 // 101 is not reproduced either: zero in twenty, against two sightings in roughly thirty
-// batteries before it. Its own suite comment already names the mechanism - the engine runs on a
-// setTimeout(nextTurn) chain and a queued turn can fire between operations, end the fight and
-// flip combatActive - so what is missing is a rate, not a cause, and twenty batteries did not
-// supply one.
+// batteries before it.
 //
-// WHAT WOULD ACTUALLY CLOSE THESE. Not more batteries at this rate: another twenty buys about a
-// 2% chance of catching 87 and a 55% chance of catching 101. 87 wants its assertion to print the
-// difference it judges, at which point this file reaches it automatically and every future sweep
-// prices it for free. 101 wants the race closed at the source rather than measured - the suite
-// knows where it is - or the row taught to wait for a settled fight rather than to read
-// combatActive the instant resumeCombat returns.
+// ^^ AND THE PARAGRAPH THAT STOOD HERE NAMED THE WRONG MECHANISM. It said 101's own suite
+// comment already had the cause - "the engine runs on a setTimeout(nextTurn) chain and a queued
+// turn can fire between operations, end the fight and flip combatActive" - and that what was
+// missing was a rate, not a cause. That race is real and it is why a save and its read-back
+// share one evaluate, but IT CANNOT BE THIS ROW: the load, the resume and the read of
+// combatActive are a single SYNCHRONOUS evaluate, and a queued turn cannot fire inside one. I
+// wrote it into this file and into the item, off a reading of the wrong forty lines.
+//
+// The cause was found by CONSTRUCTING it instead of waiting for it, and it needed no rate at
+// all. resumeCombat ends with processTurn(), which runs the resumed turn inside the same
+// synchronous call. The fixture deletes the carried body, so exactly one operator is left
+// standing; when a hostile holds the resumed turn and its blow kills that operator, the squad is
+// wiped and combatActive is false before the evaluate returns. Forced by putting that operator
+// on 1 hp, the row goes red 1 run in 8 with the failure exactly as seen - "no throw", queue four
+// deep, screen still on combat. And the fixture already sits on that edge: over three unforced
+// runs the operator loaded at 0, 50 and 70 hp. It arrives already dead one run in three.
+//
+// So the row was never flaky about coming back. It came back and was LOST on the turn it came
+// back on, which is the game working. Both rows in 101 that read combatActive now assert the
+// thing they meant - that the fight came back, which is turnQueue resolving and the screen not
+// being the map - and print what happened when it then ended. Held by five mutations: forcing
+// resumeCombat's bail reds both rows, and the wipe path passes ten of ten while saying so.
+//
+// TWO LESSONS, and the second is the expensive one. First: twenty batteries bought a rate and no
+// cause, while one afternoon of constructing the failure bought the cause and made the rate
+// irrelevant. When a flake has a small number of candidate mechanisms, FORCE EACH ONE rather
+// than sampling for it - the sweep below reached the same disposition on M04 and it was right
+// there too, but only because M04 had no reachable construction. Second: the sentence above was
+// written from a comment forty lines from the row it described, and read as established for a
+// commit. A mechanism that has not been forced is a hypothesis no matter how well it reads.
+//
+// WHAT ACTUALLY CLOSED THESE. Not more batteries: another twenty was worth about a 2% chance of
+// catching 87 and 55% of catching 101. 87 now prints the difference it judges, so this file
+// reaches it automatically and every future sweep prices it for free. 101 is closed at the row.
 
 // ── WHAT THE M04 SWEEP FOUND, AND WHAT IT GOT WRONG ────────────────────────────────────
 // Twenty-four batteries on the tree at 161ad13. 4,376 assertions, 341 printing a number that
