@@ -3265,7 +3265,9 @@ const CODEX = [
     { id: 'STATUSES', title: 'STATUS MARKS', body: () => [
         'Every mark on a unit reads four ways, so none of them depends on telling one colour from another.',
         'The letter says which it is. The border says it again by shape. The number is how many turns are left.',
-        ...STATUSES.map(s => `${s.letter} - ${s.name}: ${s.desc}`),
+        // The codex has no body to describe, so a two-sided badge prints both sides here. Reading
+        // s.desc straight would have rendered the MARKED row as the source of a function.
+        ...STATUSES.map(s => `${s.letter} - ${s.name}: ${s.codex || s.desc}`),
         'Corroding a target is the answer to anything that re-plates itself. Oiling one is the setup for fire.'
     ] },
     { id: 'RESISTANCE', title: 'ARMOUR AND RESISTANCE', body: () => [
@@ -10960,7 +10962,10 @@ function portraitFor(ent) {
 // and its remaining turns now, so colour is the last of four cues rather than the only one.
 const STATUSES = [
     { key: 'bleedingTurns', name: 'BLEED',    letter: 'B', icon: '\u{1F4A7}', cls: 'st-bleed',
-      desc: 'Loses 8% of its health at the start of each of its turns.' },
+      // N03: MAXIMUM health. The tick is Math.floor(maxHp * 0.08) and this said "its health",
+      // which reads as current - five times gentler than the truth on a body at a fifth of its
+      // bar, and that is precisely the moment a player is reading the badge to decide.
+      desc: 'Loses 8% of its MAXIMUM health at the start of each of its turns.' },
     { key: 'stunnedTurns',  name: 'STUN',     letter: 'S', icon: '\u{1F4AB}', cls: 'st-stun',
       desc: 'Loses its turn entirely.' },
     { key: 'armorTurns',    name: 'BRACED',   letter: 'A', icon: '\u{1F6E1}\uFE0F', cls: 'st-armor',
@@ -10968,13 +10973,34 @@ const STATUSES = [
     { key: 'oiledTurns',    name: 'OILED',    letter: 'O', icon: '\u{1F6E2}\uFE0F', cls: 'st-oil',
       desc: 'Takes 15 more from energy, and fire ignites it for double.' },
     { key: 'corrodedTurns', name: 'CORRODED', letter: 'C', icon: '\u{1F9EA}', cls: 'st-corrode',
-      desc: 'Armour counts as zero against every hit.' },
+      // Its OWN armour. mitigate zeroes `ac` for a corroded body and then adds an escort's plate
+      // back on the line below, so a guarded lieutenant keeps twenty of it - which is exactly the
+      // fight where somebody reads this badge and decides the acid did the job.
+      desc: 'Its own armour counts as zero. A living escort still shields it.' },
+    // N02: THE ONE BADGE THAT MEANS TWO DIFFERENT THINGS, so it is the one that takes a function.
+    // On a hostile it is the squad's own mark: M09 established that MARK_BONUS reads any damaging
+    // move by ANYONE, not a sniper's next shot, and rewrote the CALLED SHOT card to say so - and
+    // left this badge describing the rule as it stood before that. "Ranged" was never true after
+    // M09 and is the one surface K04 put on the field so a player can read the fight off it.
+    //
+    // On an operator it is the Carrion's mark, which no MARK_BONUS reads at all: the steering
+    // lives in `lockOn`, which turns every hostile onto that body and hits 2.2x harder. Same
+    // counter, same chip, opposite meaning - and K04's own rule for these is that the badge
+    // describes whoever it sits on.
     { key: 'markedTurns',   name: 'MARKED',   letter: 'M', icon: '\u{1F3AF}', cls: 'st-mark',
-      desc: 'Ranged, and lined up to be executed next turn.' }
+      desc: t => t && t.isPlayer
+        ? 'Everything out there has turned to look at them, and hits far harder for it.'
+        : 'The next damaging blow from anyone lands 50% harder and spends it. An Execute doubles instead.',
+      codex: 'on one of theirs, the next damaging blow from anyone lands 50% harder and spends it '
+           + '(an Execute doubles instead); on one of yours, everything out there has turned to look.' }
 ];
+// A description may be a function of the body it is sitting on, because one of the six means
+// opposite things on the two sides of the field. Everything else hands back a string and reads
+// exactly as it did.
+function statusDesc(s, ent) { return typeof s.desc === 'function' ? s.desc(ent) : s.desc; }
 function statusChips(ent) {
     return STATUSES.filter(s => (ent[s.key] || 0) > 0).map(s =>
-        `<span class="st ${s.cls}" title="${s.name}: ${s.desc}" aria-label="${s.name}, ${ent[s.key]} turns left">` +
+        `<span class="st ${s.cls}" title="${s.name}: ${statusDesc(s, ent)}" aria-label="${s.name}, ${ent[s.key]} turns left">` +
         `<b>${s.letter}</b><i>${ent[s.key]}</i></span>`).join('');
 }
 
@@ -13758,7 +13784,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
-    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, noteReach, noteFront, noteHaul, noteCover, noteLanding, noteMark, noteCombo, noteBleed, bleedFor, bleedSet, clearBleed, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, MARK_BONUS, CALLED_SHOT_MULT, hasTrait, traitOnField,
+    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, statusDesc, noteReach, noteFront, noteHaul, noteCover, noteLanding, noteMark, noteCombo, noteBleed, bleedFor, bleedSet, clearBleed, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, MARK_BONUS, CALLED_SHOT_MULT, hasTrait, traitOnField,
     PERK_DMG_FLAT, PERK_DMG_MULT, PERK_SPD, PERK_MAXHP, PERK_HP_FLAT,
     perkStacks, perkDmgFlat, perkDmgMult, syncRankPerks, syncAllRankPerks, bankPerkStack, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
