@@ -2433,6 +2433,40 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O03: THE CAPSTONE NOBODY BUYS IS BOUGHT 3.3 TIMES A RUN ────────────────────────────
+// Filed off two lines of this report as a dead feature - "90% of points on a stat card, 10% on a
+// signature, 0% on a capstone" beside "3.21 taken on promotion, 0.00 bought at the Outpost" - and
+// REFUTED by the first measurement taken of it. Both halves of that second line are PURCHASES AT
+// THE SAME PRICE. assignPerk charges capstoneCost() whichever door the card came through, so the
+// 0.00 is a door attribution and not a feature nobody buys.
+//
+// Instrumented at the moment a banked point is in hand, every reason exclusive, 150 expeditions:
+//
+//   levelShort   5522  (90%)   the body is under CAPSTONE_LEVEL
+//   alreadyHas    640  (10%)   at the gate, forks shut - and holding the capstone already
+//   forksOpen       0          never once the blocker
+//   tooDear         0          NEVER ONCE unaffordable
+//   bought          0          which is the row that started this
+//
+// THE PRICE IS NOT THE GATE AND NEVER WAS. Zero of 6,162 opportunities were open-and-unaffordable,
+// so any proposal to cut CAPSTONE_BUY_BASE would have moved a number that was already never read.
+// The mechanism is order, not economy: rollPerkOffer puts the capstone FIRST the moment it opens,
+// and this file's promotion policy takes it first by name, so by the time the Outpost loop runs
+// the trait is held and capstoneOpen is false. The shelf never sees one still open.
+//
+// THE SHELF IS STILL REACHABLE FOR A PLAYER, which is the part that keeps this from being a bug.
+// capstoneOpen shuts on holding the trait, not on having been offered it, so a player who
+// DECLINES the capstone at the promotion screen finds it on the Outpost shelf afterwards. What is
+// unreachable is the shelf under a policy that always takes it at the first door - and that is
+// this harness's taste, not the game's shape. D05's trap, and I walked into it filing the item.
+//
+// WHAT SHIPPED IS THE WORDING. "taken on promotion" against "bought at the Outpost" reads as free
+// against paid; it is the sentence that produced this whole item. Now "through the promotion
+// screen / off the Outpost shelf - same card, same price". An instrument that invites a misreading
+// is an instrument bug, the same class as N04's unnamed scale and D06's unnamed arm.
+//
+// NO DIAL MOVES. CAPSTONE_LEVEL and CAPSTONE_BUY_BASE both stay.
+
 // ── O01: BOTH PARKED DIALS RE-MEASURED, BOTH LEFT ALONE - AND ONE MOVED ON ITS OWN ────
 // The two balance calls parked for the owner, measured on the current tree before anything was
 // touched. Three careers of 150, default policy (perks random, draft line, order long), taken
@@ -7001,7 +7035,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       : 'no player turns recorded');
   }
   line('signatures bought at the Outpost', `${mean(nums('sigsBought')).toFixed(1)} per run`);
-  line('capstones reached', `${mean(nums('capsTaken')).toFixed(2)} taken on promotion, ${mean(nums('capsBought')).toFixed(2)} bought at the Outpost, per run`);
+  // O03: BOTH NUMBERS ARE PURCHASES AT THE SAME PRICE, and the wording here used to be "taken on
+  // promotion" against "bought at the Outpost" - which reads as free against paid. It is not:
+  // assignPerk charges capstoneCost() whichever door the card came through. The 0.00 on the
+  // right is a DOOR ATTRIBUTION, not a dead feature, and I filed it as a dead feature off this
+  // line before measuring it. rollPerkOffer puts the capstone first the moment it opens and the
+  // promotion policy above takes it first, so the shelf never sees one still open. A player who
+  // DECLINES it at the promotion screen finds it on the shelf afterwards - capstoneOpen only
+  // shuts once the trait is held - so the right-hand door is reachable, just not by this policy.
+  line('capstones bought', `${mean(nums('capsTaken')).toFixed(2)} through the promotion screen, `
+    + `${mean(nums('capsBought')).toFixed(2)} off the Outpost shelf, per run - same card, same price`);
   // M02: what the five training cards actually get. A census - a point either bought a stat card
   // or it did not - so it reads at any sample size. M04 then made the five situational and gave
   // this harness a policy (--perks), so the split below is read against the policy that produced
