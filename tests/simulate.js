@@ -2433,6 +2433,53 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O06: THE ROAD'S FORKS, COUNTED - AND "FIGHT NODES DO NOT DIFFER" IS REFUTED ────────
+// Scoping a phase that would give factions a memory of you, on the premise that fight nodes do
+// not differ so the 58% of routing decisions that are all-fight are not really decisions. The
+// premise is wrong, and the number that was supposed to support it says something else.
+//
+// 12,265 routing decisions over 150 expeditions, bucketed by what was actually on the table.
+// The four buckets are exclusive and sum to the total, which is how they should be read:
+//
+//   a forced step, one node           5,624   46%
+//   a fight against something else    2,887   24%
+//   fights whose factions differ      2,346   19%
+//   the same faction twice            1,408   11%
+//
+// FIGHT NODES DIFFER, AND THE ROAD OFFERS THE CHOICE. Of the forks carrying two or more fights
+// and nothing else, 62% put two DIFFERENT factions side by side - a different pool, formation,
+// ground and sky in each. H11 established the faction-formation tie; this says a player meets it
+// as a choice rather than as a sequence. So the phase's premise is refuted before it was built.
+//
+// A NUMBER I DERIVED AND HAD TO GO BACK FOR. The first pass at this table was computed from an
+// earlier instrument's buckets rather than printed by this one, and it was wrong twice over: it
+// put the forced step at 33% by assuming every single-node fork was a fight, when a lone CAMP or
+// SHOP is just as forced, and one of its four rows was an inference with no measurement under it
+// at all. Re-run against the census above, every figure here is one the report printed.
+//
+// THE REAL SHAPE IS THE FORCED STEP. NEARLY HALF of every routing decision in the game offers
+// exactly one node. availableNodeIds returns the current node's edges, so that is a node with a single
+// exit, and generateSectorMap says where they come from: tiers are 2 or 3 wide, edges are a
+// proportional window, and the window is ONE node wide whenever the two tiers are the same width
+// - widened by `if (hi + 1 < b.length && rng() < 0.5) src.edges.push(...)`. The generator's own
+// comment calls that extension "the forks that make routing a real decision instead of a
+// corridor". It is a deliberate density knob sitting at 0.5, and at 0.5 nearly half the road is
+// corridor. The convergence onto the boss at the last tier is forced by design and is part of it.
+//
+// SO THE DIAL EXISTS AND IS ONE NUMBER. Nothing moves on this commit - raising it lengthens every
+// run's options and would move the wall, which is the owner's call - but "the road is not a
+// decision often enough" now has a measured size and a single place to change it.
+//
+// WHAT IS LEFT OF THE ORIGINAL IDEA, stated so it is not quietly dropped: the choice between two
+// factions exists but carries NO MEMORY. There is no per-faction state anywhere in the engine -
+// FACTIONS holds bg, weather, ground, allies and a couple of caps, and `allies` is read only by
+// N14's deep-tier pool mixing. Standing is per-CAST, not per-faction. So fighting the Choir all
+// run changes nothing about the Choir. That is a real phase, but it is about giving an existing
+// choice consequence rather than creating one, which is a different pitch from the one filed.
+//
+// SHIPPED: the four-way fork census above, because "58% all fights" was the line that made the
+// wrong pitch sound right, and a corridor and a crossroads should never read the same again.
+
 // ── O05: THE ELITE OFFER WAS BUILT, MEASURED, AND REVERTED - AND IT PRICED THE CHANNEL ─
 // O04 found 56% of the relic shelf arriving from elites as a die roll with nothing asked. The
 // change that followed from it: hand over TWO cards instead of one, so the biggest channel asks
@@ -5711,6 +5758,20 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     stat.forks++;
     if (avail.some(n => !isFight(n))) stat.forksWithChoice++;
     if (avail.every(n => isFight(n))) stat.forksAllFights++;
+    // O06: A FORK OF ONE IS NOT A FORK, and "58% of decisions were all fights" does not separate
+    // a corridor from a choice between two different roads. Bucketed by how many fight nodes were
+    // actually on the table and how many DISTINCT factions they were, because a fight against the
+    // Choir and a fight against the Carrion are different fights - different pool, formation,
+    // ground and sky - and counting them as "two fights" hides the only variety the road has.
+    {
+      const fightsHere = avail.filter(isFight);
+      const kinds = [...new Set(fightsHere.map(n => n.type))];
+      stat.forkShape = stat.forkShape || {};
+      const k = avail.length === 1 ? 'forced'
+              : fightsHere.length <= 1 ? 'oneFightPlusOther'
+              : kinds.length > 1 ? 'factionsDiffer' : 'sameFactionTwice';
+      stat.forkShape[k] = (stat.forkShape[k] || 0) + 1;
+    }
     stat.takenNodes[kindOf(node)] = (stat.takenNodes[kindOf(node)] || 0) + 1;
     if (!isFight(node)) stat.tookNonFight++;
     // K10: the bench arm. Stamped here rather than at generation because a node's sky is rolled
@@ -7903,6 +7964,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   line('node kinds taken', shareOf(took, tookTot) || 'none');
   const forks = tot('forks'), withChoice = tot('forksWithChoice'), allFights = tot('forksAllFights');
   line('routing decisions faced', `${forks}`);
+  { const sh = {}; results.forEach(r => Object.entries(r.forkShape || {}).forEach(([k, v]) => sh[k] = (sh[k] || 0) + v));
+    const t = Object.values(sh).reduce((a, b) => a + b, 0);
+    const say = k => `${sh[k] || 0} (${t ? Math.round(100 * (sh[k] || 0) / t) : 0}%)`;
+    line('  a forced step, one node on the table', say('forced'));
+    line('  a fight against something else', say('oneFightPlusOther'));
+    line('  fights whose factions differ', say('factionsDiffer'));
+    line('  the same faction twice', say('sameFactionTwice')); }
   line('  with something other than a fight on offer', `${withChoice} (${forks ? (withChoice / forks * 100).toFixed(0) : 0}%)`);
   line('  where every option was a fight', `${allFights} (${forks ? (allFights / forks * 100).toFixed(0) : 0}%)`);
   line('  and a non-fight was actually taken', `${tot('tookNonFight')} (${forks ? (tot('tookNonFight') / forks * 100).toFixed(0) : 0}%)`);
