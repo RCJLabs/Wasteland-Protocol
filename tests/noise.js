@@ -38,6 +38,59 @@
 // needs samples before it settles. Twenty resolves a 3 sd margin comfortably and is what the K03
 // sweep used; ten will find the rows already firing and not much else.
 
+// ── THE N-SWEEP: TWENTY BATTERIES, NOTHING RED, AND NEITHER ROW IT WAS RUN FOR ─────────
+// Run to settle two rows that had each gone red once under a full battery and passed ~20 of 20
+// in isolation: 87-recruit-routing's aware-vs-blind row, and 101-what-the-save-keeps' pre-fallen
+// save row. Twenty batteries on the tree at 82058b8. 4,637 assertions, 347 printing a number
+// that moves, 35 joined to a bound. NOTHING WENT RED - which is the second sweep in a row to be
+// started for a specific flake and reproduce none of it.
+//
+// AND NEITHER ROW APPEARS IN THE REPORT AT ALL, for two different structural reasons. Both are
+// limits this file already names in its own header, showing up together:
+//
+//   87  judges `Math.abs(aware - blind) < 0.05` - a bound on a DIFFERENCE that is never printed.
+//       The header calls this one out by name with 76-bench, and no pairing will ever reach it.
+//   101 prints "(no throw)" and no number at all, so there is nothing for a spread to be
+//       measured on. Only the red list can ever speak for it, and the red list was empty.
+//
+// So the sweep answered them from the KEPT RUNS rather than from the report, which is what
+// --keep is for. 87 prints both walks on adjacent lines, so the quantity the assertion actually
+// judges can be reconstructed:
+//
+//   blind walk          mean 69.28%  sd 0.83  seen 67.7 - 70.9
+//   aware walk          mean 69.44%  sd 1.24  seen 67.3 - 72.1
+//   |aware - blind|     mean 0.0099  sd 0.0095  max 0.0340   against a bound of 0.05
+//
+// THE PREMISE THE ITEM WAS FILED ON IS REFUTED. "Calibrated near its own noise" is what K03
+// found in 83-ground - a floor 2.7 sd below the mean, red one battery in three. This is not
+// that. The two walks are independent draws, so the difference carries sd = hypot(0.83, 1.24) =
+// 1.49 points, the bound sits 3.35 sd out, and the half-normal that implies predicts a mean
+// |diff| of 0.0119 against the 0.0099 observed - the model fits. A 3.35 sd two-tailed bound
+// fires about once in 1,240 batteries.
+//
+// IT FIRED ONCE IN THE SIX BATTERIES BEFORE THIS SWEEP. One in 26 observed against one in 1,240
+// predicted, and not reproduced in twenty more. Those do not reconcile and one occurrence cannot
+// say why. Recorded as unexplained rather than explained badly - which is the same disposition
+// M04's sweep reached three paragraphs down, for the same reason, and #192 reached before that.
+//
+// NO BOUND MOVES. Widening a tolerance that has 3.35 sd of headroom, to satisfy one occurrence
+// the measurement says should not have happened, is precisely "a change made to satisfy an
+// instrument rather than the game" - which this file warns against in the M04 note below, and
+// would be worse here because the instrument says the row is fine.
+//
+// 101 is not reproduced either: zero in twenty, against two sightings in roughly thirty
+// batteries before it. Its own suite comment already names the mechanism - the engine runs on a
+// setTimeout(nextTurn) chain and a queued turn can fire between operations, end the fight and
+// flip combatActive - so what is missing is a rate, not a cause, and twenty batteries did not
+// supply one.
+//
+// WHAT WOULD ACTUALLY CLOSE THESE. Not more batteries at this rate: another twenty buys about a
+// 2% chance of catching 87 and a 55% chance of catching 101. 87 wants its assertion to print the
+// difference it judges, at which point this file reaches it automatically and every future sweep
+// prices it for free. 101 wants the race closed at the source rather than measured - the suite
+// knows where it is - or the row taught to wait for a settled fight rather than to read
+// combatActive the instant resumeCombat returns.
+
 // ── WHAT THE M04 SWEEP FOUND, AND WHAT IT GOT WRONG ────────────────────────────────────
 // Twenty-four batteries on the tree at 161ad13. 4,376 assertions, 341 printing a number that
 // moves, 35 of those joined to a bound. NOTHING WENT RED across the sweep - which is itself a
