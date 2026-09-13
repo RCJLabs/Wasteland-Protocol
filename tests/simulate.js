@@ -2433,6 +2433,40 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O04: WHERE THE RELIC SHELF COMES FROM, AND IT IS NOT THE DECISION ──────────────────
+// A run ends holding 10.6 relics of a pool of 20, and every non-cursed one lands in 67-86% of
+// runs - so two runs end with nearly the same shelf and a relic is a collection rather than a
+// build. Before proposing scarcity, the obvious question: 2.5 commander offers a run cannot
+// supply ten relics, so WHERE DO THEY COME FROM. Tagged at every acquisition site in the engine,
+// 150 expeditions, 1,498 relics:
+//
+//   FIGHT_DROP        834  56%   an elite node, unconditional
+//   COMMANDER_OFFER   371  25%   three cards, pick one - the only one that is a decision
+//   CITADEL_CACHE     140   9%   stocked at the muster
+//   EVENT_DRAW2       114   8%   one event, two relics at once
+//   shop, three paths  39   3%   260 scrap, 180 scrap, and a shelf item
+//   MAGPIE x3, CITADEL_SPOT, CAMP_CACHE   0   not reached by this policy
+//
+// FIFTY-SIX PER CENT OF THE SHELF IS A DIE ROLL NOBODY MAKES. `if (isCurrentNodeElite) { const
+// rDrop = rollRelic(); ... }` - no chance gate on the relic itself, one per elite cleared, and
+// rollRelic's pool filters CURSED out, so the largest channel is all upside with no decision and
+// no cost attached. The channel that IS a decision, the commander's three cards, is a quarter of
+// what a run ends holding.
+//
+// The engine says this about itself two lines under the drop: "A commander is worth a decision
+// rather than a die roll, so it hands over three". The distinction is already the design's; the
+// die roll is simply the bigger supplier.
+//
+// WHAT IS THE GAME AND WHAT IS THE ROBOT. The structure is the game's: an elite hands over a
+// relic with nothing asked. The RATE is this policy's - it takes 1,303 of 1,379 elites offered
+// (94%), and a player who routes around elites sees fewer. So "56%" is the share under a squad
+// that fights everything; the shape - that the biggest channel asks nothing - holds at any rate.
+// 834 drops from 1,303 elites is 64%; the other 36% found the pool already empty and paid scrap.
+//
+// NOTHING SHIPPED ON THIS COMMIT. The census is the deliverable and any change here moves the
+// relic economy, which moves the wall, and the wall's target is the owner's - the same reason
+// J04 and O01 recorded and stopped.
+
 // ── O03: THE CAPSTONE NOBODY BUYS IS BOUGHT 3.3 TIMES A RUN ────────────────────────────
 // Filed off two lines of this report as a dead feature - "90% of points on a stat card, 10% on a
 // signature, 0% on a capstone" beside "3.21 taken on promotion, 0.00 bought at the Outpost" - and
