@@ -118,5 +118,29 @@ module.exports = {
       /which is \$\{\(picked \/ turns \* 100\)/.test(sim) && /of the move tally M06 read/.test(sim));
     ok('and the free actions are printed beside the turn count rather than folded into it',
       /plus \$\{free\} tactics bought without spending one/.test(sim));
+
+    // ── N04: and WHICH SCALE, which is the same question one step further out ───
+    // A figure divided by the run count is a per-career figure, and a reader who cannot tell it
+    // from a total across the sample cannot use either. #197 tier A found the M11 combo block
+    // printing "667 lethal" - a raw total - on a line whose other figures were already divided
+    // by 150, so it read as 4.4 a career being 667. The guard tier A shipped was written against
+    // the SPELLING (a bare sum()) and missed the same defect in its own bleed block one screen
+    // below, where the leak was a bare FIELD instead.
+    //
+    // Written against the rule rather than the spelling now, and it is a simple rule: a line
+    // that divides by n is printing a per-career figure and has to say so where the reader is
+    // looking. A line that names its denominator another way - "of ${n}", "% of runs", "mean" -
+    // has already answered the question and is exempt.
+    {
+      const names = /a career|a run|per run|each career|\bmean\b|of \$\{n\}|% of runs/;
+      const unscaled = [];
+      for (const m of sim.matchAll(/line\((.*?)\);\n/gs)) {
+        const c = m[1];
+        if (c.length > 1200 || !/\/\s*n\b|per\(/.test(c) || names.test(c)) continue;
+        unscaled.push(sim.slice(0, m.index).split('\n').length);
+      }
+      ok(`every per-career figure in the report says so${unscaled.length ? ' - line ' + unscaled.join(', ') : ''}`,
+        unscaled.length === 0);
+    }
   }
 };

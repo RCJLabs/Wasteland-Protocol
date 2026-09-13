@@ -7262,8 +7262,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // The column this census exists for. Sorted by it, because that IS the ranking.
       const prem = rows.filter(([, v]) => v.fired > v.pierced)
                        .sort((a, b) => b[1].premium - a[1].premium);
-      line('  damage the pairing itself added, points a career',
-        prem.map(([k, v]) => `${k.toLowerCase()} ${Math.round(v.premium / n)}`).join(', ') || 'none');
+      // N04: TOTALS, like every other count in this block and like nine of the eleven censuses in
+      // this file. It read "points a career" and sat between two lines of raw totals, which is
+      // the defect #197 tier A found in the bleed block and I shipped again here one commit
+      // earlier. Within a block the scale has to be one thing; across blocks the header records
+      // state their own, and the per-firing line below is a rate and belongs to neither.
+      line('  damage the pairing itself added, points across the sample',
+        prem.map(([k, v]) => `${k.toLowerCase()} ${v.premium}`).join(', ') || 'none');
       // Per firing, against the whole swing it sat on - the second figure is the context for the
       // first. A 2.0x that reads half its swing is the arithmetic working; anything far off that
       // is armour or a resistance eating into the difference, which is a real effect and not a
@@ -7330,8 +7335,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // first. Real information rather than a rounding error - it is the whole of what a cleanse
       // is worth, seen from the other side.
       const dead = rows.filter(([, v]) => v.applied > 0 && !v.ticks);
-      if (dead.length) line('  applied but never ticked once',
-        dead.map(([k, v]) => `${k.toLowerCase()} ${v.applied}`).join(', '));
+      // N04: through per(), like every other figure in this block. This line read v.applied raw
+      // and the scale guard #197 tier A shipped did not catch it, because that guard looked for
+      // a bare sum() and this is a bare FIELD. The guard below is written against the shape
+      // rather than the spelling now.
+      if (dead.length) line('  applied but never ticked once, a career',
+        dead.map(([k, v]) => `${k.toLowerCase()} ${(v.applied / n).toFixed(1)}`).join(', '));
       // THE MEASUREMENT THAT DECIDES THE NEXT ITEM. Seven of the nineteen sites ASSIGN the
       // counter rather than raising it, so a SHIV's two turns can overwrite a five-turn BARBED
       // SHOT. #197 tier A deliberately did not fix that - an instrument that changes the game
