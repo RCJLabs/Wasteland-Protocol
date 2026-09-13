@@ -96,5 +96,26 @@ module.exports = {
       /_at: at, _cls: cls/.test(fs.readFileSync(path.join(root, 'game.js'), 'utf8')));
     ok('the report says plainly when a whole half of the content never fired',
       /THE SECOND HALF OF EVERY PAIR HAS NEVER FIRED HERE/.test(sim));
+
+    // ── M10: and what the damage column is not ─────────────────────────────────
+    // M10 measured the fork with both halves firing and found the wall unmoved, then found its
+    // own sensitive measure useless for ranking them: the window is the overdrive's own
+    // resolution, and the second half of nearly every pair spends its value after that - burns,
+    // bleeds, corrode, a cleanse, a cost to its holder. The bias runs one way. A column that
+    // reads like a ranking and is not one has to say so where it prints, not only in a header
+    // nobody scrolls to, so these rows hold the caveat on the line itself.
+    ok('the per-firing column names itself as something other than a ranking',
+      /NOT a ranking - see above/.test(sim));
+    ok('and the note above it names the mechanism rather than just warning',
+      /BACKBURNER's three turns of burning/.test(sim) && /the bias runs one way/.test(sim));
+    const delayed = await page.evaluate(() => {
+      const second = Object.values(OVERDRIVES).filter(p => p.length > 1).map(p => p[1]);
+      // The claim the caveat rests on: the second halves really are the delayed ones.
+      return { total: second.length,
+               delayed: second.filter(o => /burning|bleed|corrode|oil|cleanse|heal|costs/i.test(o.desc)).map(o => o.id) };
+    });
+    ok(`${delayed.delayed.length} of ${delayed.total} second halves spend their value after the turn they fire in (${
+        delayed.delayed.map(i => i.toLowerCase()).join(', ')})`,
+      delayed.delayed.length >= 5);
   }
 };

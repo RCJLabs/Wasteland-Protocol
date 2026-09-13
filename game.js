@@ -11785,9 +11785,17 @@ function resolveAction(targetId) {
         if (runStats) {
             runStats.od = runStats.od || {};
             const at = pair.findIndex(o => o.id === variant.id);
-            const row = runStats.od[variant.id] = runStats.od[variant.id] || { fired: 0, _at: at, _cls: cls };
+            const row = runStats.od[variant.id] = runStats.od[variant.id] || { fired: 0, dmg: 0, kills: 0, _at: at, _cls: cls };
             row.fired++;
         }
+        // M10: what the bar actually bought, measured as the hostile line's health before and
+        // after rather than by adding up the branches - this block has a dozen of them and an
+        // overdrive that pierces, revives or oils would be counted by some and not others. Taken
+        // off activeEntities at both ends so a body that dies inside the blast still counts the
+        // health it lost. Careers are the outcome measure and this is the sensitive one: K06 put
+        // the win-count floor at about fourteen for three careers an arm, which cannot resolve a
+        // single button, while damage is a figure with tens of thousands of swings behind it.
+        const odHpBefore = activeEntities.filter(e => !e.isPlayer).reduce((a, e) => a + Math.max(0, e.hp), 0);
         pendingOverdrive = null;
         momentum = 0; addMomentum(0); playSFX('overdrive'); triggerGlitch();
         log(`> ${actEnt.name} unleashed ${variant.name}!`, "log-combo");
@@ -11880,6 +11888,14 @@ function resolveAction(targetId) {
         // Everything the overdrive killed is counted before the fight is allowed to end, so a
         // sweep that wins the node still books the kills it made on the way.
         if (odKills >= OVERKILL_AT) checkBountyProgress('OVERKILL');
+        // Booked before odKills is cleared, so the kill count and the damage come off the same
+        // firing. A heal-only overdrive books zero here and that is the honest number for it -
+        // two of the nine pairs are heal against heal, and damage cannot rank those.
+        if (runStats && runStats.od && runStats.od[variant.id]) {
+            const after = activeEntities.filter(e => !e.isPlayer).reduce((a, e) => a + Math.max(0, e.hp), 0);
+            runStats.od[variant.id].dmg += Math.max(0, odHpBefore - after);
+            runStats.od[variant.id].kills += (odKills || 0);
+        }
         odKills = null;
         pendingAction = null; checkWinState(); return;
     }

@@ -2433,6 +2433,53 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── M10: THE OVERDRIVE FORK IS A NULL, AND MY OWN COLUMN CANNOT SAY OTHERWISE ──
+// The M-audit opened `--overdrive second` and deliberately answered nothing with it. Nine
+// variants had never fired in this project and P02 priced overdrive choice without ever
+// exercising it. Three 150-expedition careers an arm:
+//
+//                          first (every career on record)      second
+//   runs that ended the road              18 / 23 / 24      21 / 24 / 22
+//                      mean                       21.7              22.3
+//   wipes per run      mean                       6.28              6.35
+//                                        6.18/6.29/6.36    6.23/6.57/6.25
+//   overdrives fired                    344 / 281 / 458   375 / 487 / 476
+//
+// THE WALL DOES NOT CARE. +0.7 wins against the floor K06 measured at about fourteen for three
+// careers an arm, 0.07 wipes, and the arms' spreads sitting inside each other - and the second
+// arm is the TIGHTER of the two, so this is not one arm being noisy. Whichever half of each pair
+// a player takes, the road is the same length. That is a real answer to the question the audit
+// left open, and it is the boring one.
+//
+// AND THE COLUMN I BUILT TO ANSWER IT MORE SENSITIVELY CANNOT. Health removed per firing reads
+// like a ranking and is not one:
+//
+//                   first                       second            what the second actually does
+//   pyromaniac      hellfire      115           backburner    59  3 turns of burning, after
+//   scavenger       scrap storm    87           booby trap    52  corrode and oil, after
+//   trench fiend    meatgrinder    99           last charge   58  3.4x, minus a fifth of his own
+//   harpooner       full haul      97           iron barb     67  hauls and bleeds
+//   hazmat          full purge     31           clean room     0  cleanses and heals the squad
+//   shotgunner      breach charge  69           scatterstorm  93
+//   bruiser / hound / sniper       level
+//
+// The window is the overdrive's OWN RESOLUTION, and the second half of nearly every pair puts
+// its value outside that window - burns, bleeds, corrode, a cleanse, a cost to its own holder.
+// The firsts are the immediate ones. So the bias is structural and it runs the way that flatters
+// the arm I was comparing against, which is exactly the shape of error that would have had me
+// report "the first halves are better" off a table that measures no such thing. Read as what it
+// is - how much of each overdrive lands inside its own turn - it is a fair description and a
+// useful one. Read as a ranking it is wrong, and the report now says so on the line itself.
+//
+// WHAT WOULD SETTLE IT is attributing a status tick back to whatever applied it, which needs
+// statuses to carry a source and is a piece of work rather than a counter. Filed. Until then the
+// careers are the answer and the answer is that it does not matter.
+//
+// ONE THING WORTH KEEPING from the biased column, because it does not depend on the window:
+// CLEAN ROOM and both medic overdrives remove nothing at all, ever. Three of eighteen overdrives
+// are pure support, and no reading in this file - damage, kills, or the wall - can price them.
+// That is not a defect, it is a gap in what this instrument is for.
+//
 // ── M-AUDIT: TWO THINGS THIS FILE COULD NOT SEE, AND DID NOT SAY SO ────────────
 // M01-M09 and four b-items are done. Audited the way F03, H and L were, and the two findings
 // are the same kind: a reading the instrument could not make, reported as though it had.
@@ -6934,6 +6981,28 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       line('  the first of the pair against the second', `${firsts} vs ${seconds}` +
         (seconds ? '' : ' - THE SECOND HALF OF EVERY PAIR HAS NEVER FIRED HERE'));
       line('  by variant', rows.map(([k, v]) => `${k.toLowerCase()}${v._at ? '(2nd)' : ''} ${v.fired}`).join(', '));
+      // M10: the health the line lost while the overdrive resolved, per firing. Per firing rather
+      // than in total, because the two halves of a pair do not fire the same number of times and
+      // a class that reaches its bar more often is not a better overdrive.
+      //
+      // THIS COLUMN CANNOT RANK THE TWO HALVES AND MUST NOT BE READ AS IF IT COULD. The window is
+      // the overdrive's own resolution, and the second half of nearly every pair puts its value
+      // OUTSIDE that window: BACKBURNER's three turns of burning, BLOOD SCENT's bleeds, BOOBY
+      // TRAP's corrode and oil, CLEAN ROOM's cleanse and heal, LAST CHARGE's cost to its own
+      // holder. The firsts are the immediate ones - HELLFIRE 2x now, EARTHSHAKER 1.5x now - so
+      // the bias runs one way and it runs the way that flatters them. Read this as "how much of
+      // each overdrive lands inside its own turn", which is what it measures, and take the
+      // careers above for whether the choice is worth anything.
+      const per = ([k, v]) => `${k.toLowerCase()} ${v.fired ? Math.round(v.dmg / v.fired) : 0}`;
+      line('  health removed inside the overdrive\'s own turn, per firing (NOT a ranking - see above)',
+        rows.filter(([, v]) => v.dmg > 0).sort((a, b) => b[1].dmg / b[1].fired - a[1].dmg / a[1].fired).map(per).join(', ') || 'none dealt damage');
+      const heals = rows.filter(([, v]) => !v.dmg);
+      if (heals.length) line('  and the ones that remove none at all', heals.map(([k]) => k.toLowerCase()).join(', ')
+        + ' - every point of what these buy lands somewhere this counter cannot see');
+      const byCls = {};
+      rows.forEach(([k, v]) => { (byCls[v._cls] = byCls[v._cls] || []).push([k, v]); });
+      line('  per class, the half that fired and what it was worth a firing',
+        Object.entries(byCls).sort().map(([c, rs]) => `${c.toLowerCase()} ${rs.map(per).join('/')}`).join(', '));
     }
   }
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
