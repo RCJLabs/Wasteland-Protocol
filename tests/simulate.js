@@ -2433,6 +2433,68 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── #197 TIER A: THE BLEED, BY WHAT OPENED IT ─────────────────────────────────────────
+// Every timed status in this game was a bare integer on a body, so a tick could never be booked
+// back to whatever applied it. The #197 scope split the sixteen of them three ways and this is
+// tier A, the only one where a source stamp gives an exact answer: a bleed ticks on its own, so
+// the whole tick belongs to whatever opened the wound. Nineteen sites apply one. The gate for
+// starting it was M11's own measurement - 45% to 61% of every combo in the game reads a bleed.
+//
+// Three 150-expedition careers. EVERY FIGURE HERE IS PER CAREER.
+//
+//                                          a         b         c
+//   THE SQUAD OPENS
+//   bleeds applied                      99.6     102.5      98.8   over 12-13 sources
+//   turns of bleeding granted            200       210       209
+//   ticks                                108       115       112
+//   health removed, raw / landed  5313/3640 5371/3601 5713/3935
+//   ticks that killed                    4.4       4.4       4.3
+//
+//   THE ROAD OPENS
+//   bleeds applied                     136.7     116.1     124.7   over 5 sources
+//   ticks                               78.8      69.8      74.6
+//   health removed, raw / landed    623/259   542/233   599/245
+//   ticks that killed                   0.85      0.84      0.97
+//
+//   squad sources, landed a career / per application
+//   rad_shot         1145 / 29    1348 / 30    1279 / 33
+//   ripsaw            775 / 122    581 / 131   1052 / 118
+//   cap_nail_bomb     616 / 53     440 / 45     590 / 48
+//   rip_and_tear      341 / 27     403 / 31     223 / 20
+//   barbed_shot       220 / 108    274 / 89     286 / 114
+//   shiv              213 / 24     240 / 25     232 / 30
+//   feral_bite        141 / 12     167 / 13     109 / 10
+//   blood_moon        134 / 22     107 / 28     136 / 23
+//   the other four     ~45 total    ~42 total    ~27 total
+//
+// THE SAME INVERSION M11 FOUND, ON A SECOND AND INDEPENDENT LEDGER. RAD SHOT tops the total in
+// all three careers and is among the cheapest per use at 29-33. RIPSAW and BARBED SHOT are worth
+// 89 to 131 a use - four times as much - and are applied so rarely that RIPSAW only reaches
+// second place. Frequency and worth rank oppositely here exactly as they do in the combo table,
+// which is now two separate measurements of the same shape rather than one result.
+//
+// THE TWO SIDES ARE NOT THE SAME MECHANIC. The road APPLIES MORE bleeds than the squad does -
+// 117-137 a career against 99-103 - and removes about a fifteenth as much health with them
+// (233-259 against 3601-3935). The per-application column says why: every road source is worth
+// 1-5 points a use against the squad's 10-131. A bleed is 8% of the victim's maxHp, and an
+// operator is a far smaller bar than a sector-7 hostile.
+//
+// And the mitigation is asymmetric in the same direction: the squad's outgoing bleeds lose
+// 31-33% between raw and landed, the road's incoming lose 57-59%. M03 zeroed armour against a bleed on
+// purpose - plate does not stop a wound - so the whole of that gap is RESISTANCES, which every
+// operator carries and most of the bestiary does not.
+//
+// THE MEASUREMENT THAT WAS DEFERRED ON PURPOSE. Seven of the nineteen sites ASSIGN the counter
+// rather than raising it, so a SHIV's two turns can overwrite a five-turn BARBED SHOT. The #197
+// scope called that a latent defect and this item deliberately did NOT fix it - an instrument
+// that changes the game while measuring it cannot be trusted about either - and counted it
+// instead: 1.3, 0.7 and 1.0 shortenings a career, 0.7% to 1.3% of squad applications and 0.0%
+// of the road's. Real, and small enough that it is now a rate rather than an argument.
+//
+// Nothing here moves a dial. The census is the deliverable; what to do about RAD SHOT carrying a
+// third of the squad's bleed damage at a thirtieth of RIPSAW's value a use is a balance question
+// and wants an arm, not a column.
+//
 // ── M11: THE TEN PAIRINGS, COUNTED FOR THE FIRST TIME ──────────────────────────────────
 // COMBOS has been in this game since Phase 1 and nothing had ever counted any of it. This file
 // booked a combo turn as "claimed the turn" and stopped there, so a pairing nobody can reach and
@@ -5986,6 +6048,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.od = runStats.od || {};             // M-audit: which half of each overdrive pair fired
   stat.odPairs = Object.keys(OVERDRIVES || {}).length;   // read in the page; the report has no OVERDRIVES
   stat.cb = runStats.cb || {};             // M11: every one of the ten pairings, and what it bought
+  stat.bl = runStats.bl || {};             // #197 tier A: every bleed, by what opened it
   // The full key list, not just a count: the report is asked which pairings NEVER fired, and a
   // count can only say how many are missing. Same key the census builds, so the two cannot drift.
   stat.cbAll = (COMBOS || []).map(c => `${c.move}>${c.needs.replace('Turns', '')}`);
@@ -7156,6 +7219,56 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
         ? 'all of them belong to classes a career has to recruit - this is a roster history, not a finding'
         : 'at least one is a starting class, which IS worth chasing - see suite 168, which stages all ten');
     }
+  }
+  // ── #197 tier A: the bleed, by what opened it ─────────────────────────────────────────
+  // Nineteen sites in this game apply a bleed and the tick could say only that one had happened.
+  // It is the only status that does something on its own each turn, it is 8% of maxHp a tick,
+  // and M11 measured that 45-61% of every combo in the game reads one - so "which of the
+  // nineteen" is the largest single question the status system could not answer.
+  //
+  // TWO FIGURES, AND THE SECOND IS NEW. `raw` is what the tick asked for before armour and
+  // resistances, which is the number noteDamageType already books a line earlier and so can be
+  // reconciled against it. `landed` is what the body actually lost, and nothing in this project
+  // has ever counted it: the tick's only other ledger is the death. Both are printed because the
+  // gap between them IS the mitigation, and M03 typed bleed as phys precisely so that gap exists.
+  {
+    const bl = foldAll('bl');
+    const sides = [['atFoe', 'the squad opens'], ['atSquad', 'the road opens']];
+    sides.forEach(([side, what]) => {
+      const rows = Object.entries(bl[side] || {});
+      if (!rows.length) return;
+      const sum = k => rows.reduce((a, [, v]) => a + (v[k] || 0), 0);
+      // EVERY FIGURE IN THIS BLOCK IS PER CAREER. The first cut of these two lines mixed the two
+      // scales on one line - a per-career damage figure beside a raw total for ticks - which is
+      // how a reader ends up quoting "667 lethal bleeds a career" off a number that is 4.4.
+      const per = k => sum(k) / n;
+      line(`bleeds ${what}`, `${per('applied').toFixed(1)} a career over ${rows.length} sources, ` +
+        `granting ${per('turns').toFixed(0)} turns of bleeding`);
+      line('  what the ticks took, raw / landed', `${Math.round(per('raw'))} / ${Math.round(per('dmg'))} ` +
+        `a career over ${per('ticks').toFixed(0)} ticks, ${per('kills').toFixed(1)} of them lethal`);
+      // The column the item exists for, ranked by what it actually removed rather than by how
+      // often it was applied - M11's whole finding was that those two rank oppositely.
+      const by = rows.filter(([, v]) => v.dmg > 0).sort((a, b) => b[1].dmg - a[1].dmg);
+      line('  by source, health removed a career',
+        by.map(([k, v]) => `${k.toLowerCase()} ${Math.round(v.dmg / n)}`).join(', ') || 'none');
+      line('  and per application, which is what one use of it is worth',
+        by.map(([k, v]) => `${k.toLowerCase()} ${Math.round(v.dmg / Math.max(1, v.applied))}`).join(', ') || 'none');
+      // Applied and never ticked: a bleed that was cleansed, or landed on something that died
+      // first. Real information rather than a rounding error - it is the whole of what a cleanse
+      // is worth, seen from the other side.
+      const dead = rows.filter(([, v]) => v.applied > 0 && !v.ticks);
+      if (dead.length) line('  applied but never ticked once',
+        dead.map(([k, v]) => `${k.toLowerCase()} ${v.applied}`).join(', '));
+      // THE MEASUREMENT THAT DECIDES THE NEXT ITEM. Seven of the nineteen sites ASSIGN the
+      // counter rather than raising it, so a SHIV's two turns can overwrite a five-turn BARBED
+      // SHOT. #197 tier A deliberately did not fix that - an instrument that changes the game
+      // while measuring it cannot be trusted about either - and counts it instead.
+      const shortened = sum('shortened');
+      line('  applications that SHORTENED a longer bleed', shortened
+        ? `${(shortened / n).toFixed(1)} a career, ${(shortened / (sum('applied') + shortened) * 100).toFixed(1)}% of them - ` +
+          `the seven assigning sites; a rate, not an opinion`
+        : 'none in this sample');
+    });
   }
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   // K06: which pieces, because a total with no names in it cannot say whether the slot is being

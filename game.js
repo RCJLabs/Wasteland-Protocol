@@ -349,6 +349,64 @@ function noteCombo(c, hit) {
     const without = rv >= 100 ? 0 : Math.max(1, Math.floor(cd / c.mult) - rv - ac);
     row.premium += Math.max(0, net - without);
 }
+// ── #197 tier A: a bleed that knows what opened it ──────────────────────────────────────
+// Every timed status in this game is a bare integer on a body. Nothing carries where it came
+// from, so a tick could never be booked back to whatever applied it - and the bleed is the one
+// that matters most: it is the only status that DOES something on its own each turn, and M11
+// measured that 45% to 61% of every combo in the game reads one. Nineteen sites apply it, from
+// six overdrives to a boss passive to the blood moon, and the tick could say only "a bleed".
+//
+// Two verbs rather than one, and the difference is not cosmetic. Twelve of the nineteen sites
+// raise the counter with Math.max and seven ASSIGN it - so a SHIV's two turns can currently
+// overwrite a five-turn BARBED SHOT and shorten it. That is a latent defect the #197 scope
+// named, and it is deliberately NOT fixed here: this item is an instrument, and changing the
+// game while building the thing that measures it is how a reading gets attributed to the wrong
+// cause. bleedSet keeps the assign semantics exactly and COUNTS the shortenings instead, so the
+// next item gets a rate rather than my opinion.
+//
+// The source follows the counter. A bleed that does not lengthen the one already on the body
+// has not done anything, so it does not take ownership either - which makes "whose bleed is
+// this" answerable at every moment rather than a race between two callers.
+function noteBleed(kind, ent, src, a, b) {
+    if (!runStats) return;
+    const bl = runStats.bl = runStats.bl || {};
+    const side = ent && ent.isPlayer ? 'atSquad' : 'atFoe';
+    const rows = bl[side] = bl[side] || {};
+    const row = rows[src || 'UNATTRIBUTED'] = rows[src || 'UNATTRIBUTED'] ||
+        { applied: 0, turns: 0, shortened: 0, ticks: 0, raw: 0, dmg: 0, kills: 0 };
+    if (kind === 'apply') { row.applied++; row.turns += a; }
+    else if (kind === 'shorten') { row.shortened++; }
+    else if (kind === 'tick') {
+        row.ticks++; row.raw += a; row.dmg += b;
+        if (ent.hp <= 0) row.kills++;
+    }
+}
+// "Bleed for at least N turns" - the twelve Math.max sites.
+function bleedFor(target, turns, src) {
+    if (!target) return false;
+    const had = target.bleedingTurns || 0;
+    if (turns <= had) return false;
+    target.bleedingTurns = turns; target.bleedSrc = src;
+    noteBleed('apply', target, src, turns - had);
+    return true;
+}
+// "Set the bleed to N" - the seven that assign, semantics preserved exactly, including the
+// shortening. Counted rather than corrected; see the note above.
+function bleedSet(target, turns, src) {
+    if (!target) return false;
+    const had = target.bleedingTurns || 0;
+    target.bleedingTurns = turns; target.bleedSrc = src;
+    if (turns < had) { noteBleed('shorten', target, src); return true; }
+    noteBleed('apply', target, src, turns - had);
+    return true;
+}
+// One door for every site that ends a bleed, so a stale source can never label the next one.
+// M09's markedBy is the cautionary tale: it is set at three sites, cleared at none, and is
+// harmless today only because its one reader happens to be gated behind markedTurns > 0.
+function clearBleed(target) {
+    if (!target) return;
+    target.bleedingTurns = 0; target.bleedSrc = null;
+}
 // The enemy's front, defined once. The resolver's `dist === 0` means index 0 of the living
 // non-burrowed hostiles, and a second definition that drifted from it would make the two halves
 // of this measurement incomparable.
@@ -5321,7 +5379,7 @@ function executeSelfAction(type) {
     if (type === 'PURGE_VALVE') {
         const heal = 10 + (hasMod(actEnt, 'SCRUBBER_UNIT') ? 15 : 0);
         activeEntities.filter(e => e.isPlayer && e.hp > 0).forEach(a => {
-            a.bleedingTurns = 0; a.oiledTurns = 0; a.corrodedTurns = 0;
+            clearBleed(a); a.oiledTurns = 0; a.corrodedTurns = 0;
             a.hp = Math.min(a.maxHp, a.hp + heal);
             spawnFCT(a.id, `+${heal}`, "fct-heal");
         });
@@ -5449,7 +5507,7 @@ function resolveConsumableItem(targetId) {
         let heal = 30; target.hp = Math.min(target.maxHp, target.hp + heal);
         log(`> ${actEnt.name} injects ${target.name} with a Med-Stim (+${heal} HP).`, "log-heal"); spawnFCT(target.id, `+${heal}`, "fct-heal"); playSFX('heal');
     } else if (pendingAction === 'ITEM_ADRENALINE') {
-        target.stunnedTurns = 0; target.bleedingTurns = 0; target.hp = Math.min(target.maxHp, target.hp + 10);
+        target.stunnedTurns = 0; clearBleed(target); target.hp = Math.min(target.maxHp, target.hp + 10);
         log(`> ${target.name} surges with Adrenaline (cleansed, +10 HP).`, "log-heal"); spawnFCT(target.id, "CLEANSED", "fct-status"); playSFX('heal');
     } else if (pendingAction === 'ITEM_BOMB') {
         triggerShake(); log(`> ${actEnt.name} hurls a Scrap Bomb!`, "log-dmg"); playSFX('blast');
@@ -5602,7 +5660,7 @@ function regroupSquad() {
     squadBroken = false;
     runStats.regroups--;
     closeRanks();
-    playerRoster.forEach(p => { p.hp = p.maxHp; p.stunnedTurns = 0; p.bleedingTurns = 0; p.armorTurns = 0; p.armor = 0; p.oiledTurns = 0; });
+    playerRoster.forEach(p => { p.hp = p.maxHp; p.stunnedTurns = 0; clearBleed(p); p.armorTurns = 0; p.armor = 0; p.oiledTurns = 0; });
     // A Regroup Bond from the Armory prepays exactly one of these.
     if (regroupInsured) regroupInsured = false;
     else scrap = Math.floor(scrap / 2);
@@ -7256,7 +7314,7 @@ function devGive(kind) {
     else if (kind === 'MATS') { materials.parts += 10; materials.chems += 10; materials.tech += 10; }
     else if (kind === 'BAG') { inventory = []; const all = Object.keys(ITEM_DATA); while (inventory.length < metaUpgrades.invMax) inventory.push(all[inventory.length % all.length]); }
     else if (kind === 'SKULL') { bossSkulls++; saveMeta(); }
-    else if (kind === 'HEAL') playerRoster.forEach(c => { c.hp = c.maxHp; c.stunnedTurns = 0; c.bleedingTurns = 0; });
+    else if (kind === 'HEAL') playerRoster.forEach(c => { c.hp = c.maxHp; c.stunnedTurns = 0; clearBleed(c); });
     else if (kind === 'LEVEL') playerRoster.forEach(c => awardXp(c, c.xpToNext - c.xp));
     else if (kind === 'PERKS') playerRoster.forEach(c => { c.perkPoints += 3; });
     else if (kind === 'RELIC') { const left = unownedRelics(); if (left.length) activeRelics.push(left[0]); }
@@ -10721,7 +10779,7 @@ function initiateCombat(nodeType, isEliteNode) {
     // nothing else. Deleted rather than honoured: honouring it is a buff to two operators and
     // wants its own measurement, and a stat the engine has never applied is not a balance change
     // to remove.
-    playerRoster.forEach(ent => { ent.stunnedTurns = 0; ent.bleedingTurns = 0; ent.armorTurns = 0; ent.armor = 0;
+    playerRoster.forEach(ent => { ent.stunnedTurns = 0; clearBleed(ent); ent.armorTurns = 0; ent.armor = 0;
         ent.oiledTurns = 0; ent.corrodedTurns = 0; ent.markedTurns = 0; ent.guardTurns = 0; });
     // THE WALL: whoever is holding the front opens already braced. Set after the clear above
     // so it survives it, and worth the same as an Iron Guard the squad did not have to spend
@@ -11331,7 +11389,7 @@ function applyTurnStartEffects(ent) {
 
     // Over The Top runs on the Fiend's own turns, so it is spent here rather than on the clock.
     if ((ent.chargeTurns || 0) > 0) { ent.chargeTurns--; chg = true; if (ent.chargeTurns > 0) spawnFCT(ent.id, "OVER THE TOP", "fct-combo"); }
-    if (hasTrait(ent, 'NO_MANS_LAND')) ent.bleedingTurns = 0;
+    if (hasTrait(ent, 'NO_MANS_LAND')) clearBleed(ent);
     if (ent.bleedingTurns > 0) { let b = Math.max(1, Math.floor(ent.maxHp * 0.08));
         if (ent.isPlayer && hasRelic('FIELD_DRESSING')) b = Math.max(1, Math.floor(b / 2));
         if (ent.isPlayer && relicSetActive('Field Surgery')) ent.bleedingTurns = Math.min(ent.bleedingTurns, 1);
@@ -11351,12 +11409,29 @@ function applyTurnStartEffects(ent) {
         const cut = mitigate(null, ent, b, 'phys', 'BLEED');
         noteDamageType(ent.isPlayer ? 'atSquad' : 'atFoe', 'phys', b, cut.rv);
         noteCover(cut.cover, ent, cut.n);
+        // #197 tier A: read BEFORE clearBleed runs at the bottom of this block, which is the
+        // ordering that actually carries weight - a bleed running out on this tick still did
+        // this tick's damage, and the body is about to stop carrying the answer. (The decrement
+        // itself does not wipe the name, so whether the read sits above or below it changes
+        // nothing; only the clear does, and a mutation that moves the clear up loses the last
+        // tick of every bleed in the game.)
+        //
+        // Both figures go in. `b` is the raw, which reconciles against the type ledger a line
+        // above; the landed number is the one nothing in this project has ever counted -
+        // noteDamageType books the raw, and the tick's only other ledger is the death.
+        const opened = ent.bleedSrc;
         ent.bleedingTurns--; chg = true;
+        const took = Math.min(Math.max(0, cut.n), ent.hp);
         if (cut.n > 0) {
             ent.hp = Math.max(0, ent.hp - cut.n);
             log(`> ${ent.name} bleeds for ${cut.n}.`, "log-dmg"); spawnFCT(ent.id, `-${cut.n}`, "fct-dmg");
             if (ent.isPlayer) addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath('BLEED');
-        } }
+        }
+        noteBleed('tick', ent, opened, b, took);
+        // Spent, so the next thing to open this body owns it rather than inheriting the last
+        // one's name. clearBleed rather than a bare assignment for the same reason every other
+        // site uses it: one door, and no stale source can survive it.
+        if (ent.bleedingTurns <= 0) clearBleed(ent); }
     // Bleeding out and choking are deaths too. Now that a unit going down has a voice, dying to
     // a status tick in silence is the odd one out rather than the norm.
     if (wasAlive && ent.hp <= 0) { playSFX(ent.isPlayer ? 'fallen' : 'downed'); if (ent.isPlayer) goDown(ent); }
@@ -11765,7 +11840,7 @@ function spendTactic(kind) {
         spawnFCT(actor.id, 'FOCUSED', 'fct-combo'); playSFX('click');
     } else if (kind === 'STIM') {
         const t = stimTarget() || actor;
-        t.bleedingTurns = 0; t.stunnedTurns = 0; t.oiledTurns = 0;
+        clearBleed(t); t.stunnedTurns = 0; t.oiledTurns = 0;
         const heal = stimHeal(t);
         t.hp = Math.min(t.maxHp, t.hp + heal);
         log(`> STIM: ${t.name} cleansed and patched for ${heal}.`, 'log-heal');
@@ -11859,13 +11934,13 @@ function resolveAction(targetId) {
             // ghost on the field at half health for the rest of the fight.
             if (target.fallen) { log(`> ${target.name} is beyond reviving.`, 'log-dmg'); }
             else {
-            target.hp = Math.max(target.hp, Math.floor(target.maxHp * 0.5)); target.stunnedTurns = 0; target.bleedingTurns = 0;
+            target.hp = Math.max(target.hp, Math.floor(target.maxHp * 0.5)); target.stunnedTurns = 0; clearBleed(target);
             spawnFCT(target.id, "REVIVED", "fct-heal"); playSFX('heal');
             }
         } else if (variant.id === 'TRIAGE_PROTOCOL') {
             activeEntities.filter(e => e.isPlayer && e.hp > 0).forEach(a => {
                 a.hp = Math.min(a.maxHp, a.hp + Math.floor(a.maxHp * 0.35));
-                a.bleedingTurns = 0; a.stunnedTurns = 0; a.oiledTurns = 0;
+                clearBleed(a); a.stunnedTurns = 0; a.oiledTurns = 0;
                 spawnFCT(a.id, "TRIAGED", "fct-heal");
             });
             playSFX('heal');
@@ -11874,10 +11949,10 @@ function resolveAction(targetId) {
         } else if (variant.id === 'BOOBY_TRAP') {
             all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 0.6, 'energy', null); e.corrodedTurns = 3; e.oiledTurns = 3; spawnFCT(e.id, "RIGGED", "fct-weak"); });
         } else if (variant.id === 'HELLFIRE') {
-            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 2.0, 'energy', null); e.oiledTurns = 3; e.bleedingTurns = 3; });
+            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 2.0, 'energy', null); e.oiledTurns = 3; bleedSet(e, 3, 'HELLFIRE'); });
         } else if (variant.id === 'BACKBURNER') {
             applyDamageHit(actEnt, target, actEnt.dmgBase * 3.2, 'energy', null);
-            if (target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns, 3); spawnFCT(target.id, "BURNING", "fct-weak"); }
+            if (target.hp > 0) { bleedFor(target, 3, 'BACKBURNER'); spawnFCT(target.id, "BURNING", "fct-weak"); }
         } else if (variant.id === 'BREACH_CHARGE') {
             target.armor = 0; target.armorTurns = 0; applyDamageHit(actEnt, target, actEnt.dmgBase * 3.0, 'phys', null);
         } else if (variant.id === 'SCATTERSTORM') {
@@ -11894,11 +11969,11 @@ function resolveAction(targetId) {
         } else if (variant.id === 'OVERWATCH') {
             all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.2, 'phys', null); if (e.hp > 0) { e.markedTurns = 3; e.markedBy = actEnt.id; noteMark('set', 'OVERWATCH', e, actEnt); spawnFCT(e.id, "MARKED", "fct-status"); } });
         } else if (variant.id === 'APEX_PREDATOR') {
-            actEnt.hp = actEnt.maxHp; applyDamageHit(actEnt, target, actEnt.dmgBase * 2.5, 'bio', null); target.bleedingTurns = 3;
+            actEnt.hp = actEnt.maxHp; applyDamageHit(actEnt, target, actEnt.dmgBase * 2.5, 'bio', null); bleedSet(target, 3, 'APEX_PREDATOR');
         } else if (variant.id === 'BLOOD_SCENT') {
-            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.5, 'bio', null); if (e.hp > 0) e.bleedingTurns = Math.max(e.bleedingTurns, 3); });
+            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.5, 'bio', null); if (e.hp > 0) bleedFor(e, 3, 'BLOOD_SCENT'); });
         } else if (variant.id === 'MEATGRINDER') {
-            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.6, 'phys', null); if (e.hp > 0) { e.bleedingTurns = Math.max(e.bleedingTurns, 3); spawnFCT(e.id, "BLEED", "fct-status"); } });
+            all(e => { applyDamageHit(actEnt, e, actEnt.dmgBase * 1.6, 'phys', null); if (e.hp > 0) { bleedFor(e, 3, 'MEATGRINDER'); spawnFCT(e.id, "BLEED", "fct-status"); } });
         } else if (variant.id === 'LAST_CHARGE') {
             applyDamageHit(actEnt, target, actEnt.dmgBase * 3.4, 'phys', null);
             const paid = Math.max(1, Math.floor(actEnt.maxHp * 0.2));
@@ -11909,7 +11984,7 @@ function resolveAction(targetId) {
         } else if (variant.id === 'CLEAN_ROOM') {
             activeEntities.filter(e => e.isPlayer && e.hp > 0).forEach(a => {
                 a.hp = Math.min(a.maxHp, a.hp + Math.floor(a.maxHp * 0.45));
-                a.bleedingTurns = 0; a.stunnedTurns = 0; a.oiledTurns = 0; a.corrodedTurns = 0;
+                clearBleed(a); a.stunnedTurns = 0; a.oiledTurns = 0; a.corrodedTurns = 0;
                 spawnFCT(a.id, "SCRUBBED", "fct-heal");
             });
             all(e => { if (e.hp > 0) { e.corrodedTurns = 3; spawnFCT(e.id, "CORRODED", "fct-weak"); } });
@@ -11921,7 +11996,7 @@ function resolveAction(targetId) {
         } else if (variant.id === 'IRON_BARB') {
             haulForward(target);
             applyDamageHit(actEnt, target, actEnt.dmgBase * 3.5, 'phys', null);
-            if (target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns, 3); spawnFCT(target.id, "BLEED", "fct-status"); }
+            if (target.hp > 0) { bleedFor(target, 3, 'IRON_BARB'); spawnFCT(target.id, "BLEED", "fct-status"); }
         }
         // The Overclocked Reactor's teeth: every overdrive vents through whoever holds the front.
         if (hasRelic('OVERCLOCKED_REACTOR')) {
@@ -11961,7 +12036,7 @@ function resolveAction(targetId) {
     if (pendingAction === 'CAUTERIZE') {
         let heal = 20 + Math.floor(Math.random() * 10) + (hasMod(actEnt, 'FIELD_KIT') ? 15 : 0);
         target.hp = Math.min(target.maxHp, target.hp + heal); actEnt.cooldowns.cauterize = cdFor(actEnt, 'cauterize', 3);
-        if (hasTrait(actEnt, 'FIELD_SURGEON')) { target.bleedingTurns = 0; target.stunnedTurns = 0; target.oiledTurns = 0; spawnFCT(target.id, "CLEANSED", "fct-status"); }
+        if (hasTrait(actEnt, 'FIELD_SURGEON')) { clearBleed(target); target.stunnedTurns = 0; target.oiledTurns = 0; spawnFCT(target.id, "CLEANSED", "fct-status"); }
         if (hasCap(actEnt, 'CAP_WHOLE_LINE')) {
             const share = Math.max(1, Math.floor(heal / 3));
             activeEntities.filter(e => e.isPlayer && e.hp > 0 && e.id !== target.id).forEach(a => {
@@ -12175,7 +12250,7 @@ function resolveAction(targetId) {
             if (behind && behind.hp > 0) applyDamageHit(actEnt, behind, Math.floor(baseDmg * 0.5), atkType, null);
         }
         if (pendingAction === 'SLUG_SHOT' && hasMod(actEnt, 'INCENDIARY_SLUGS') && target.hp > 0) { target.oiledTurns = Math.max(target.oiledTurns, 2); setTimeout(() => spawnFCT(target.id, "OILED", "fct-weak"), 400); }
-        if (pendingAction === 'SCRAP_BLADE' && hasMod(actEnt, 'JAGGED_EDGE') && target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns, 2); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400); }
+        if (pendingAction === 'SCRAP_BLADE' && hasMod(actEnt, 'JAGGED_EDGE') && target.hp > 0) { bleedFor(target, 2, 'JAGGED_EDGE'); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400); }
         if (pendingAction === 'ACID_FLASK') { target.corrodedTurns = 3; log(`> ${target.name}'s plating is corroding!`, "log-dmg"); setTimeout(() => spawnFCT(target.id, "CORRODED", "fct-weak"), 400); }
         if (pendingAction === 'SPOTTERS_MARK') { target.markedTurns = hasMod(actEnt, 'SPOTTING_SCOPE') ? 4 : 3; target.markedBy = actEnt.id; noteMark('set', 'SPOTTERS_MARK', target, actEnt); log(`> ${target.name} is marked.`, "log-status"); setTimeout(() => spawnFCT(target.id, "MARKED", "fct-status"), 400);
             if (hasCap(actEnt, 'CAP_RANGE_CARD')) {
@@ -12183,7 +12258,7 @@ function resolveAction(targetId) {
                 if (behind && behind.hp > 0) { behind.markedBy = actEnt.id; noteMark('set', 'SPOTTERS_MARK', behind, actEnt); behind.markedTurns = Math.max(behind.markedTurns || 0, target.markedTurns);
                     log(`> ${behind.name} is on the card too.`, 'log-status'); setTimeout(() => spawnFCT(behind.id, 'MARKED', 'fct-status'), 500); }
             } }
-        if (pendingAction === 'RIP_AND_TEAR' && target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns, 3); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400); }
+        if (pendingAction === 'RIP_AND_TEAR' && target.hp > 0) { bleedFor(target, 3, 'RIP_AND_TEAR'); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400); }
         if (pendingAction === 'MOLOTOV') {
             actEnt.cooldowns.molotov = cdFor(actEnt, 'molotov', 3); triggerShake();
             if (hasMod(actEnt, 'NAPALM_MIX') && target.hp > 0) { target.oiledTurns = Math.max(target.oiledTurns, 3); setTimeout(() => spawnFCT(target.id, "OILED", "fct-weak"), 450); }
@@ -12203,7 +12278,7 @@ function resolveAction(targetId) {
             if (behind && behind.hp > 0) applyDamageHit(actEnt, behind, Math.floor(baseDmg * 0.4), atkType, null);
         }
         if (pendingAction === 'FLASHBANG' && hasCap(actEnt, 'CAP_NAIL_BOMB') && target.hp > 0) {
-            target.bleedingTurns = Math.max(target.bleedingTurns || 0, 2);
+            bleedFor(target, 2, 'CAP_NAIL_BOMB');
             setTimeout(() => spawnFCT(target.id, 'BLEED', 'fct-status'), 450);
         }
         if (pendingAction === 'ACID_FLASK' && hasTrait(actEnt, 'ACID_RAIN')) {
@@ -12215,7 +12290,7 @@ function resolveAction(targetId) {
         if (pendingAction === 'FERAL_BITE' && hasTrait(actEnt, 'RELENTLESS') && target.hp <= 0) actEnt.cooldowns.feral_bite = 0;
         if (pendingAction === 'FERAL_BITE' && hasCap(actEnt, 'CAP_BLOOD_SCENT')) {
             const behind = livingEnemies[dist + 1];
-            if (behind && behind.hp > 0) { behind.bleedingTurns = Math.max(behind.bleedingTurns || 0, 3);
+            if (behind && behind.hp > 0) { bleedFor(behind, 3, 'CAP_BLOOD_SCENT');
                 setTimeout(() => spawnFCT(behind.id, 'BLEED', 'fct-status'), 450); }
         }
         if (hasTrait(actEnt, 'LEAD_THE_PACK') && DAMAGING_MOVES.includes(pendingAction)) addMomentum(5);
@@ -12244,18 +12319,18 @@ function resolveAction(targetId) {
 
         // ── the three found on the road ──────────────────────────────────────────────
         if (pendingAction === 'RIPSAW' && target.hp > 0) {
-            target.bleedingTurns = Math.max(target.bleedingTurns, hasTrait(actEnt, 'SAWBONES') ? 5 : 3);
+            bleedFor(target, hasTrait(actEnt, 'SAWBONES') ? 5 : 3, 'RIPSAW');
             setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400);
         }
         if (pendingAction === 'BAYONET_THRUST' && hasCap(actEnt, 'CAP_ENTRENCHED') && actEnt.gridPos === 1 && target.hp > 0) {
             applyDamageHit(actEnt, target, Math.floor(baseDmg * dmgMult), atkType, null);
         }
         if (pendingAction === 'BAYONET_THRUST' && hasMod(actEnt, 'SERRATED_EDGE') && target.hp > 0) {
-            target.bleedingTurns = Math.max(target.bleedingTurns, 2);
+            bleedFor(target, 2, 'SERRATED_EDGE');
             setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400);
         }
         if (pendingAction === 'BARBED_SHOT' && target.hp > 0) {
-            target.bleedingTurns = Math.max(target.bleedingTurns, hasTrait(actEnt, 'DEEP_HOOK') ? 5 : 3);
+            bleedFor(target, hasTrait(actEnt, 'DEEP_HOOK') ? 5 : 3, 'BARBED_SHOT');
             setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400);
         }
         if (pendingAction === 'SPRAY_GUN' && hasMod(actEnt, 'HIGH_PRESSURE') && target.hp > 0) {
@@ -12462,7 +12537,7 @@ function raiseBody(ent, share) {
     if (!ent) return false;
     ent.hp = Math.max(1, Math.floor(ent.maxHp * share));
     ent.deathPlayed = false; ent.bloomed = false; ent.martyred = false; ent.tallied = false;
-    ent.stunnedTurns = 0; ent.bleedingTurns = 0;
+    ent.stunnedTurns = 0; clearBleed(ent);
     return true;
 }
 
@@ -12681,7 +12756,7 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
     // Bloodletter: the chieftain's kit is all serrated, so every blow it lands keeps bleeding.
     // Steady pressure rather than a spike - it is answered by cleansing, not by armour.
     if (attacker.bossPassive === 'BLOODLETTER' && netDmg > 0 && target.hp > 0 && target.isPlayer) {
-        target.bleedingTurns = Math.max(target.bleedingTurns || 0, 2);
+        bleedFor(target, 2, 'BLOODLETTER');
         setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed);
     }
 
@@ -12696,7 +12771,7 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
         let bleedChance = abilityStr === 'FERAL_BITE' ? 0.9 : abilityStr === 'SHIV' ? 0.4 : 0.6;
         if (abilityStr === 'RAD_SHOT' && hasTrait(attacker, 'RAD_SPECIALIST')) bleedChance = 1;
         if (sectorFront === 'BLOOD_MOON') bleedChance = 1;
-        if (Math.random() < bleedChance) { target.bleedingTurns = abilityStr === 'SHIV' ? 2 : 3; log(`> ${target.name} bleeding!`, "log-dmg"); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
+        if (Math.random() < bleedChance) { bleedSet(target, abilityStr === 'SHIV' ? 2 : 3, abilityStr); log(`> ${target.name} bleeding!`, "log-dmg"); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
     } else if (abilityStr === 'HEAVY_WRENCH' || abilityStr === 'FLASHBANG' || abilityStr === 'RIOT_BUTT') {
         let sc = (abilityStr === 'FLASHBANG') ? 0.35 : abilityStr === 'RIOT_BUTT' ? 0.25 : 0.2; if (abilityStr === 'FLASHBANG' && target.resistances.energy < 0) sc *= 2;
         if (abilityStr === 'FLASHBANG' && hasMod(attacker, 'WIDE_LENS')) sc = 1;
@@ -12704,7 +12779,7 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
         if (Math.random() < sc) { target.stunnedTurns = 1; log(`> ${target.name} stunned!`, "log-status"); setTimeout(() => spawnFCT(target.id, "STUNNED", "fct-status"), 300 * globalSettings.combatSpeed); }
     } else if (sectorFront === 'BLOOD_MOON' && atkType === 'phys' && netDmg > 0 && target.hp > 0 && Math.random() < 0.2) {
         // Under the blood moon any raw hit can open a wound, on either side of the field.
-        target.bleedingTurns = Math.max(target.bleedingTurns || 0, 2);
+        bleedFor(target, 2, 'BLOOD_MOON');
         log(`> The blood moon opens ${target.name}.`, "log-dmg");
         setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed);
     }
@@ -12874,7 +12949,7 @@ function openEnragePhase(enemy) {
     // Plague Wind: no reinforcements, it simply infects the whole line at once.
     if (e.plague) {
         activeEntities.filter(t => t.isPlayer && t.hp > 0).forEach(t => {
-            t.bleedingTurns = Math.max(t.bleedingTurns, 3);
+            bleedFor(t, 3, 'PLAGUE');
             spawnFCT(t.id, "PLAGUE", "fct-status");
         });
         log(`> The squad is choking on rot.`, "log-status");
@@ -13083,7 +13158,7 @@ function executeEnemyAi(enemy) {
                 help.hp = help.maxHp = Math.max(10, Math.floor(40 * sc.mult));
                 help.dmgBase = Math.max(4, Math.floor(12 * sc.dmg));
                 help.sig = null; help.sigCd = 0; help.plate = 0;
-                help.bleedingTurns = 0; help.stunnedTurns = 0; help.oiledTurns = 0;
+                clearBleed(help); help.stunnedTurns = 0; help.oiledTurns = 0;
                 help.corrodedTurns = 0; help.markedTurns = 0; help.armorTurns = 0;
                 // The clone is for what kind of thing arrives - the portrait, the reach, the
                 // resistances - not for what rank it holds. Health and damage were already
@@ -13377,10 +13452,10 @@ function executeEnemyAi(enemy) {
         // Affixes that pay out on contact rather than at the muster. Read off the list, so a
         // champion carrying two of them gets both.
         if (hasAffix(enemy, 'VAMPIRIC')) { let heal = Math.max(1, Math.floor(rawDmg * 0.5)); enemy.hp = Math.min(enemy.maxHp, enemy.hp + heal); setTimeout(() => spawnFCT(enemy.id, `+${heal}`, "fct-heal"), 300); }
-        if (hasAffix(enemy, 'SEPTIC') && target.hp > 0) { target.bleedingTurns = Math.max(target.bleedingTurns || 0, 2); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
+        if (hasAffix(enemy, 'SEPTIC') && target.hp > 0) { bleedFor(target, 2, 'SEPTIC'); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
 
         if (intent.type === 'STATUS' || riderOf(enemy)) { 
-            if (Math.random() < 0.5 || hasTrait(target, 'UNSHAKEABLE')) { target.bleedingTurns = 2; setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
+            if (Math.random() < 0.5 || hasTrait(target, 'UNSHAKEABLE')) { bleedSet(target, 2, 'ENEMY_STATUS'); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 300 * globalSettings.combatSpeed); }
             else { target.stunnedTurns = 1; setTimeout(() => spawnFCT(target.id, "STUNNED", "fct-status"), 300 * globalSettings.combatSpeed); }
         }
     }
@@ -13621,7 +13696,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
-    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, noteReach, noteFront, noteHaul, noteCover, noteMark, noteCombo, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, MARK_BONUS, CALLED_SHOT_MULT, hasTrait, traitOnField,
+    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, noteReach, noteFront, noteHaul, noteCover, noteMark, noteCombo, noteBleed, bleedFor, bleedSet, clearBleed, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, MARK_BONUS, CALLED_SHOT_MULT, hasTrait, traitOnField,
     PERK_DMG_FLAT, PERK_DMG_MULT, PERK_SPD, PERK_MAXHP, PERK_HP_FLAT,
     perkStacks, perkDmgFlat, perkDmgMult, syncRankPerks, syncAllRankPerks, bankPerkStack, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
