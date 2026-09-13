@@ -126,8 +126,12 @@ module.exports = {
     // and once by the roster card's resist probe, none of which is a blow - a ledger kept at that
     // line read the squad taking six times what it dealt. The figure goes back with the result
     // and is booked where damage is actually applied.
+    // M11 added `cd` to the same return, for the same reason J04 added `ac`: a figure the caller
+    // cannot reconstruct. So this asserts what M08b was actually about - the state goes BACK
+    // rather than being booked at a line mitigate reaches five times - instead of pinning the
+    // tuple's exact width, which made a second honest addition to it read as a regression.
     ok('mitigate hands the cover state back rather than counting it',
-      /return \{ n, rv, ac, cover \};/.test(src) && !/noteCover\([^)]*\);\s*\n\s*if \(cover\.onRank1\)/.test(src));
+      /return \{ n, rv, ac,[^}]*\bcover\b[^}]*\};/.test(src) && !/noteCover\([^)]*\);\s*\n\s*if \(cover\.onRank1\)/.test(src));
     ok('and every path that lands damage books it: the blow, the sky tick and the bleed',
       (src.match(/noteCover\(/g) || []).length === 4);
     const forecast = await page.evaluate(() => {

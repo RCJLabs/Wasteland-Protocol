@@ -303,6 +303,52 @@ function noteCover(cover, t, dmg) {
     g.blows++; g.dmg += dmg;
     if (on) { g.hit++; g.hitDmg += dmg; }
 }
+// M11: what the ten pairings in COMBOS are actually worth. The table has existed since Phase 1
+// and nothing has ever counted it - the simulator books a combo turn only as "claimed", which
+// says a combo happened and nothing about which one or what it bought. It is the largest
+// unmeasured channel the statuses feed: every pairing is a 1.5x to 2.0x multiplier, and all ten
+// are squad-only, because comboFor returns null for a player target.
+//
+// Booked HERE, at the landing point, and not at the branch in resolveAction that decides the
+// combo fired. That is M08b's rule and it is not a stylistic one: mitigate is reached five times
+// over by things that are not blows. This site is past all of that - the blow has landed and
+// netDmg is what the body actually lost.
+//
+// THE PREMIUM IS THE COLUMN THIS EXISTS FOR, and it is exact rather than modelled, which is the
+// difference between it and the damage column M10 had to withdraw. There the window was wrong:
+// an overdrive's value leaks into turns after the one it fired in, so its own damage could not
+// rank it. Here the window is the swing itself. The combo multiplies dmgMult and nothing else,
+// mitigate's whole multiplicative chain runs on the product, and the subtractions come last:
+//
+//     n = max(1, cd - rv - ac)
+//
+// so the same swing without the pairing is max(1, floor(cd / mult) - rv - ac), and mitigate
+// hands back all three terms. No second mitigate call - that would re-fire its side effects
+// (THICK_HIDE's noteQuirk among them) and count a quirk twice for a number nobody took.
+//
+// Two things the figure is honestly NOT:
+//   - It is short by integer flooring, at most a unit or two a swing, because cd/mult undoes a
+//     product that was floored on the way in. One-directional and small; stated on the line.
+//   - It excludes VULTURES_INSTINCT's own 1.25x, which rides isCombo further down the resolver.
+//     That is correct: the relic is present in both arms of the counterfactual, so what is left
+//     is the pairing's own contribution and not the pairing plus whatever else read the flag.
+// A pierced swing (HEADSHOT) takes no premium at all - pierce sets n to the target's whole
+// health and the multiplier never touches it - so those are counted apart rather than credited.
+function noteCombo(c, hit) {
+    if (!runStats || !c || !hit) return;
+    const { net, rv, ac, cd, pierced, lethal } = hit;
+    const cb = runStats.cb = runStats.cb || {};
+    // Keyed by the pairing, not the move: two moves ignite oil and they are two rows, because
+    // which one the squad reached for is half of what the census is being asked.
+    const row = cb[`${c.move}>${c.needs.replace('Turns', '')}`] = cb[`${c.move}>${c.needs.replace('Turns', '')}`] ||
+        { fired: 0, dmg: 0, premium: 0, kills: 0, pierced: 0, _mult: c.mult, _name: c.name, _eats: c.consumes ? 'y' : 'n' };
+    row.fired++;
+    row.dmg += Math.max(0, net);
+    if (lethal) row.kills++;
+    if (pierced) { row.pierced++; return; }
+    const without = rv >= 100 ? 0 : Math.max(1, Math.floor(cd / c.mult) - rv - ac);
+    row.premium += Math.max(0, net - without);
+}
 // The enemy's front, defined once. The resolver's `dist === 0` means index 0 of the living
 // non-burrowed hostiles, and a second definition that drifted from it would make the two halves
 // of this measurement incomparable.
@@ -4853,6 +4899,7 @@ function addMomentum(amt) {
 let fightLog = null;
 let chasedIn = false;      // set while the chase is being placed, read when the log is opened
 let comboKill = false;     // true only while a combo's own blow is landing
+let comboHit = null;       // M11: the COMBOS row riding that blow, for the census at the landing point
 let odKills = null;        // counts kills inside one overdrive, null when none is resolving
 const BLITZ_TURNS = 6;     // squad turns, not actor turns - measured at a median of 9
 const OVERKILL_AT = 2;     // kills in one overdrive
@@ -12098,8 +12145,11 @@ function resolveAction(targetId) {
 
         if (effReach === 'melee' && reach >= 1) checkBountyProgress('REACH');
         comboKill = isCombo;
+        // M11: the MARKED! branch above also sets isCombo and has no COMBOS row - that payoff is
+        // the mark's and noteMark already counts it. Only the ten table pairings ride this.
+        comboHit = combo || null;
         applyDamageHit(actEnt, target, Math.floor(baseDmg * dmgMult), atkType, pendingAction);
-        comboKill = false;
+        comboKill = false; comboHit = null;
 
         if (hasRelic('BLOOD_VIAL') && atkType === 'bio' && actEnt.hp < actEnt.maxHp) {
             const fed = relicSetActive('Field Surgery') ? 10 : 5;
@@ -12328,7 +12378,10 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     // and not what was taken off. ASHFALL adds 2 to every unit and an escort adds 20, so the
     // one surface that answers "why did that number happen" was crediting the escort's plate
     // to nobody. The soaked TOTAL was always right; it is the breakdown that was short.
-    return { n, rv, ac, cover };
+    // M11 goes with it for the same reason J04's `ac` did: `cd` is the figure the whole
+    // multiplicative chain produced, just before the two subtractions, and it is the only term
+    // from which a combo's counterfactual can be reconstructed without running mitigate twice.
+    return { n, rv, ac, cd, cover };
 }
 
 // ── F05: one ledger for a body ──────────────────────────────────────────────────────────
@@ -12502,10 +12555,22 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
     // by armour and a resistance. It still comes through here so the blow keeps its ledger:
     // the kill, the contracts, the bestiary, the Tally, the card that explains it.
     const pierce = !!(opts && opts.pierce);
-    const figure = t => pierce ? { n: Math.max(1, t.hp), rv: 0, ac: 0, cover: null }
+    const figure = t => pierce ? { n: Math.max(1, t.hp), rv: 0, ac: 0, cd: Math.max(1, t.hp), cover: null }
                                : mitigate(attacker, t, calcDmg, atkType, abilityStr);
-    let { n: netDmg, rv: resistValue, ac: armourTaken, cover } = figure(target);
+    let { n: netDmg, rv: resistValue, ac: armourTaken, cd: preSoak, cover } = figure(target);
     noteCover(cover, target, netDmg);
+    // M11: booked before the bond block below, which is safe and deliberate - a combo can only
+    // ever be aimed at a hostile (comboFor returns null for a player target) and the bond save
+    // only fires on a player one, so the two can never meet. Booking here keeps the figure the
+    // one this swing produced rather than one a later branch might have replaced.
+    // Taken and spent in the same breath, so the flag is strictly one-shot. The resolver clears
+    // it on the line after the aimed blow, which is what keeps the DRUM CHOKE splash and the AoE
+    // follow-through out of the count - but if anything below ever threw between the two, a live
+    // flag would sit there and the next blow through this door, an enemy's included, would be
+    // booked as a combo nobody fired.
+    const ridden = comboHit; comboHit = null;
+    noteCombo(ridden, { net: netDmg, rv: resistValue, ac: armourTaken, cd: preSoak,
+                        pierced: pierce, lethal: netDmg >= target.hp });
     // File the whole story of this number: what it started as, what bent it, what soaked it.
     const filed = { attacker: attacker.name, target: target.name, raw: calcDmg,
                     trace: (hitTrace || []).slice(), atkType, abilityStr };
@@ -12524,7 +12589,7 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
             // the ORIGINAL target's, which is the plate that did not stop anything. filed.armor
             // used to read target.armor further down, AFTER the swap, and so was right by
             // accident; taking the figure from mitigate is what made the staleness reachable.
-            ({ n: netDmg, rv: resistValue, ac: armourTaken } = figure(target));
+            ({ n: netDmg, rv: resistValue, ac: armourTaken, cd: preSoak } = figure(target));
             // F09: the record was filed before the swap, so the tap-to-explain card named the
             // operator the blow was MEANT for while the log line beside it named the one who
             // took it. The card explains a number, and the number is the saviour's.
@@ -13556,7 +13621,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
-    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, noteReach, noteFront, noteHaul, noteCover, noteMark, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, MARK_BONUS, CALLED_SHOT_MULT, hasTrait, traitOnField,
+    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, noteReach, noteFront, noteHaul, noteCover, noteMark, noteCombo, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, MARK_BONUS, CALLED_SHOT_MULT, hasTrait, traitOnField,
     PERK_DMG_FLAT, PERK_DMG_MULT, PERK_SPD, PERK_MAXHP, PERK_HP_FLAT,
     perkStacks, perkDmgFlat, perkDmgMult, syncRankPerks, syncAllRankPerks, bankPerkStack, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
@@ -13632,6 +13697,7 @@ globalThis.WP = {
     // F05: the two flags noteKill is TOLD about rather than reading, so a suite can prove a
     // status tick does not cash what the last swing left behind.
     get comboKill() { return comboKill; }, set comboKill(v) { comboKill = v; },
+    get comboHit() { return comboHit; }, set comboHit(v) { comboHit = v; },
     get odKills() { return odKills; }, set odKills(v) { odKills = v; },
     get pendingReq() { return pendingReq; }, set pendingReq(v) { pendingReq = v; },
     get pendingCache() { return pendingCache; }, set pendingCache(v) { pendingCache = v; },

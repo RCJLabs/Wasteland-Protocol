@@ -2433,6 +2433,77 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── M11: THE TEN PAIRINGS, COUNTED FOR THE FIRST TIME ──────────────────────────────────
+// COMBOS has been in this game since Phase 1 and nothing had ever counted any of it. This file
+// booked a combo turn as "claimed the turn" and stopped there, so a pairing nobody can reach and
+// a pairing everybody reaches read identically. Came out of the #197 scope as the largest
+// unmeasured channel the statuses feed. Three 150-expedition careers:
+//
+//                                    a        b        c
+//   combos fired                  3508     3534     3398      (23.4 / 23.6 / 22.7 a career)
+//   pairings reached              9/10     9/10    10/10
+//   kills landed on a combo swing  27%      33%      28%
+//
+//                            fired a / b / c        premium a firing
+//   rip_and_tear>bleeding    1764 / 1392 / 1961        12 / 23 / 19
+//   thermite>corroded         670 /  870 /  587       105 / 78 / 111
+//   molotov>oiled  *          332 /  725 /  266        79 / 101 / 103
+//   buckshot>oiled *          198 /  268 /  135        77 / 71 / 99
+//   bayonet_thrust>bleeding   185 /  146 /   86        14 / 30 / 29
+//   execute_shot>marked *     156 /   60 /  168        59 / 56 / 70
+//   scrap_blade>stunned        69 /    5 /   32        34 / 32 / 23
+//   spray_gun>corroded         68 /    0 /   59        36 /  - /  9
+//   pipe_rifle>bleeding        66 /   37 /   33        21 / 18 / 22
+//   harpoon>corroded            0 /   31 /   71         - / 37 / 61
+//                                                   (* spends the status it reads)
+//
+// THE FINDING, AND IT HOLDS ON ALL THREE: the most-fired pairing is among the least valuable a
+// firing. RIP AND TEAR is the top of the fired column in every career - 50%, 39% and 58% of all
+// combos - and sits in the bottom third of the premium order in every career, at 12, 23 and 19
+// points. THERMITE tops or nearly tops the premium order in all three at 105, 78 and 111, and
+// MOLOTOV and BUCKSHOT sit with it. Roughly a five-fold gap, stable across the three, between
+// what happens most and what is worth most. A tuning pass reading only "which combos happen"
+// would have had this backwards, which is what the column was missing rather than a detail.
+//
+// Not claimed: an exact ordering below the top. The middle of the premium column moves between
+// careers (pipe_rifle 21/18/22 against bayonet_thrust 14/30/29) and three careers cannot
+// separate rows that close - K06's floor applies to a census as much as to a comparison.
+//
+// The `*` is most of the mechanism. Three of the ten SPEND the status they read; the other
+// seven leave it on the body, so one application is cashable every turn until it expires. RIP
+// AND TEAR does not spend its bleed and BARBED SHOT keeps applying it.
+//
+// ── AND A READING I PUBLISHED AND HAD TO WITHDRAW WITHIN THE HOUR ─────────────────────
+// Career (a) alone showed harpoon>corroded at ZERO of 3508, with the HARPOONER deployed in 48 of
+// those 150 careers - and I wrote it up as the M06 shape: not weak, unreached. It is not. A
+// twenty-career run immediately fired HARPOON thirty-two times and left SPRAY GUN cold instead,
+// career (b) did the same, and career (c) reached all ten. HARPOON, SPRAY GUN and BAYONET THRUST
+// belong to the three N08 RECRUIT classes, so which of them a census sees is decided by which
+// recruits that career happened to sign. THE PER-PAIRING COUNT OFF ONE CAREER IS A ROSTER
+// HISTORY, NOT A PROPERTY OF THE GAME - the same error K06 named for win counts, wearing the
+// costume of a census rather than a comparison. Suite 168 stages all ten off the table and every
+// one of them fires, which is the reading a cold column can actually support.
+//
+// What IS stable across the three is the total (23.4 / 23.6 / 22.7 a career), the top of the
+// premium order, and the inversion above. Read those; do not read a single career's zero.
+//
+// ── WHY THE PREMIUM COLUMN IS A RANKING AND M10's DAMAGE COLUMN IS NOT ─────────────────
+// The one below says in capitals that it cannot rank the overdrive halves, and the difference is
+// worth stating because the two columns look alike. It is the WINDOW. An overdrive's value leaks
+// into the turns after the one it fires in, so its own resolution cannot price it. A combo is a
+// multiplier on a single swing that resolves inside that swing, and mitigate hands back cd, rv
+// and ac - so the same blow without the pairing is max(1, floor(cd / mult) - rv - ac), which is
+// arithmetic on figures the engine already produced rather than a model of the formula. No
+// second mitigate call: that re-fires its own side effects and counts a quirk twice for a number
+// nobody was dealt. Short by integer flooring, a unit or two a swing, one direction only.
+//
+// Three independent figures agreed to the point on the fixture in suite 168: what the census
+// claimed, what taking the status away actually cost, and half the swing a 2.0x multiplied.
+//
+// Points a career rather than a share, for K09's reason - there is no landed-damage denominator
+// in this file to take a share OF (the type ledger counts raw, before armour), and inventing one
+// is how M06 and M08b both went wrong.
+//
 // ── M10: THE OVERDRIVE FORK IS A NULL, AND MY OWN COLUMN CANNOT SAY OTHERWISE ──
 // The M-audit opened `--overdrive second` and deliberately answered nothing with it. Nine
 // variants had never fired in this project and P02 priced overdrive choice without ever
@@ -5914,6 +5985,20 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.mk = runStats.mk || null;           // M09: every mark placed, cashed and run out
   stat.od = runStats.od || {};             // M-audit: which half of each overdrive pair fired
   stat.odPairs = Object.keys(OVERDRIVES || {}).length;   // read in the page; the report has no OVERDRIVES
+  stat.cb = runStats.cb || {};             // M11: every one of the ten pairings, and what it bought
+  // The full key list, not just a count: the report is asked which pairings NEVER fired, and a
+  // count can only say how many are missing. Same key the census builds, so the two cannot drift.
+  stat.cbAll = (COMBOS || []).map(c => `${c.move}>${c.needs.replace('Turns', '')}`);
+  // And which of those belong to a class a career has to RECRUIT rather than start with. Three of
+  // the ten do, and a cold column is far likelier to be a roster history than a finding - which
+  // is a mistake this file's M11 record has already published and withdrawn once.
+  {
+    const recruit = new Set((RECRUIT_POOL || []).map(r => r.classType));
+    const clsOf = m => Object.keys(ABILITIES).find(k => ABILITIES[k].some(a => a.move === m))
+                    || Object.keys(FOURTH_ABILITIES).find(k => FOURTH_ABILITIES[k].move === m);
+    stat.cbRecruit = (COMBOS || []).filter(c => recruit.has(clsOf(c.move)))
+                                   .map(c => `${c.move}>${c.needs.replace('Turns', '')}`);
+  }
   stat.qkDrawn = runStats.qkDrawn || {};   // and what the pool actually handed out
   stat.ut = runStats.ut || {};   // L03: the damage the type ledger cannot see
   // K05: what came out of the materials bag and by which door, plus what was still sitting in
@@ -7003,6 +7088,73 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       rows.forEach(([k, v]) => { (byCls[v._cls] = byCls[v._cls] || []).push([k, v]); });
       line('  per class, the half that fired and what it was worth a firing',
         Object.entries(byCls).sort().map(([c, rs]) => `${c.toLowerCase()} ${rs.map(per).join('/')}`).join(', '));
+    }
+  }
+  // ── M11: the ten pairings, and what each of them actually bought ──────────────────────
+  // COMBOS has been in the file since Phase 1 and nothing has ever counted it. This file books a
+  // combo turn only as "claimed" - which says a combo happened and nothing about WHICH, so a
+  // pairing nobody can reach and a pairing everybody reaches read the same. That is the shape
+  // M-audit found in the overdrives (nine of eighteen unreachable) and M06 found in the
+  // signatures (CALLED SHOT at 1%), and it is worth checking here before any of it is tuned.
+  //
+  // UNLIKE THE OVERDRIVE COLUMN ABOVE, the premium here is a ranking and may be read as one.
+  // The difference is the window. An overdrive's value leaks into later turns and its own
+  // damage cannot price it; a combo is a multiplier on one swing that resolves inside that
+  // swing. mitigate hands back cd, rv and ac, so the same blow without the pairing is
+  // max(1, floor(cd / mult) - rv - ac) exactly - no second call, no model of the formula.
+  // Short by integer flooring, a unit or two a swing, one-directional. VULTURES INSTINCT's own
+  // 1.25x sits in both arms and so correctly cancels out of the premium while staying in dmg.
+  //
+  // Points per career rather than a share, for K09's reason two hundred lines down: what a
+  // pairing is worth is how much damage it adds, and a share of a total nobody landed cannot
+  // say that. There is no landed-damage denominator in this file to take a share OF - the type
+  // ledger counts raw, pre-mitigation - and inventing one is how M06 and M08b went wrong.
+  {
+    const cb = foldAll('cb');
+    const rows = Object.entries(cb).sort((a, b) => b[1].fired - a[1].fired);
+    const all = [...new Set(results.flatMap(r => r.cbAll || []))];
+    const pairs = all.length;
+    const fired = rows.reduce((a, [, v]) => a + v.fired, 0);
+    line('combos fired', `${fired} (${(fired / n).toFixed(1)} a career) across ${rows.length} of ${pairs} pairings`);
+    if (rows.length) {
+      // `eats` is the half that explains the fired column. Three of the ten SPEND the status they
+      // read - IGNITE takes the oil, CONFIRMED takes the mark - and the other seven leave it on
+      // the body, so one application can be cashed every turn until it runs out. RIP AND TEAR is
+      // half of all combos in this game and does not consume its bleed, which is most of why.
+      line('  by pairing (* spends the status it reads)',
+        rows.map(([k, v]) => `${k.toLowerCase()}${v._eats === 'y' ? '*' : ''} ${v.fired}`).join(', '));
+      // The column this census exists for. Sorted by it, because that IS the ranking.
+      const prem = rows.filter(([, v]) => v.fired > v.pierced)
+                       .sort((a, b) => b[1].premium - a[1].premium);
+      line('  damage the pairing itself added, points a career',
+        prem.map(([k, v]) => `${k.toLowerCase()} ${Math.round(v.premium / n)}`).join(', ') || 'none');
+      // Per firing, against the whole swing it sat on - the second figure is the context for the
+      // first. A 2.0x that reads half its swing is the arithmetic working; anything far off that
+      // is armour or a resistance eating into the difference, which is a real effect and not a
+      // fault in the column.
+      line('  and per firing, the pairing\'s share of the swing it multiplied',
+        prem.map(([k, v]) => { const f = Math.max(1, v.fired - v.pierced);
+          return `${k.toLowerCase()} x${v._mult} ${Math.round(v.premium / f)} of ${Math.round(v.dmg / f)}`; }).join(', ') || 'none');
+      line('  kills landed on a combo swing', rows.reduce((a, [, v]) => a + v.kills, 0) +
+        ` of ${fired} (${(rows.reduce((a, [, v]) => a + v.kills, 0) / Math.max(1, fired) * 100).toFixed(0)}%)`);
+      // A pierced swing takes the target's whole health and the multiplier never touches it, so
+      // it is a firing with no premium rather than a firing worth nothing. Named when it happens.
+      const pierced = rows.reduce((a, [, v]) => a + v.pierced, 0);
+      if (pierced) line('  of those, pierced (HEADSHOT - the multiplier does not apply)', String(pierced));
+    }
+    // A cold pairing, and WHAT IT IS SAFE TO CONCLUDE FROM ONE. Three of the ten belong to the
+    // N08 recruit classes, so whether a career ever sees them is decided by which recruits it
+    // signed - and the first version of this line said "unreached, which is a different finding
+    // from unrewarding", which read a roster history as a property of the game and had to be
+    // withdrawn the same day. Marked per row instead, and the reading is spelled out rather than
+    // left to whoever quotes the line.
+    const cold = all.filter(k => !cb[k]);
+    const recruit = new Set(results.flatMap(r => r.cbRecruit || []));
+    if (cold.length) {
+      line('  never fired in this sample', cold.map(s => s.toLowerCase() + (recruit.has(s) ? ' (recruit class)' : '')).join(', '));
+      line('    what that means', cold.every(k => recruit.has(k))
+        ? 'all of them belong to classes a career has to recruit - this is a roster history, not a finding'
+        : 'at least one is a starting class, which IS worth chasing - see suite 168, which stages all ten');
     }
   }
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
