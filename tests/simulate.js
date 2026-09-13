@@ -2433,6 +2433,47 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O07: THE MAP'S LOPSIDEDNESS IS LOAD-BEARING, AND THE ONE-NUMBER DIAL IS TWO ────────
+// O06 left "the road is corridor too often" with what looked like a single dial: the edge
+// extension in generateSectorMap, `if (hi + 1 < b.length && rng() < 0.5)`. Building it found the
+// extension reaches ONE WAY ONLY - it offers b[hi + 1] and never b[lo - 1] - so a node already at
+// the right of its tier cannot gain a fork at all. Measured over 4,000 generated maps:
+//
+//   single-exit nodes, by position in their tier     left 39.5%   middle 37.6%   RIGHT 71.6%
+//
+// The rightmost node of a tier is a forced step nearly twice as often as the leftmost, from
+// geometry rather than from any roll. That looks exactly like a defect, and fixing it is two
+// lines. It is not a defect.
+//
+// WHAT THE SUITE CAUGHT. 87-recruit-routing asserts that 10-30% of tier 2-9 nodes are reachable
+// from ONLY ONE of the two tier-1 openings - the map has to commit you to something, or the first
+// choice of a run means nothing. A symmetric extension at the same 0.5 drops that to 7.8% and the
+// battery goes red. Swept against both constraints at once:
+//
+//   shape         p     forced%   left%   right%   one-opening%   (bound 10-30)
+//   right-only   0.50    51.7     39.5    71.6        17.8         <- today
+//   symmetric    0.50    38.1     41.4    41.3         7.8   OUT
+//   symmetric    0.30    49.2     52.7    52.8        13.1
+//   symmetric    0.25    52.1     55.4    55.5        14.8
+//   symmetric    0.20    55.0     57.8    57.8        17.3
+//
+// THE BIAS IS WHAT MAKES THE COMMITMENT. Concentrating every extension on one side is what makes
+// reachability asymmetric, and asymmetric reachability IS the one-opening share. Hold commitment
+// where it is today (17.8%) and a symmetric road needs p = 0.20, which leaves it MORE corridor
+// than it is now - 55.0% against 51.7%. Hold the corridor rate where it is and commitment falls
+// to 14.8%. There is no setting that buys both, so the lopsidedness is not a bug sitting next to
+// the dial; it is the other half of the dial.
+//
+// SO #1 IS NOT A ONE-NUMBER CHANGE and the pitch behind it was wrong in the same way O06's was.
+// "Fewer forced steps" and "your first turning matters" are the same knob pulling opposite ways,
+// and picking a point on that curve is a design call with a target behind it - the owner's, like
+// J04's plate and O01's scar price. NOTHING SHIPPED; game.js is byte-identical to before.
+//
+// WORTH KNOWING IF ANYONE RETURNS TO IT: the curve above is the whole decision, already measured.
+// A road that is both less forced AND still committing needs a different mechanism - exclusivity
+// that does not come from geometry, such as a node that shuts a branch behind you - rather than a
+// number moved on this one.
+
 // ── O06: THE ROAD'S FORKS, COUNTED - AND "FIGHT NODES DO NOT DIFFER" IS REFUTED ────────
 // Scoping a phase that would give factions a memory of you, on the premise that fight nodes do
 // not differ so the 58% of routing decisions that are all-fight are not really decisions. The
