@@ -91,6 +91,12 @@ module.exports = {
       own.cleared.t === 0 && !own.cleared.s);
     ok(`the shortening is counted rather than corrected (${(own.ledger.atFoe.ASSIGNED || {}).shortened})`,
       (own.ledger.atFoe.ASSIGNED || {}).shortened === 1 && !(own.ledger.atFoe.ASSIGNED || {}).applied);
+    // #201: and WHAT IT THREW AWAY, which is the figure the decision turns on. A rate alone
+    // cannot be acted on, and an arm cannot settle an effect this small - K06 put the floor at
+    // about fourteen wins across three careers - so the cost has to be arithmetic instead. The
+    // seven turns on the body went to two, so five turns of bleeding were thrown away.
+    ok(`and the turns it threw away are counted with it (${(own.ledger.atFoe.ASSIGNED || {}).turnsLost})`,
+      (own.ledger.atFoe.ASSIGNED || {}).turnsLost === 5);
     ok('and the turns each source actually granted are counted apart from the applications',
       own.ledger.atFoe.LONG.turns === 5 && own.ledger.atFoe.LONGER.turns === 2 && !own.ledger.atFoe.SHORT);
 
@@ -161,7 +167,7 @@ module.exports = {
       /foldAll\('bl'\)/.test(sim));
     {
       const block = (sim.match(/const bl = foldAll\('bl'\);[\s\S]*?\n  \}/) || [''])[0];
-      const unread = ['applied', 'turns', 'shortened', 'ticks', 'raw', 'dmg', 'kills']
+      const unread = ['applied', 'turns', 'shortened', 'turnsLost', 'ticks', 'raw', 'dmg', 'kills']
         .filter(f => !block.includes(f));
       ok(`every field the census keeps is read by the report${unread.length ? ': ' + unread.join(', ') + ' unread' : ''}`,
         unread.length === 0);

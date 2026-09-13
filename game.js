@@ -357,12 +357,14 @@ function noteCombo(c, hit) {
 // six overdrives to a boss passive to the blood moon, and the tick could say only "a bleed".
 //
 // Two verbs rather than one, and the difference is not cosmetic. Twelve of the nineteen sites
-// raise the counter with Math.max and seven ASSIGN it - so a SHIV's two turns can currently
-// overwrite a five-turn BARBED SHOT and shorten it. That is a latent defect the #197 scope
-// named, and it is deliberately NOT fixed here: this item is an instrument, and changing the
-// game while building the thing that measures it is how a reading gets attributed to the wrong
-// cause. bleedSet keeps the assign semantics exactly and COUNTS the shortenings instead, so the
-// next item gets a rate rather than my opinion.
+// raise the counter with Math.max and seven ASSIGN it - so a SHIV's two turns can overwrite a
+// five-turn BARBED SHOT and shorten it. The #197 scope called that a latent defect; tier A
+// declined to fix it while building the instrument that measures it, and #201 then priced it
+// rather than arguing about it: 0.3 to 1.2 turns of bleeding thrown away a career, worth 12 to
+// 45 points against the 3650-odd the squad's bleeds land. A third to one percent of one damage
+// channel. DECLINED - the semantics stay as they are, and bleedSet keeps counting, so a future
+// card that makes long bleeds common will show up in the column rather than in somebody's
+// memory of this decision.
 //
 // The source follows the counter. A bleed that does not lengthen the one already on the body
 // has not done anything, so it does not take ownership either - which makes "whose bleed is
@@ -373,9 +375,14 @@ function noteBleed(kind, ent, src, a, b) {
     const side = ent && ent.isPlayer ? 'atSquad' : 'atFoe';
     const rows = bl[side] = bl[side] || {};
     const row = rows[src || 'UNATTRIBUTED'] = rows[src || 'UNATTRIBUTED'] ||
-        { applied: 0, turns: 0, shortened: 0, ticks: 0, raw: 0, dmg: 0, kills: 0 };
+        { applied: 0, turns: 0, shortened: 0, turnsLost: 0, ticks: 0, raw: 0, dmg: 0, kills: 0 };
     if (kind === 'apply') { row.applied++; row.turns += a; }
-    else if (kind === 'shorten') { row.shortened++; }
+    // #201: how many turns of bleeding a shortening actually THREW AWAY, not just that one
+    // happened. A rate on its own cannot be acted on - 1% of applications could be one turn a
+    // career or a hundred - and an arm cannot settle an effect this small either, because K06
+    // measured the floor at about fourteen wins across three careers. Counting the turns makes
+    // it arithmetic: turns lost, against 8% of a maxHp each, is the whole cost of the defect.
+    else if (kind === 'shorten') { row.shortened++; row.turnsLost += a; }
     else if (kind === 'tick') {
         row.ticks++; row.raw += a; row.dmg += b;
         if (ent.hp <= 0) row.kills++;
@@ -396,7 +403,7 @@ function bleedSet(target, turns, src) {
     if (!target) return false;
     const had = target.bleedingTurns || 0;
     target.bleedingTurns = turns; target.bleedSrc = src;
-    if (turns < had) { noteBleed('shorten', target, src); return true; }
+    if (turns < had) { noteBleed('shorten', target, src, had - turns); return true; }
     noteBleed('apply', target, src, turns - had);
     return true;
 }

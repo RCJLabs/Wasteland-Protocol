@@ -2469,8 +2469,10 @@ const ROOT = path.join(__dirname, '..');
 //
 // THE SAME INVERSION M11 FOUND, ON A SECOND AND INDEPENDENT LEDGER. RAD SHOT tops the total in
 // all three careers and is among the cheapest per use at 29-33. RIPSAW and BARBED SHOT are worth
-// 89 to 131 a use - four times as much - and are applied so rarely that RIPSAW only reaches
-// second place. Frequency and worth rank oppositely here exactly as they do in the combo table,
+// far more a use and are applied so rarely that RIPSAW only reaches second place. (#201 ran two
+// further careers, which WIDEN those per-use figures rather than moving them: across five, RAD
+// SHOT runs 29-35, RIPSAW 118-131, BARBED SHOT 89-162. The gap is the finding; the exact
+// multiple is noisier than three careers could show, and BARBED SHOT is the noisy one.) Frequency and worth rank oppositely here exactly as they do in the combo table,
 // which is now two separate measurements of the same shape rather than one result.
 //
 // THE TWO SIDES ARE NOT THE SAME MECHANIC. The road APPLIES MORE bleeds than the squad does -
@@ -2484,12 +2486,26 @@ const ROOT = path.join(__dirname, '..');
 // purpose - plate does not stop a wound - so the whole of that gap is RESISTANCES, which every
 // operator carries and most of the bestiary does not.
 //
-// THE MEASUREMENT THAT WAS DEFERRED ON PURPOSE. Seven of the nineteen sites ASSIGN the counter
-// rather than raising it, so a SHIV's two turns can overwrite a five-turn BARBED SHOT. The #197
-// scope called that a latent defect and this item deliberately did NOT fix it - an instrument
-// that changes the game while measuring it cannot be trusted about either - and counted it
-// instead: 1.3, 0.7 and 1.0 shortenings a career, 0.7% to 1.3% of squad applications and 0.0%
-// of the road's. Real, and small enough that it is now a rate rather than an argument.
+// THE DEFERRED MEASUREMENT, NOW PRICED - AND THE DEFECT IS DECLINED. Seven of the nineteen sites
+// ASSIGN the counter rather than raising it, so a SHIV's two turns can overwrite a five-turn
+// BARBED SHOT. Tier A deliberately did not fix it - an instrument that changes the game while
+// measuring it cannot be trusted about either - and counted it instead. #201 then PRICED it,
+// because a rate cannot be acted on: 1% of applications is one turn a career or a hundred
+// depending on how much each one throws away, and an arm cannot settle it either - K06 put the
+// floor at about fourteen wins across three careers and this is orders below that. So the
+// census counts the turns lost, and the answer is arithmetic:
+//
+//                                        a       b       c
+//   shortenings a career                0.2     0.6     1.1
+//   turns of bleeding thrown away       0.3     0.7     1.2
+//   points that costs the squad          12      24      45
+//   against, landed by its own bleeds  3662    3647    3940
+//                                      0.3%    0.7%    1.1%
+//
+// A third to one percent of ONE damage channel, which is itself a fraction of what a squad
+// deals. DECLINED, on the M08b precedent: measure the change, state the size, decline it. The
+// seven sites keep their semantics and bleedSet keeps counting, so if a future card ever makes
+// a long bleed common the column will say so without anybody having to remember this.
 //
 // Nothing here moves a dial. The census is the deliverable; what to do about RAD SHOT carrying a
 // third of the squad's bleed damage at a thirtieth of RIPSAW's value a use is a balance question
@@ -7266,8 +7282,19 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       const shortened = sum('shortened');
       line('  applications that SHORTENED a longer bleed', shortened
         ? `${(shortened / n).toFixed(1)} a career, ${(shortened / (sum('applied') + shortened) * 100).toFixed(1)}% of them - ` +
-          `the seven assigning sites; a rate, not an opinion`
+          `the seven assigning sites`
         : 'none in this sample');
+      // #201: and what that costs, which is the figure a decision can actually be made on. A
+      // rate cannot be acted on by itself - 1% of applications is one turn a career or a hundred
+      // depending on how much each one throws away - and an arm cannot settle an effect this
+      // small either: K06 put the floor at about fourteen wins across three careers. Turns lost
+      // against the tick they would each have done is the whole cost, as arithmetic.
+      if (shortened) {
+        const lost = per('turnsLost');
+        const perTick = per('dmg') / Math.max(1, per('ticks'));
+        line('    and what it threw away', `${lost.toFixed(1)} turns of bleeding a career, ` +
+          `about ${Math.round(lost * perTick)} points against the ${Math.round(per('dmg'))} this side's bleeds land`);
+      }
     });
   }
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
