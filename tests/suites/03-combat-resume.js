@@ -52,5 +52,69 @@ module.exports = {
     const snap = await page.evaluate(() =>
       JSON.parse(localStorage.getItem(BASE_SAVE_KEY + currentSlot) || '{}').combat);
     ok('the snapshot clears once the fight is settled', !snap);
+
+    // ── A FIGHT THAT COMES BACK WITH NOBODY STANDING STILL HAS TO END ─────────────────
+    // Found while checking a loose thread from #209: a resume loaded an operator at 0 hp and the
+    // fight came back up ACTIVE with nobody on our side of it. The assumption at the time was
+    // that the wipe check fires on the next turn. It does not, and the cost of not checking was
+    // an unrecoverable soft-lock.
+    //
+    // executeEnemyAi picks its targets with
+    //     let validTargets = activeEntities.filter(e => e.isPlayer && e.hp > 0);
+    //     if (validTargets.length === 0) return;
+    // and that bare return was the ONE exit of about nine in that function that neither schedules
+    // the next turn nor checks the win state. Every sibling does one or the other. So the chain
+    // stopped dead: activeIndex frozen, combatActive true, the deck reading "ENEMY TURN..." and
+    // the log holding nothing after "> COMBAT RESUMED." - no SQUAD DOWN, no run over, no way out
+    // of the tab. Measured at 12s here and it is not a slow frame, it is forever.
+    //
+    // WHY RESUME IS THE WAY IN. Nothing else starts a turn without a checkWinState in front of
+    // it. applyDamageHit does not call checkWinState itself - its CALLERS do - so in a normal
+    // fight the blow that empties the field also ends it. resumeCombat calls processTurn
+    // directly, so a fight restored with the field already empty gets a turn nobody checked.
+    //
+    // WHAT IS NOT ESTABLISHED: that ordinary play writes such a save. saveGameState runs at the
+    // top of processTurn, before the turn's effects, so the bytes on disk carry a living squad;
+    // no route from real play to a wiped-squad save was found. This holds the engine to the
+    // safe behaviour either way, because the cost of being wrong is a save nobody can open.
+    await page.reload();
+    await engineUp(page);
+    const stuck = await page.evaluate(() => {
+      localStorage.clear(); currentSlot = 1; loadMeta(); confirmNewGame(1.0); sectorFront = null;
+      globalSettings.combatSpeed = 0.05;
+      initiateCombat('RAIDERS', false);
+      // The state the resume has to survive: a snapshot whose squad is already down.
+      activeEntities.filter(e => e.isPlayer).forEach(e => { e.hp = 0; });
+      playerRoster.forEach(p => { p.hp = 0; });
+      saveGameState();
+      return localStorage.getItem(BASE_SAVE_KEY + currentSlot);
+    });
+    await page.reload();
+    await engineUp(page);
+    const came = await page.evaluate(saved => {
+      currentSlot = 1; localStorage.setItem(BASE_SAVE_KEY + currentSlot, saved);
+      globalSettings.combatSpeed = 0.05;
+      loadGameState();
+      if (pendingCombat) resumeCombat(pendingCombat);
+      return { active: combatActive,
+               oursUp: activeEntities.filter(e => e.isPlayer && e.hp > 0).length,
+               foesUp: activeEntities.filter(e => !e.isPlayer && e.hp > 0).length };
+    }, stuck);
+    ok(`a save whose squad is already down still comes back as a fight (${came.oursUp} up against ${came.foesUp})`,
+      came.oursUp === 0 && came.foesUp > 0);
+    // The whole point is the DEFERRED chain, so this waits on the engine rather than on a clock.
+    let ended = true;
+    try { await page.waitForFunction(() => !combatActive, null, { polling: 100, timeout: 12000 }); }
+    catch (e) { ended = false; }
+    const way = await page.evaluate(() => ({
+      active: combatActive, ai: activeIndex,
+      down: /squad-down/.test((document.getElementById('command-deck') || {}).innerHTML || ''),
+      deck: ((document.getElementById('command-deck') || {}).innerHTML || '').replace(/<[^>]*>/g, '').trim().slice(0, 40)
+    }));
+    ok(`and it ends rather than hanging on a turn with nothing to swing at `
+       + `(${ended ? 'ended' : 'STILL ACTIVE after 12s'}, deck "${way.deck}", index ${way.ai})`,
+      ended === true && way.active === false);
+    ok(`with SQUAD DOWN on the deck, which is the only way out of that screen (${way.down})`,
+      way.down === true);
   }
 };

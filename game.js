@@ -13215,7 +13215,17 @@ function executeEnemyAi(enemy) {
     }
 
     let validTargets = activeEntities.filter(e => e.isPlayer && e.hp > 0); 
-    if (validTargets.length === 0) return;
+    // THE ONE EXIT THAT DROPPED THE TURN. Every other early return in this function either
+    // schedules the next turn or checks the win state; this one - nobody left to swing at - did
+    // neither, so the chain stopped here with combatActive still true. Reached through
+    // resumeCombat, which is the one caller that starts a turn WITHOUT a checkWinState in front
+    // of it: load a save whose squad is down and the fight comes back up, the enemy takes its
+    // turn, finds no target, and returns into nothing. No SQUAD DOWN, no run over, activeIndex
+    // frozen, the deck reading "ENEMY TURN..." forever - an unrecoverable soft-lock rather than
+    // a missed frame. checkWinState is exactly the right answer: with no player standing it puts
+    // SQUAD DOWN on the deck and ends the fight, which is what the blow that emptied the field
+    // would have done had one been thrown.
+    if (validTargets.length === 0) { checkWinState(); return; }
     let intent = enemy.intent || { type: 'ATTACK' };
     let target = pickTarget(enemy, validTargets, intent);
 
