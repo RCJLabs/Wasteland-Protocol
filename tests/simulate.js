@@ -2433,6 +2433,50 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O08: THE WOUNDED RUN IS ALREADY BUILT - AND WHY FOUR PITCHES IN A ROW WERE WRONG ───
+// Filed as a phase: 71% of runs wipe, so the middle of a collapsing run is the most-played part
+// of the game and the least designed - triage, carrying wounded, choosing what to abandon.
+// REFUTED on evidence already in this file and this report, before any new measurement.
+//
+// INSIDE THE FIGHT, over 150 expeditions: 2,879 operators go on the floor (19.2 a run) and 2,311
+// are dragged clear (15.4); 704 are lost for good (4.69). The squad spends 4,911 turns picking
+// people up, and of the 6,016 turns taken with somebody down, 80% had a way to reach them. The
+// rescue game is not missing, it is most of what a losing fight consists of.
+//
+// AND THE MONOPOLY WAS ASKED AND ANSWERED. The report reads 88% of rescues as the STIM tactic and
+// 5% as the medic's hands, which looks exactly like one button. H05 built `--rescue hands` for
+// precisely that suspicion and measured it: 87/7/6 becomes 65/16/20 with the ordering reversed,
+// complete separation, so the share was this file reaching for the bar first. What the GAME
+// offers is unchanged between arms - the bar reaches 71-75% of down-turns, a deck move 16-20%,
+// the bag 13-21%. And bar-first is half a sector deeper: the dominant tool dominates because it
+// is the renewable one and spending it first keeps the bag full. H05 shipped nothing and was
+// right to.
+//
+// LEAVING THE FIGHT IS ALSO BUILT AND ALSO USED: 4.75 withdrawals a run, 5.75 regroups spent,
+// 4.91 fallbacks deployed with, and a retreat on the table 713 times at 62% affordable after I01
+// opened that door. Losing is a sequence of decisions roughly five times a run.
+//
+// ── AND THE PART WORTH KEEPING: FOUR PITCHES, FOUR REFUTATIONS, ONE CAUSE ──────────────
+// O03, O06, O07 and this one came out of a single brainstorm and every one failed the same way.
+// They were generated FROM THIS REPORT'S SUMMARY LINES without checking those lines against what
+// the file already records:
+//
+//   O03  "0% of points buy a capstone"      a door attribution; capstones are bought 3.3 a run
+//   O06  "58% of forks are all fights"      62% of those offer two DIFFERENT factions
+//   O07  "46% of steps are forced"          the fix trades against a bound a suite already sets
+//   O08  "88% of rescues are one button"    H05 measured it as the harness's own ordering
+//
+// A report line describes a measurement someone already took for a reason. Read as a gap, it is
+// an invitation to re-file work that is done. THE CHECK THAT WOULD HAVE CAUGHT ALL FOUR is one
+// grep of this header and the item list for the system being pitched, BEFORE the pitch - not
+// after, when a career has been spent measuring it.
+//
+// That is not an argument against reading the report for ideas. Three of the four turned up
+// something real on the way - a mis-worded line fixed in O03, a census shipped in O06, a coupling
+// nobody had measured in O07. It is an argument for spending five minutes on the record first,
+// because the difference between "nobody has looked at this" and "somebody looked and wrote down
+// why not" is the whole value of having written it down.
+
 // ── O07: THE MAP'S LOPSIDEDNESS IS LOAD-BEARING, AND THE ONE-NUMBER DIAL IS TWO ────────
 // O06 left "the road is corridor too often" with what looked like a single dial: the edge
 // extension in generateSectorMap, `if (hi + 1 < b.length && rng() < 0.5)`. Building it found the
