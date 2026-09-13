@@ -2433,6 +2433,46 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O05: THE ELITE OFFER WAS BUILT, MEASURED, AND REVERTED - AND IT PRICED THE CHANNEL ─
+// O04 found 56% of the relic shelf arriving from elites as a die roll with nothing asked. The
+// change that followed from it: hand over TWO cards instead of one, so the biggest channel asks
+// something, with the commander's three kept bigger so the hierarchy the file states survives.
+// Two cards and not three, and the count deliberately NOT cut - a game that wipes 71% of runs is
+// not one to take relics away from, so the intent was to change whether the player chose, not
+// how much they got.
+//
+// ONE TRAP AVOIDED IN THE BUILDING, worth keeping even though the change went back. The obvious
+// implementation is rollRelicOffer(2), and it is wrong: that builder SEEDS A RARE FIRST by
+// construction, so an offer built from it hands a rare-preferring player one every time - a 30%
+// rare rate turned into 100% and called "a choice". A separate draw at rollRelic's own odds puts
+// a rare on at least one of two cards 51% of the time, which is what choosing is actually worth.
+//
+// IT DID NOT INTEGRATE AND THE ARM SAID SO IMMEDIATELY. The elite branch lives inside
+// checkWinState and set pendingRelicOffer, which the engine shows through afterNode - a path
+// this file does not take, since it calls bankNode rather than collectLoot. The offers were
+// staged and never picked up. One career, against the O01 baseline:
+//
+//                             baseline (3 careers)      the broken arm (1)
+//   relics held, mean          10.6                     4.8
+//   relic offers seen          2.47 a run               2.21 a run   <- never rose
+//   runs that ended the road   21 / 19 / 17             9
+//
+// AND THAT ACCIDENT PRICED THE CHANNEL, which is the one thing worth keeping. Destroying the
+// elite relic destroys 5.8 relics a run - which reconciles with O04's census of 5.6 FIGHT_DROPs a
+// run, so the arm really did remove that channel and nothing else - and the career that lost them
+// ended the road 9 times against a baseline of 21/19/17. ONE CAREER, so the win figure is
+// suggestive rather than established (K06 resolves +/-4.2 on one). The relic count is a census
+// over a whole career and reads at that size.
+//
+// Which settles a question the brainstorm had open: the first instinct was to make the elite drop
+// RARER so the commander's offer would dominate. Had that shipped it would have cut a channel
+// carrying half the shelf and, on this evidence, a large share of the wins. The channel is
+// load-bearing. Anything done here has to keep the count and change only the asking.
+//
+// REVERTED. game.js is byte-identical to before the attempt; what stands is O04's census and this
+// price. Re-doing it needs the offer plumbed through a path the harness actually walks, which is
+// its own piece of work rather than a line in the elite branch.
+
 // ── O04: WHERE THE RELIC SHELF COMES FROM, AND IT IS NOT THE DECISION ──────────────────
 // A run ends holding 10.6 relics of a pool of 20, and every non-cursed one lands in 67-86% of
 // runs - so two runs end with nearly the same shelf and a relic is a collection rather than a
