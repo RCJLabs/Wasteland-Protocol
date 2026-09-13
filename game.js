@@ -303,6 +303,38 @@ function noteCover(cover, t, dmg) {
     g.blows++; g.dmg += dmg;
     if (on) { g.hit++; g.hitDmg += dmg; }
 }
+// ── N01: one door for everything a landed blow owes the ledgers ────────────────────────
+// THE BUG THIS CLOSES, and it is M08b's exactly, one line away and missed for four items.
+// mitigate carried `noteQuirk('THICK_HIDE', true)` inside itself - and mitigate is reached by
+// five paths that are not blows: four threatBoard forecasts, which are the AI previewing its
+// own damage, and the roster card's resist probe. So the quirk census counted a hit every time
+// anything WONDERED about a hit. M05 published the result as a count of firings - "THICK_HIDE
+// 182,859 and 189,321" beside VAMPIRIC's 3,414 and 5,519 - and the fifty-fold gap read as a
+// hit-taken quirk being common rather than as an instrument counting the wrong event.
+//
+// AND THE SAME AUDIT FOUND THE MIRROR OF IT. noteCover was booked at three landing points and
+// typedToll is a fourth - the vents, the turned tank, the chem spill - which run damage through
+// mitigate and apply it without telling the cover ledger. So one census was counting blows
+// nobody threw and the other was missing blows that landed, for the same reason: the bookings
+// were spread by hand across sites that nothing held together.
+//
+// Held together now. Every path that actually takes health off a body comes through here, and
+// anything a future item wants to book off a landed blow goes in this function rather than into
+// mitigate - which computes, and must not count.
+function noteLanding(cut, t, dmg) {
+    if (!cut) return;
+    noteCover(cut.cover, t, dmg);
+    // Booked HERE rather than where it is applied, which is the whole of the fix.
+    if (cut.thick) noteQuirk('THICK_HIDE', true);
+    if (!runStats) return;
+    // Self-seeding, and not because it is tidier. The first cut of this seeded {calls:0, blows:0}
+    // and then wrote `m.blows++` - which is the M-audit's exact bug, undefined + 1 into NaN and
+    // then a believable zero, and it shipped in the same commit that was fixing an instrument.
+    // It failed in this suite's own fixture, which resets runStats.mit to a bare object the way
+    // a reload does. A key that increments itself cannot have a seed to drift from.
+    const m = runStats.mit = runStats.mit || {};
+    m.blows = (m.blows || 0) + 1;
+}
 // M11: what the ten pairings in COMBOS are actually worth. The table has existed since Phase 1
 // and nothing has ever counted it - the simulator books a combo turn only as "claimed", which
 // says a combo happened and nothing about which one or what it bought. It is the largest
@@ -11380,7 +11412,7 @@ function applyTurnStartEffects(ent) {
     const skyHit = (type, raw, cause, cls) => {
         const cut = mitigate(null, ent, raw, type, null);
         noteDamageType(ent.isPlayer ? 'atSquad' : 'atFoe', type, raw, cut.rv);
-        noteCover(cut.cover, ent, cut.n);
+        noteLanding(cut, ent, cut.n);
         if (cut.n <= 0) return;
         const _b = ent.hp;
         ent.hp = Math.max(0, ent.hp - cut.n);
@@ -11415,7 +11447,7 @@ function applyTurnStartEffects(ent) {
         // L03 built goes empty - which the report states rather than leaving blank.
         const cut = mitigate(null, ent, b, 'phys', 'BLEED');
         noteDamageType(ent.isPlayer ? 'atSquad' : 'atFoe', 'phys', b, cut.rv);
-        noteCover(cut.cover, ent, cut.n);
+        noteLanding(cut, ent, cut.n);
         // #197 tier A: read BEFORE clearBleed runs at the bottom of this block, which is the
         // ordering that actually carries weight - a bleed running out on this tick still did
         // this tick's damage, and the body is about to stop carrying the answer. (The decrement
@@ -12378,6 +12410,10 @@ function resolveAction(targetId) {
 // have had their say. Lifted out of applyDamageHit so the aiming preview runs the same
 // arithmetic the real hit does - a preview that recomputes is a preview that drifts.
 function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
+    // Counted against noteLanding's blows, so the size of this gap is a number in the report
+    // rather than something an audit has to rediscover. It is the denominator that makes a
+    // counter kept in the wrong place visible the next time somebody adds one.
+    if (runStats) { const m = runStats.mit = runStats.mit || {}; m.calls = (m.calls || 0) + 1; }
 
     // K08: the sky now sends its tick through here, and the sky ticks EVERY active body -
     // including ones put on the field rather than drawn off a template. A damage function that
@@ -12418,7 +12454,17 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     if (hasDoctrine('NO_HANDS') && t.isPlayer && t.gridPos === 1 && attacker && !attacker.isPlayer
         && attacker.range === 'melee') cd = Math.floor(cd * 0.8);
     if (hasRelic('CHEM_ETCHER') && !t.isPlayer && (t.corrodedTurns || 0) > 0) cd = Math.floor(cd * 1.25);
-    if (hasQuirk(t, 'THICK_HIDE')) { noteQuirk('THICK_HIDE', true); cd = Math.max(1, cd - 3); }
+    // N01: applied here, COUNTED at the landing point. This line runs on four forecasts and a
+    // UI probe for every blow that is actually thrown; noteLanding is the one that knows a body
+    // took something. The flag rides back with the figure, the way J04's `ac` and M11's `cd` do.
+    let thick = false;
+    if (hasQuirk(t, 'THICK_HIDE')) {
+        thick = true; cd = Math.max(1, cd - 3);
+        // What the OLD counter counted, kept so the size of the error is a measurement rather
+        // than a story. This increments exactly where noteQuirk used to sit; the real count now
+        // lands in noteLanding, and the report prints the two side by side.
+        if (runStats) { const m = runStats.mit = runStats.mit || {}; m.hideSeen = (m.hideSeen || 0) + 1; }
+    }
     // Ruins are cover for whoever is standing in them, and the front rank is where the cover is.
     // ...unless the sky has filled the cover: gas pools in exactly the low ground you crouch in.
     // M08b: what the ground's front cover reached, handed back with the figure rather than counted
@@ -12463,7 +12509,7 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     // M11 goes with it for the same reason J04's `ac` did: `cd` is the figure the whole
     // multiplicative chain produced, just before the two subtractions, and it is the only term
     // from which a combo's counterfactual can be reconstructed without running mitigate twice.
-    return { n, rv, ac, cd, cover };
+    return { n, rv, ac, cd, cover, thick };
 }
 
 // ── F05: one ledger for a body ──────────────────────────────────────────────────────────
@@ -12579,6 +12625,10 @@ function raiseBody(ent, share) {
 function typedToll(target, raw, atkType, cls) {
     const cut = mitigate(null, target, raw, atkType, null);
     noteDamageType(target.isPlayer ? 'atSquad' : 'atFoe', atkType, raw, cut.rv);
+    // N01: the fourth landing point, and the one M08b's cover ledger never saw. A vent runs its
+    // damage through mitigate like everything else, so the ground's front cover reduces it - and
+    // until now nothing counted that, which made the cover census short by every vent in the game.
+    noteLanding(cut, target, cut.n);
     if (cut.n <= 0) return 0;
     target.hp = Math.max(0, target.hp - cut.n);
     spawnFCT(target.id, `-${cut.n}`, cls || 'fct-status'); triggerHitFlash(target.id);
@@ -12637,10 +12687,14 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
     // by armour and a resistance. It still comes through here so the blow keeps its ledger:
     // the kill, the contracts, the bestiary, the Tally, the card that explains it.
     const pierce = !!(opts && opts.pierce);
-    const figure = t => pierce ? { n: Math.max(1, t.hp), rv: 0, ac: 0, cd: Math.max(1, t.hp), cover: null }
+    // A pierced blow never reaches mitigate, so it carries no cover, no hide and no call - it is
+    // a blow with no mitigation at all, which is what HEADSHOT's banner promises. It still books
+    // as a landing, so calls and blows can legitimately differ by exactly the pierced ones.
+    const figure = t => pierce ? { n: Math.max(1, t.hp), rv: 0, ac: 0, cd: Math.max(1, t.hp), cover: null, thick: false }
                                : mitigate(attacker, t, calcDmg, atkType, abilityStr);
-    let { n: netDmg, rv: resistValue, ac: armourTaken, cd: preSoak, cover } = figure(target);
-    noteCover(cover, target, netDmg);
+    let cut = figure(target);
+    let { n: netDmg, rv: resistValue, ac: armourTaken, cd: preSoak } = cut;
+    noteLanding(cut, target, netDmg);
     // M11: booked before the bond block below, which is safe and deliberate - a combo can only
     // ever be aimed at a hostile (comboFor returns null for a player target) and the bond save
     // only fires on a player one, so the two can never meet. Booking here keeps the figure the
@@ -12671,7 +12725,8 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
             // the ORIGINAL target's, which is the plate that did not stop anything. filed.armor
             // used to read target.armor further down, AFTER the swap, and so was right by
             // accident; taking the figure from mitigate is what made the staleness reachable.
-            ({ n: netDmg, rv: resistValue, ac: armourTaken, cd: preSoak } = figure(target));
+            cut = figure(target);
+            ({ n: netDmg, rv: resistValue, ac: armourTaken, cd: preSoak } = cut);
             // F09: the record was filed before the swap, so the tap-to-explain card named the
             // operator the blow was MEANT for while the log line beside it named the one who
             // took it. The card explains a number, and the number is the saviour's.
@@ -13703,7 +13758,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
-    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, noteReach, noteFront, noteHaul, noteCover, noteMark, noteCombo, noteBleed, bleedFor, bleedSet, clearBleed, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, MARK_BONUS, CALLED_SHOT_MULT, hasTrait, traitOnField,
+    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, noteReach, noteFront, noteHaul, noteCover, noteLanding, noteMark, noteCombo, noteBleed, bleedFor, bleedSet, clearBleed, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, MARK_BONUS, CALLED_SHOT_MULT, hasTrait, traitOnField,
     PERK_DMG_FLAT, PERK_DMG_MULT, PERK_SPD, PERK_MAXHP, PERK_HP_FLAT,
     perkStacks, perkDmgFlat, perkDmgMult, syncRankPerks, syncAllRankPerks, bankPerkStack, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,

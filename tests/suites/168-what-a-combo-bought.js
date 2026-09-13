@@ -225,8 +225,12 @@ module.exports = {
     ok('and is counted by the mark ledger instead, where it belongs', marked.cashed === 1);
 
     // ── The instrument is wired to the report, and folds like every other census ─
+    // Asserted on the TERM, not on the width of the tuple. This row pinned the exact return
+    // shape and broke the moment N01 added `thick` to it - the second time a return-shape
+    // assertion in this project has read an honest addition as a regression, suite 165's being
+    // the first. What M11 needs is that cd comes back at all.
     ok('mitigate hands cd back with the figure, which is what the counterfactual is built from',
-      /return \{ n, rv, ac, cd, cover \}/.test(src));
+      /return \{ n, rv, ac,[^}]*\bcd\b[^}]*\};/.test(src));
     ok('the census reads it rather than re-running mitigate for a second opinion',
       /Math\.floor\(cd \/ c\.mult\) - rv - ac/.test(src) && !/mitigate\([^)]*\)[\s\S]{0,200}mitigate\(/.test(
         (src.match(/function noteCombo[\s\S]*?\n\}/) || [''])[0]));

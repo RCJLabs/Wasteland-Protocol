@@ -2433,6 +2433,57 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── N01: MITIGATE COMPUTES AND MUST NOT COUNT ─────────────────────────────────────────
+// Out of the N-audit, and it is M08b's own defect sitting one line from where M08b fixed it.
+// mitigate carried `noteQuirk('THICK_HIDE', true)` INSIDE itself. mitigate is reached by five
+// paths that are not blows - four threatBoard forecasts, which price every hostile's attack
+// against every operator every turn, and the roster card's resist probe - so the quirk census
+// counted a hit every time anything WONDERED about a hit.
+//
+// M05 published the result as a count of firings and nobody questioned it:
+//
+//   "every quirk with a runtime effect fired - VAMPIRIC 3,414 and 5,519,
+//    THICK_HIDE 182,859 and 189,321, SECOND_WIND 252 and 204, ..."
+//
+// A fifty-fold gap read as a hit-taken quirk being common. It was the instrument. The old
+// counter is kept deliberately, incrementing in exactly the place noteQuirk used to sit, so the
+// size of the error is measured rather than asserted. Three 150-expedition careers:
+//
+//                                          a         b         c
+//   mitigate asked, a career            17,003    18,222    18,925
+//   blows that actually landed           1,988     2,182     2,191
+//                                          8.6x      8.4x      8.6x
+//   THICK_HIDE, as the old counter saw  211,729   188,214   103,879
+//   THICK_HIDE, as it fires              10,808    10,960     7,231
+//                                         19.6x     17.2x     14.4x
+//
+// M05's PUBLISHED FIGURE WAS FOURTEEN TO TWENTY TIMES THE REAL ONE, and the reproduction lands
+// in the same range as what it published (211,729 / 188,214 / 103,879 against 182,859 and
+// 189,321), which is the cross-check that the old counter has been reproduced exactly.
+//
+// THE CORRECTED PICTURE, and it is an ordinary one:
+//
+//   vampiric 4,953 / 5,475 / 5,850      thick_hide 10,808 / 10,960 / 7,231
+//   scrap_rat 1,472 / 1,615 / 1,138     slow_bleeder 801 / 640 / 807
+//   second_wind 292 / 254 / 262         overcharged 326 / 240 / 257
+//
+// THICK_HIDE is the most-fired runtime quirk by about two to one over VAMPIRIC, which is what a
+// quirk that pays on every hit TAKEN should look like beside one that pays on hits LANDED while
+// hurt. Fifty to one was never a fact about the game. M05's own conclusion - that nothing in the
+// pool is unreachable and every runtime quirk fires - survives; only its largest number moves.
+//
+// ── AND THE MIRROR OF IT, WHICH NOBODY HAD NOTICED AT ALL ─────────────────────────────
+// noteCover was wired to three landing points by hand and typedToll is a FOURTH: the vents, the
+// turned tank, the chem spill. Those run their damage through mitigate like everything else, so
+// the ground's front cover reduces them - and M08b's cover ledger had never seen one. One census
+// was counting blows nobody threw and the other was missing blows that landed, for the same
+// reason: the bookings were spread across sites that nothing held together.
+//
+// noteLanding is the door now, and mitigate keeps exactly one counter - its own call count -
+// against which the 8.4-8.6x above is the standing denominator. That ratio is the thing that
+// makes this class of bug visible the next time somebody adds a counter, which is why it is a
+// printed line rather than a comment.
+//
 // ── #197 TIER A: THE BLEED, BY WHAT OPENED IT ─────────────────────────────────────────
 // Every timed status in this game was a bare integer on a body, so a tick could never be booked
 // back to whatever applied it. The #197 scope split the sixteen of them three ways and this is
@@ -3080,6 +3131,11 @@ const ROOT = path.join(__dirname, '..');
 // in the pool is unreachable. All fifteen were drawn in both careers, and every quirk with a
 // runtime effect fired - VAMPIRIC 3,414 and 5,519, THICK_HIDE 182,859 and 189,321, SECOND_WIND
 // 252 and 204, SLOW_BLEEDER 943 and 702, SCRAP_RAT 1,195 and 1,399, OVERCHARGED 299 and 191.
+//   ^^ THICK_HIDE's FIGURE HERE IS WRONG BY 14-20x AND IS LEFT STANDING SO THE CORRECTION HAS
+//   SOMETHING TO POINT AT. It was counted inside mitigate, which four forecasts and a UI probe
+//   reach for every blow that lands, so it counted wondering rather than happening. Re-measured
+//   at 7,231-10,960 in N01, which puts it about two to one over VAMPIRIC rather than fifty. The
+//   sentence this belongs to - that nothing in the pool is unreachable - is unaffected.
 // The four pure stat quirks have no runtime read at all and correctly report none: RECKLESS is
 // written onto the sheet the moment it is rolled and has nothing to fire.
 //
@@ -6065,6 +6121,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.odPairs = Object.keys(OVERDRIVES || {}).length;   // read in the page; the report has no OVERDRIVES
   stat.cb = runStats.cb || {};             // M11: every one of the ten pairings, and what it bought
   stat.bl = runStats.bl || {};             // #197 tier A: every bleed, by what opened it
+  stat.mit = runStats.mit || {};           // N01: mitigate's calls against the blows that landed
   // The full key list, not just a count: the report is asked which pairings NEVER fired, and a
   // count can only say how many are missing. Same key the census builds, so the two cannot drift.
   stat.cbAll = (COMBOS || []).map(c => `${c.move}>${c.needs.replace('Turns', '')}`);
@@ -7296,6 +7353,26 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
           `about ${Math.round(lost * perTick)} points against the ${Math.round(per('dmg'))} this side's bleeds land`);
       }
     });
+  }
+  // ── N01: what mitigate is asked, against what actually lands ──────────────────────────
+  // The denominator that makes a counter kept in the wrong place visible. mitigate is reached by
+  // four threatBoard forecasts - the AI previewing its own damage - and the roster card's resist
+  // probe, none of which is a blow. Anything counted INSIDE it therefore counts wondering rather
+  // than happening, which is how THICK_HIDE came to be published at 182,859 beside VAMPIRIC's
+  // 3,414 and read as a common quirk rather than as a broken instrument.
+  //
+  // `hide seen` is what the old counter counted, kept deliberately: it is the same increment in
+  // the same place, so the gap between it and the quirk census's THICK_HIDE row IS the size of
+  // the error, measured rather than argued.
+  {
+    const m = foldAll('mit');
+    if (m.calls) {
+      const hide = (foldAll('qk').THICK_HIDE || {}).fired || 0;
+      line('mitigate asked / blows landed', `${Math.round(m.calls / n)} / ${Math.round(m.blows / n)} a career ` +
+        `- ${(m.calls / Math.max(1, m.blows)).toFixed(1)}x, and the rest are forecasts and probes`);
+      line('  THICK_HIDE, as the old counter saw it / as it fires', `${m.hideSeen || 0} / ${hide}` +
+        (hide ? ` - the published figure was ${((m.hideSeen || 0) / hide).toFixed(1)}x the real one` : ''));
+    }
   }
   line('gear equipped per run', mean(nums('gearEquipped')).toFixed(1));
   // K06: which pieces, because a total with no names in it cannot say whether the slot is being

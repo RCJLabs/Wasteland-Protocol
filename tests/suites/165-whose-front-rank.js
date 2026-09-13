@@ -132,8 +132,15 @@ module.exports = {
     // tuple's exact width, which made a second honest addition to it read as a regression.
     ok('mitigate hands the cover state back rather than counting it',
       /return \{ n, rv, ac,[^}]*\bcover\b[^}]*\};/.test(src) && !/noteCover\([^)]*\);\s*\n\s*if \(cover\.onRank1\)/.test(src));
-    ok('and every path that lands damage books it: the blow, the sky tick and the bleed',
-      (src.match(/noteCover\(/g) || []).length === 4);
+    // N01 made this stronger rather than weaker. noteCover used to be called at three landing
+    // points by hand - and typedToll was a FOURTH that nobody had wired, so every vent, turned
+    // tank and chem spill landed through mitigate with the ground's cover applied and the ledger
+    // never saw it. All four now go through noteLanding, which is the only caller noteCover has,
+    // so a fifth landing point cannot be added without going through the same door.
+    ok('noteCover has exactly one caller, and it is the shared landing door',
+      (src.match(/noteCover\(/g) || []).length === 2);
+    ok('and every path that takes health off a body goes through that door: the blow, the sky, the bleed, the vent',
+      (src.match(/noteLanding\(/g) || []).length === 5);
     const forecast = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       window.__clearField();
