@@ -2433,6 +2433,62 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O01: BOTH PARKED DIALS RE-MEASURED, BOTH LEFT ALONE - AND ONE MOVED ON ITS OWN ────
+// The two balance calls parked for the owner, measured on the current tree before anything was
+// touched. Three careers of 150, default policy (perks random, draft line, order long), taken
+// on the tree at fe128ab:
+//
+//                            c1        c2        c3       mean
+//   runs that ended the road  21        19        17       19.0
+//   scars dealt              196       195       227       206   (1.31 / 1.30 / 1.51 a run)
+//   treated at the Outpost   54%       53%       53%        53%
+//   plate share, sector 1     41.2%     39.1%     38.2%
+//   plate share, sector 7     16.0%     14.4%     18.4%
+//
+// THE SCAR DIAL MOVED WITHOUT ANYBODY TURNING IT, which is the finding here. M03b left this at
+// 67% treated (range 66-69 over 160-173 scars a career) with the design question stated: "whether
+// 67% is low enough is a design question, and the dial is SCAR_TREAT_SKULLS". It is now 53%
+// (range 53-54 over 195-227), and the ranges do not overlap. Nobody edited the price.
+//
+// The cause is the numerator, not the purse: SCARS PER RUN ROSE about 20%, from 1.07-1.15 to
+// 1.31-1.51, while the price stayed at 40 skulls. More scars arriving at the same cost means a
+// smaller share of them gets bought off. So M03's goal - a scar that is a decision rather than a
+// scrap tax - was reached further by drift than the commit that aimed at it, and the question
+// M03b left open has answered itself at 53%.
+//
+// SCAR_TREAT_SKULLS STAYS AT 40, at the owner's call. Turning it now would be tuning on top of a
+// drift nobody has decided to keep, and the lever is pointed the right way already.
+//
+// THE PLATE RE-CONFIRMS J04 ON A MUCH-CHANGED TREE. 38.2-41.2% of a hit at sector one falling to
+// 14.4-18.4% at sector seven, against J04's 34% -> 14% measured before M04 through N07 shipped. The
+// middle sectors are noisy at one career each (c3 reads 42.1% at s5, above its own s1) and should
+// not be read as a curve; the two ends are what three careers agree on. Same
+// shape, both ends slightly higher. J04's disposition holds and for a stronger reason than it had:
+// making the plate keep pace at depth hardens exactly the sectors a run already struggles to
+// reach. NOTHING RETUNED, at the owner's call.
+//
+// AND A CORRECTION I MADE BEFORE THE NUMBERS WERE IN. Career one read 21 runs that ended the road
+// and I took it for a collapse against M04b's 34.7, which would have been a 14-win regression.
+// M04b's 34.7 IS THE MATCHED-PICK ARM. The default is `perks random`, whose own note says "`random`
+// is the default and stays the baseline", and its recorded figure is 25.0 from arms of 28, 21, 26.
+// Against that, 19.0 from 21, 19, 17 is a gap of six wins with the ranges touching - inside K06's
+// ~14 floor, and NOT a regression. Comparing a default-arm run to an arm-specific figure is the
+// same denominator error D05, D06, M06 and M08b were each filed for, committed here against this
+// file's own table.
+//
+// A THIRD SIGHTING OF THE SMOKE-SAMPLE TRAP, and it is worth a rule. A 40-expedition smoke read
+// the treated share at 11% against 53% at 150 - a fivefold understatement, not noise. The cause is
+// structural rather than statistical: SKULLS ACCUMULATE ACROSS A CAREER and the Citadel is the
+// competing sink, so a short career spends every skull on upgrades and never holds the 80 the
+// policy wants, while a long one maxes the Citadel and banks the rest for scars. The figure is
+// therefore a function of career LENGTH, not just of sample size.
+//
+// M01 read 81% at 20 runs against 91-93% at 150; J04's 25-run smoke doubled an effect it then
+// measured at half; this is the third. The header's rule is "150+ before believing anything about
+// depth"; it should be read to cover ANYTHING THAT ACCUMULATES ACROSS A CAREER - skulls, the
+// Citadel, scars, the roster - because a short sample of those is not a noisy estimate of the long
+// one, it is a measurement of a different and poorer player.
+
 // ── N01: MITIGATE COMPUTES AND MUST NOT COUNT ─────────────────────────────────────────
 // Out of the N-audit, and it is M08b's own defect sitting one line from where M08b fixed it.
 // mitigate carried `noteQuirk('THICK_HIDE', true)` INSIDE itself. mitigate is reached by five
