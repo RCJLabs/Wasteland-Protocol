@@ -239,5 +239,58 @@ module.exports = {
     ok('and still lists every ordinary signature', codex.ordinaryStillListed);
     ok('the bestiary keeps a file on it only once it has been learned against you',
       codex.fileWhenEarned === 'FIELD_REPAIR' && codex.fileWhenNot === null);
+
+    // ── AND THE FIGHT ITSELF SAYS SO, WHICH IT DID NOT ───────────────────────────────
+    // The manual and the bestiary both carried the provenance; the fight did not. Measured at
+    // grudge 2 before this shipped, the opening named the learned move ZERO times and used the
+    // word "learned" ZERO times - while announcing the grudge PHASE two lines on, which cannot
+    // fire until a quarter health. The move armed from turn one was the silent one.
+    //
+    // The only places the provenance existed were the sig tag's hover title and the codex.
+    // Hover is not a surface on a touch screen, and a manual read before the fight is not the
+    // moment you need it. So the line rides the opening, above the reserve line on purpose:
+    // this is what you plan the next turn around, that is what you plan the endgame around.
+    const opening = await page.evaluate(() => {
+      const sectorOf = id => { for (let s = 1; s <= 40; s++) if (bossForSector(s).id === id) return s; return null; };
+      const fight = (id, g) => {
+        activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+        bossSalt = 'suite75'; grudges = {}; if (g) grudges[id] = g;
+        currentSector = sectorOf(id); currentTier = 10;
+        document.getElementById('log').innerHTML = '';
+        initiateCombat('BOSS', false);
+        return document.getElementById('log').innerText;
+      };
+      const rows = BOSS_POOL.filter(b => b.learned).map(b => {
+        const s = ENEMY_SIGS[b.learned.sig];
+        const said = g => fight(b.id, g).includes('It brings ' + s.name.toUpperCase());
+        const at2 = fight(b.id, 2).split('\n').map(l => l.trim());
+        const iLearned = at2.findIndex(l => l.includes('It brings '));
+        const iReserve = at2.findIndex(l => l.includes('Held in reserve:'));
+        return { id: b.id, name: s.name, desc: s.desc,
+                 cold: said(0), atOne: said(1), earned: said(2), risen: said(3),
+                 beforeReserve: iLearned >= 0 && (iReserve < 0 || iLearned < iReserve) };
+      });
+      return { rows, gate: LEARNED_AT };
+    });
+    const openNamed = opening.rows.filter(r => r.earned);
+    ok(`the fight opening names what it took off you, for every commander (${openNamed.length} of ${opening.rows.length})`,
+      openNamed.length === opening.rows.length);
+    // The gate is read off the engine rather than written here, so moving LEARNED_AT moves this.
+    const openQuiet = opening.rows.filter(r => !r.cold && !r.atOne);
+    ok(`and says nothing before it has been earned, at a gate of ${opening.gate} (${openQuiet.length} of ${opening.rows.length} silent at 0 and 1)`,
+      opening.gate === 2 && openQuiet.length === opening.rows.length);
+    ok(`it still says so once the grudge is capped (${opening.rows.filter(r => r.risen).length} of ${opening.rows.length})`,
+      opening.rows.every(r => r.risen));
+    // The ordering claim, not just the presence one: the armed move above the reserved one.
+    ok(`the move that is live now is named above the one held back (${opening.rows.filter(r => r.beforeReserve).length} of ${opening.rows.length})`,
+      opening.rows.every(r => r.beforeReserve));
+    // WHERE IT CAME FROM, not just what it does. The line prints the signature's own desc rather
+    // than a second string written for the log, so this holds the descs to carrying the
+    // provenance - READ_THE_LINE was the one that did not and was given it here.
+    const openSource = opening.rows.filter(r => /\blearned\b/i.test(r.desc));
+    ok(`and every learned move says where it came from (${openSource.length} of ${opening.rows.length})`
+       + (openSource.length === opening.rows.length ? ''
+          : ': ' + opening.rows.filter(r => !/\blearned\b/i.test(r.desc)).map(r => r.name).join(', ')),
+      openSource.length === opening.rows.length);
   }
 };

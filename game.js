@@ -9209,7 +9209,7 @@ const ENEMY_SIGS = {
     WHISTLE:    { name: 'Whistle',      kind: 'action',  icon: '\u{1F4EF}', weight: 0.32, cd: 4, learned: true,
                   desc: 'The Marshal puts the hound back on its feet. It learned that you kill the dog first.' },
     READ_THE_LINE:{ name: 'Read The Line', kind: 'action', icon: '\u{1F32A}', weight: 0.30, cd: 3, learned: true,
-                  desc: 'The Stormcaller stops turning the sky at random and picks the one your line is worst under.' },
+                  desc: 'The Stormcaller stops turning the sky at random and picks the one your line is worst under. It learned which weather you never brought an answer for.' },
     FIELD_REPAIR:{ name: 'Field Repair', kind: 'action', icon: '\u{1F6E1}', weight: 0.30, cd: 3, learned: true,
                   desc: 'The Bastion patches its ward generator instead of shooting. It learned that you go for the generator.' },
     COUNT_YOURS:{ name: 'Count Yours',  kind: 'action',  icon: '\u{1F480}', weight: 0.26, cd: 2, learned: true,
@@ -10913,6 +10913,25 @@ function initiateCombat(nodeType, isEliteNode) {
         if (g > 0) {
             firePrompt('GRUDGE');
             log(`> You have put this one down ${g === 1 ? 'once' : `${g} times`}. It came back for it.`, "log-dmg");
+            // C09's missing half. The learned move is ARMED FROM TURN ONE and this opening said
+            // nothing about it, while the grudge PHASE - which cannot fire until a quarter health
+            // - was announced two lines on. Measured at grudge 2 before the fix: the opening
+            // named the move 0 times and used the word "learned" 0 times, so the only places the
+            // provenance existed were the sig tag's hover title and the codex. Hover is not a
+            // surface on a touch screen, and a manual read before the fight is not the moment.
+            //
+            // The text comes off the signature's OWN desc rather than a second string written
+            // here. Every learned desc already ends in where it came from - "It learned that from
+            // watching you drag yours clear" - so a tell of its own would be two descriptions of
+            // one move drifting apart, which is exactly what M08b was filed for.
+            //
+            // Above the reserve line on purpose: this one is the thing you plan the next turn
+            // around, that one is the thing you plan the endgame around.
+            const learned = learnedMove(b, g);
+            if (learned && ENEMY_SIGS[learned.sig]) {
+                const ls = ENEMY_SIGS[learned.sig];
+                log(`> It brings ${ls.name.toUpperCase()}: ${ls.desc}`, "log-status");
+            }
             if (b.grudge) log(`> Held in reserve: ${b.grudge.name} — ${b.grudge.tell}`, "log-status");
         }
     } processTurn();
