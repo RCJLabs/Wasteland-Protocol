@@ -38,6 +38,53 @@
 // needs samples before it settles. Twenty resolves a 3 sd margin comfortably and is what the K03
 // sweep used; ten will find the rows already firing and not much else.
 
+// ── O14: THE LAST 101 FLAKE, AND THE ENGINE WAS RIGHT ─────────────────────────────────
+// Suite 101's fight-log pair: three sightings in about thirty batteries, zero in the twenty this
+// file ran to find them. Sampling had had its turn. Forced instead, in three arms, and it took
+// one attempt:
+//
+//   a save taken on a living operator    9 -> 9     the guard holds
+//   a save taken on a hostile            9 -> 9     nothing to guard
+//   a save taken on a body that had FALLEN, still in the queue    9 -> 10
+//
+// processTurn reads and clears `resumingTurn` at the top, then four lines later returns early if
+// the body whose turn it is has no health left. On that path the guard is spent on a turn that
+// never happens and the operator behind the corpse is counted. It needs the save to have been
+// taken on a body that has since fallen, which 101's own fixture stages some of the time by
+// deleting a carried body - and that is the whole of the intermittency.
+//
+// THE ENGINE IS NOT WRONG. THE ROW WAS. The decisive arm is the one that removes the save
+// entirely: identical field, same corpse at the same index, straight into processTurn, and the
+// count goes 9 -> 10 as well. The resume costs nothing. The fight steps over a body and the
+// operator behind it takes a turn, which is a turn - save or no save. 101 was asserting an
+// identity the game legitimately breaks in exactly one case, and had been since K08 wrote it.
+//
+// So the row now asserts what it is named for on BOTH branches - unchanged when the fight came
+// back onto a body still standing, and exactly one more when it had to step over one - which
+// pins the +1 rather than tolerating it. The construction ships as three rows in suite 03.
+//
+// Held by one mutation that matters: removing the guard entirely - I02's shape, where every
+// reload charges the fight a turn - reds 101's row through a real save and reload.
+//
+// AND A SECOND MUTATION I WROTE UP AS CAUGHT BEFORE RUNNING IT. Moving the clear BELOW that early
+// return is the "fix" somebody would reach for on seeing the +1, and I recorded the new rows as
+// catching it off an arm whose 9 was a hostile taking the turn rather than the mutation biting.
+// Run properly it passes the WHOLE battery - 4687 passed, 0 failed. The guard's placement is not
+// pinned by anything behavioural, and no fixture built here isolates it, because the turn chain
+// runs on past the guarded turn either way. Pinned as intent instead, on the engine's own
+// sentence, and labelled as that rather than as a guarantee.
+//
+// Which is the third time in this one item that a claim was stronger than what was behind it -
+// 101's row, then a row I wrote to replace it asserting `=== 10` where a hostile can take the
+// turn, then this. The lesson is not "check the mutation", it is that a mutation which passes
+// looks exactly like one that was never run.
+//
+// THREE FLAKES IN THIS SUITE HAVE NOW GONE THE SAME WAY. #209's pair, and this one: both were
+// rows asserting something stronger than the thing they were named for, both survived a
+// twenty-battery sweep, and both fell to one afternoon of forcing the mechanism. The sweep's own
+// header already says this - "when a flake has a small number of candidate mechanisms, FORCE EACH
+// ONE rather than sampling for it" - and it is now three for three.
+
 // ── THE O09 SWEEP: TWO RED IN TWENTY, AND THIS FILE REPORTED ONE ───────────────────────
 // Run because two distinct rows had gone red in four batteries and the next tuning item was
 // about to trust a single battery. Twenty batteries on the tree at 478942f, 83 minutes. 4,645
@@ -62,12 +109,10 @@
 // WHAT THE TWENTY ACTUALLY SAY, against the two rows #213 was opened on:
 //
 //   101  fight-log pair       0/20    not reproduced; 2 sightings before this, 0 in the 20
-//                                ^^ AND IT FIRED AGAIN AFTER THIS SWEEP, on the O13 battery, both
-//                                rows together at 9 -> 10 exactly as logged. Three sightings now,
-//                                against 0 in the twenty batteries run to find it. That is the
-//                                rate #192 calls actionable and this sweep could not reach - so
-//                                the next move on it is #209's, constructing the failure rather
-//                                than sampling for it, not another twenty batteries.
+//                                ^^ FIRED AGAIN AFTER THIS SWEEP, on the O13 battery, both rows
+//                                at 9 -> 10. Three sightings against 0 in the twenty run to find
+//                                it - and CLOSED BY CONSTRUCTION rather than by more batteries.
+//                                See O14 below.
 //   166  mark multiplier      1/20    REPRODUCED - this is the one the report hid
 //   168  combo oil cost       1/20    new, first sighting - and the SAME defect as 166
 //

@@ -159,9 +159,17 @@ module.exports = {
     const now = await page.evaluate(saved => {
       currentSlot = 1;
       Store.set(BASE_SAVE_KEY + currentSlot, saved);   // the save under test, not whatever raced it
+      // O14: WHO the save was taken on, read off the save itself rather than off the resumed
+      // field, because the question the turn-count rows below ask is whether the fight came back
+      // onto that body or had to step over it.
+      const rawC = (JSON.parse(saved || '{}').combat) || {};
+      const savedOn = (rawC.queueIds || [])[rawC.activeIndex || 0] || null;
       loadGameState();
       if (pendingCombat) resumeCombat(pendingCombat);
-      return { contracts: [...activeContracts], regroups: totalRegroups(), carry: canCarry(),
+      const stoodUp = activeEntities.some(e => e.id === savedOn && e.hp > 0);
+      return { savedOn, stoodUp,
+               landedOn: turnQueue[activeIndex] ? turnQueue[activeIndex].id : null,
+               contracts: [...activeContracts], regroups: totalRegroups(), carry: canCarry(),
                mult: runStats.contractMult, names: contractNames(),
                log: fightLog ? { ...fightLog } : null, vacated: [...vacatedRanks],
                focus: momentumFocus, press: pressExtra, bg: combatBgFile, resumed: combatActive,
@@ -292,9 +300,12 @@ module.exports = {
     // engine's own note says a fight lands; what the claim needs is only that the fight ran long
     // enough to have lost BLITZ, which the engine names. Read off BLITZ_TURNS, and paired with
     // the identity that actually matters here: the count came back from the save unchanged.
+    // O14: the three flags are the claim; the turn count is the sister row below, which owns the
+    // one case where it legitimately moves. Asserting the count here too made this row fire for
+    // a reason that has nothing to do with what it is named for.
     ok(`a fight that lost FLAWLESS, BLITZ and FRUGAL has still lost them (${JSON.stringify(now.log)})`,
       now.log && now.log.hurt === true && now.log.spent === true && now.log.chased === true
-      && now.log.turns > BLITZ && now.log.turns === was.log.turns);
+      && now.log.turns > BLITZ);
     // K08: this row read `now.log.turns === 9 && was.log.turns === 9`, and 9 is the MEDIAN of the
     // quantity it judges - K03 measured this exact fight at 9.15 +/- 0.37 and called it the
     // tightest row in the battery. It went red the moment the sky started meeting resistances,
@@ -303,8 +314,33 @@ module.exports = {
     // the row is FOR is that resuming did not add a turn, which is a before-and-after on one
     // fight and needs no literal at all. The count is still printed, so a phase that moves it a
     // long way is still visible to anybody reading the line.
-    ok(`and resuming did not charge the fight for the turn it came back on (${was.log.turns} -> ${now.log.turns})`,
-      now.log.turns === was.log.turns && was.log.turns > BLITZ);
+    // O14: AND THE IDENTITY WAS TOO STRONG BY EXACTLY ONE CASE, which is why this pair went red
+    // three times in about thirty batteries and zero times in the twenty tests/noise.js ran to
+    // find it. Constructed rather than sampled, the way #209 closed the sister rows above:
+    //
+    //   saved on a living operator   9 -> 9    the guard holds
+    //   saved on a hostile           9 -> 9    nothing to guard
+    //   saved on a body that had FALLEN, still in the queue   9 -> 10
+    //
+    // processTurn reads and clears `resumingTurn` at the top, and four lines later returns early
+    // if the body whose turn it is has no health left - so on that path the guard is spent on a
+    // turn that never happens, and the next operator's turn is counted. The guard's own comment
+    // says it is cleared early so "an early return below cannot carry it into a turn that IS
+    // new", and that is exactly right: the next operator's turn IS new.
+    //
+    // THE ENGINE IS NOT WRONG AND THE ROW WAS. Run the identical field with no save anywhere -
+    // same dead body at the same index, straight into processTurn - and the count goes 9 -> 10
+    // as well. The resume costs nothing; the fight simply steps over a corpse and the operator
+    // behind it takes a turn, which is a turn. The suite's own fixture deletes a carried body,
+    // so it stages that state some of the time, which is the whole of the intermittency.
+    //
+    // So the row asserts what it is named for, on both branches - and pins the +1 rather than
+    // tolerating it, which is more than the identity did.
+    ok(`and resuming did not charge the fight for the turn it came back on ` +
+       `(${was.log.turns} -> ${now.log.turns}, saved on ${now.savedOn}` +
+       `${now.stoodUp ? ' and it came back up' : ' which had fallen, so the fight stepped over it'})`,
+      was.log.turns > BLITZ
+      && (now.stoodUp ? now.log.turns === was.log.turns : now.log.turns === was.log.turns + 1));
     ok(`the rank a fallen operator left is still a rank to close (${JSON.stringify(now.vacated)})`,
       JSON.stringify(now.vacated) === JSON.stringify(was.vacated) && was.vacated.length === 1);
     ok('and the momentum already spent on FOCUS and PRESS is still spent on them',

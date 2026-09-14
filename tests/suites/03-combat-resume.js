@@ -116,5 +116,93 @@ module.exports = {
       ended === true && way.active === false);
     ok(`with SQUAD DOWN on the deck, which is the only way out of that screen (${way.down})`,
       way.down === true);
+
+    // ── O14: WHAT A RESUMED TURN IS CHARGED FOR, constructed rather than sampled ────────
+    // Suite 101's fight-log pair went red three times in about thirty batteries and zero times
+    // in the twenty tests/noise.js ran to find it - the rate #192 calls actionable and sampling
+    // could not reach. Forced here in three lines instead, which is #209's method and took one
+    // attempt.
+    //
+    // processTurn reads and clears `resumingTurn` at the top, then four lines later returns
+    // early if the body whose turn it is has no health left. On that path the guard is spent on
+    // a turn that never happens and the operator behind the corpse is counted. That is the
+    // whole of the intermittency: it needs the save to have been taken on a body that has since
+    // fallen, which 101's own fixture stages some of the time by deleting a carried body.
+    //
+    // AND THE ENGINE IS RIGHT. The last arm runs the identical field with no save in it at all,
+    // and the count moves the same way - so the resume costs nothing, the fight simply steps
+    // over a corpse and the operator behind it takes a turn, which is a turn. 101's row asserted
+    // an identity that the game legitimately breaks in one case; it now asserts the case.
+    const charged = await page.evaluate(() => {
+      // THE QUEUE IS BUILT, NOT ACCEPTED. The first cut of this let initiateCombat hand over
+      // whatever order it drew and rebuilt the field per arm - so the body behind the corpse was
+      // sometimes a hostile, whose turn is not a squad turn and does not count, and the two arms
+      // were not even walking the same queue. It went red 1 battery in 3 asserting `=== 10`,
+      // which is the exact defect this block was written to record in suite 101: a row claiming
+      // something stronger than the thing it is named for. Written the same afternoon, four
+      // lines under a comment about it.
+      //
+      // So: a corpse at index 0 and a living operator at index 1, put there by hand, and both
+      // arms run against that one field.
+      const build = () => {
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+        initiateCombat('RAIDERS', false);
+        fightLog.turns = 9;
+        const ours = turnQueue.filter(e => e.isPlayer && e.hp > 0);
+        const theirs = turnQueue.filter(e => !e.isPlayer);
+        turnQueue = [ours[0], ours[1], ...theirs].filter(Boolean);
+        activeEntities = [...turnQueue];
+        activeIndex = 0;
+        turnQueue[0].hp = 0;            // fell during its own turn, still in the queue
+        return { corpse: turnQueue[0].id, behind: turnQueue[1].id, behindIsOurs: !!turnQueue[1].isPlayer };
+      };
+      const run = (asResume) => {
+        const b = build();
+        resumingTurn = !!asResume;
+        processTurn();
+        const out = { ...b, turns: fightLog.turns,
+                      landedOn: turnQueue[activeIndex] && turnQueue[activeIndex].id };
+        combatActive = false;
+        return out;
+      };
+      return { fallen: run(true), noSave: run(false) };
+    });
+    ok(`the fixture puts a fallen body in front of a living operator ` +
+       `(${charged.fallen.corpse} down, ${charged.fallen.behind} behind it)`,
+      charged.fallen.behindIsOurs === true && charged.noSave.behindIsOurs === true);
+    // WHAT THIS FIXTURE CANNOT DO, said rather than forced. The standing case - a resume onto a
+    // body still up, which must NOT be charged - was tried here twice and does not isolate:
+    // driving processTurn by hand after initiateCombat has already opened the fight lets the
+    // chain run on past the guarded turn, so both the absolute count and a resumed-against-fresh
+    // difference come back carrying turns this row is not asking about. Suite 101 asserts it
+    // through a real save, reload and resumeCombat, which is where it belongs and where it
+    // passes. The two arms below are the ones this fixture can hold, and they are the pair that
+    // carries the finding.
+    ok(`a resume onto a body that had fallen steps over it and the operator behind it is charged ` +
+       `(${charged.fallen.corpse} -> ${charged.fallen.landedOn}, 9 -> ${charged.fallen.turns})`,
+      charged.fallen.turns === 10 && charged.fallen.landedOn === charged.fallen.behind);
+    ok(`and that is the fight, not the save - the same field with no resume in it counts the ` +
+       `same turn (9 -> ${charged.noSave.turns})`,
+      charged.noSave.turns === charged.fallen.turns);
+    // WHAT THESE ROWS DO NOT HOLD, checked rather than assumed. The obvious companion claim is
+    // that the guard's PLACEMENT is load-bearing - that reading and clearing `resumingTurn` in
+    // one statement, above the early return, is what makes this work. It is not pinned by
+    // anything: moving the clear below that return and running the whole battery comes back
+    // 4687 passed, 0 failed. I wrote it up as caught before running it, off an earlier arm whose
+    // 9 was a hostile taking the turn rather than the mutation biting.
+    //
+    // The behaviour difference is real but no fixture here isolates it - the chain runs on past
+    // the guarded turn either way. What CAN be pinned is the intent, which the engine states in
+    // its own comment: read and cleared in the same breath so an early return cannot carry the
+    // flag into a turn that IS new. Pinned as written, against drift rather than against a
+    // measurement, and labelled as that rather than as a behavioural guarantee.
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'game.js'), 'utf8');
+    ok('the resume flag is still read and cleared in one statement, as its own comment says',
+      /const resumed = resumingTurn; resumingTurn = false;/.test(src));
+    // And the version that charges EVERY reload a turn - I02's shape, the expensive one - is
+    // caught, by suite 101's row through a real save and reload. That is the protection that
+    // matters and it is a behavioural one.
+    ok('and the count is still guarded at all',
+      /if \(aE\.isPlayer && fightLog && !resumed\) fightLog\.turns\+\+;/.test(src));
   }
 };
