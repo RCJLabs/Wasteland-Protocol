@@ -1468,7 +1468,8 @@ const ROOT = path.join(__dirname, '..');
 // reach of a squad growing 1.21x a sector; at hp 1.04 it reads 3.91 against a 3.5 ceiling, so
 // 1.06 is the flattest health the design allows. The shipped pair sits on that floor.
 //
-// WHAT THIS DID NOT DO. The wipe rate barely moved (6.4 -> 5.8-6.2 a career): runs still end in
+// WHAT THIS DID NOT DO. The wipe rate barely moved (6.4 -> 5.8-6.2 a run ^^ O-audit: was "a career", and
+// the report has always printed this one as "wipes per run, mean"): runs still end in
 // a wipe, they just end later. Income was left at 1.4 a sector.
 //
 // AND ONE CLAIM HERE WAS WRONG, corrected by H14 below rather than quietly edited out: this
@@ -2433,6 +2434,70 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O-AUDIT: THE REPORT HAS TWO WORDS FOR ONE DENOMINATOR, AND USES BOTH ──────────
+// O01-O15 are done, and the tree was audited the way F03, H, L, M and N were: look for a
+// reading the instrument could not make, or did not make, but reported as though it had.
+//
+// ONE, AND IT IS THIS FILE'S OWN RULE BROKEN BY THIS FILE. `n` is results.length - the number
+// of EXPEDITIONS in the sample - so anything divided by n is per expedition. A career, in the
+// vocabulary this file uses everywhere else, is the whole sample: every measurement on record
+// is described as "three 150-expedition careers". Eight report lines divided by n and said
+// "a career"; seventeen divided by n and said "per run". Both spellings sit in one report
+// eleven lines apart, on the identical computation:
+//
+//   operators put on the floor   125 (12.5 per run)
+//   combos fired                 260 (26.0 a career)
+//
+// Measured rather than argued, because a word can be defended and a number cannot: the
+// mitigate line reads 17,109 at --runs 4 and 16,272 at --runs 8. A career total would double.
+//
+// SO THE RECORD CARRIES BOTH MEANINGS AND THE READER CANNOT TELL WHICH. M11's own table prints
+// "combos fired 3508" beside "(23.4 a career)", and 3508/150 = 23.4 - the total and the
+// per-expedition figure on one line, the second wearing the first's name. Six header rows are
+// corrected in place above, each marked ^^. N01's 17,003, M11's 23.4, #201's shortenings,
+// #197's 117-137 and H13's 6.4 wipes were all per expedition; M01's "160-173 scars a career"
+// and H03's "263 skulls over forty carried runs" were already career totals and are untouched.
+//
+// WHAT IS NOT AFFECTED, AND IT IS MOST OF IT: every ratio and every percentage. N01's THICK_HIDE
+// at 14-20x, M11's pairing shares, K09's soak figures, O15's four buckets - the error divides
+// out of all of them. What moves is absolute magnitudes, and only where the word was wrong.
+//
+// AND THE GUARD COULD NOT HAVE CAUGHT IT, because the guard stated the rule backwards. Suite
+// 163's denominator row - written by N04 against "the rule rather than the spelling" - said
+// "a line that divides by n is printing a per-career figure", so it accepted the wrong word as
+// proof of compliance. Both halves are fixed: the rule now says what n is, and "a career" is
+// refused on a line that divides by it. Two mutations: putting one "a career" back reds the new
+// row at its line number, and stripping the scale word entirely reds the old one.
+//
+// TWO. NOTHING HAS EVER TAKEN A RETREAT. I01 moved perDepth 15 -> 6 and reported the retreat
+// door opening from 25-28% affordable to 56-62% - and affordability is the whole of what was
+// measured, because this file has no policy that presses the button. It says so at both sites
+// ("Nothing here takes the retreat"), so this is an honest gap rather than a false claim, but
+// it is a gap with a shape: WITHDRAW has an arm, retreat has none, and the engine already keeps
+// runStats.retreats and runStats.retreatsFailed that no report reads because nothing generates
+// them. A `--retreat` arm is one item, and it is the only way to find out whether I01 bought
+// anything. NOT BUILT HERE - an audit that ships a measurement is an audit that stopped auditing.
+//
+// THREE, STATED CAREFULLY BECAUSE THE OBVIOUS VERSION IS WRONG. The bench job has been measured
+// ONCE, and never on its own. G13 ran `--bench scout` bundled with `--tactics smart` and
+// `--draft doctrine` as a single three-lever arm; nothing separated under D17 and the bound was
+// the finding. So SCOUT, QUARTERMASTER and MEDIC have a door, it has been walked through, and
+// what any one of them is worth is unmeasured. That is a smaller claim than "C10 shipped content
+// nothing has ever exercised", which is what the flag default alone would have suggested.
+//
+// WHAT THE AUDIT DID NOT FIND, stated because an audit that only reports hits is not an audit.
+// The other never-named arms are documented at their definitions and deliberate: `--order long`
+// says it is kept so figures predating orders stay comparable (worth knowing that every score in
+// this repo describes a player on the longest of three orders, while the GAME defaults to
+// PATROL - declared, not hidden); `--ending walk`, `--extract off`, `--stage 0` and
+// `--reckoning off` each carry their reason. Ten runStats keys the report never reads -
+// ascension, chapelUsed, contracts, doctrineMult, lastKiller, orderCut, retreats,
+// retreatsFailed, scrapEarned, setsAnnounced - all have readers in game.js and are named by
+// suites, so none is an L02-style dead field. frontsSeen IS read, and the fronts are drawn by
+// the engine rather than forced, which is right. Exactly one assertion in 172 suites has a
+// constant-true condition (159:152) and its comment says why it is a warning rather than a
+// failure. And no O-phase claim was found stale beyond the six scale labels above.
+
 // ── O15: NO HANDS TRADES A THIRD OF THE SQUAD'S OUTPUT FOR A FIFTEENTH OF ITS SKIN ─────
 // O12/O13 left LIGHT_ORDER and NO_HANDS measured at about seven wins below a default line, with
 // the remedy a design call. Two directions were available - loosen what the card ASKS, or raise
@@ -3063,7 +3128,7 @@ const ROOT = path.join(__dirname, '..');
 // size of the error is measured rather than asserted. Three 150-expedition careers:
 //
 //                                          a         b         c
-//   mitigate asked, a career            17,003    18,222    18,925
+//   mitigate asked, an expedition       17,003    18,222    18,925   ^^ O-audit: was "a career"
 //   blows that actually landed           1,988     2,182     2,191
 //                                          8.6x      8.4x      8.6x
 //   THICK_HIDE, as the old counter saw  211,729   188,214   103,879
@@ -3140,7 +3205,7 @@ const ROOT = path.join(__dirname, '..');
 // which is now two separate measurements of the same shape rather than one result.
 //
 // THE TWO SIDES ARE NOT THE SAME MECHANIC. The road APPLIES MORE bleeds than the squad does -
-// 117-137 a career against 99-103 - and removes about a fifteenth as much health with them
+// 117-137 an expedition against 99-103 (^^ O-audit: both were "a career") - and removes about a fifteenth as much health with them
 // (233-259 against 3601-3935). The per-application column says why: every road source is worth
 // 1-5 points a use against the squad's 10-131. A bleed is 8% of the victim's maxHp, and an
 // operator is a far smaller bar than a sector-7 hostile.
@@ -3160,7 +3225,7 @@ const ROOT = path.join(__dirname, '..');
 // census counts the turns lost, and the answer is arithmetic:
 //
 //                                        a       b       c
-//   shortenings a career                0.2     0.6     1.1
+//   shortenings an expedition           0.2     0.6     1.1      ^^ O-audit: was "a career"
 //   turns of bleeding thrown away       0.3     0.7     1.2
 //   points that costs the squad          12      24      45
 //   against, landed by its own bleeds  3662    3647    3940
@@ -3182,7 +3247,7 @@ const ROOT = path.join(__dirname, '..');
 // unmeasured channel the statuses feed. Three 150-expedition careers:
 //
 //                                    a        b        c
-//   combos fired                  3508     3534     3398      (23.4 / 23.6 / 22.7 a career)
+//   combos fired                  3508     3534     3398      (23.4 / 23.6 / 22.7 an expedition)
 //   pairings reached              9/10     9/10    10/10
 //   kills landed on a combo swing  27%      33%      28%
 //
@@ -3226,7 +3291,7 @@ const ROOT = path.join(__dirname, '..');
 // costume of a census rather than a comparison. Suite 168 stages all ten off the table and every
 // one of them fires, which is the reading a cold column can actually support.
 //
-// What IS stable across the three is the total (23.4 / 23.6 / 22.7 a career), the top of the
+// What IS stable across the three is the total (23.4 / 23.6 / 22.7 an expedition ^^ O-audit), the top of the
 // premium order, and the inversion above. Read those; do not read a single career's zero.
 //
 // ── WHY THE PREMIUM COLUMN IS A RANKING AND M10's DAMAGE COLUMN IS NOT ─────────────────
@@ -7977,7 +8042,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     const all = [...new Set(results.flatMap(r => r.cbAll || []))];
     const pairs = all.length;
     const fired = rows.reduce((a, [, v]) => a + v.fired, 0);
-    line('combos fired', `${fired} (${(fired / n).toFixed(1)} a career) across ${rows.length} of ${pairs} pairings`);
+    line('combos fired', `${fired} (${(fired / n).toFixed(1)} a run) across ${rows.length} of ${pairs} pairings`);
     if (rows.length) {
       // `eats` is the half that explains the fired column. Three of the ten SPEND the status they
       // read - IGNITE takes the oil, CONFIRMED takes the mark - and the other seven leave it on
@@ -8046,14 +8111,14 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // scales on one line - a per-career damage figure beside a raw total for ticks - which is
       // how a reader ends up quoting "667 lethal bleeds a career" off a number that is 4.4.
       const per = k => sum(k) / n;
-      line(`bleeds ${what}`, `${per('applied').toFixed(1)} a career over ${rows.length} sources, ` +
+      line(`bleeds ${what}`, `${per('applied').toFixed(1)} a run over ${rows.length} sources, ` +
         `granting ${per('turns').toFixed(0)} turns of bleeding`);
       line('  what the ticks took, raw / landed', `${Math.round(per('raw'))} / ${Math.round(per('dmg'))} ` +
-        `a career over ${per('ticks').toFixed(0)} ticks, ${per('kills').toFixed(1)} of them lethal`);
+        `a run over ${per('ticks').toFixed(0)} ticks, ${per('kills').toFixed(1)} of them lethal`);
       // The column the item exists for, ranked by what it actually removed rather than by how
       // often it was applied - M11's whole finding was that those two rank oppositely.
       const by = rows.filter(([, v]) => v.dmg > 0).sort((a, b) => b[1].dmg - a[1].dmg);
-      line('  by source, health removed a career',
+      line('  by source, health removed a run',
         by.map(([k, v]) => `${k.toLowerCase()} ${Math.round(v.dmg / n)}`).join(', ') || 'none');
       line('  and per application, which is what one use of it is worth',
         by.map(([k, v]) => `${k.toLowerCase()} ${Math.round(v.dmg / Math.max(1, v.applied))}`).join(', ') || 'none');
@@ -8065,7 +8130,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // and the scale guard #197 tier A shipped did not catch it, because that guard looked for
       // a bare sum() and this is a bare FIELD. The guard below is written against the shape
       // rather than the spelling now.
-      if (dead.length) line('  applied but never ticked once, a career',
+      if (dead.length) line('  applied but never ticked once, a run',
         dead.map(([k, v]) => `${k.toLowerCase()} ${(v.applied / n).toFixed(1)}`).join(', '));
       // THE MEASUREMENT THAT DECIDES THE NEXT ITEM. Seven of the nineteen sites ASSIGN the
       // counter rather than raising it, so a SHIV's two turns can overwrite a five-turn BARBED
@@ -8073,7 +8138,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // while measuring it cannot be trusted about either - and counts it instead.
       const shortened = sum('shortened');
       line('  applications that SHORTENED a longer bleed', shortened
-        ? `${(shortened / n).toFixed(1)} a career, ${(shortened / (sum('applied') + shortened) * 100).toFixed(1)}% of them - ` +
+        ? `${(shortened / n).toFixed(1)} a run, ${(shortened / (sum('applied') + shortened) * 100).toFixed(1)}% of them - ` +
           `the seven assigning sites`
         : 'none in this sample');
       // #201: and what that costs, which is the figure a decision can actually be made on. A
@@ -8084,7 +8149,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       if (shortened) {
         const lost = per('turnsLost');
         const perTick = per('dmg') / Math.max(1, per('ticks'));
-        line('    and what it threw away', `${lost.toFixed(1)} turns of bleeding a career, ` +
+        line('    and what it threw away', `${lost.toFixed(1)} turns of bleeding a run, ` +
           `about ${Math.round(lost * perTick)} points against the ${Math.round(per('dmg'))} this side's bleeds land`);
       }
     });
@@ -8103,7 +8168,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     const m = foldAll('mit');
     if (m.calls) {
       const hide = (foldAll('qk').THICK_HIDE || {}).fired || 0;
-      line('mitigate asked / blows landed', `${Math.round(m.calls / n)} / ${Math.round(m.blows / n)} a career ` +
+      line('mitigate asked / blows landed', `${Math.round(m.calls / n)} / ${Math.round(m.blows / n)} a run ` +
         `- ${(m.calls / Math.max(1, m.blows)).toFixed(1)}x, and the rest are forecasts and probes`);
       line('  THICK_HIDE, as the old counter saw it / as it fires', `${m.hideSeen || 0} / ${hide}` +
         (hide ? ` - the published figure was ${((m.hideSeen || 0) / hide).toFixed(1)}x the real one` : ''));

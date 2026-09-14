@@ -128,19 +128,42 @@ module.exports = {
     // below, where the leak was a bare FIELD instead.
     //
     // Written against the rule rather than the spelling now, and it is a simple rule: a line
-    // that divides by n is printing a per-career figure and has to say so where the reader is
-    // looking. A line that names its denominator another way - "of ${n}", "% of runs", "mean" -
-    // has already answered the question and is exempt.
+    // that divides by n has to say what it divided by, where the reader is looking. A line that
+    // names its denominator another way - "of ${n}", "% of runs", "mean" - has already answered
+    // the question and is exempt.
+    //
+    // O-AUDIT: AND THE RULE ITSELF NAMED THE WRONG SCALE, which is why this row never caught
+    // the thing it was written for. `n` is results.length - the number of EXPEDITIONS in the
+    // sample - so a figure divided by n is per expedition. The rule above used to say it was
+    // "a per-career figure", and a career in this file's own vocabulary is the whole sample:
+    // every measurement on record is described as "three 150-expedition careers". So the guard
+    // accepted "a career" on a line that had just divided the career by 150, and eight lines
+    // said exactly that while seventeen others said "per run" for the identical computation -
+    // both spellings inside one report, eleven lines apart:
+    //
+    //   operators put on the floor   125 (12.5 per run)
+    //   combos fired                 260 (26.0 a career)     <- same total/n, other word
+    //
+    // Measured rather than argued: the same line reads 17,109 at --runs 4 and 16,272 at
+    // --runs 8. A career total would double; a per-expedition figure does not move, and this
+    // does not move.
+    //
+    // So "a career" is no longer accepted on a line that divides by n - not a style preference,
+    // a statement that cannot be true of that computation.
     {
-      const names = /a career|a run|per run|each career|\bmean\b|of \$\{n\}|% of runs/;
-      const unscaled = [];
+      const names = /a run|per run|\bmean\b|of \$\{n\}|% of runs/;
+      const unscaled = [], miscalled = [];
       for (const m of sim.matchAll(/line\((.*?)\);\n/gs)) {
         const c = m[1];
-        if (c.length > 1200 || !/\/\s*n\b|per\(/.test(c) || names.test(c)) continue;
-        unscaled.push(sim.slice(0, m.index).split('\n').length);
+        if (c.length > 1200 || !/\/\s*n\b|per\(/.test(c)) continue;
+        const at = sim.slice(0, m.index).split('\n').length;
+        if (/a career|each career/.test(c)) miscalled.push(at);
+        else if (!names.test(c)) unscaled.push(at);
       }
-      ok(`every per-career figure in the report says so${unscaled.length ? ' - line ' + unscaled.join(', ') : ''}`,
+      ok(`every figure divided by the run count says so${unscaled.length ? ' - line ' + unscaled.join(', ') : ''}`,
         unscaled.length === 0);
+      ok(`and none of them calls a per-expedition figure a career${miscalled.length ? ' - line ' + miscalled.join(', ') : ''}`,
+        miscalled.length === 0);
     }
   }
 };
