@@ -2440,6 +2440,48 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O20: THE CENSUS, CORRECTED - AND A BRUISER IS STANDING IN A NO HANDS LINE ──────
+// O19 fixed the outgoing census to read the move being resolved rather than a global, withdrew
+// two published figures, and left the re-measurement to this item. Three careers an arm against
+// a paired baseline, interleaved, on the corrected instrument.
+//
+// FIRST, O15's FIGURE WAS NEARLY RIGHT AND IS RESTORED. The squad throws 35.3% of its damage in
+// melee on a default line, against the broken reading's 37.7%. So the bug barely moved the
+// default arm - pendingAction happened to agree with the move often enough there - and the shape
+// O15 concluded on survives at roughly 5 to 1 rather than 5.5. The incoming buckets are
+// unchanged as O19 said they would be: 35.2% melee onto the front rank, 7.0% covered by the edge.
+//
+// AND SECOND, O18's LEAK IS REAL AND WAS NEVER THE BUG. A NO HANDS career still throws 25.8% of
+// its damage in melee on the corrected census, with the card taken 150 of 150 and kept 150 of
+// 150. O19's fix - the doctrine re-asking on promotion and on gear, carriesMelee reading through
+// moveReachFor - did not move it at all.
+//
+// SO THE REPORT NAMES THE MOVE NOW, because two items were spent guessing at a share. 60
+// expeditions, --draft doctrine:NO_HANDS --arrange front:
+//
+//   heavy_wrench 1236   shiv 1007   shield_slam 464   ripsaw 278   trench_sweep 213
+//   bayonet_thrust 159  buckshot 1
+//
+// HEAVY WRENCH AND SHIELD SLAM ARE THE BRUISER'S, and the Bruiser carries melee in its BASE
+// three - it cannot pass carriesMelee at any rank, with any bench choice, wearing anything. A
+// class that can never hold this doctrine is standing in a line that reports holding it, and it
+// is throwing the largest share of the melee. This is not the promotion hole and not the mod
+// hole; both of those are real, constructed in suite 79, and neither explains a Bruiser.
+//
+// WHAT IS RULED OUT, checked rather than assumed: closeRanks is not the path. It already refuses
+// to step a body into a vacated rank when that would break the promise - `keeps()` asks
+// holds([...deployedLine(), c]) before moving anybody - and it re-asks checkDoctrine afterwards.
+// assignSlot re-asks. The draft only sets wantDoctrine when it built a line that holds.
+//
+// SO THE CAUSE IS NOT YET FOUND, and this item stops here rather than guessing a fourth time.
+// What it leaves is better than what it started with: the leak is confirmed real on a corrected
+// instrument, the two published figures are restored or withdrawn correctly, and the report names
+// the move instead of printing a share - so the next item begins by asking how a Bruiser reaches
+// a line that owns no melee, which is one question with one answer rather than a hunt.
+//
+// NO DIAL MOVES. The only engine change is the move id riding on the figure so the census can
+// name it.
+
 // ── O19: THE DOCTRINE RE-ASKS NOW - AND THE CENSUS THAT FOUND THE HOLE WAS BROKEN ──
 // O18 closed on a plan: call checkDoctrine on promotion and on gear, re-measure, then decide the
 // card's edge. The first half is done and the second half turned into something else.
@@ -7261,7 +7303,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.bl = runStats.bl || {};             // #197 tier A: every bleed, by what opened it
   stat.mit = runStats.mit || {};           // N01: mitigate's calls against the blows that landed
   stat.reach = runStats.reach || {};       // O15: what reaches the squad, by attacker reach x rank
-  stat.out = runStats.out || {};           // O15: and what the squad throws, by the reach of the move
+  stat.out = runStats.out || {};
+  stat.outMoves = runStats.outMoves || {};   // O20: which move, when it reads as melee           // O15: and what the squad throws, by the reach of the move
   // O16: read back what the ENGINE booked, not what the policy thinks it pressed - G13's rule.
   // The two are printed against each other so a policy that silently does nothing says so.
   stat.engineRetreats = runStats.retreats || 0;
@@ -8775,6 +8818,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
           const om = o.melee || { blows: 0, dmg: 0 };
           line('what the squad throws in melee', `${(100 * om.dmg / otot).toFixed(1)}% of the damage ` +
                `it deals (${om.blows.toLocaleString()} blows, ${Math.round(om.dmg).toLocaleString()} points)`);
+          // O20: named rather than shared, because "a quarter is melee" cannot say what is
+          // throwing it and two items were spent guessing.
+          const mv = foldAll('outMoves');
+          const top = Object.entries(mv).sort((a, b) => b[1] - a[1]).slice(0, 8);
+          line('    and the melee it throws is', top.map(([k, v]) => `${k.toLowerCase()} ${v}`).join(', ') || 'none');
           line('  so NO HANDS trades', `${(100 * om.dmg / otot).toFixed(1)}% of output for ` +
                `${(100 * 0.2 * mf.dmg / tot).toFixed(1)}% off what it takes`);
         }

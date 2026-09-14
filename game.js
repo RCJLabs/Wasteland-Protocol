@@ -346,6 +346,16 @@ function noteLanding(cut, t, dmg) {
         const k = cut.meleeOut ? 'melee' : 'ranged';
         o[k] = o[k] || { blows: 0, dmg: 0 };
         o[k].blows++; o[k].dmg += Math.max(0, dmg || 0);
+        // O20: AND WHICH MOVE, WHEN IT IS MELEE. The corrected census still reads a quarter of a
+        // NO HANDS career's damage as melee, and O19's fix - the doctrine re-asking on promotion
+        // and gear - did not move it. The Scavenger's SHIV and the BAYONET are both ruled out, so
+        // something else is putting a melee-reach move in a line that owns none, and a share
+        // cannot say what. This names it. Booked only on the melee side, so it costs nothing on
+        // the ordinary path.
+        if (cut.meleeOut && cut.move) {
+            const m = runStats.outMoves = runStats.outMoves || {};
+            m[cut.move] = (m[cut.move] || 0) + 1;
+        }
     }
 }
 // M11: what the ten pairings in COMBOS are actually worth. The table has existed since Phase 1
@@ -12612,7 +12622,7 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     // M11 goes with it for the same reason J04's `ac` did: `cd` is the figure the whole
     // multiplicative chain produced, just before the two subtractions, and it is the only term
     // from which a combo's counterfactual can be reconstructed without running mitigate twice.
-    return { n, rv, ac, cd, cover, thick, meleeIn, atFront, meleeOut };
+    return { n, rv, ac, cd, cover, thick, meleeIn, atFront, meleeOut, move: abilityStr };
 }
 
 // ── F05: one ledger for a body ──────────────────────────────────────────────────────────
@@ -12802,7 +12812,8 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
                                   meleeIn: !!(t.isPlayer && attacker && !attacker.isPlayer && attacker.range === 'melee'),
                                   atFront: !!(t.isPlayer && t.gridPos === 1),
                                   meleeOut: !!(!t.isPlayer && attacker && attacker.isPlayer &&
-                                               moveReachFor(abilityStr, attacker) === 'melee') }
+                                               moveReachFor(abilityStr, attacker) === 'melee'),
+                                  move: abilityStr }
                                : mitigate(attacker, t, calcDmg, atkType, abilityStr);
     let cut = figure(target);
     let { n: netDmg, rv: resistValue, ac: armourTaken, cd: preSoak } = cut;

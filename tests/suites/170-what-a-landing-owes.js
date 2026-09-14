@@ -187,7 +187,7 @@ module.exports = {
     const ret = keysOf((src.match(/return \{ n, rv, ac, cd, cover, thick[^}]*\}/) || [''])[0]);
     const pierceFig = (src.match(/pierce \? \{ n: Math\.max\(1, t\.hp\)[\s\S]*?\}/) || [''])[0];
     const pk = keysOf(pierceFig).filter(k => !['Math', 'max', 't', 'hp', 'isPlayer', 'attacker',
-      'range', 'gridPos', 'moveReachFor', 'abilityStr', 'null', 'false', 'true'].includes(k));
+      'range', 'gridPos', 'moveReachFor', 'null', 'false', 'true'].includes(k));
     ok(`a pierced blow is built with the same shape so the door can take it ` +
        `(${ret.join(',')} against ${pk.join(',')})`,
       ret.length > 0 && ret.every(k => pk.includes(k)) && pk.every(k => ret.includes(k)));
