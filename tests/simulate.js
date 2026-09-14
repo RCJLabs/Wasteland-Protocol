@@ -2433,6 +2433,62 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O11: WHAT A DOCTRINE IS WORTH - THE SCORE MULTIPLIER, AND NOTHING THAT SEPARATES ───
+// G13 ran the doctrine lever bundled with two others and nothing separated; O10 closed with the
+// question still open. Answering it needed an arm this file did not have. The DEFAULT is not a
+// doctrine-free control - `--draft line` banks one opportunistically on 120 of 150 runs - and
+// `--draft random`, which skips the bank, changes the draft too, so its difference carries a
+// different line as well as a missing multiplier. `--doctrine off` withholds only the TAKE: the
+// same draft, the same line, the same three offers rolled and read, nothing banked.
+//
+// Three careers an arm, 150 expeditions each, interleaved ON/OFF/ON/OFF/ON/OFF so machine drift
+// falls on both - the G13 discipline. 900 expeditions.
+//
+//                             doctrine ON              doctrine OFF        D17
+//   doctrines taken           120 / 123 / 117          0 / 0 / 0           (the arm works)
+//   runs that ended the road   19 /  23 /  22         19 / 21 / 18         direction reverses
+//   reached sector 7           27 /  34 /  38         31 / 34 / 31         direction reverses
+//   wipes per run            6.22 / 6.18 / 6.37     6.36 / 6.19 / 6.76     3/3, ranges overlap
+//   nodes cleared, median      73 /  78 /  75         76 / 73 / 79         direction reverses
+//   score, median            24.4k/ 25.9k/ 24.5k    20.6k/ 21.5k/ 22.9k    3/3, NO OVERLAP
+//
+// ONE ROW SEPARATES AND IT IS THE ONE THE MULTIPLIER IS APPLIED TO. computeScore multiplies by
+// st.doctrineMult directly, so a score gap is the first thing a doctrine buys by construction
+// and the last thing that should be read as an effect. Priced rather than waved at: the 360
+// doctrines actually taken carry a weighted mean bonus of 0.1352, read off game.js's own table
+// against the take counts, and they land on 80% of runs so the median run in the ON arm carries
+// one. That predicts +13.5% of score. The observed lift is +15.1%. The residual is 1.6 points
+// against per-career medians that themselves range over 6%.
+//
+// SO THE SEVEN EDGES ARE A NULL AT THIS SAMPLE. Wipes per run moves 6.44 -> 6.26, the doctrine's
+// way, three times out of three - and the ranges overlap, which is the same disposition M10
+// reached on the overdrive fork and K11 on the augment cap. Wins move +2.0 against K06's
+// measured floor of about 14 on three careers, and do not hold direction. Nodes cleared moves
+// the WRONG way. Nothing here is an effect; the honest ceiling is "worth less than the noise".
+//
+// AND THE ARM HAS A NAME, which is the whole of O10's lesson. This measures THE MIX THIS POLICY
+// TAKES, and that mix is not the table: OLD_GUARD and THE_WALL are ~72% of every career's takes,
+// FIELD_SURGERY and CONSCRIPTS are a handful each, and LIGHT_ORDER and NO_HANDS are taken ZERO
+// times because the default draft opens on a body that fails both. Two of the seven edges never
+// ran in any of these 900 expeditions. "Doctrines are a null" would be wrong; what is measured
+// is that OLD GUARD's +10% on veterans and THE WALL's opening brace, at the rate this policy
+// takes them, do not move survival at three careers an arm.
+//
+// THE D06 CHECK, RUN BEFORE PUBLISHING THE NULL. A null measured over an edge that never fires
+// is not a null. Six of seven edges were already held - THE WALL's brace and OLD GUARD's 10% in
+// suite 79, LIGHT ORDER's speed, FIELD SURGERY's patch and CONSCRIPTS' doubled XP in 59,
+// BROAD SPECTRUM's seam in 79. NO HANDS' 80% was held nowhere; it is now, exactly, on mitigate's
+// own figure, with the half the engine's comment states and nothing checked - that giving up
+// reach does not also buy cover. Held by three mutations.
+//
+// (I first wrote that TWO edges were unheld, THE WALL's among them, off a grep that searched for
+// the wrong words. Four rows at 79:157-161 hold it. Corrected before it reached the record, and
+// noted because a claim about what is not tested is exactly as checkable as any other.)
+//
+// NO DIAL MOVES. A doctrine pays 13.5% of score and an amount of survival this instrument cannot
+// resolve from zero. Whether that is the right price is a design call and score is a real
+// channel, not a readout - the same reason O04 censused the relic shelf and stopped.
+
 // ── O10: THE DOCTRINE CENSUS, READ AT LAST - AND TWO DEAD CARDS THAT ARE NOT DEAD ──────
 // This block has printed since G13 and nobody had ever run it and written the numbers down. The
 // first 150-expedition career taken of it, default policy:
@@ -4245,6 +4301,17 @@ const DRAFT = flag('draft', 'line');
 // M01: whether the Outpost ever takes a scar off. `off` is the behaviour every career before
 // M01 ran with, kept so those records stay comparable.
 const SCAR_POLICY = flag('scars', 'treat');
+// O11: THE CONTROL ARM A DOCTRINE HAS NEVER HAD. Asking what a doctrine is worth needs a run
+// that does not have one, and this file had no such policy: `--draft line`, the default, banks
+// one opportunistically whenever the line it drafted happens to keep an offered card, which O10
+// measured at 114 of 150 runs. `--draft random` skips the bank - but it also changes the draft,
+// so the difference would carry a different line as well as a missing multiplier and neither
+// could be read off it.
+//
+// `--doctrine off` suppresses only the BANK. The same draft, the same line, the same three
+// offers rolled and read, and then nothing taken. That is the one comparison in which the
+// doctrine is the only thing that moved.
+const DOCTRINE_POLICY = flag('doctrine', 'on');
 // M04 made the five training cards situational, and M02 had already established that this file
 // picks among them uniformly at random. Under the OLD five that was harmless - every card was
 // worth the same on every body, so there was nothing for a policy to get right. Under the new
@@ -4559,7 +4626,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -4802,7 +4869,11 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     if (!take && draftPolicy !== 'random') {
       take = doctrineOffer.find(id => { const d = doctrineById(id); return d && d.holds(standing); }) || null;
     }
-    if (take) { activeDoctrine = take; stat.doctrine = take; }
+    // O11: the control arm. The offer is still rolled and still read - doctrineOffered and
+    // doctrineLive below are the same numbers either way, so the census stays honest - and the
+    // take is what is withheld.
+    if (take && doctrinePolicy !== 'off') { activeDoctrine = take; stat.doctrine = take; }
+    stat.doctrineSuppressed = !!take && doctrinePolicy === 'off';
     stat.doctrineOffered = doctrineOffer.slice();
     stat.doctrineLive = doctrineOffer.filter(id => { const d = doctrineById(id); return d && d.holds(standing); });
   }
@@ -6645,7 +6716,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }

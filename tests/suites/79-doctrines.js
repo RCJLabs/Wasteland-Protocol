@@ -160,6 +160,45 @@ module.exports = {
     ok('the brace is temporary, not a permanent stat', braced.on.frontTurns > 0);
     ok('nobody behind the front gets it', braced.on.backArmor === 0 && braced.on.backGuard === 0);
 
+    // ── O11: NO HANDS, the one edge in the table nothing held ────────────────────────────
+    // Found while checking a null. Measuring what a doctrine is WORTH came back as "the score
+    // multiplier and nothing separable", and before publishing that the D06 question has to be
+    // asked of every edge in the mix: is the code even running? Six of the seven were already
+    // held - here, and in suite 59 for LIGHT ORDER, FIELD SURGERY and CONSCRIPTS. NO HANDS' was
+    // not held anywhere. It contributes nothing to that null either way, because the default
+    // draft never takes it (O10: offered 76 times in 150 expeditions, live zero), but "no test
+    // and never taken" is how a card quietly stops working and nobody finds out.
+    //
+    // Exact rather than sampled, on mitigate's own returned figure - the reduction is a single
+    // Math.floor(cd * 0.8), so there is nothing here a tolerance would be protecting against.
+    const hands = await page.evaluate(() => {
+      const mk = (id, pos) => ({ id, name: id, isPlayer: true, gridPos: pos, armor: 0,
+                                 corrodedTurns: 0, oiledTurns: 0, venomStacks: 0,
+                                 resistances: { phys: 0, bio: 0, energy: 0 } });
+      const front = mk('p1', 1), back = mk('p2', 2);
+      const brawler = { id: 'e1', name: 'B', isPlayer: false, gridPos: 0, range: 'melee' };
+      const shooter = { id: 'e2', name: 'S', isPlayer: false, gridPos: 0, range: 'ranged' };
+      const hit = (atk, tgt) => mitigate(atk, tgt, 100, 'phys', 'BASIC').n;
+      const out = {};
+      activeDoctrine = null; doctrineBroken = false;
+      out.offMelee = hit(brawler, front); out.offShot = hit(shooter, front);
+      out.offBack = hit(brawler, back);
+      activeDoctrine = 'NO_HANDS'; doctrineBroken = false;
+      out.onMelee = hit(brawler, front); out.onShot = hit(shooter, front);
+      out.onBack = hit(brawler, back);
+      activeDoctrine = null; doctrineBroken = false;
+      return out;
+    });
+    ok(`NO HANDS takes a fifth off enemy melee that reaches the front rank ` +
+       `(${hands.offMelee} -> ${hands.onMelee})`,
+      hands.onMelee === Math.floor(hands.offMelee * 0.8));
+    // The half the engine's own comment states and nothing checked: "the doctrine is about
+    // giving up reach, not about being harder to shoot".
+    ok(`and nothing off being shot (${hands.offShot} -> ${hands.onShot})`,
+      hands.onShot === hands.offShot);
+    ok(`nor off a rank that is not the front one (${hands.offBack} -> ${hands.onBack})`,
+      hands.onBack === hands.offBack);
+
     // ── OLD GUARD: veterans only ─────────────────────────────────────────────────────────
     const guard = await page.evaluate(() => {
       const vet = MASTERY_RANKS[VETERAN_RANK];

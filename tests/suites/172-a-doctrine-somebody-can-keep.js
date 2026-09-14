@@ -153,5 +153,34 @@ module.exports = {
     ok(`OLD GUARD's offer gate counts at least a full line, or it can be offered and never kept ` +
        `(gate ${coupling.vets}, line ${coupling.line})`,
       coupling.vets >= coupling.line);
+
+    // ── O11: the control arm, and the one property that makes it a control ─────────────
+    // Asking what a doctrine is WORTH needs a run that does not have one, and until O11 this
+    // file had no such policy. `--draft line` banks one opportunistically on 114 of 150 runs, so
+    // the default is not a doctrine-free arm; `--draft random` skips the bank but changes the
+    // draft too, which puts a different line in the comparison as well as a missing multiplier.
+    //
+    // `--doctrine off` withholds the TAKE and nothing else. What makes it a control rather than
+    // a second policy is that the OFFER is still rolled and still read - doctrineOffered and
+    // doctrineLive are the same numbers either way - so the census above stays a census and the
+    // only thing that moved between the arms is whether the card was banked. Read off the
+    // simulator's source the way suite 166 reads its own arm: a lever nobody can see is the
+    // failure G13 went looking for a balance answer and found instead.
+    const fs = require('fs');
+    const path = require('path');
+    const sim = fs.readFileSync(path.join(__dirname, '..', '..', 'tests', 'simulate.js'), 'utf8');
+    ok('the doctrine control arm exists and is not the default',
+      /const DOCTRINE_POLICY = flag\('doctrine', 'on'\)/.test(sim));
+    ok('it withholds the take',
+      /if \(take && doctrinePolicy !== 'off'\) \{ activeDoctrine = take/.test(sim));
+    ok('and leaves the offer to be rolled and read, so the census is the same either way',
+      /stat\.doctrineOffered = doctrineOffer\.slice\(\);/.test(sim)
+      && sim.indexOf("if (take && doctrinePolicy !== 'off')")
+         < sim.indexOf('stat.doctrineOffered = doctrineOffer.slice();'));
+    // AND THE REPORT NAMES ITS ARM. O10 nearly filed two dead doctrines off a line that was
+    // reporting the draft policy back; the sentence that stops the next reader doing it is part
+    // of the instrument, not a comment in a commit message.
+    ok('the census line says whose line "live" is measured against',
+      /live = the offer THIS draft policy's line could keep/.test(sim));
   }
 };
