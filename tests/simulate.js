@@ -2496,7 +2496,15 @@ const ROOT = path.join(__dirname, '..');
 // suites, so none is an L02-style dead field. frontsSeen IS read, and the fronts are drawn by
 // the engine rather than forced, which is right. Exactly one assertion in 172 suites has a
 // constant-true condition (159:152) and its comment says why it is a warning rather than a
-// failure. And no O-phase claim was found stale beyond the six scale labels above.
+// failure.
+//
+// AND ONE THING IT MISSED, added the same day. The paragraph here first read "no O-phase claim
+// was found stale beyond the six scale labels above", and O10's closing line - "what a doctrine
+// is WORTH is still unmeasured" - is stale, answered by O11 eleven lines above it in this file
+// and marked there. The audit checked the arms, the dead fields and the denominators and never
+// read the O-series' own closing sentences against the items that followed them. That is the
+// fourth time this session a closing statement was broader than what was behind it, and the
+// only one of the four I found by being asked a question rather than by running a check.
 
 // ── O15: NO HANDS TRADES A THIRD OF THE SQUAD'S OUTPUT FOR A FIFTEENTH OF ITS SKIN ─────
 // O12/O13 left LIGHT_ORDER and NO_HANDS measured at about seven wins below a default line, with
@@ -2814,6 +2822,11 @@ const ROOT = path.join(__dirname, '..');
 // precisely so runs measured before doctrines existed stay comparable, and `--draft doctrine`
 // already exists for the other question. What a doctrine is WORTH is still unmeasured: G13 only
 // ever ran it bundled with two other levers, where nothing separated under D17.
+//   ^^ ANSWERED BY O11, the item directly above, which built the `--doctrine off` control and
+//   priced it at +13.5% of score by construction and a null on everything else. Marked rather
+//   than deleted because the sentence is why O11 exists. Found while answering "what is left" -
+//   the O-audit one commit earlier closed with "no O-phase claim was found stale beyond the six
+//   scale labels", and this is one, sitting eleven lines below the item that answers it.
 
 // ── O08: THE WOUNDED RUN IS ALREADY BUILT - AND WHY FOUR PITCHES IN A ROW WERE WRONG ───
 // Filed as a phase: 71% of runs wipe, so the middle of a collapsing run is the most-played part
