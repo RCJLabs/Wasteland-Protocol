@@ -2434,6 +2434,78 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O16: THE DOOR I01 PRICED, WALKED THROUGH AT LAST - AND IT IS A NULL ────────────
+// I01 moved retreat's perDepth 15 -> 6 and could only report AFFORDABILITY: 25-28% of the
+// moments it was on the table, up to 56-62%. Whether taking it does anything was never asked,
+// because nothing here pressed the button. The O-audit filed that as the one place a shipped
+// change to the game had never been measured at all.
+//
+// THE BLOCKER WAS REAL AND THE FIX IS ONE LINE, because I02 built it and did not connect it.
+// retreat()'s failure calls nextTurn(), which OPENS the next actor's turn through the engine -
+// turn-start applied, turn counted - so this loop, which walks the queue itself, would do both
+// again. I01 filed that as needing "the loop to hand the turn walk back to the engine, a much
+// larger change", and I02 repeated it three paragraphs after building `engineOpened` for exactly
+// that state. Constructed with Math.random pinned so the break cannot hold:
+//
+//   before   activeIndex 0, actor p3, fightLog.turns 0, every cooldown 5
+//   after    activeIndex 1, actor p2, fightLog.turns 1, p2's cooldown 4, p3 untouched
+//
+// One turn-start, one count, on the body nextTurn landed on. Handing that body to engineOpened
+// is the whole of it. Suite 146 holds the contract, and two mutations: taking nextTurn() out of
+// the failure path reds the three constructed rows, and dropping the engineOpened line reds the
+// row that pins the fix.
+//
+// THE ARM, NAMED. `--retreat losing` takes the break on the same condition the withdraw policy
+// uses, and sits ABOVE it - so retreat is the first answer to a fight going wrong and withdraw
+// is the fallback when the purse is short or the break fails. That is what the button is for: a
+// fall-back keeps the node, a withdrawal gives it up. It measures WHAT TAKING THE DOOR DOES,
+// under a policy that takes it whenever the squad is losing and can pay. It does not measure how
+// often a player would. `off` stays the default so every figure on record stays comparable.
+//
+// Three careers an arm, 150 expeditions each, interleaved OFF/ON/OFF/ON/OFF/ON so machine drift
+// falls on both. 900 expeditions.
+//
+//                             --retreat off          --retreat losing        D17
+//   withdrawals per run       5.26 / 5.21 / 5.08     2.87 / 3.27 / 3.89      3/3, NO OVERLAP
+//   runs that ended the road    20 /  21 /  15         24 /  15 /  15        direction reverses
+//   reached sector 7            34 /  26 /  29         37 /  29 /  25        direction reverses
+//   wipes per run             6.61 / 6.41 / 6.34     6.29 / 6.39 / 6.52      direction reverses
+//   nodes cleared, median       80 /  77 /  75         77 /  75 /  74        3/3, ranges overlap
+//   score, median            27.4k/ 23.4k/ 23.0k    27.6k/ 25.2k/ 23.4k      3/3, ranges overlap
+//
+// THE ONE ROW THAT SEPARATES IS THE ONE THIS POLICY MOVES BY CONSTRUCTION, and it is the control
+// check rather than the finding - O11's lesson about the score multiplier, one phase later. The
+// retreat sits above the withdraw branch and pre-empts it, so withdrawals MUST fall. They fall
+// by about half, and the arithmetic ties out: 178-358 withdrawals avoided a career against
+// 259-284 breaks that held. The arm does what it says, and the engine's own count agrees with
+// this file's press for press (511/511, 487/487, 559/559) - the row prints MISMATCH if it ever
+// does not, because a policy that silently does nothing is this project's oldest failure.
+//
+// AND WITH THAT SUBSTITUTION HAPPENING FIVE HUNDRED TIMES A CAREER, NOTHING DOWNSTREAM MOVES.
+// Not one outcome row. Wins reverse direction, sector 7 reverses, wipes reverse, and the two
+// that hold direction overlap. Wins move -0.7 on the mean against K06's measured floor of about
+// 14 across three careers, which is not a reading at all.
+//
+// THIS IS A WELL-POWERED NULL RATHER THAN A QUIET ONE, which is the difference between this and
+// a door nobody opened. The treatment is enormous: 487-559 presses a career, about 3.4 a run,
+// half of them failing, and 87,500-106,900 scrap spent breaking off - roughly 700 a run, against
+// a purse I01 measured at a median of 287 at a recruit node. A run spends more on breaking off
+// than it holds at the moment it would sign a body, and the road is no deeper for it.
+//
+// WHY, AS MECHANISM RATHER THAN CONCLUSION: a fall-back re-faces the same node with the same
+// squad, so the scrap and the fight it took to break off buy another attempt at the thing that
+// was going badly. `nodes cleared` is slightly LOWER on the ON arm (77/75/74 against 80/77/75)
+// and `fights per run` slightly higher (60/56/56 against 58/56/53), both consistent with paying
+// a fight to re-take a node rather than walking on. The door is not broken and it is not a trap;
+// it is a wash, and it was a wash at every depth the sample reached.
+//
+// NO DIAL MOVES. I01's retune stands - the door SHOULD be affordable, and a player who wants the
+// node back should be able to buy the attempt. What is now on the record is that buying it is
+// worth nothing measurable, so any future repricing of RETREAT has a baseline to move against
+// rather than a guess. Whether a fall-back should do more than hand back the same fight - heal,
+// or scatter the enemy, or cost the node's guard something - is a design question this measures
+// the need for and does not answer.
+
 // ── O-AUDIT: THE REPORT HAS TWO WORDS FOR ONE DENOMINATOR, AND USES BOTH ──────────
 // O01-O15 are done, and the tree was audited the way F03, H, L, M and N were: look for a
 // reading the instrument could not make, or did not make, but reported as though it had.
@@ -4570,6 +4642,33 @@ const CONTRACTS = flag('contracts', '').split(',').filter(Boolean);
 // only one. With this on it also runs from fights it is losing, so the cost of leaving can be
 // measured against the cost of staying. `--withdraw off` is the old behaviour, for comparison.
 const WITHDRAW_POLICY = flag('withdraw', 'on') !== 'off';
+// O16: THE DOOR I01 PRICED AND NOBODY HAS EVER WALKED THROUGH. I01 moved perDepth 15 -> 6 and
+// reported the retreat going from 25-28% affordable to 56-62% - affordability, which is all this
+// file could see, because no policy here presses the button. Both I01 and I02 record WHY, and the
+// reason was that retreat()'s failure path calls nextTurn(), which opens the next actor's turn
+// through the engine: this loop would then tick that actor's turn-start a second time and count
+// their turn twice. I01 filed it as needing "the loop to hand the turn walk back to the engine,
+// a much larger change".
+//
+// IT IS NOT A LARGER CHANGE, BECAUSE I02 ALREADY BUILT THE MECHANISM AND DID NOT CONNECT IT.
+// `engineOpened` exists for exactly this state - a turn the ENGINE has already opened, which the
+// loop must accept rather than re-open - and I02 built it for initiateCombat's opening
+// processTurn while writing, three paragraphs later, that "the retreat path stands as I01 left
+// it". Constructed rather than argued, with Math.random pinned so the break cannot succeed:
+//
+//   before   activeIndex 0, actor p3, fightLog.turns 0, every cooldown 5
+//   after    activeIndex 1, actor p2, fightLog.turns 1, p2's cooldown 4, p1 and p3 untouched
+//
+// One turn-start, one count, on the actor nextTurn landed on. Handing that actor to
+// `engineOpened` is the whole of the fix.
+//
+// `off` is the default so every figure on record stays comparable. `losing` takes the break on
+// the same condition the withdraw policy uses, which makes retreat the FIRST answer to a fight
+// going wrong and withdraw the fallback when the purse is short or the break fails - that is
+// what the button is for, since a fall-back keeps the node and a withdrawal does not. NAME THE
+// ARM: this measures what taking the door does to a run, under a policy that takes it whenever
+// the squad is losing and can pay. It does not measure how often a player would.
+const RETREAT_POLICY = flag('retreat', 'off');
 // The draft policy was hardcoded to a front-liner, usually a medic, and one other - which meant
 // "which classes get deployed" reported that policy back rather than anything about the game.
 // `--draft random` fields three drawn flat from the roster; `--draft only:PYROMANIAC` forces one
@@ -4920,7 +5019,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange, retreatPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -4950,6 +5049,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  tookNonFight: 0, evOptions: 0, evBookable: 0, evCouldBook: 0,
                  evShown: 0, evPriced: 0, evPricedTook: 0, pricedBySector: {},
                  retreatOpen: 0, retreatAfford: 0, retreatAsked: [], retreatPurse: [], retreatBySector: {},
+                 // O16: and what taking it did. Seeded here rather than self-started, because
+                 // the report divides by them and M07's NaN came from a key a run never touched.
+                 retreatTook: 0, retreatFailed: 0, retreatPaid: 0, retreatTookBySector: {}, fellBack: 0,
                  recruitWhy: {}, recruitBurned: 0, recruitFielded: 0, recruitBenched: 0, reslotted: 0, reslottedRecruit: 0,
                  fieldGap: [], fieldUps: [], fieldMine: [],
                  relicOffers: 0, cursedOffered: 0, cursedTaken: 0, cacheOffered: 0, cacheTaken: 0,
@@ -6109,7 +6211,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       stat.sigsFaced[e.sig] = (stat.sigsFaced[e.sig] || 0) + 1;
     });
     const enemyStartHp = activeEntities.filter(e => !e.isPlayer).reduce((a, e) => a + e.hp, 0);
-    let rounds = 0, fled = false;
+    let rounds = 0, fled = false, fellBack = false;
     const wonBefore = runStats.fightsWon || 0;   // E01: what the engine had banked before this fight
     while (combatActive && rounds < 400) {
       rounds++;
@@ -6162,6 +6264,34 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
           if (held >= price) { stat.retreatAfford++; row.afford++; }
         }
       }
+      // O16: AND THE POLICY THAT TAKES IT, above withdrawing because a fall-back keeps the node
+      // and a withdrawal gives it up. canRetreat() is asked of the engine - no hand copy of the
+      // gate - and retreat() is pressed twice because it arms on the first press like withdraw.
+      if (actor.isPlayer && retreatPolicy !== 'off' && losing(enemyStartHp) && canRetreat()) {
+        const purse = scrap, down = bleedingOut().slice();
+        stat.retreatTook++;
+        stat.retreatTookBySector['s' + currentSector] = (stat.retreatTookBySector['s' + currentSector] || 0) + 1;
+        retreat(); retreat();
+        stat.retreatPaid += purse - scrap;
+        if (!combatActive) {
+          // The break worked. fallBackToNode has already run recoverDowned, so the bodies it
+          // picked up are counted here for the same reason withdraw's are: the scar denominator
+          // is every operator recovered, and one missing branch read 12% against a 0.08 chance.
+          countBodies();
+          stat.recovered += down.length;
+          down.forEach(e => stat.clockLeft.push(e.downTurns || 0));
+          fellBack = true;
+          break;
+        }
+        // It failed: the scrap is gone and so is the turn. retreat() called nextTurn(), which
+        // opened the NEXT actor's turn through the engine - turn-start applied, turn counted.
+        // That is what engineOpened is for, so the loop accepts that turn instead of re-opening
+        // it. Without this line the actor behind the break gets two turn-starts and two counts,
+        // which is the double-tick I01 filed as the blocker and I02 had already solved.
+        stat.retreatFailed++;
+        engineOpened = turnQueue[activeIndex];
+        continue;
+      }
       if (actor.isPlayer && withdrawPolicy && canWithdraw() && losing(enemyStartHp)) {
         countBodies();
         // withdraw() reaches recoverDowned on its own, so the operators it picks up have to be
@@ -6198,6 +6328,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     (runStats.fallen || []).slice(stat.lost.length).forEach(f => stat.lost.push(f.name));
     activeEntities.forEach(e => { delete e.__counted; });
     stat.rounds += rounds;
+    // O16: a fall-back is not a withdrawal. The node is un-cleared and retreatNode sends the
+    // walk straight back at it, so the run has spent scrap and a fight and kept the node; a
+    // withdrawal gives the node up and takes a wound and a pursuit. Counted apart.
+    if (fellBack) { tallyScars(); stat.fellBack++; return 'fellback'; }
     if (fled) { tallyScars(); stat.withdrawals++; return 'fled'; }
     const survived = activeEntities.some(e => e.isPlayer && e.hp > 0);
     const foesLeft = activeEntities.filter(e => !e.isPlayer && e.hp > 0).length;
@@ -6705,6 +6839,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // runStats.nodes is counted by bankNode below rather than here, where it used to fire for
     // won and lost alike.
     if (outcome === 'fled') { spend(); continue; }
+    // O16: the same shape, and availableNodeIds() puts the squad back in front of the same node
+    // because fallBackToNode set retreatNode - so the next pass re-faces it rather than walking on.
+    if (outcome === 'fellback') { spend(); continue; }
 
     if (outcome === 'lost') {
       stat.wipes++;
@@ -6907,6 +7044,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.mit = runStats.mit || {};           // N01: mitigate's calls against the blows that landed
   stat.reach = runStats.reach || {};       // O15: what reaches the squad, by attacker reach x rank
   stat.out = runStats.out || {};           // O15: and what the squad throws, by the reach of the move
+  // O16: read back what the ENGINE booked, not what the policy thinks it pressed - G13's rule.
+  // The two are printed against each other so a policy that silently does nothing says so.
+  stat.engineRetreats = runStats.retreats || 0;
+  stat.engineRetreatsFailed = runStats.retreatsFailed || 0;
   // The full key list, not just a count: the report is asked which pairings NEVER fired, and a
   // count can only say how many are missing. Same key the census builds, so the two cannot drift.
   stat.cbAll = (COMBOS || []).map(c => `${c.move}>${c.needs.replace('Turns', '')}`);
@@ -7062,7 +7203,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE, retreatPolicy: RETREAT_POLICY });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -8603,6 +8744,26 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     const cols = Object.keys(by).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
     line('  affordable by sector',
       cols.map(k => `${k.slice(1)}: ${by[k].open ? Math.round(by[k].afford / by[k].open * 100) : 0}% of ${by[k].open}`).join('  '));
+    // ── O16: AND WHAT TAKING IT DID, which is the half I01 could not reach ──────────────
+    // Only under `--retreat losing`; the default arm presses nothing and says so rather than
+    // printing a row of zeroes that reads like a finding about the game.
+    const took = tot('retreatTook'), failed = tot('retreatFailed'), back = tot('fellBack');
+    if (!took) {
+      line('  and taken', `never - this arm does not press it (--retreat ${RETREAT_POLICY})`);
+    } else {
+      // The engine's own count beside this file's. They must agree: retreat() books every press
+      // itself, so a gap means the policy pressed something that was not the button.
+      const eng = tot('engineRetreats'), engF = tot('engineRetreatsFailed');
+      line('  and taken', `${took} times (${(took / n).toFixed(2)} a run), engine booked ${eng}` +
+        (eng === took ? '' : ` - MISMATCH, the policy and the button disagree`));
+      line('    the break held', `${back} of ${took} (${(back / took * 100).toFixed(0)}%), ` +
+        `failed ${failed}` + (engF === failed ? '' : ` - MISMATCH against the engine's ${engF}`));
+      line('    scrap spent breaking off', `${tot('retreatPaid')} (${Math.round(tot('retreatPaid') / n)} a run, ` +
+        `${Math.round(tot('retreatPaid') / took)} a press)`);
+      const bt = foldAll('retreatTookBySector');
+      const bcols = Object.keys(bt).sort((a, b) => Number(a.slice(1)) - Number(b.slice(1)));
+      line('    taken by sector', bcols.map(k => `${k.slice(1)}: ${bt[k]}`).join('  ') || 'none');
+    }
   }
 
   line('event choices offered, total', `${evOpt}`);
