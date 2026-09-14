@@ -2433,6 +2433,96 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O15: NO HANDS TRADES A THIRD OF THE SQUAD'S OUTPUT FOR A FIFTEENTH OF ITS SKIN ─────
+// O12/O13 left LIGHT_ORDER and NO_HANDS measured at about seven wins below a default line, with
+// the remedy a design call. Two directions were available - loosen what the card ASKS, or raise
+// what it PAYS - and both were guesses. Priced instead.
+//
+// THE ASK IS NOT THE LEVER, and the measurement says so cleanly. LIGHT ORDER's cap is one
+// constant: at 55 the only melee body under it is the Hound, at 65 the Shotgunner comes in, a
+// real front-liner. Three careers an arm, --arrange front, against O13's on disk:
+//
+//   cap 55   15/17/10   14.00 wins    reachable by 120 of 720 arrangements
+//   cap 65   16/18/13   15.67 wins    reachable by 336 of 720
+//
+// +1.67 wins, 3/3 in direction and overlapping in range - inside the +/- 2.4 this instrument
+// states for an arm of three, so not separable from zero - bought by nearly tripling how many
+// lines keep the card. A worse choice for a gain that cannot be measured. REVERTED; the constant
+// is back at 55 and game.js carries no part of this.
+//
+// SO THE PAY, AND MY HYPOTHESIS THERE WAS REFUTED TOO. NO HANDS pays a fifth off enemy melee
+// that reaches the front rank, and I expected that to be a thin slice of a big total. Nothing
+// had ever counted it: the report splits incoming blows by damage TYPE and has never split them
+// by the attacker's REACH, which is the axis this card is about. Stamped on the figure mitigate
+// hands back and booked at the landing point - M08b's rule, and N01's bug if it is booked
+// anywhere else. Two 150-expedition careers:
+//
+//   melee, onto the front rank    33.8% / 34.1% of damage taken   <- what the edge covers
+//   shot,  onto a rank behind it  42.4% / 42.3%
+//   melee, onto a rank behind it  13.0% / 12.7%
+//   shot,  onto the front rank    10.7% / 10.9%
+//
+// The edge covers the largest single bucket of melee damage in the game and cuts a fifth of it:
+// 6.8% of everything the squad takes, both careers. That is not a thin edge. It is worth about
+// what a good relic is worth.
+//
+// AND THE OTHER HALF OF THE TRADE, ON THE SAME SCALE, WHICH IS THE FINDING. The card takes the
+// squad's melee away. The squad's melee is 37.4% / 38.0% of the damage it deals.
+//
+//   NO HANDS gives up ~37.7% of output to get 6.8% off what it takes.
+//
+// Lopsided about 5.5 to 1. Neither number is wrong on its own - the ask is a third of your
+// damage and the pay is a real defensive edge - but the card is trading offence for defence in a
+// game whose road is finished on about a third of runs, where a squad that hits softer mostly
+// arrives at the same wall later with the same squad. That is a shape problem, not a dial
+// problem, and it is why loosening the cap on its sibling bought nothing: both cards are priced
+// on the wrong axis, and moving the price along that axis does not help.
+//
+// WHAT WOULD: an edge that returns OUTPUT rather than skin - the line gave up its swings, so
+// what it still carries hits harder - or a defensive edge several times the current one. Either
+// is a design call with a number behind it now rather than a guess. NO DIAL MOVES on this commit.
+//
+// AND THE CENSUS IS THE DURABLE PART, whatever is decided. "What reaches the squad" is four
+// buckets the report has never printed, it is the denominator for every positional question
+// after this one, and suite 170 holds it at the same door it holds THICK_HIDE's: forecasts and
+// probes book nothing, every landed blow lands in exactly one bucket.
+//
+// TWO THINGS THIS ITEM GOT WRONG AND THE BATTERY CAUGHT, both worth the space because both are
+// the same class of mistake this file keeps a list of.
+//
+// FIRST, I HAND-ROLLED THE ACCUMULATOR. Both censuses above walked the runs themselves and
+// added each bucket's two keys by name - the exact shape M07, M08 and M09 each fixed once, and
+// which the M-audit unified behind foldStats specifically so there would not be a fourth. Suite
+// 163's class row - "and none is still hand-rolled" - fired on the first battery and printed
+// the offending line back at me. (It scans for that shape by name, so this paragraph describes
+// it rather than quoting it; quoting it fails the row, which is the row working.) Both are
+// foldAll now, which is what it exists for and why it is written against a PATTERN rather than
+// against the five accumulators that existed when it was written. The figures are unchanged:
+// the same sum over the same per-run bags.
+//
+// SECOND, O14's FIX TO SUITE 101 WAS TOO STRONG BY ONE CASE, in the same shape as the bug it
+// replaced. It branched on whether the body the save was taken on still had health AFTER the
+// resume, reading a dead one as "fell before the save, so the fight stepped over it". That one
+// reading covers two states and calls them both stepped-over:
+//
+//   the fight came back onto it, still up                      not charged
+//   the fight came back onto it and its own turn-start bleed    not charged   <- reads as fallen
+//     killed it on that turn
+//   it was already down, the fight stepped over it onto ours        charged
+//   ... onto a hostile, whose turn is not a squad turn          not charged
+//
+// Red once in three batteries on the second line. 40 runs of suite 101 staged the case twice,
+// so it was forced in suite 03 instead - one point of health and a bleed - which is #209's
+// method and the same method O14 used for the case it did find. All four states are held there
+// now; 101 branches on WHERE THE FIGHT LANDED, which separates them and is what the row is
+// named for. Three mutations: dropping the resume guard reddens 101 every time rather than
+// intermittently, counting hostile turns as squad turns reddens the fourth state, and a bleed
+// that cannot kill reddens the second.
+//
+// The pattern across both: a claim that is one case stronger than the thing it is named for.
+// O14 recorded that lesson about the row it replaced and then made the same error writing the
+// replacement.
+
 // ── O13: A THIRD OF O12's COST WAS MY OWN DRAFT, AND THE OTHER TWO THIRDS ARE REAL ─────
 // O12 measured LIGHT_ORDER and NO_HANDS at about ten and eleven wins below a default line and
 // called both traps. The arm it measured them with takes the FIRST satisfying arrangement off a
@@ -6737,6 +6827,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.cb = runStats.cb || {};             // M11: every one of the ten pairings, and what it bought
   stat.bl = runStats.bl || {};             // #197 tier A: every bleed, by what opened it
   stat.mit = runStats.mit || {};           // N01: mitigate's calls against the blows that landed
+  stat.reach = runStats.reach || {};       // O15: what reaches the squad, by attacker reach x rank
+  stat.out = runStats.out || {};           // O15: and what the squad throws, by the reach of the move
   // The full key list, not just a count: the report is asked which pairings NEVER fired, and a
   // count can only say how many are missing. Same key the census builds, so the two cannot drift.
   stat.cbAll = (COMBOS || []).map(c => `${c.move}>${c.needs.replace('Turns', '')}`);
@@ -8213,6 +8305,44 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     };
     show('atSquad', 'blows at the squad, by type');
     show('atFoe', 'blows at the hostiles, by type');
+
+    // O15: AND THE SAME BLOWS BY SHAPE, which is the denominator NO HANDS' edge sits on and
+    // which nothing has ever printed. The card asks the whole line to give up melee and pays a
+    // fifth off enemy melee that reaches the FRONT RANK - one of these four buckets. O12/O13
+    // measured the card at about seven wins below a default line and established that loosening
+    // the ask is not the lever (raising LIGHT ORDER's cap bought 1.67 wins, inside the floor,
+    // for nearly tripling how many lines keep it). So the question is the pay, and this is what
+    // the pay covers.
+    {
+      const r = foldAll('reach');
+      const tot = Object.values(r).reduce((a, v) => a + v.dmg, 0);
+      if (tot > 0) {
+        console.log('\n── WHAT REACHES THE SQUAD ' + '─'.repeat(31));
+        const pc = v => `${(100 * v.dmg / tot).toFixed(1)}%`;
+        [['meleeFront', 'melee, onto the front rank'],
+         ['meleeBehind', 'melee, onto a rank behind it'],
+         ['rangedFront', 'shot, onto the front rank'],
+         ['rangedBehind', 'shot, onto a rank behind it']].forEach(([k, label]) => {
+          const v = r[k] || { blows: 0, dmg: 0 };
+          line('  ' + label, `${pc(v)} of damage taken (${v.blows.toLocaleString()} blows, ` +
+                             `${Math.round(v.dmg).toLocaleString()} points)`);
+        });
+        const mf = r.meleeFront || { dmg: 0 };
+        line('what NO HANDS\' edge covers', `${pc(mf)} of what the squad takes, and it cuts a ` +
+             `fifth of that - so ${(100 * 0.2 * mf.dmg / tot).toFixed(1)}% of damage taken`);
+        // AND WHAT IT ASKS FOR, on the same scale, because a trade needs both halves. The card
+        // takes the squad's melee away; this is what the squad's melee is worth.
+        const o = foldAll('out');
+        const otot = Object.values(o).reduce((a, v) => a + v.dmg, 0);
+        if (otot > 0) {
+          const om = o.melee || { blows: 0, dmg: 0 };
+          line('what the squad throws in melee', `${(100 * om.dmg / otot).toFixed(1)}% of the damage ` +
+               `it deals (${om.blows.toLocaleString()} blows, ${Math.round(om.dmg).toLocaleString()} points)`);
+          line('  so NO HANDS trades', `${(100 * om.dmg / otot).toFixed(1)}% of output for ` +
+               `${(100 * 0.2 * mf.dmg / tot).toFixed(1)}% off what it takes`);
+        }
+      }
+    }
 
     // L03: AND WHAT THE ROWS ABOVE CANNOT SEE. noteDamageType has exactly two callers - the
     // damage door and the sky's tick - so the shares above, K09's soak figures among them, are

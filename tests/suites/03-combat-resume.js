@@ -144,28 +144,43 @@ module.exports = {
       //
       // So: a corpse at index 0 and a living operator at index 1, put there by hand, and both
       // arms run against that one field.
-      const build = () => {
+      const build = (mode) => {
         currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
         initiateCombat('RAIDERS', false);
         fightLog.turns = 9;
         const ours = turnQueue.filter(e => e.isPlayer && e.hp > 0);
         const theirs = turnQueue.filter(e => !e.isPlayer);
-        turnQueue = [ours[0], ours[1], ...theirs].filter(Boolean);
+        // 'hostile' puts one of theirs behind the corpse instead of one of ours, because a
+        // hostile's turn is not a squad turn and the count must not move for it - which 101's
+        // row asserts and nothing held until O15.
+        turnQueue = mode === 'hostile' ? [ours[0], theirs[0], ours[1], ...theirs.slice(1)].filter(Boolean)
+                                       : [ours[0], ours[1], ...theirs].filter(Boolean);
         activeEntities = [...turnQueue];
         activeIndex = 0;
-        turnQueue[0].hp = 0;            // fell during its own turn, still in the queue
+        // 'corpse': fell during its own turn, still in the queue - the case O14 found.
+        // 'dies':   up when the fight came back onto it, and killed by its OWN turn-start
+        //           tick - the case O14 missed, added by O15. One point of health and a
+        //           bleed, because the tick takes 8% of MAXIMUM health and so always lands.
+        if (mode === 'corpse' || mode === 'hostile') turnQueue[0].hp = 0;
+        if (mode === 'dies') { turnQueue[0].hp = 1; turnQueue[0].bleedingTurns = 3; }
         return { corpse: turnQueue[0].id, behind: turnQueue[1].id, behindIsOurs: !!turnQueue[1].isPlayer };
       };
-      const run = (asResume) => {
-        const b = build();
+      const run = (asResume, mode) => {
+        const b = build(mode || 'corpse');
         resumingTurn = !!asResume;
         processTurn();
+        const body = activeEntities.find(e => e.id === b.corpse);
         const out = { ...b, turns: fightLog.turns,
-                      landedOn: turnQueue[activeIndex] && turnQueue[activeIndex].id };
+                      landedOn: turnQueue[activeIndex] && turnQueue[activeIndex].id,
+                      hpAfter: body ? body.hp : 'GONE',
+                      // The reading suite 101 branched on for one release, kept here so the row
+                      // below can show it disagreeing with the queue.
+                      liveAfter: activeEntities.some(e => e.id === b.corpse && e.hp > 0) };
         combatActive = false;
         return out;
       };
-      return { fallen: run(true), noSave: run(false) };
+      return { fallen: run(true), noSave: run(false), diedOnIt: run(true, 'dies'),
+               ontoHostile: run(true, 'hostile') };
     });
     ok(`the fixture puts a fallen body in front of a living operator ` +
        `(${charged.fallen.corpse} down, ${charged.fallen.behind} behind it)`,
@@ -184,6 +199,46 @@ module.exports = {
     ok(`and that is the fight, not the save - the same field with no resume in it counts the ` +
        `same turn (9 -> ${charged.noSave.turns})`,
       charged.noSave.turns === charged.fallen.turns);
+    // ── O15: AND THE THIRD STATE, which O14 did not know was there ─────────────────────
+    // O14 closed 101's pair by branching on whether the body the save was taken on was still
+    // alive AFTER the resume, and called a dead one "fell before the save, so the fight stepped
+    // over it". That is two different states wearing one reading, and the row went red once in
+    // three batteries on the second of them:
+    //
+    //   the fight came back onto it, and it is still up      landed on it       not charged
+    //   the fight came back onto it, and its OWN turn-start  landed on it       not charged
+    //     tick killed it - 8% of maximum health as bleed
+    //   it was already down, so the fight stepped over it    landed on the next   charged
+    //
+    // The middle row reads as dead afterwards and is not the stepped-over case at all: the
+    // guard did its job, the body took the turn it was saved on, and then bled out on it. A
+    // health reading taken after the fact cannot tell those two apart. WHERE THE FIGHT LANDED
+    // can, and it is what the claim is actually about, so that is what 101 branches on now.
+    ok(`a body that dies to its own turn-start tick is still the body the fight came back onto ` +
+       `(landed on ${charged.diedOnIt.landedOn}, at ${charged.diedOnIt.hpAfter} health)`,
+      charged.diedOnIt.landedOn === charged.diedOnIt.corpse && charged.diedOnIt.hpAfter === 0);
+    // AND THE READING THAT COULD NOT TELL THEM APART, shown disagreeing with the queue rather
+    // than described. Both of these are "no health left" afterwards; only one of them was
+    // stepped over.
+    // Each arm against ITS OWN body, not against the other arm's: every arm calls initiateCombat
+    // again and gets a fresh draw, so `diedOnIt.landedOn !== fallen.landedOn` was a claim about
+    // which ids the two draws happened to deal. It passed when they differed and went red when
+    // both dealt p2 - a row depending on a draw, written in the block that exists to record
+    // exactly that mistake.
+    ok(`which the health reading calls fallen either way (came back onto it: ${charged.diedOnIt.liveAfter}, ` +
+       `stepped over: ${charged.fallen.liveAfter})`,
+      charged.diedOnIt.liveAfter === false && charged.fallen.liveAfter === false
+      && charged.diedOnIt.landedOn === charged.diedOnIt.corpse
+      && charged.fallen.landedOn !== charged.fallen.corpse);
+    // AND THE FOURTH STATE: stepped over onto a HOSTILE. The +1 above is not "a resume over a
+    // corpse costs a turn", it is "the body behind the corpse takes a turn and a squad turn is
+    // what fightLog counts". Put one of theirs behind the corpse and the count must not move -
+    // which is exactly the defect that made my first cut of the arms above red 1 battery in 3,
+    // recorded there, and now held rather than only written down.
+    ok(`and stepping over it onto a hostile is not a squad turn (${charged.ontoHostile.corpse} -> ` +
+       `${charged.ontoHostile.landedOn}, 9 -> ${charged.ontoHostile.turns})`,
+      charged.ontoHostile.behindIsOurs === false && charged.ontoHostile.turns === 9
+      && charged.ontoHostile.landedOn === charged.ontoHostile.behind);
     // WHAT THESE ROWS DO NOT HOLD, checked rather than assumed. The obvious companion claim is
     // that the guard's PLACEMENT is load-bearing - that reading and clearing `resumingTurn` in
     // one statement, above the early return, is what makes this work. It is not pinned by

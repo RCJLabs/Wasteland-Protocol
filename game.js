@@ -334,6 +334,19 @@ function noteLanding(cut, t, dmg) {
     // a reload does. A key that increments itself cannot have a seed to drift from.
     const m = runStats.mit = runStats.mit || {};
     m.blows = (m.blows || 0) + 1;
+    // O15: the shape of what the squad takes, in the four buckets NO HANDS' edge divides the
+    // world into. Self-seeding for the reason three lines up.
+    if (t && t.isPlayer) {
+        const r = runStats.reach = runStats.reach || {};
+        const k = (cut.meleeIn ? 'melee' : 'ranged') + (cut.atFront ? 'Front' : 'Behind');
+        r[k] = r[k] || { blows: 0, dmg: 0 };
+        r[k].blows++; r[k].dmg += Math.max(0, dmg || 0);
+    } else if (t) {
+        const o = runStats.out = runStats.out || {};
+        const k = cut.meleeOut ? 'melee' : 'ranged';
+        o[k] = o[k] || { blows: 0, dmg: 0 };
+        o[k].blows++; o[k].dmg += Math.max(0, dmg || 0);
+    }
 }
 // M11: what the ten pairings in COMBOS are actually worth. The table has existed since Phase 1
 // and nothing has ever counted it - the simulator books a combo turn only as "claimed", which
@@ -12503,6 +12516,25 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     if (hasRelic('LEAD_LINED_COAT') && t.isPlayer) cd = Math.floor(cd * 0.8);
     // NO HANDS: a line with nothing that swings has to be able to survive what walks into it.
     // Melee only - the doctrine is about giving up reach, not about being harder to shoot.
+    // O15: WHAT NO HANDS' EDGE SITS ON, handed back with the figure rather than counted here -
+    // mitigate is reached five times over by things that are not blows, which is M08b's rule and
+    // the bug N01 had to undo. Only the landing point knows a blow landed, so the shape of the
+    // blow rides back on the bag the way cover and thick already do.
+    //
+    // The card asks the line to give up every melee ability and pays for it with a fifth off
+    // enemy melee that reaches the front rank. Nothing has ever counted how much of what the
+    // squad takes that IS, and O12/O13 measured the card at about seven wins below a default
+    // line - so whether the ask is too steep or the pay too thin is the open question, and this
+    // is its denominator.
+    const meleeIn = !!(t.isPlayer && attacker && !attacker.isPlayer && attacker.range === 'melee');
+    const atFront = !!(t.isPlayer && t.gridPos === 1);
+    // And the mirror, because the trade has two halves. The edge above returns defence; what the
+    // card ASKS for is the squad's melee, and nothing counted what that is worth either. Read off
+    // the move being thrown rather than off the body throwing it - a Scavenger who picked up a
+    // knife at rank III is a melee swing when they use it and a rifle shot when they do not,
+    // which is the same distinction carriesMelee draws off the deck.
+    const meleeOut = !!(!t.isPlayer && attacker && attacker.isPlayer &&
+                        moveReachFor(pendingAction, attacker) === 'melee');
     if (hasDoctrine('NO_HANDS') && t.isPlayer && t.gridPos === 1 && attacker && !attacker.isPlayer
         && attacker.range === 'melee') cd = Math.floor(cd * 0.8);
     if (hasRelic('CHEM_ETCHER') && !t.isPlayer && (t.corrodedTurns || 0) > 0) cd = Math.floor(cd * 1.25);
@@ -12561,7 +12593,7 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     // M11 goes with it for the same reason J04's `ac` did: `cd` is the figure the whole
     // multiplicative chain produced, just before the two subtractions, and it is the only term
     // from which a combo's counterfactual can be reconstructed without running mitigate twice.
-    return { n, rv, ac, cd, cover, thick };
+    return { n, rv, ac, cd, cover, thick, meleeIn, atFront, meleeOut };
 }
 
 // ── F05: one ledger for a body ──────────────────────────────────────────────────────────
@@ -12747,7 +12779,11 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
     // A pierced blow never reaches mitigate, so it carries no cover, no hide and no call - it is
     // a blow with no mitigation at all, which is what HEADSHOT's banner promises. It still books
     // as a landing, so calls and blows can legitimately differ by exactly the pierced ones.
-    const figure = t => pierce ? { n: Math.max(1, t.hp), rv: 0, ac: 0, cd: Math.max(1, t.hp), cover: null, thick: false }
+    const figure = t => pierce ? { n: Math.max(1, t.hp), rv: 0, ac: 0, cd: Math.max(1, t.hp), cover: null, thick: false,
+                                  meleeIn: !!(t.isPlayer && attacker && !attacker.isPlayer && attacker.range === 'melee'),
+                                  atFront: !!(t.isPlayer && t.gridPos === 1),
+                                  meleeOut: !!(!t.isPlayer && attacker && attacker.isPlayer &&
+                                               moveReachFor(pendingAction, attacker) === 'melee') }
                                : mitigate(attacker, t, calcDmg, atkType, abilityStr);
     let cut = figure(target);
     let { n: netDmg, rv: resistValue, ac: armourTaken, cd: preSoak } = cut;

@@ -33,7 +33,7 @@ module.exports = {
     ok('mitigate books nothing to the quirk census any more',
       !/noteQuirk\(/.test(mit));
     ok('and it hands the hide back with the figure instead, beside ac and cd',
-      /return \{ n, rv, ac, cd, cover, thick \}/.test(src));
+      /return \{ n, rv, ac, cd, cover, thick[,}]/.test(src));
     // NO note* CALL AT ALL, not just no noteQuirk - that is the rule the audit turned into a
     // sentence and this row is what holds it. The two counters mitigate does keep are its own
     // call count and the deliberate copy of what the old counter saw, and both self-seed, which
@@ -97,6 +97,44 @@ module.exports = {
     // noteLanding passed every other row in this suite.
     ok(`one ordinary blow is exactly one call and one landing (${landed.calls}/${landed.blows})`,
       landed.calls === 1 && landed.blows === 1);
+
+    // ── O15: the reach census, booked at the same door and for the same reason ──────────
+    // NO HANDS asks the line to give up every melee ability and pays a fifth off enemy melee
+    // that reaches the front rank. O12/O13 measured the card at about seven wins below a default
+    // line; nothing had ever counted what either half of that trade is worth. The census that
+    // answers it rides back on mitigate's own figure and is booked HERE, which is this suite's
+    // whole subject: mitigate is asked by four forecasts and a resist probe every turn, and a
+    // ledger kept at that line counts damage nobody took. N01 shipped that bug once already.
+    const reach = await page.evaluate(() => {
+      const who = activeEntities.find(e => e.isPlayer);
+      const foe = activeEntities.find(e => !e.isPlayer);
+      const sum = r => Object.values(r || {}).reduce((a, v) => a + v.blows, 0);
+      runStats.reach = {}; runStats.out = {}; runStats.mit = {};
+      // Everything that is not a blow, first.
+      for (let i = 0; i < 10; i++) threatBoard();
+      mitigate(foe, who, 100, 'phys', null);
+      const asked = { inb: sum(runStats.reach), outb: sum(runStats.out) };
+      // Then one blow each way, on a field where the reach of both is known.
+      foe.range = 'melee'; who.gridPos = 1;
+      applyDamageHit(foe, who, 100, 'phys', null);
+      activeIndex = turnQueue.indexOf(who); pendingAction = 'SCRAP_BLADE';
+      applyDamageHit(who, foe, 100, 'phys', null);
+      return { asked, inb: { ...runStats.reach }, outb: { ...runStats.out },
+               blows: runStats.mit.blows || 0 };
+    });
+    ok(`forecasts and probes book nothing in the reach census (${reach.asked.inb} in, ${reach.asked.outb} out)`,
+      reach.asked.inb === 0 && reach.asked.outb === 0);
+    ok(`a melee blow onto the front rank lands in the bucket NO HANDS pays on ` +
+       `(${JSON.stringify(reach.inb)})`,
+      (reach.inb.meleeFront || {}).blows === 1 && Object.keys(reach.inb).length === 1);
+    ok(`and the squad's own swing is counted on the other side, not this one ` +
+       `(${JSON.stringify(reach.outb)})`,
+      (reach.outb.melee || {}).blows === 1 && Object.keys(reach.outb).length === 1);
+    // The two sides share the landing count, so a bucket that drifts from it is a bucket that
+    // is counting something else.
+    ok(`every landed blow is in exactly one bucket (${reach.blows} landings)`,
+      Object.values(reach.inb).reduce((a, v) => a + v.blows, 0)
+      + Object.values(reach.outb).reduce((a, v) => a + v.blows, 0) === reach.blows);
     const pierced = await page.evaluate(() => {
       const who = activeEntities.find(e => e.isPlayer);
       const foe = activeEntities.find(e => !e.isPlayer);
@@ -134,8 +172,21 @@ module.exports = {
     // A pierced blow is the one landing that never meets mitigate at all - HEADSHOT executes
     // outright - so it carries no cover and no hide, and calls may legitimately trail blows by
     // exactly that many. Stated here so the report's ratio is not read as an error.
-    ok('a pierced blow is built with the same shape so the door can take it',
-      /pierce \? \{ n: Math\.max\(1, t\.hp\), rv: 0, ac: 0, cd: Math\.max\(1, t\.hp\), cover: null, thick: false \}/.test(src));
+    // O15 MADE THIS A PROPERTY RATHER THAN A LITERAL, and the literal is why. Two spellings of
+    // the same figure kept in step by hand is the thing buildCombatSnapshot and resumeCombat were
+    // caught doing, and this row was one of the two halves - so adding a field to mitigate's
+    // figure reddened it correctly and would have let the pierce shortcut fall behind silently if
+    // it had only been re-pinned. Compared as key SETS now: whatever mitigate hands back, the
+    // pierce shortcut hands back the same names, because the door reads both.
+    const keysOf = block => (block.match(/([A-Za-z_]\w*)\s*[:,}]/g) || [])
+      .map(x => x.replace(/[\s:,}]/g, '')).filter(Boolean);
+    const ret = keysOf((src.match(/return \{ n, rv, ac, cd, cover, thick[^}]*\}/) || [''])[0]);
+    const pierceFig = (src.match(/pierce \? \{ n: Math\.max\(1, t\.hp\)[\s\S]*?\}/) || [''])[0];
+    const pk = keysOf(pierceFig).filter(k => !['Math', 'max', 't', 'hp', 'isPlayer', 'attacker',
+      'range', 'gridPos', 'moveReachFor', 'pendingAction', 'null', 'false', 'true'].includes(k));
+    ok(`a pierced blow is built with the same shape so the door can take it ` +
+       `(${ret.join(',')} against ${pk.join(',')})`,
+      ret.length > 0 && ret.every(k => pk.includes(k)) && pk.every(k => ret.includes(k)));
 
     // ── Wired to the report ────────────────────────────────────────────────────
     ok('the report folds the call census with the shared fold', /foldAll\('mit'\)/.test(sim));

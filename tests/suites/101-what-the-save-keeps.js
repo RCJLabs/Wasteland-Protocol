@@ -166,9 +166,12 @@ module.exports = {
       const savedOn = (rawC.queueIds || [])[rawC.activeIndex || 0] || null;
       loadGameState();
       if (pendingCombat) resumeCombat(pendingCombat);
-      const stoodUp = activeEntities.some(e => e.id === savedOn && e.hp > 0);
-      return { savedOn, stoodUp,
+      return { savedOn,
+               // O15: WHERE THE FIGHT LANDED, which is the thing the turn-count row below is
+               // actually about. O14 read the saved body's health instead and it does not
+               // separate the cases - see the comment on that row.
                landedOn: turnQueue[activeIndex] ? turnQueue[activeIndex].id : null,
+               landedPlayer: turnQueue[activeIndex] ? !!turnQueue[activeIndex].isPlayer : null,
                contracts: [...activeContracts], regroups: totalRegroups(), carry: canCarry(),
                mult: runStats.contractMult, names: contractNames(),
                log: fightLog ? { ...fightLog } : null, vacated: [...vacatedRanks],
@@ -316,31 +319,45 @@ module.exports = {
     // long way is still visible to anybody reading the line.
     // O14: AND THE IDENTITY WAS TOO STRONG BY EXACTLY ONE CASE, which is why this pair went red
     // three times in about thirty batteries and zero times in the twenty tests/noise.js ran to
-    // find it. Constructed rather than sampled, the way #209 closed the sister rows above:
-    //
-    //   saved on a living operator   9 -> 9    the guard holds
-    //   saved on a hostile           9 -> 9    nothing to guard
-    //   saved on a body that had FALLEN, still in the queue   9 -> 10
-    //
-    // processTurn reads and clears `resumingTurn` at the top, and four lines later returns early
-    // if the body whose turn it is has no health left - so on that path the guard is spent on a
-    // turn that never happens, and the next operator's turn is counted. The guard's own comment
-    // says it is cleared early so "an early return below cannot carry it into a turn that IS
-    // new", and that is exactly right: the next operator's turn IS new.
+    // find it. processTurn reads and clears `resumingTurn` at the top, and four lines later
+    // returns early if the body whose turn it is has no health left - so on that path the guard
+    // is spent on a turn that never happens, and the next operator's turn is counted. The
+    // guard's own comment says it is cleared early so "an early return below cannot carry it
+    // into a turn that IS new", and that is exactly right: the next operator's turn IS new.
     //
     // THE ENGINE IS NOT WRONG AND THE ROW WAS. Run the identical field with no save anywhere -
     // same dead body at the same index, straight into processTurn - and the count goes 9 -> 10
     // as well. The resume costs nothing; the fight simply steps over a corpse and the operator
-    // behind it takes a turn, which is a turn. The suite's own fixture deletes a carried body,
-    // so it stages that state some of the time, which is the whole of the intermittency.
+    // behind it takes a turn, which is a turn.
     //
-    // So the row asserts what it is named for, on both branches - and pins the +1 rather than
-    // tolerating it, which is more than the identity did.
+    // O15: AND O14's REPLACEMENT WAS TOO STRONG BY ONE CASE OF ITS OWN, in the same shape. It
+    // branched on whether the saved body still had health after the resume and read a dead one
+    // as "fell before the save, so the fight stepped over it" - and that reading covers TWO
+    // states, one of which is the opposite of what it says. Red again, once in three batteries,
+    // on `9 -> 9, saved on p2 which had fallen ... landed on p2`. Forced in suite 03 rather
+    // than sampled, because 40 runs of this suite staged the case twice:
+    //
+    //   the fight came back onto it, still up          landed on it    9 ->  9
+    //   the fight came back onto it and its OWN        landed on it    9 ->  9
+    //     turn-start tick killed it (8% of max as bleed)
+    //   it was already down and the fight stepped      landed on the   9 -> 10
+    //     over it onto a squad operator                  next body
+    //   ... and stepped over onto a HOSTILE            landed on the   9 ->  9
+    //                                                    next body
+    //
+    // The second row is the one that reads as fallen and was never stepped over: the guard did
+    // its job, the body took the turn it was saved on, and then bled out on it. A health
+    // reading taken after the fact cannot tell it from the third. WHERE THE FIGHT LANDED can,
+    // and it is what this row is named for, so that is what it branches on. Charged exactly
+    // when the fight stepped over the saved body onto a squad operator - a hostile's turn is
+    // not a squad turn. All four states are held by construction in suite 03.
+    const stepped = now.landedOn !== now.savedOn;
     ok(`and resuming did not charge the fight for the turn it came back on ` +
-       `(${was.log.turns} -> ${now.log.turns}, saved on ${now.savedOn}` +
-       `${now.stoodUp ? ' and it came back up' : ' which had fallen, so the fight stepped over it'})`,
+       `(${was.log.turns} -> ${now.log.turns}, saved on ${now.savedOn}, ` +
+       `${stepped ? `stepped over it onto ${now.landedOn}${now.landedPlayer ? '' : ', a hostile'}`
+                  : 'came back onto it'})`,
       was.log.turns > BLITZ
-      && (now.stoodUp ? now.log.turns === was.log.turns : now.log.turns === was.log.turns + 1));
+      && now.log.turns === was.log.turns + (stepped && now.landedPlayer ? 1 : 0));
     ok(`the rank a fallen operator left is still a rank to close (${JSON.stringify(now.vacated)})`,
       JSON.stringify(now.vacated) === JSON.stringify(was.vacated) && was.vacated.length === 1);
     ok('and the momentum already spent on FOCUS and PRESS is still spent on them',

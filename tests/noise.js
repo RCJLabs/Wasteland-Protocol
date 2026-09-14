@@ -79,6 +79,35 @@
 // turn, then this. The lesson is not "check the mutation", it is that a mutation which passes
 // looks exactly like one that was never run.
 //
+// ── O15: AND A FOURTH TIME, WHICH WAS THE REPLACEMENT ROW ITSELF ──────────────────────
+// The row above did not close the flake. It went red again at one battery in three, on
+// `9 -> 9, saved on p2 which had fallen ... landed on p2` - and the diagnostic is the tell: the
+// fight landed on the very body the row says it stepped over.
+//
+// O14's branch reads the saved body's health AFTER the resume, and that reading covers two
+// states. A body can be up when the fight comes back onto it, take the turn it was saved on,
+// and then be killed by its OWN turn-start tick - 8% of maximum health as bleed, applied four
+// lines after the count. Afterwards it has no health, exactly like a body that fell before the
+// save; but it was never stepped over and its turn was correctly not charged. One reading,
+// two opposite states, and the row called them both stepped-over.
+//
+// SAMPLING COULD NOT SETTLE IT AGAIN: 40 runs of suite 101 staged the fallen branch twice.
+// Forced in suite 03 instead, on the fixture O14 already built there, by giving the body one
+// point of health and a bleed. Four states now held by construction:
+//
+//   came back onto it, still up                       landed on it       not charged
+//   came back onto it, killed by its own tick         landed on it       not charged
+//   stepped over it onto a squad operator             landed on the next     charged
+//   stepped over it onto a hostile                    landed on the next not charged
+//
+// 101 branches on WHERE THE FIGHT LANDED, which separates all four and is what the row is named
+// for. Three mutations, all caught: dropping the resume guard reds 101 EVERY time now rather
+// than intermittently; counting hostile turns as squad turns reds the fourth state; a bleed
+// that cannot kill reds the second.
+//
+// THE ENGINE STILL HAS NOT BEEN WRONG ONCE IN THIS. Three rows in a row asserted something one
+// case stronger than their own name, and each time the game was doing the right thing.
+//
 // THREE FLAKES IN THIS SUITE HAVE NOW GONE THE SAME WAY. #209's pair, and this one: both were
 // rows asserting something stronger than the thing they were named for, both survived a
 // twenty-battery sweep, and both fell to one afternoon of forcing the mechanism. The sweep's own
