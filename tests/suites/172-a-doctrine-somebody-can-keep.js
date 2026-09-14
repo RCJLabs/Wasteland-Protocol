@@ -227,5 +227,48 @@ module.exports = {
       /carriesMelee\(f\) \? 1e6 : 0\) \+ baseHpOf\(f\)/.test(sim));
     ok('and it still places every candidate before asking, which is the whole point of the helper',
       /if \(!d\.holds\(cand\)\) continue;/.test(sim));
+
+    // ── O21: WHEN THE FILE READS THE PROMISE, AND WHAT THE LINE WAS HOLDING WHEN IT ASKED ──
+    // Three items were spent on a question this file created. `doctrineKept` was set in the
+    // MUSTER TAIL, four lines below the take, and printed under the heading "still keeping it at
+    // the end" - so it could only ever come back 100%, and it did: 150 of 150 on the careers O18
+    // and O20 read. Instrumented at the fight door instead, the same arm ran 553 of 689 doors
+    // with the doctrine BROKEN. O18 priced NO HANDS believing the card was carried the whole way;
+    // O20 found a quarter of that career's damage thrown in melee and, trusting the same row,
+    // concluded a Bruiser must be standing in a line that cannot draft one. It was not. The card
+    // was dark, and a dark card forbids nothing.
+    //
+    // The cause of the darkness was this file too, and in the same shape: applyBench - the policy
+    // that picks which three of four abilities a rank III operator brings - ran in the muster
+    // tail, BELOW the draft and below the take. So the draft asked holds() of decks it was about
+    // to change. The Scavenger is the clean case: their fourth is a SHIV, the engine benches the
+    // fourth by default, NO HANDS signs off on a deck that reads clean, and then this policy
+    // benches the basic instead and the SHIV comes off the bench. First breach at sector 1,
+    // fight 1. Moved above the draft, the same arm runs 678 of 733 doors live, breaches ZERO,
+    // and ends 16 runs of 20 still keeping the card.
+    //
+    // Both rows are about WHERE a line sits, which is exactly what nobody re-reads, so both are
+    // pinned by position rather than by presence.
+    const at = re => { const m = sim.match(re); return m ? sim.indexOf(m[0]) : -1; };
+    const benchPolicy = at(/const applyBench = c => \{/);
+    const draftStarts = at(/const draft = \[\];/);
+    const takeAsks    = at(/if \(take && doctrinePolicy !== 'off'\)/);
+    ok('the bench policy is written once', (sim.match(/const applyBench = c => \{/g) || []).length === 1);
+    ok(`and it runs before the draft, so a doctrine is asked of the deck the run will carry ` +
+       `(${benchPolicy} < ${draftStarts})`,
+      benchPolicy > 0 && draftStarts > 0 && benchPolicy < draftStarts && benchPolicy < takeAsks);
+
+    const keptRead  = at(/stat\.doctrineKept = !!activeDoctrine && !doctrineBroken;/);
+    const fightDoor = at(/stat\.docDoorAll\+\+;/);
+    ok('the keep is read once', (sim.match(/stat\.doctrineKept = !!activeDoctrine/g) || []).length === 1);
+    ok(`and it is read after the last fight door rather than at the muster (${keptRead} > ${fightDoor})`,
+      keptRead > 0 && fightDoor > 0 && keptRead > fightDoor);
+    // The door census itself, which is what turned an inference into a reading.
+    ok('every fight door is counted, and separately the ones under a live doctrine',
+      /stat\.docDoorAll\+\+;/.test(sim) && /stat\.docDoor\+\+;/.test(sim));
+    ok('a live doctrine whose own rule is false at the door is recorded with the line that failed it',
+      /if \(d && !d\.holds\(line\)\) \{[\s\S]{0,200}?stat\.docBreach\+\+;/.test(sim));
+    ok('and a dark one records whether it was never taken or broken, and where',
+      /\(!activeDoctrine \? 'never taken' : 'broken'\) \+ ' s' \+ currentSector/.test(sim));
   }
 };

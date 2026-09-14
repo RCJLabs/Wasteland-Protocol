@@ -182,12 +182,19 @@ module.exports = {
     // figure reddened it correctly and would have let the pierce shortcut fall behind silently if
     // it had only been re-pinned. Compared as key SETS now: whatever mitigate hands back, the
     // pierce shortcut hands back the same names, because the door reads both.
+    // O21: AND THE SCRAPE IS SYMMETRIC NOW, which is the same lesson one level down. The
+    // not-a-key list was applied to the pierce block only, because until now only that block
+    // held expressions - so the first field whose VALUE is an expression on both sides reddened
+    // this row for a literal rather than for a missing key. `who` is that field: it ends in
+    // `: null` on each path, `null` was filtered out of one list and not the other, and the row
+    // reported a shape mismatch that did not exist. One filter, both blocks.
+    const notKeys = ['Math', 'max', 't', 'hp', 'isPlayer', 'attacker', 'range', 'gridPos',
+                     'moveReachFor', 'classType', 'abilityStr', 'null', 'false', 'true'];
     const keysOf = block => (block.match(/([A-Za-z_]\w*)\s*[:,}]/g) || [])
-      .map(x => x.replace(/[\s:,}]/g, '')).filter(Boolean);
+      .map(x => x.replace(/[\s:,}]/g, '')).filter(Boolean).filter(k => !notKeys.includes(k));
     const ret = keysOf((src.match(/return \{ n, rv, ac, cd, cover, thick[^}]*\}/) || [''])[0]);
     const pierceFig = (src.match(/pierce \? \{ n: Math\.max\(1, t\.hp\)[\s\S]*?\}/) || [''])[0];
-    const pk = keysOf(pierceFig).filter(k => !['Math', 'max', 't', 'hp', 'isPlayer', 'attacker',
-      'range', 'gridPos', 'moveReachFor', 'null', 'false', 'true'].includes(k));
+    const pk = keysOf(pierceFig);
     ok(`a pierced blow is built with the same shape so the door can take it ` +
        `(${ret.join(',')} against ${pk.join(',')})`,
       ret.length > 0 && ret.every(k => pk.includes(k)) && pk.every(k => ret.includes(k)));

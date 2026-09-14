@@ -355,6 +355,15 @@ function noteLanding(cut, t, dmg) {
         if (cut.meleeOut && cut.move) {
             const m = runStats.outMoves = runStats.outMoves || {};
             m[cut.move] = (m[cut.move] || 0) + 1;
+            // O21: the same swing, keyed by the body that threw it and the promise in force when
+            // it landed. O20 named the moves and they were the Bruiser's - a class NO HANDS can
+            // never draft - which left two readings the move alone cannot separate: a Bruiser is
+            // standing in that line, or the melee is being thrown on fights where the card is not
+            // live. This says which, per swing, and needs no inference either way.
+            const w = runStats.outMelee = runStats.outMelee || {};
+            const k = (cut.who || 'unknown') + ' under ' +
+                      (activeDoctrine && !doctrineBroken ? activeDoctrine : 'no doctrine');
+            w[k] = (w[k] || 0) + 1;
         }
     }
 }
@@ -4439,6 +4448,17 @@ const ACTIONS = {
         if (!ch || masteryRank(ch.classType) < 3) return;
         ch.benchedMove = el.dataset.move;
         if (kind === 'muster') { renderMuster(); return; }
+        // O21: THE THIRD DOOR INTO A DECK, AND THE ONE THAT STILL DID NOT ASK. O19 closed the
+        // two that change a loadout mid-run - a promotion, which can hand an operator a fourth
+        // ability, and a gear fit, which can change a move's reach without touching the deck -
+        // and left this one, which is the most direct of the three: it picks which three of four
+        // abilities an operator brings. Bench the Scavenger's PIPE_RIFLE and SHIV comes off the
+        // bench with it, so a line that took NO HANDS on a clean deck is now throwing melee and
+        // the badge still reads live. The muster is deliberately not asked here: nothing is
+        // committed until DEPLOY, and musterDeploy already drops a doctrine the line stops
+        // keeping rather than breaking it, which is the right answer while the line is still
+        // being edited. This is the in-run door, and it is the same ask assignSlot makes.
+        checkDoctrine();
         saveGameState(); renderOutpost();
     },
     'node-combat':      el => { enterNode(el.dataset.node); initiateCombat(el.dataset.type, el.dataset.elite === '1'); },
@@ -12622,7 +12642,11 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     // M11 goes with it for the same reason J04's `ac` did: `cd` is the figure the whole
     // multiplicative chain produced, just before the two subtractions, and it is the only term
     // from which a combo's counterfactual can be reconstructed without running mitigate twice.
-    return { n, rv, ac, cd, cover, thick, meleeIn, atFront, meleeOut, move: abilityStr };
+    // O21: and WHO threw it, when the thrower is ours. The move alone named the deck it came
+    // from and not the body holding it, which is the half of the question O20 could not
+    // close - a move can be reached through a mod as well as through a class deck.
+    return { n, rv, ac, cd, cover, thick, meleeIn, atFront, meleeOut, move: abilityStr,
+             who: attacker && attacker.isPlayer ? attacker.classType : null };
 }
 
 // ── F05: one ledger for a body ──────────────────────────────────────────────────────────
@@ -12813,7 +12837,8 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
                                   atFront: !!(t.isPlayer && t.gridPos === 1),
                                   meleeOut: !!(!t.isPlayer && attacker && attacker.isPlayer &&
                                                moveReachFor(abilityStr, attacker) === 'melee'),
-                                  move: abilityStr }
+                                  move: abilityStr,
+                                  who: attacker && attacker.isPlayer ? attacker.classType : null }
                                : mitigate(attacker, t, calcDmg, atkType, abilityStr);
     let cut = figure(target);
     let { n: netDmg, rv: resistValue, ac: armourTaken, cd: preSoak } = cut;

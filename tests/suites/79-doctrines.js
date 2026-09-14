@@ -294,6 +294,58 @@ module.exports = {
     ok(`but bringing it instead of a basic does (${closed.rank3Bringing}, deck ${closed.deckThen.join('/')})`,
       closed.rank3Bringing === true && closed.deckThen.includes('SHIV'));
 
+    // ── O21: AND THE DOOR THAT MAKES THAT CHOICE ────────────────────────────────────────
+    // The row above names the state that breaks NO HANDS - a rank III operator bringing their
+    // fourth - and O19 closed the two ways a loadout changes on its own: a promotion and a gear
+    // fit. It left the way a PLAYER changes it, which is the most direct of the three, because
+    // it is the screen where you pick which three of four to bring. Bench the Scavenger's
+    // PIPE_RIFLE and the SHIV comes off the bench with it; nothing asked, so the badge went on
+    // reading live over a line that was now throwing melee.
+    //
+    // The muster is deliberately NOT asked. Nothing is committed until DEPLOY, and musterDeploy
+    // drops a doctrine the line stops keeping rather than latching it broken - which is the right
+    // answer while the line is still being edited, and the row below holds that too.
+    ok('the in-run bench choice re-asks the doctrine',
+      /ch\.benchedMove = el\.dataset\.move;[\s\S]{0,1600}?checkDoctrine\(\);\n\s*saveGameState\(\);/.test(src));
+    ok('and the muster still returns before it, because nothing is committed there yet',
+      /ch\.benchedMove = el\.dataset\.move;\n\s*if \(kind === 'muster'\) \{ renderMuster\(\); return; \}/.test(src));
+    ok('the muster drops a doctrine the line stops keeping rather than breaking it',
+      /if \(activeDoctrine && !doctrineHolds\(\)\) activeDoctrine = null;/.test(src));
+
+    // Constructed, because a regex says the call is there and not that it does anything. A live
+    // NO HANDS over a clean rank III Scavenger, then the bench swapped the way the handler swaps
+    // it: the rule goes false, and the ask is what turns that into a broken promise.
+    const benched = await page.evaluate(() => {
+      // __line calls confirmNewGame, which builds a fresh roster - so the line is stood up
+      // FIRST and the body read off it afterwards. Written the other way round, the operator
+      // whose bench this sets is a stale object that nothing on the field points at, and every
+      // row below passes for the wrong reason.
+      window.__line(['SCAVENGER', 'MEDIC', 'SNIPER']);
+      sectorFront = null;
+      const scav = playerRoster.find(c => c.classType === 'SCAVENGER' && c.gridPos > 0);
+      const was = mastery.SCAVENGER, benchWas = scav.benchedMove;
+      mastery.SCAVENGER = 10 ** 9;
+      scav.benchedMove = null;                        // the default: the fourth sits out
+      activeDoctrine = 'NO_HANDS'; doctrineBroken = false;
+      const out = { holdsClean: doctrineHolds(), paysClean: doctrineMult() };
+      scav.benchedMove = 'PIPE_RIFLE';                // what the handler writes
+      out.holdsAfter = doctrineHolds();
+      out.brokeBeforeAsking = doctrineBroken;
+      checkDoctrine();                                // what the handler now calls
+      out.brokeAfterAsking = doctrineBroken;
+      out.paysAfter = doctrineMult();
+      mastery.SCAVENGER = was; scav.benchedMove = benchWas;
+      activeDoctrine = null; doctrineBroken = false;
+      return out;
+    });
+    ok(`NO HANDS holds over a Scavenger whose fourth is benched, and pays (${benched.paysClean.toFixed(2)})`,
+      benched.holdsClean === true && benched.paysClean > 1);
+    ok('bringing the SHIV makes the rule false on the spot', benched.holdsAfter === false);
+    ok('which on its own breaks nothing - the promise is only broken when something asks',
+      benched.brokeBeforeAsking === false && benched.brokeAfterAsking === true);
+    ok(`and then it pays nothing (${benched.paysClean.toFixed(2)} -> ${benched.paysAfter.toFixed(2)})`,
+      benched.paysAfter === 1);
+
     // ── OLD GUARD: veterans only ─────────────────────────────────────────────────────────
     const guard = await page.evaluate(() => {
       const vet = MASTERY_RANKS[VETERAN_RANK];

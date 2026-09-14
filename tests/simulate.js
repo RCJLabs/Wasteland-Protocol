@@ -2440,6 +2440,69 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O21: THE CARD WAS NEVER LIVE - THIS FILE READ THE PROMISE FOUR LINES TOO EARLY ─
+// O20 closed on one question with one answer: how does a Bruiser reach a line that owns no
+// melee? It does not. No Bruiser has ever stood in a live NO HANDS line. The card was DARK for
+// four fights in five, and this file said it was kept.
+//
+// I proposed a mechanism three times - the Scavenger's knife, the BAYONET, closeRanks - and was
+// wrong three times, so this item proposed nothing. It instrumented the line at the fight door:
+// at every fight, if a doctrine is taken and unbroken, ask the doctrine its OWN holds() of
+// whoever is standing, and record the line rather than a theory. Two counters, one key, and the
+// answer came back on the first run:
+//
+//   --draft doctrine:NO_HANDS, 12 careers      before          after both fixes
+//     fight doors under a live doctrine        136 of 689      678 of 733
+//     where its own rule was false at the door   9 (1.3%)        0 (0.0%)
+//     doors run with the card BROKEN           553             55
+//     runs still keeping it at the end         12 of 12        16 of 20
+//     melee as a share of output               13.9%           4.3%
+//     of that melee, thrown under a live card  0               0
+//
+// TWO BUGS, BOTH IN THIS FILE, BOTH ABOUT WHERE A LINE SITS.
+//
+// THE FIRST IS THE ONE THAT COST THREE ITEMS. `stat.doctrineKept` was set in the MUSTER TAIL,
+// four lines below the take, and printed under the heading "still keeping it at the end". It
+// could only ever come back 100%, and it did - 150 of 150 on the careers O18 and O20 read, which
+// is the row both of them reasoned from. It is read after the last fight door now. The default
+// arm, which has never been able to say this: 19 of 25 runs take a card and 10 of those 19 are
+// still keeping it at the end, with 784 of 1295 fight doors run under a live one.
+//
+// THE SECOND IS WHY THE CARD WENT DARK SO FAST, and it is the same shape. `applyBench` - the
+// policy that decides which three of four abilities a rank III operator brings - ran in the
+// muster tail too, BELOW the draft and below the take. So the draft asked holds() of decks it
+// was about to change. The Scavenger is the clean case: their fourth is a SHIV, the engine
+// benches the fourth by default, NO HANDS signs off on a deck that reads clean, and then this
+// policy benches the basic instead and the SHIV comes off the bench. First breach at sector 1,
+// fight 1, before a single blow. The bench policy runs above the draft now, and the breach
+// count at the door is zero on both arms - which is the row to watch, because it goes red the
+// moment a fourth path into a deck opens.
+//
+// AND ONE REAL HOLE IN THE GAME, found on the way and closed. O19 shut the two doors that change
+// a loadout on their own - a promotion and a gear fit - and left the one a PLAYER uses: the bench
+// chip, which is the screen where you pick which three of four to bring. Bench the Scavenger's
+// PIPE_RIFLE and the SHIV comes off the bench with it, and nothing asked, so the badge went on
+// reading live over a line that was now throwing melee. It re-asks now, in the run only; the
+// muster deliberately does not, because nothing is committed until DEPLOY and musterDeploy
+// already drops a card the line stops keeping rather than latching it broken. Constructed in
+// suite 79: holds and pays 1.15, bring the SHIV, the rule goes false, nothing breaks until
+// something asks, and then it pays 1.00.
+//
+// WHAT THIS OVERTURNS. O20's headline - a Bruiser standing in a NO HANDS line - is withdrawn at
+// its own site. O18's "its rule does not hold in play" was the right worry aimed at the wrong
+// mechanism: the rule holds at 100% of live doors, and what was actually happening is that the
+// card broke almost immediately and a broken card forbids nothing, so the melee O18 and O20 both
+// measured was ordinary play by an ordinary line. Every doctrine figure this file has printed
+// was read through a keep rate of 100% that was not a measurement.
+//
+// WHAT IT DOES NOT CLAIM. The melee share is not the cost of NO HANDS - O18 already corrected
+// that once and the "so NO HANDS trades" row still prints both halves career-wide, including
+// stretches where the card is dark. What the card is worth is a paired measurement on a working
+// instrument, and it has not been taken. It is the first thing the next item should do, because
+// for the first time the arm it would be taken on carries the card for the whole run.
+//
+// NO DIAL MOVES. One call added in the game, two lines moved in the instrument.
+//
 // ── O20: THE CENSUS, CORRECTED - AND A BRUISER IS STANDING IN A NO HANDS LINE ──────
 // O19 fixed the outgoing census to read the move being resolved rather than a global, withdrew
 // two published figures, and left the re-measurement to this item. Three careers an arm against
@@ -2467,6 +2530,11 @@ const ROOT = path.join(__dirname, '..');
 // class that can never hold this doctrine is standing in a line that reports holding it, and it
 // is throwing the largest share of the melee. This is not the promotion hole and not the mod
 // hole; both of those are real, constructed in suite 79, and neither explains a Bruiser.
+//   ^^ O21 WITHDRAWS THIS, INCLUDING THE TITLE ABOVE. The Bruiser is real and the deck read is
+//   right; what is wrong is "a line that reports holding it". Instrumented at the fight door,
+//   NO HANDS was BROKEN at 553 of 689 doors on this very arm, and no Bruiser has ever stood in
+//   a live one. The row that said otherwise - "kept 150 of 150" - was read in the muster tail,
+//   four lines below the take, and could not have said anything else.
 //
 // WHAT IS RULED OUT, checked rather than assumed: closeRanks is not the path. It already refuses
 // to step a body into a vacated rank when that would break the promise - `keeps()` asks
@@ -2474,6 +2542,9 @@ const ROOT = path.join(__dirname, '..');
 // assignSlot re-asks. The draft only sets wantDoctrine when it built a line that holds.
 //
 // SO THE CAUSE IS NOT YET FOUND, and this item stops here rather than guessing a fourth time.
+//   ^^ O21 FOUND IT, and stopping was the right call: the fourth guess would have been wrong
+//   too, because there was nothing in the game to find. Instrumenting the line at the door
+//   instead of reasoning about it answered it on the first run.
 // What it leaves is better than what it started with: the leak is confirmed real on a corrected
 // instrument, the two published figures are restored or withdrawn correctly, and the report names
 // the move instead of printing a share - so the next item begins by asking how a Bruiser reaches
@@ -2562,6 +2633,11 @@ const ROOT = path.join(__dirname, '..');
 // NO HANDS career deals is MELEE, on a card whose entire rule is that nobody in the line owns a
 // melee ability, taken 150 of 150 and "still keeping it at the end" 150 of 150. Two holes, and
 // neither is visible to the rule:
+//   ^^ O21: AND "150 OF 150" WAS NOT A MEASUREMENT. That row was set in the muster tail, four
+//   lines below the take, under a heading claiming to read the end of the run - so it returned
+//   100% by construction. Read at the door, this arm ran four fights in five with the card
+//   BROKEN. The worry in the title is upheld and the mechanism is not: the rule holds at every
+//   live door; the card simply went dark in sector 1, and a broken card forbids nothing.
 //   ^^ O19 WITHDRAWS THE 22-27% TOO, and for the same reason: it is the same broken census. What
 //   remains true is that the two holes below are real - both are constructed in suite 79 - and
 //   that a doctrine could not be priced while they were open. How much melee a NO HANDS line
@@ -5294,6 +5370,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
                  extracted: false, walkedAt: 0, formations: {}, factionFights: {}, loose: 0, doctrine: null, doctrineKept: false,
                  benchHeld: null,
+                 docDoorAll: 0, docDark: {}, docDoor: 0, docBreach: 0, docBreachLine: {}, docBreachFirst: null, docArrived: {},
                  booked: 0, bookedKinds: {}, augments: 0,
                  offeredNodes: {}, takenNodes: {}, forks: 0, forksWithChoice: 0, forksAllFights: 0,
                  cachesMet: 0, cachesClean: 0, cachesForced: 0, cacheScrap: 0, cacheLocks: {}, cacheOpener: {},
@@ -5418,6 +5495,21 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // A player fields a line, not a lottery: someone to hold the front, usually a medic, and
   // whoever else. The old shuffle regularly deployed three glass cannons and measured the
   // resulting deaths as difficulty.
+  // O21: AND IT RUNS BEFORE THE DRAFT NOW, BECAUSE A DOCTRINE IS A QUESTION ABOUT A DECK.
+  // It used to run in the muster tail, forty lines BELOW the doctrine take - so the draft asked
+  // holds() of decks this policy was about to change, and the change is exactly the kind a
+  // prohibition cares about. The Scavenger is the clean case: their fourth is a SHIV, the engine
+  // benches the fourth by default, so at draft time their deck reads clean and NO HANDS signs
+  // off on them; this policy then benches the basic instead, SHIV comes off the bench, and the
+  // run starts with the rule already false. Measured before the move, on 12 careers at
+  // `--draft doctrine:NO_HANDS`: 553 of 689 fight doors ran with the doctrine BROKEN, and the
+  // first breach landed at sector 1, fight 1. A loadout is decided before a promise is made.
+  const applyBench = c => {
+    if (!c || masteryRank(c.classType) < 3) return;
+    const basic = (ABILITIES[c.classType] || []).find(a => !a.cd && a.reach !== 'self');
+    if (basic) c.benchedMove = basic.move;
+  };
+  playerRoster.forEach(applyBench);
   const slots = hasContract('SHORT_HANDED') ? [1, 2] : [1, 2, 3];
   playerRoster.forEach(p => { p.gridPos = 0; });
   const byClass = c => playerRoster.filter(p => c.includes(p.classType));
@@ -5578,6 +5670,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // The real deploy button is what applies a doctrine's edge and banks its multiplier, so the
   // sim goes through it rather than around it.
   musterDeploy();
+  // O21: who the muster actually put on the field, by id, so the door check below can tell a
+  // body that was drafted from one that turned up later. The draft's own list is not enough -
+  // the tail tops it up, the arrangement can move people, and musterDeploy is the last word.
+  const openingLine = playerRoster.filter(p => p.gridPos > 0).map(p => p.id);
   // K06: a BENCH TEST, not a policy. Every source of gear in the game is rollGear(), a uniform
   // draw over the unowned pool - the elite drop, the commander drop, an event, and the Armory's
   // single gear slot - so a player cannot seek a particular piece and the drop rate swamps any
@@ -5757,16 +5853,10 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // deckFor fell back to the engine's default of benching the FOURTH for them, and TRENCH
   // SWEEP, TANK RUPTURE and WHALE LINE were structurally unreachable in every measurement this
   // file has taken. E12c called those three rare; they were blocked.
-  const applyBench = c => {
-    if (!c || masteryRank(c.classType) < 3) return;
-    const basic = (ABILITIES[c.classType] || []).find(a => !a.cd && a.reach !== 'self');
-    if (basic) c.benchedMove = basic.move;
-  };
   playerRoster.forEach(applyBench);
   // The opening draft, so a run that never reaches a fight still reports who it picked.
   // Everyone who actually stands in a line is added at the door of each fight below.
   stat.deployed = playerRoster.filter(p => p.gridPos > 0).map(p => p.classType);
-  stat.doctrineKept = !!activeDoctrine && !doctrineBroken;
   const bountiesAtStart = () => activeBounties.map(b => b.desc).join('|');
   // Which contracts a run actually settles, so one nobody can finish shows as a zero.
   let lastBoard = null;
@@ -6419,6 +6509,45 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // reading was taken from. Counted once per run per class, as before.
     playerRoster.filter(p => p.gridPos > 0)
       .forEach(p => { if (!stat.deployed.includes(p.classType)) stat.deployed.push(p.classType); });
+    // O21: THE LINE, CHECKED AGAINST THE PROMISE IT IS BEING PAID FOR. O20 closed on one
+    // question it could not answer: a NO HANDS career throws a quarter of its damage in melee,
+    // and the moves it throws are heavy_wrench and shield_slam - the Bruiser's base deck, a
+    // class that can never pass carriesMelee and so can never be drafted into that line. I
+    // proposed a mechanism for that three times (the Scavenger's knife, the BAYONET, and
+    // closeRanks) and was wrong three times, so this stops proposing one. It asks the doctrine
+    // its own holds() of whoever is standing at each fight door, and when the answer is no it
+    // records the line that failed rather than a theory about why.
+    //
+    // The badge reads live the whole time - taken on 150 runs of 150, kept on 150 of 150 - so
+    // if a breach is ever seen here, the run is being paid a multiplier for a rule that is not
+    // true of the field. That is the whole finding, and it needs no interpretation: the line's
+    // own classes are the answer, and whether each body was at the muster or arrived later.
+    stat.docDoorAll++;
+    if (!activeDoctrine || doctrineBroken) {
+      const k = (!activeDoctrine ? 'never taken' : 'broken') + ' s' + currentSector;
+      stat.docDark[k] = (stat.docDark[k] || 0) + 1;
+    }
+    if (activeDoctrine && !doctrineBroken) {
+      const d = doctrineById(activeDoctrine);
+      const line = playerRoster.filter(p => p.gridPos > 0);
+      stat.docDoor++;
+      if (d && !d.holds(line)) {
+        stat.docBreach++;
+        const key = line.map(c => c.classType + (openingLine.includes(c.id) ? '' : '*'))
+                        .sort().join('+') || '(empty)';
+        stat.docBreachLine[key] = (stat.docBreachLine[key] || 0) + 1;
+        // A star above means the body was not on the field at the muster. Counted on its own
+        // too, because that is the difference between a line that was wrong from the start and
+        // one that became wrong when somebody walked into it.
+        line.filter(c => !openingLine.includes(c.id)).forEach(c => {
+          stat.docArrived[c.classType] = (stat.docArrived[c.classType] || 0) + 1;
+        });
+        if (!stat.docBreachFirst) {
+          stat.docBreachFirst = activeDoctrine + ': ' + key + ' at sector ' + currentSector +
+                                ', fight ' + stat.fights;
+        }
+      }
+    }
     // What an elite node actually fielded. Counted off the units rather than off the roll, so
     // an affix that stops being handed out shows up here as a zero instead of going unnoticed -
     // which is exactly how ARMORED spent its whole life decaying.
@@ -7304,7 +7433,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.mit = runStats.mit || {};           // N01: mitigate's calls against the blows that landed
   stat.reach = runStats.reach || {};       // O15: what reaches the squad, by attacker reach x rank
   stat.out = runStats.out || {};
-  stat.outMoves = runStats.outMoves || {};   // O20: which move, when it reads as melee           // O15: and what the squad throws, by the reach of the move
+  stat.outMoves = runStats.outMoves || {};   // O20: which move, when it reads as melee
+  stat.outMelee = runStats.outMelee || {};   // O21: and which body, under which promise           // O15: and what the squad throws, by the reach of the move
   // O16: read back what the ENGINE booked, not what the policy thinks it pressed - G13's rule.
   // The two are printed against each other so a policy that silently does nothing says so.
   stat.engineRetreats = runStats.retreats || 0;
@@ -7334,6 +7464,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // a piece can be taken off again, so what an operator ACTUALLY finished the run wearing is
   // read off the roster rather than inferred from the ledger.
   stat.trinketsHeld = playerRoster.filter(c => c.trinket).map(c => c.trinket);
+  // O21: READ AT THE END OF THE RUN, WHICH IS WHAT THE ROW HAS ALWAYS CLAIMED TO SAY. This sat
+  // in the muster tail, four lines below the take - "still keeping it at the end" was a reading
+  // taken at the START, and it could only ever come back 100%. Three items were spent on what
+  // that number hid. O18 priced NO HANDS against a career it believed was carrying the card the
+  // whole way; O20 found a quarter of that career's damage thrown in melee and, reading the same
+  // row, concluded a Bruiser must be standing in a line that cannot draft one; and I proposed
+  // three mechanisms for that and was wrong three times. The doctrine was simply BROKEN - 553 of
+  // 689 fight doors on the arm that found it - and a broken doctrine pays nothing and forbids
+  // nothing, so the melee was ordinary play by an ordinary line. One row, read four lines too
+  // early, is the whole of it.
+  stat.doctrineKept = !!activeDoctrine && !doctrineBroken;
   stat.matLeft = { ...materials };
   // K05: and how full each body ended up. A catalogue the same size as the cap means a filled
   // operator carries the whole catalogue, so the shape of this histogram is the question - if
@@ -8016,6 +8157,32 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     const byDoc = {};
     withDoc.forEach(r => { byDoc[r.doctrine] = (byDoc[r.doctrine] || 0) + 1; });
     Object.entries(byDoc).sort((a, b) => b[1] - a[1]).forEach(([k, v]) => line('  ' + k, v));
+    // O21: the badge says live; this says whether the rule is true of the field. A non-zero
+    // breach count is a multiplier being paid for a promise the line is not keeping, and the
+    // key names the classes that were standing - a star on a class means that body was not on
+    // the field at the muster, so the line became wrong rather than starting wrong.
+    const doors = results.reduce((a, r) => a + (r.docDoor || 0), 0);
+    const breaches = results.reduce((a, r) => a + (r.docBreach || 0), 0);
+    const doorsAll = results.reduce((a, r) => a + (r.docDoorAll || 0), 0);
+    line('fight doors under a live doctrine', `${doors} of ${doorsAll}`);
+    line('  where its own rule was false', `${breaches} (${(100 * breaches / Math.max(1, doors)).toFixed(1)}%)`);
+    const dark = {};
+    results.forEach(r => Object.entries(r.docDark || {}).forEach(([k, v]) => { dark[k] = (dark[k] || 0) + v; }));
+    const darkRows = Object.entries(dark).sort((a, b) => b[1] - a[1]);
+    line('  and dark at', darkRows.length ? darkRows.map(([k, v]) => `${k} x${v}`).join(', ') : 'nowhere');
+    if (breaches) {
+      const byLine = {}, byArr = {};
+      results.forEach(r => {
+        Object.entries(r.docBreachLine || {}).forEach(([k, v]) => { byLine[k] = (byLine[k] || 0) + v; });
+        Object.entries(r.docArrived || {}).forEach(([k, v]) => { byArr[k] = (byArr[k] || 0) + v; });
+      });
+      Object.entries(byLine).sort((a, b) => b[1] - a[1]).slice(0, 8)
+        .forEach(([k, v]) => line('  line', `${k} x${v}`));
+      const arr = Object.entries(byArr).sort((a, b) => b[1] - a[1]);
+      line('  standing but not mustered', arr.length ? arr.map(([k, v]) => `${k} ${v}`).join(', ') : 'nobody');
+      const first = results.find(r => r.docBreachFirst);
+      if (first) line('  first seen', first.docBreachFirst);
+    }
   }
 
   console.log('\n── FORMATIONS ' + '─'.repeat(43));
@@ -8823,6 +8990,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
           const mv = foldAll('outMoves');
           const top = Object.entries(mv).sort((a, b) => b[1] - a[1]).slice(0, 8);
           line('    and the melee it throws is', top.map(([k, v]) => `${k.toLowerCase()} ${v}`).join(', ') || 'none');
+          // O21: the same blows, keyed by the body that threw them and the card that was live
+          // when they landed. The move names a deck; this names a hand and a moment, which is
+          // what separates "a Bruiser is standing in that line" from "the card was not live".
+          const wh = foldAll('outMelee');
+          Object.entries(wh).sort((a, b) => b[1] - a[1]).slice(0, 10)
+            .forEach(([k, v]) => line('    thrown by', `${k} x${v}`));
           line('  so NO HANDS trades', `${(100 * om.dmg / otot).toFixed(1)}% of output for ` +
                `${(100 * 0.2 * mf.dmg / tot).toFixed(1)}% off what it takes`);
         }
