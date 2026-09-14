@@ -63,7 +63,7 @@
 //
 //   101  fight-log pair       0/20    not reproduced; 2 sightings before this, 0 in the 20
 //   166  mark multiplier      1/20    REPRODUCED - this is the one the report hid
-//   168  combo oil cost       1/20    new, first sighting, not seen before or since
+//   168  combo oil cost       1/20    new, first sighting - and the SAME defect as 166
 //
 // 166 IS K03's SHAPE AND THE FIRST SINCE K03 WHOSE ARITHMETIC SUPPORTS IT. Reconstructed off the
 // kept runs - the row above it prints the ratio this row judges - the measured ratio is mean
@@ -89,6 +89,21 @@
 // climbs 1.2383 -> 1.2400 -> 1.2450 -> 1.2483 with the sample because a ratio of two noisy means
 // is biased. At the shipped AVG the row was judged against a centre 0.012 low, a fifth of its own
 // tolerance gone before any noise.
+//
+// 168 IS THE SAME THING AGAIN, AND WAS FIXED THE SAME WAY. Its row read `wet - dry >= claimed
+// - 2` over two 24-swing means; reconstructed off the kept batteries the margin is mean 1.90, sd
+// 0.85, min 0 - the bound 2.23 sd out. The slack of 2 was never a fact about the game either. It
+// was an allowance for the wet and dry swings having rolled different numbers, which is a fixture
+// gap rather than a tolerance: everything else about those two swings is pinned - bare body,
+// cleared field, cooldowns and hp put back - and then baseDmg opens with a d6. Given one
+// replayable roll sequence the pair differs only in the oil, and the booked premium equals the
+// measured gap EXACTLY, on every swing, for the same 48 swings the averaging cost. The new row
+// catches a one-point under-booking that the old one could not have caught at any magnitude: a
+// premium booked light only made `claimed - 2` smaller and the condition easier.
+//
+// Three rows in two suites, all the same shape, none of them found by the red list - two never
+// fired at all, and the one that did was hidden by the bug at the top of this record. What found
+// them was measuring the row that fired and then looking at what stood beside it.
 //
 // A FOURTH THING FELL OUT OF MUTATING THE FIX. Moving CALLED_SHOT_MULT to 1.30 left all 24 rows
 // green while the perk card went on promising 25%: the figure on the card was written by hand and

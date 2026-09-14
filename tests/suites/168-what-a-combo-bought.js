@@ -80,6 +80,23 @@ module.exports = {
         resolveAction(front.id);
         return { dealt: a - front.hp, splash: b - behind.hp, cb: JSON.parse(JSON.stringify(runStats.cb)) };
       };
+      // THE LAST UNCONTROLLED INPUT IN THE PREMIUM ARM. Everything else about these two swings is
+      // pinned - bare body, cleared field, cooldowns and hp put back - and then baseDmg opens with
+      // `Math.floor(Math.random() * 6)`, so the wet swing and the dry swing it is differenced
+      // against were never the same swing. Averaging 24 of each was the old answer to that and it
+      // left the row judged inside its own noise (see the block below). A replayable sequence is
+      // the answer L06 would have given: make the two swings identical in the roll as well, and
+      // the difference stops being an estimate. The stub is local to this file and put back in
+      // the same evaluate - a leaked Math.random would poison every block after it.
+      const realRandom = Math.random;
+      let seed = 1;
+      window.__pinRolls = s => {
+        // Mixed rather than seeded straight: consecutive seeds fed to a bare LCG land in a short
+        // cycle, and a probe that did exactly that repeated its four damage values forever.
+        seed = ((s ^ 0x9e3779b9) * 2654435761) >>> 0;
+        Math.random = () => { seed = (seed * 1103515245 + 12345) >>> 0; return (seed >>> 8) / 16777216; };
+      };
+      window.__freeRolls = () => { Math.random = realRandom; };
       return breacher.id;
     });
 
@@ -131,13 +148,21 @@ module.exports = {
     // is not a measurement - suite 29's __perkAvg has averaged since P07 and M09 re-derived it
     // worse by comparing singles.
     const paired = await page.evaluate(() => {
-      let wet = 0, dry = 0, claimed = 0, n = 24;
-      for (let i = 0; i < n; i++) {
-        const a = window.__swingAt('BUCKSHOT', true);
-        wet += a.dealt; claimed += (a.cb['BUCKSHOT>oiled'] || {}).premium || 0;
-        dry += window.__swingAt('BUCKSHOT', false).dealt;
-      }
-      return { wet: wet / n, dry: dry / n, claimed: claimed / n };
+      let wet = 0, dry = 0, claimed = 0, n = 24, offBy = [], seen = {};
+      try {
+        for (let i = 0; i < n; i++) {
+          // The same sequence twice, so the only difference between the two swings is the oil.
+          window.__pinRolls(i); const a = window.__swingAt('BUCKSHOT', true);
+          window.__pinRolls(i); const b = window.__swingAt('BUCKSHOT', false);
+          const c = (a.cb['BUCKSHOT>oiled'] || {}).premium || 0;
+          wet += a.dealt; dry += b.dealt; claimed += c;
+          offBy.push((a.dealt - b.dealt) - c);
+          seen[a.dealt] = 1;
+        }
+      } finally { window.__freeRolls(); }
+      return { wet: wet / n, dry: dry / n, claimed: claimed / n, n,
+               worstOff: offBy.reduce((m, x) => Math.abs(x) > Math.abs(m) ? x : m, 0),
+               rolls: Object.keys(seen).length };
     });
     // OILED does two things, and only one of them is the pairing: the 2.0x here, and a flat -15
     // off the target's resistance that mitigate applies to ENERGY only. BUCKSHOT is phys, which
@@ -145,8 +170,22 @@ module.exports = {
     // the multiplier and nothing else, and the three figures below agree to the point. A pairing
     // whose move IS energy (MOLOTOV) would show a gap wider than the premium, and correctly so.
     ok(`the pairing claims ${Math.round(paired.claimed)} points a swing`, paired.claimed > 0);
-    ok(`and taking the oil away costs ${Math.round(paired.wet - paired.dry)}, which is at least that much`,
-      paired.wet - paired.dry >= paired.claimed - 2);
+    // THIS ROW USED TO READ `>= claimed - 2` OVER TWO 24-SWING MEANS, and the O09 sweep caught it
+    // going red 1 battery in 20. Reconstructed off twenty kept batteries, the margin it left was
+    // mean 1.90, sd 0.85, min 0 - the bound 2.23 sd out, which this file's own header calls a row
+    // that fires this month. The slack of 2 was never a fact about the game; it was an allowance
+    // for the fact that the wet and dry swings rolled different numbers.
+    //
+    // Pinned to one sequence they roll the SAME numbers, and the allowance is not needed: the gap
+    // and the booked premium agree to the point on every single swing, twelve of twelve on the
+    // probe and all ${paired.n} here. That is a strictly stronger claim than the mean-of-24 it
+    // replaces - per swing rather than on average, exact rather than within 2 - and it costs the
+    // same 48 swings. The rolls count is printed so a sequence that degenerated to one value
+    // could never pass this off as agreement.
+    ok(`and taking the oil away costs exactly that, on every swing ` +
+       `(${Math.round(paired.wet - paired.dry)} against ${Math.round(paired.claimed)}, ` +
+       `worst disagreement ${paired.worstOff}, over ${paired.rolls} distinct rolls)`,
+      paired.worstOff === 0 && paired.rolls >= 4);
     // The multiplier's own share, computed off the wet swing: a 2.0x that lands n took n/2 from
     // the pairing. Within flooring of what the census booked.
     ok(`and the claim matches half of the swing it multiplied (${Math.round(paired.claimed)} vs ${Math.round(paired.wet / 2)})`,
