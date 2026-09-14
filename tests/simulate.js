@@ -739,6 +739,7 @@
 // The other half of F10 is not measured here and does not need to be: which three of four a
 // rank III operator brings is a control that did not exist on two of the three screens that
 // edit a roster. Suite 118 drives all three.
+//   ^^ READ: not an open question - the sentence says itself it does not need measuring.
 //
 // G01: A PAIRED MEASUREMENT WITH NO POWER, AND WHY THAT IS THE FINDING.
 //
@@ -1077,6 +1078,7 @@
 // further things a real player does are still unmeasured and worth naming rather than
 // forgetting: no policy here banks a capstone to take later, and none re-drafts its line
 // between expeditions as the roster changes.
+//   ^^ READ: STILL OPEN. Nothing since has banked a capstone or re-drafted between expeditions.
 
 // G06: A NULL, MEASURED ON THE ARM WHERE THE THING ACTUALLY HAPPENS.
 //
@@ -1584,6 +1586,9 @@ const ROOT = path.join(__dirname, '..');
 // therefore needs this loop to hand the turn walk back to the engine, which is a much larger
 // change than a policy flag and is its own item. Until then the shipped question - "is the door
 // open?" - is answered, and "does walking through it change anything?" is not.
+//   ^^ ANSWERED BY O16: the arm exists, the blocker was one line (I02 had already built
+//   engineOpened for it), and walking through the door is a well-powered null. The "much larger
+//   change" this paragraph predicted was wrong, and O16 says so where it belongs.
 
 // ── I02: THE TURN EVERY FIGHT WAS OPENING TWICE ───────────────────────────────────
 // ── BOUNTY FIGURES ABOVE THIS LINE ARE UNDERSTATED BY ABOUT A TENTH ───────────────
@@ -2125,6 +2130,7 @@ const ROOT = path.join(__dirname, '..');
 // nothing has ever aggregated them, so the question sat open from E04 to here. The engine books
 // it now, per sector, on the runStats idiom the weather ledger uses: what the hit was worth
 // before the plate, and what the plate took off it.
+//   ^^ READ: not an open claim - the next clause closes it ("the engine books it now").
 //
 // Three careers of 150:
 //
@@ -2434,6 +2440,53 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O17: THE RECORD NOW READS ITSELF, AND IT WAS STALE IN FIVE PLACES ──────────────
+// Three times in two days a closing sentence in this file was answered by the item that
+// followed it and left standing in the present tense. This record is newest-first, so the
+// answer sits ABOVE the question - eleven lines above it, in one case - and nothing re-reads
+// the older block. The O-audit swept the arms, the dead fields and the denominators and caught
+// none of them: staleness in prose is a property of the RECORD, not of the code.
+//
+// tests/stale.js is the instrument. It finds every present-tense open claim in this header and
+// reports which have been READ since - marked ^^ with what settled them, or with why they still
+// stand. Fifteen claims; ten minutes of reading. THE SCAN FOUND TWO MORE I DID NOT KNOW ABOUT:
+//
+//   O10's    "what a doctrine is WORTH is still unmeasured"      answered by O11   (known)
+//   O-audit  "NOTHING HAS EVER TAKEN A RETREAT ... NOT BUILT"    answered by O16   (known)
+//   M-audit  "WHICH HALF IS BETTER IS NOT MEASURED HERE"         answered by M10   (known)
+//   I01      "does walking through it change anything? - is not" answered by O16   <- new
+//   K06/P02  "no reading has ever come off the second half"      answered by M10   <- new
+//   ^^ READ: the five rows above QUOTE claims rather than making any - which the scan cannot
+//   tell apart, so it flags them and this line clears them. Each claim is marked at its own
+//   site. My first draft of this table went red against the row I had just written, the same
+//   way my O15 write-up went red against suite 163's hand-rolled-accumulator scan: a record
+//   that quotes what an instrument looks for will trip it, and that is the instrument working.
+//
+// I01's is the one worth looking at twice. It does not just leave a question open - it PREDICTS
+// that answering it needs "a much larger change than a policy flag". O16 answered it with one
+// line, because I02 had already built the mechanism. A stale claim is not only out of date; it
+// can carry a wrong estimate of the work, and that estimate is what keeps an item parked.
+//
+// WHAT THE INSTRUMENT DELIBERATELY DOES NOT DO is nominate which item answered which claim. That
+// was built first, run, and thrown away: scoring a claim's words against the titles of newer
+// items gave nine candidates with one right answer; widening to the claim's paragraph - needed
+// to catch the M-audit case, whose subject word sits three lines above the claim - gave twelve
+// with two. The rest matched on `policy`, `work`, `engine`, `runs`, `never`, words this record
+// uses everywhere, and filtering to words in three titles or fewer did not save it. A list that
+// is three-quarters wrong trains you to skim it, which is worse than no list. The enumeration is
+// exact and the judgement stays with whoever reads it.
+//
+// THE RATCHET IS NOT "NO CLAIM MAY BE OPEN". Open claims are how this file says what it does not
+// know and there should be plenty - five of the fifteen are marked STILL OPEN, including two on
+// the queue right now (the bench job alone, and K11's twelve-careers-an-arm question). The bar
+// is that none sits UNREAD. An item that closes on an open question marks it in the same breath,
+// which costs one line. Suite 173 holds the count at zero and pins the five settled ones at their
+// own sites, so a rewrite that tidies a marker away without settling the claim goes red rather
+// than passing as better prose. Two mutations: a new unread claim reds the ratchet by line
+// number, and deleting one marker reds both the ratchet and that claim's own row.
+//
+// NO DIAL MOVES. game.js is untouched.
+
 // ── O16: THE DOOR I01 PRICED, WALKED THROUGH AT LAST - AND IT IS A NULL ────────────
 // I01 moved retreat's perDepth 15 -> 6 and could only report AFFORDABILITY: 25-28% of the
 // moments it was on the table, up to 56-62%. Whether taking it does anything was never asked,
@@ -2563,6 +2616,7 @@ const ROOT = path.join(__dirname, '..');
 // the finding. So SCOUT, QUARTERMASTER and MEDIC have a door, it has been walked through, and
 // what any one of them is worth is unmeasured. That is a smaller claim than "C10 shipped content
 // nothing has ever exercised", which is what the flag default alone would have suggested.
+//   ^^ READ: STILL OPEN. No item since has run --bench on its own.
 //
 // WHAT THE AUDIT DID NOT FIND, stated because an audit that only reports hits is not an audit.
 // The other never-named arms are documented at their definitions and deliberate: `--order long`
@@ -2580,7 +2634,8 @@ const ROOT = path.join(__dirname, '..');
 // AND ONE THING IT MISSED, added the same day. The paragraph here first read "no O-phase claim
 // was found stale beyond the six scale labels above", and O10's closing line - "what a doctrine
 // is WORTH is still unmeasured" - is stale, answered by O11 eleven lines above it in this file
-// and marked there. The audit checked the arms, the dead fields and the denominators and never
+// and marked there.   ^^ READ: this line QUOTES a claim rather than making one; the claim itself
+//   is marked at its own site. The audit checked the arms, the dead fields and the denominators and never
 // read the O-series' own closing sentences against the items that followed them. That is the
 // fourth time this session a closing statement was broader than what was behind it, and the
 // only one of the four I found by being asked a question rather than by running a check.
@@ -3078,6 +3133,7 @@ const ROOT = path.join(__dirname, '..');
 // REVERTED. game.js is byte-identical to before the attempt; what stands is O04's census and this
 // price. Re-doing it needs the offer plumbed through a path the harness actually walks, which is
 // its own piece of work rather than a line in the elite branch.
+//   ^^ READ: STILL OPEN. Nothing since has plumbed the elite offer through a walked path.
 
 // ── O04: WHERE THE RELIC SHELF COMES FROM, AND IT IS NOT THE DECISION ──────────────────
 // A run ends holding 10.6 relics of a pool of 20, and every non-cursed one lands in 67-86% of
@@ -3169,6 +3225,7 @@ const ROOT = path.join(__dirname, '..');
 // smaller share of them gets bought off. So M03's goal - a scar that is a decision rather than a
 // scrap tax - was reached further by drift than the commit that aimed at it, and the question
 // M03b left open has answered itself at 53%.
+//   ^^ READ: not an open claim - the sentence records the answer.
 //
 // SCAR_TREAT_SKULLS STAYS AT 40, at the owner's call. Turning it now would be tuning on top of a
 // drift nobody has decided to keep, and the lever is pointed the right way already.
@@ -3420,6 +3477,7 @@ const ROOT = path.join(__dirname, '..');
 // arm is the TIGHTER of the two, so this is not one arm being noisy. Whichever half of each pair
 // a player takes, the road is the same length. That is a real answer to the question the audit
 // left open, and it is the boring one.
+//   ^^ READ: not an open claim - this is M10 CLOSING the audit's question, not raising one.
 //
 // AND THE COLUMN I BUILT TO ANSWER IT MORE SENSITIVELY CANNOT. Health removed per firing reads
 // like a ranking and is not one:
@@ -3476,6 +3534,9 @@ const ROOT = path.join(__dirname, '..');
 // charge, blood scent, clean room. WHICH HALF IS BETTER IS NOT MEASURED HERE - that is a
 // measurement and this is the door it needs. `first` stays the default so every career on
 // record is still comparable.
+//   ^^ ANSWERED BY M10, seventy lines above: three careers an arm, first against second, +0.7
+//   wins against K06's floor of about fourteen. Whichever half a player takes, the road is the
+//   same length. The door this paragraph asked for was walked through by the very next item.
 //
 // TWO. THE CENSUS ACCUMULATORS KEPT THEIR KEY LISTS APART FROM THEIR SEEDS, and the mismatch
 // shipped three items running: M07 in nums(), M08's per-card ledger, M09's mark ledger. The
@@ -3795,6 +3856,7 @@ const ROOT = path.join(__dirname, '..');
 //
 // AND THREE ARE A CONJUNCTION - a named ability AND a state - WHICH IS WHERE THIS INSTRUMENT
 // RUNS OUT. Counted in two parts, because one rate over both cannot say which half failed:
+//   ^^ READ: not an open claim - it explains why the census is split in two, and then splits it.
 //
 //                            holder reached for it        of those, the state held
 //   GO_FOR_THE_THROAT        18%, 16%                     28%, 17%
@@ -4251,6 +4313,7 @@ const ROOT = path.join(__dirname, '..');
 // shield takes 9.0 points off every hundred incoming against the knuckles' nothing - is not in
 // dispute; what is unresolved is whether that soak is worth as much as the swing, and six careers
 // an arm cannot say. It would take about twelve.
+//   ^^ READ: STILL OPEN, and priced - twelve careers an arm. Nothing since has spent them.
 //
 // AND THE ARMS ARE STILL A BENCH. Every one of them fits the whole deployed line with one piece
 // at every muster, which no player can do: K07 measured that the Armory sells one piece per visit
@@ -4747,6 +4810,8 @@ const MARK_POLICY = flag('mark', 'blind');
 // overdrives fired over 40 expeditions, every one of them the first of its pair, nine of
 // eighteen variants reached. P02 was a phase called "momentum worth spending - tactics and
 // OVERDRIVE CHOICE" and no reading in this project has ever come off the second half of one.
+//   ^^ ANSWERED: the M-audit opened `--overdrive second` and M10 measured it at three careers an
+//   arm. Readings come off the second half now, and they say it does not matter which half.
 //
 // `first` is what every career before this ran and stays the default so those records hold.
 // `second` takes the other half for every class, which is the arm that makes the other nine
