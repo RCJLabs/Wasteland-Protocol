@@ -2440,6 +2440,57 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O18: NO HANDS CANNOT BE PRICED, BECAUSE ITS RULE DOES NOT HOLD IN PLAY ─────────
+// O15 measured the card's trade for the first time and the owner picked the direction: pay in
+// the currency it charges in. The line gives up its knives, so what it still carries hits
+// harder. Built as NO_HANDS_EDGE = 1.25 on every swing the line throws, sized at a quarter
+// because K06's floor is about fourteen wins across three careers an arm and anything smaller
+// would read as nothing whichever way it went. Three careers against a paired baseline,
+// interleaved, 900 expeditions:
+//
+//                             baseline              NO HANDS + output edge   D17
+//   runs that ended the road   17 / 23 / 19          10 / 13 / 18            3/3, overlap
+//   reached sector 7           32 / 30 / 29          18 / 19 / 28            separates, WRONG WAY
+//   score, median            23.7k/ 22.4k/ 23.4k   19.7k/ 18.9k/ 24.0k       reverses
+//
+//   wins mean   baseline 19.67   NO HANDS 13.67   gap -6.00, against O13's -7.00
+//
+// A QUARTER MORE DAMAGE ON EVERY SWING THE SQUAD THROWS IS WORTH ONE WIN. That is the headline
+// and it is not about this card: it is the fourth time this instrument has priced a large
+// output change near zero - M04b's matching at ten, K11's augment cap at 1.5, M10's overdrive
+// fork at 0.7. The wall is not made of squad damage.
+//
+// THE EDGE DID FIRE, checked rather than assumed, because D06 is what happens when it did not:
+// melee points a blow read 30.5-32.2 on the baseline and 37.8-43.7 on the arm.
+//
+// AND THE MEASUREMENT FOUND THE REASON THE CARD CANNOT BE PRICED AT ALL. 22-27% of the damage a
+// NO HANDS career deals is MELEE, on a card whose entire rule is that nobody in the line owns a
+// melee ability, taken 150 of 150 and "still keeping it at the end" 150 of 150. Two holes, and
+// neither is visible to the rule:
+//
+//   carriesMelee reads deckFor(), and deckFor GROWS - at mastery rank 3 it appends the class's
+//   fourth ability, and the Scavenger's fourth is SHIV, reach melee. A line legal at the muster
+//   stops being legal as the career runs.
+//
+//   moveReachFor returns melee for PIPE_RIFLE on any body wearing a BAYONET. The engine's own
+//   comment says so - "the same move can be melee in one pair of hands and ranged in another" -
+//   and a deck read cannot see a mod at all.
+//
+// AND NOTHING RE-ASKS: checkDoctrine has three callers, two in the draft and one in assignSlot.
+// Not promotion, not gear. The promise is checked when it is made and when a body changes slot,
+// and never again.
+//
+// SO THE DIAL IS REVERTED. game.js carries no part of the output edge. Not because the direction
+// is wrong - it is the owner's call and it is a reasonable one - but because a card that is not
+// enforcing its own rule cannot be priced, and an edge measured on a line that is still swinging
+// is measuring something other than the card. Suite 79 holds all three halves of the hole, and
+// the caller row is written against the LIST rather than a count, so adding the missing call
+// from promotion or gear reds it and asks for this note to be updated.
+//
+// WHAT IT WOULD TAKE, in order: call checkDoctrine when mastery ranks up and when gear is
+// fitted, re-measure the card as it then actually plays, and only then decide what its edge
+// should be. That is one item and the first half of it is small.
+
 // ── O17: THE RECORD NOW READS ITSELF, AND IT WAS STALE IN FIVE PLACES ──────────────
 // Three times in two days a closing sentence in this file was answered by the item that
 // followed it and left standing in the present tense. This record is newest-first, so the

@@ -199,6 +199,55 @@ module.exports = {
     ok(`nor off a rank that is not the front one (${hands.offBack} -> ${hands.onBack})`,
       hands.onBack === hands.offBack);
 
+    // ── O18: AND THE RULE DOES NOT HOLD IN PLAY, which is why the card cannot be priced ──
+    // O18 set out to pay NO HANDS in the currency it charges in - the line gives up its knives,
+    // so what it still carries hits harder. Three careers against a paired baseline moved the
+    // gap from O13's -7.00 wins to -6.00, which is inside K06's floor of about fourteen, and
+    // the measurement turned up the reason on the way: THE LINE IS STILL SWINGING. 22-27% of
+    // the damage a NO HANDS career deals is melee, on a card whose whole rule is that nobody in
+    // the line owns a melee ability.
+    //
+    // carriesMelee reads deckFor(), and deckFor GROWS: at mastery rank 3 it appends the class's
+    // fourth ability, and the Scavenger's fourth is SHIV, reach melee. A line legal at the
+    // muster stops being legal as the career goes on. Separately, moveReachFor returns melee for
+    // PIPE_RIFLE on any body wearing a BAYONET - a mod turns the Scavenger's most-thrown move
+    // into a melee swing, and a deck read cannot see that at all.
+    //
+    // AND NOTHING RE-ASKS. checkDoctrine has three callers: two in the draft and one in
+    // assignSlot. Not promotion, not gear. So the promise is checked when it is made and when a
+    // body moves rank, and never again - which is the same shape as the doctrine's own comment
+    // about offerable-but-unkeepable, one step later in the run.
+    const leak = await page.evaluate(() => {
+      const scav = playerRoster.find(c => c.classType === 'SCAVENGER');
+      const base = (ABILITIES.SCAVENGER || []).map(a => a.reach);
+      const fourth = FOURTH_ABILITIES.SCAVENGER;
+      return { baseHasMelee: base.includes('melee'),
+               fourthMove: fourth && fourth.move, fourthReach: fourth && fourth.reach,
+               carriesNow: carriesMelee(scav),
+               // The mod half: what the engine calls the reach of a rifle with a bayonet on it.
+               // hasMod reads ent.weaponMod on a player, so the probe hands it exactly that
+               // rather than a shape of my own invention - the first cut passed a gear array and
+               // the row went red against a mod the engine never saw.
+               bayonet: moveReachFor('PIPE_RIFLE', { isPlayer: true, weaponMod: 'BAYONET' }),
+               plain: moveReachFor('PIPE_RIFLE', { isPlayer: true, weaponMod: null }) };
+    });
+    ok(`the Scavenger's own three carry no melee, so the line is legal at the muster ` +
+       `(carriesMelee ${leak.carriesNow})`,
+      leak.baseHasMelee === false && leak.carriesNow === false);
+    ok(`but its fourth ability is melee, and deckFor appends it at mastery rank 3 ` +
+       `(${leak.fourthMove}:${leak.fourthReach})`,
+      leak.fourthReach === 'melee');
+    // The mod is the half a deck read can never see, because it changes the MOVE at throw time.
+    ok(`and a BAYONET makes the rifle a melee swing without touching the deck ` +
+       `(PIPE_RIFLE ${leak.plain} -> ${leak.bayonet})`,
+      leak.plain === 'ranged' && leak.bayonet === 'melee');
+    // THE ROW THAT SAYS WHY IT IS NEVER CAUGHT. Written against the caller list rather than a
+    // count, so adding a call from promotion or gear - the fix - reds it and asks for an update.
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'game.js'), 'utf8');
+    const callers = (src.match(/checkDoctrine\(\)/g) || []).length - 1;   // minus the declaration
+    ok(`checkDoctrine is asked from ${callers} places, none of them promotion or gear`,
+      callers <= 3 && !/masteryRank[\s\S]{0,400}checkDoctrine\(\)/.test(src));
+
     // ── OLD GUARD: veterans only ─────────────────────────────────────────────────────────
     const guard = await page.evaluate(() => {
       const vet = MASTERY_RANKS[VETERAN_RANK];
