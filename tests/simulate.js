@@ -2433,6 +2433,65 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O12: THE TWO CARDS NOBODY TAKES ARE TRAPS, AND THE ARM THAT PROVED IT WAS BROKEN ───
+// O10 found LIGHT_ORDER and NO_HANDS offered 70-76 times in 150 expeditions and live zero, and
+// established they are keepable by 120 of 720 lines - so the zero is the draft, not the game.
+// The question that leaves: a player who WANTS one has to give up the front rank. Is that a
+// choice or a trap? Four arms, three 150-expedition careers each.
+//
+//                        baseline      THE_WALL      NO_HANDS      LIGHT_ORDER
+//   runs that ended road  19/23/22      21/21/23      10/ 9/11      12/ 9/13
+//   reached sector 7      27/34/38      33/38/32      16/12/13      16/14/20
+//   deepest sector, mean  3.60/4.00/4.00 3.90/4.00/4.10 2.90/2.50/2.80 3.10/2.70/2.90
+//   nodes cleared, median 73/78/75      74/74/79      69/65/64      69/69/67
+//   wipes per run         6.22/6.18/6.37 6.15/6.37/6.33 6.49/6.16/6.01 6.61/6.41/6.27
+//   score, median         24.4/25.9/24.5k 26.2/25.0/27.0k 17.0/13.1/14.5k 18.4/13.7/13.8k
+//
+//   means                 21.33 wins    21.67         10.00         11.33
+//   wipes per NODE        0.0831        0.0831        0.0942        0.0941
+//
+// BOTH ARE TRAPS AND THE CONTROL IS WHAT SAYS SO. THE_WALL, built around deliberately in exactly
+// the same way, is indistinguishable from the default line on every row - 21.67 wins against
+// 21.33, ranges overlapping, and wipes per node identical to four decimal places. So "building
+// around a doctrine" costs nothing. The two cards that forbid the front rank cost about eleven
+// and ten wins, half the win rate, a third of the depth and 40% of the score, 3/3 with no
+// overlap on every depth row.
+//
+// THE MECHANISM IS IN THE LAST TWO ROWS AND IT IS NOT WHAT I EXPECTED. Wipes per RUN is flat
+// across all four arms - these lines do not go down more often. They clear nine fewer nodes
+// while going down the same number of times, so they go down more often PER NODE OF PROGRESS:
+// 0.094 against 0.083, and the two arms agree to three decimal places with each other. A line
+// with no heavy body at the front does not die faster; it stops sooner.
+//
+// AND THE CONTROL ARM WAS BROKEN THE FIRST TIME, which is the other half of this. Three careers
+// of `--draft doctrine:THE_WALL` ran to completion reporting a deepest sector of 1, 0 commanders
+// and 0 elites - with G13's own guard firing on every one: 150 of 150 RUNS FIELDED NOBODY.
+//
+// The cause is G13's bug in a door G13 did not close. A doctrine is a predicate on the WHOLE
+// line; building one legal member at a time asks holds() of every PREFIX, and THE WALL asks who
+// holds rank 1 before any rank is handed out. G13 diagnosed exactly that, rewrote the pooled
+// `--draft doctrine` branch to build-place-then-ask, and left the identical test in `--draft
+// doctrine:<id>` TEN LINES ABOVE ITS OWN FIX, in a comment that names THE WALL as the case that
+// breaks. Two of seven doctrines were unmeasurable through that flag and nothing said so until
+// an arm was pointed at one.
+//
+// Fixed as one helper both callers use, so a third copy cannot drift in - and the named-doctrine
+// arm now records an unfieldable card rather than fielding nobody, which the pooled branch
+// already did. BROAD_SPECTRUM, the other whole-line predicate G13 named, was equally broken and
+// is equally fixed.
+//
+// THEN THE SUITE ROW WRITTEN TO HOLD THAT FIX FOUND A THIRD COPY. The tail that tops up a short
+// draft carried the same prefix test. It was dormant - only the policies that never set a wanted
+// doctrine leave a short draft, so the filter never ran - and dormant is not harmless, it is the
+// copy nobody re-reads. Dropped. My own fix was incomplete and the row I wrote to hold it is
+// what said so, which is the whole argument for asserting a property about duplicated logic on
+// the source rather than trusting a careful edit.
+//
+// NO DIAL MOVES. Two of seven doctrines charge about half a career's wins for the line they ask
+// for, and whether that price should come down - or the cards should ask for less - is a design
+// call with the wall behind it. What is established is that it is a price and not a shrug, and
+// that a player taking either one is not making the trade the card implies.
+
 // ── O11: WHAT A DOCTRINE IS WORTH - THE SCORE MULTIPLIER, AND NOTHING THAT SEPARATES ───
 // G13 ran the doctrine lever bundled with two others and nothing separated; O10 closed with the
 // question still open. Answering it needed an arm this file did not have. The DEFAULT is not a
@@ -4776,6 +4835,33 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const pickFrom = list => list[Math.floor(Math.random() * list.length)];
   const draft = [];
   let wantDoctrine = null;   // aimed at while drafting; banked below, once ranks are real
+  // O12: G13's FIX, FACTORED, BECAUSE THE TWO DOCTRINE POLICIES HAD ALREADY DRIFTED APART.
+  // G13 found that building a line one legal member at a time asks holds() of every PREFIX, and
+  // three of the seven cannot be true of one - BROAD SPECTRUM wants all three damage types
+  // across the line, and THE WALL asks who holds rank 1 when no rank has been handed out yet.
+  // It rewrote the pooled `--draft doctrine` branch to build, place, then ask. It left the
+  // identical prefix test in `--draft doctrine:<id>` ten lines above, and its own comment names
+  // THE WALL as the case that breaks.
+  //
+  // That sat there until O12 pointed `--draft doctrine:THE_WALL` at it and got the guard G13
+  // built firing on every line of the report: 150 of 150 RUNS FIELDED NOBODY, three careers
+  // running to completion and reporting a deepest sector of 1, 0 commanders and 0 elites. The
+  // guard worked perfectly; the thing it guards had a second door.
+  //
+  // One helper now, so a third caller cannot reintroduce it. Ordering matters because THE WALL
+  // reads rank 1, so this walks ordered selections rather than combinations.
+  const lineKeeping = d => {
+    const place = line => { playerRoster.forEach(p => { p.gridPos = 0; });
+                            line.forEach((p, i) => { p.gridPos = slots[i]; }); };
+    const ordered = (pool, k) => k === 0 ? [[]]
+      : pool.flatMap((c, i) => ordered(pool.filter((_, j) => j !== i), k - 1).map(rest => [c, ...rest]));
+    const cands = ordered(playerRoster, Math.min(slots.length, playerRoster.length))
+      .sort(() => Math.random() - 0.5);
+    let held = null;
+    for (const cand of cands) { place(cand); if (d.holds(cand)) { held = cand; break; } }
+    playerRoster.forEach(p => { p.gridPos = 0; });   // the tail below does the real placing
+    return held;
+  };
   if (draftPolicy === 'random') {
     // No shape at all: whatever the roster hands you. This is the floor.
   } else if (draftPolicy.startsWith('doctrine:')) {
@@ -4784,9 +4870,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     const d = doctrineById(want);
     if (d) {
       doctrineOffer = [want];
-      const shuffled = [...playerRoster].sort(() => Math.random() - 0.5);
-      shuffled.forEach(c => { if (draft.length < slots.length && d.holds([...draft, c])) draft.push(c); });
-      wantDoctrine = want;
+      const held = lineKeeping(d);
+      if (held) { draft.push(...held); wantDoctrine = want; }
+      // And it reports rather than fielding nobody, which the pooled branch already did and
+      // this one did not: an arm aimed at a doctrine this roster cannot keep is a finding about
+      // the doctrine, not a run to quietly throw away.
+      else { stat.doctrineUnfieldable = want; }
     }
   } else if (draftPolicy === 'doctrine' && doctrineOffer.length) {
     // G13: a doctrine is a predicate on the WHOLE line, and this used to build the line one
@@ -4808,15 +4897,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // of them, once per run.
     const want = doctrineOffer[Math.floor(Math.random() * doctrineOffer.length)];
     const d = doctrineById(want);
-    const place = line => { playerRoster.forEach(p => { p.gridPos = 0; });
-                            line.forEach((p, i) => { p.gridPos = slots[i]; }); };
-    const ordered = (pool, k) => k === 0 ? [[]]
-      : pool.flatMap((c, i) => ordered(pool.filter((_, j) => j !== i), k - 1).map(rest => [c, ...rest]));
-    const cands = ordered(playerRoster, Math.min(slots.length, playerRoster.length))
-      .sort(() => Math.random() - 0.5);
-    let held = null;
-    for (const cand of cands) { place(cand); if (d.holds(cand)) { held = cand; break; } }
-    playerRoster.forEach(p => { p.gridPos = 0; });   // the tail below does the real placing
+    const held = lineKeeping(d);
     if (held) { draft.push(...held); wantDoctrine = want; }
     // Nothing this roster can field keeps it. Recorded rather than swallowed, and the line is
     // drafted the ordinary way so the run is still a run.
@@ -4829,12 +4910,25 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     draft.push(pickFrom(byClass(['BRUISER', 'SHOTGUNNER'])));
     if (slots.length > 2 && Math.random() < 0.7) draft.push(pickFrom(byClass(['MEDIC'])));
   }
+  // O12: AND THE SAME PREFIX TEST WAS HERE TOO, IN A THIRD PLACE. This tail tops up any draft
+  // that came back short, and it filtered candidates by asking holds() of the draft-so-far plus
+  // one candidate - the exact test G13 deleted from one branch and I had just deleted from a
+  // second. (Spelled out in words rather than in code, because the suite row below asserts that
+  // the literal appears nowhere in this file and a comment quoting it would red the row.) It was
+  // dormant: the
+  // only policies that leave a short draft (`only:` and the default line) never set
+  // wantDoctrine, so `d` was always null here and the filter never ran. Dormant is not the same
+  // as harmless - a doctrine policy that ever returned a partial line would have walked straight
+  // into it - and it is exactly the copy nobody re-reads. Found by the suite row written to hold
+  // the first fix, which is what that row is for.
+  //
+  // Dropped rather than converted: the doctrine branches place a whole line through lineKeeping
+  // above, so there is nothing for a doctrine-aware top-up to do, and a predicate on a partial
+  // line cannot be asked correctly in any case.
   while (draft.length < slots.length) {
     const rest = playerRoster.filter(p => !draft.includes(p));
-    const d = doctrineById(wantDoctrine);
-    const legal = d ? rest.filter(c => d.holds([...draft, c])) : rest;
-    if (!legal.length) break;
-    draft.push(pickFrom(legal));
+    if (!rest.length) break;
+    draft.push(pickFrom(rest));
   }
   draft.forEach((p, i) => { p.gridPos = slots[i]; });
   // G13: what the draft actually fielded, read back off the roster rather than off the policy's

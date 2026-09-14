@@ -182,5 +182,33 @@ module.exports = {
     // of the instrument, not a comment in a commit message.
     ok('the census line says whose line "live" is measured against',
       /live = the offer THIS draft policy's line could keep/.test(sim));
+
+    // ── O12: THE PREFIX BUG, IN THE SECOND DOOR G13 DID NOT CLOSE ──────────────────────
+    // A doctrine is a predicate on the WHOLE line. G13 found that building a line one legal
+    // member at a time asks holds() of every PREFIX, that three of the seven cannot be true of
+    // one, and that the failure is silent and total - the draft comes back empty and the run
+    // plays out with nobody standing. It rewrote the pooled `--draft doctrine` branch to build,
+    // place, then ask, and wrote a comment naming THE WALL as the case that breaks.
+    //
+    // It left the identical prefix test in `--draft doctrine:<id>`, ten lines above its own fix.
+    // That sat there until O12 aimed a control arm at `--draft doctrine:THE_WALL` and got the
+    // guard G13 built firing on every line of three whole careers: 150 of 150 RUNS FIELDED
+    // NOBODY, reporting a deepest sector of 1 and zero commanders. The guard was perfect. The
+    // thing it guards had two doors and one was open.
+    //
+    // The rows above already hold the GAME's half - every doctrine is keepable by some line. This
+    // holds the HARNESS's: one helper, both callers, no prefix test anywhere. A property about
+    // duplicated logic is worth asserting on the source, because the second copy is exactly what
+    // nobody re-reads.
+    ok('the line-keeping search is written once',
+      (sim.match(/const lineKeeping = d => \{/g) || []).length === 1);
+    ok('and both doctrine draft policies go through it',
+      (sim.match(/lineKeeping\(d\)/g) || []).length === 2);
+    ok('neither of them asks holds() of a partial line any more',
+      !/d\.holds\(\[\.\.\.draft, c\]\)/.test(sim));
+    // And the named-doctrine arm reports an unfieldable card rather than fielding nobody, which
+    // is what the pooled branch already did and this one did not.
+    ok('a named doctrine this roster cannot keep is recorded, not silently skipped',
+      (sim.match(/stat\.doctrineUnfieldable = want;/g) || []).length === 2);
   }
 };

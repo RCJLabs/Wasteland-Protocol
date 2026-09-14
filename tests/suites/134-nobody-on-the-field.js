@@ -160,13 +160,28 @@ module.exports = {
       doctrines.BROAD_SPECTRUM && doctrines.BROAD_SPECTRUM.singles === 0);
 
     // ── And the harness no longer asks the question that way ─────────────────────
+    // O12 MOVED WHERE THIS LIVES, and this row is why that was noticed rather than assumed. G13
+    // fixed the pooled `--draft doctrine` branch in place, and these two rows read that branch's
+    // own slice of the source. They were correct and they were narrow: `--draft doctrine:<id>`
+    // ten lines above kept the prefix test for another whole phase, and no row here looked at it
+    // because the slice stopped short of it. O12 found that by pointing an arm at THE WALL and
+    // getting 150 of 150 runs fielding nobody.
+    //
+    // The search is one helper both policies call now, so the assertion moves up with it - and
+    // the prefix test is checked against the WHOLE FILE rather than one branch's slice, which is
+    // the narrowness that let the second copy sit there.
     const sim = fs.readFileSync(path.join(__dirname, '..', 'simulate.js'), 'utf8');
-    const block = sim.slice(sim.indexOf("draftPolicy === 'doctrine' && doctrineOffer.length"),
-                            sim.indexOf("draftPolicy.startsWith('only:')"));
-    ok('the doctrine draft no longer grows a line asking holds() of every prefix',
-      !/draft\.length < slots\.length && d\.holds\(\[\.\.\.draft, c\]\)/.test(block));
-    ok('it places a whole candidate line before asking', /place\(cand\);\s*if \(d\.holds\(cand\)\)/.test(block));
-    ok('and it says so when no line this roster can field keeps the doctrine',
-      /doctrineUnfieldable/.test(block));
+    ok('no doctrine draft anywhere grows a line asking holds() of every prefix',
+      !/d\.holds\(\[\.\.\.draft, c\]\)/.test(sim));
+    const helper = sim.slice(sim.indexOf('const lineKeeping = d =>'),
+                             sim.indexOf("if (draftPolicy === 'random')"));
+    ok('it places a whole candidate line before asking', /place\(cand\);\s*if \(d\.holds\(cand\)\)/.test(helper));
+    ok('and every doctrine policy goes through that one search',
+      (sim.match(/lineKeeping\(d\)/g) || []).length === 2);
+    // And BOTH of them say so when nothing this roster can field keeps the doctrine. The pooled
+    // branch always did; the named one fielded nobody instead, silently, which is what O12 walked
+    // into. Counted rather than merely present, so a future edit cannot drop one of the two.
+    ok('and both of them say so when no line this roster can field keeps the doctrine',
+      (sim.match(/stat\.doctrineUnfieldable = want;/g) || []).length === 2);
   }
 };
