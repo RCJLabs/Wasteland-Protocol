@@ -84,7 +84,16 @@ lines.forEach((l, i) => {
   if (k < 0) return;
   // Already read and marked? The marker sits within a few lines of the claim it settles.
   const marked = lines.slice(i, i + 10).some(x => MARK.test(x));
-  found.push({ line: i + 1, text: l.replace(/^\/\/\s*/, '').trim(), item: items[k].title, marked });
+  // WHAT THE MARK SAYS, not just that there is one. The O17 write-up put "five of the fifteen
+  // are marked STILL OPEN" into the record and the answer was four - a miscount in the very item
+  // about miscounts, written an hour after the marks went in. A number in prose drifts; this one
+  // is read off the file so the suite can pin it.
+  const near = lines.slice(i, i + 12).join(' ');
+  const kind = !marked ? 'unread'
+             : /\^\^[^\n]*ANSWERED/i.test(near) ? 'answered'
+             : /STILL OPEN/i.test(near) ? 'open'
+             : 'notaclaim';
+  found.push({ line: i + 1, text: l.replace(/^\/\/\s*/, '').trim(), item: items[k].title, marked, kind });
 });
 
 const live = found.filter(f => !f.marked);
@@ -92,6 +101,9 @@ const show = ALL ? found : live;
 
 console.log(`\n${found.length} present-tense open claims in the record`);
 console.log(`  ${found.length - live.length} read since, and marked`);
+const by = k => found.filter(f => f.kind === k).length;
+console.log(`    ${by('answered')} answered by a later item   ${by('open')} still open   ` +
+            `${by('notaclaim')} not an open claim after reading`);
 console.log(`  ${live.length} unread\n`);
 
 show.forEach(f => {
@@ -109,4 +121,5 @@ if (!ALL) {
     ? 'CLEAN: every open claim in the record has been read against what followed it.'
     : `${live.length} unread. Mark each ^^ with what settled it, or with why it still stands.`);
 }
-module.exports = { scan: () => ({ total: found.length, live: live.length, found }) };
+module.exports = { scan: () => ({ total: found.length, live: live.length, found,
+  answered: by('answered'), open: by('open'), notaclaim: by('notaclaim') }) };

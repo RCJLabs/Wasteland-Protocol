@@ -2477,13 +2477,26 @@ const ROOT = path.join(__dirname, '..');
 // exact and the judgement stays with whoever reads it.
 //
 // THE RATCHET IS NOT "NO CLAIM MAY BE OPEN". Open claims are how this file says what it does not
-// know and there should be plenty - five of the fifteen are marked STILL OPEN, including two on
+// know and there should be plenty - FOUR of the seventeen are marked STILL OPEN, including two on
 // the queue right now (the bench job alone, and K11's twelve-careers-an-arm question). The bar
 // is that none sits UNREAD. An item that closes on an open question marks it in the same breath,
 // which costs one line. Suite 173 holds the count at zero and pins the five settled ones at their
 // own sites, so a rewrite that tidies a marker away without settling the claim goes red rather
 // than passing as better prose. Two mutations: a new unread claim reds the ratchet by line
 // number, and deleting one marker reds both the ratchet and that claim's own row.
+//
+// AND THAT SENTENCE FIRST SAID "five of the fifteen", WHICH IS WRONG ON BOTH NUMBERS. Four are
+// open, not five; seventeen claims exist, not fifteen, because the write-up above added two of
+// its own. I wrote it an hour after doing the marking, in the item whose entire subject is claims
+// in this record being wrong, and found it only when somebody asked "so nothing left?" and I
+// grepped for the answer rather than repeating myself.
+//
+// SO THE COUNTS ARE NO LONGER PROSE. tests/stale.js reads what each mark SAYS - answered, still
+// open, or not a claim after reading - and suite 173 pins all four numbers. A miscount now reds
+// the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
+// the file reports it rather than as I remember it:
+//
+//   6 answered by a later item     4 still open     7 not an open claim after reading
 //
 // NO DIAL MOVES. game.js is untouched.
 

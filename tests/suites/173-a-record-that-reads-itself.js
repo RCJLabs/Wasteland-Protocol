@@ -42,6 +42,19 @@ module.exports = {
     ok(`and every one has been read against what followed it${r.live ? ' - unread at line ' +
         r.found.filter(f => !f.marked).map(f => f.line).join(', ') : ''}`,
       r.live === 0);
+    // AND WHAT THE MARKS SAY, pinned. The O17 write-up put "five of the fifteen are marked STILL
+    // OPEN" into the record and it was four of seventeen - a miscount in the item about
+    // miscounts, written an hour after the marking. A number that lives only in prose drifts;
+    // these are read off the file, so the paragraph and the record cannot disagree again.
+    ok(`${r.answered} answered by a later item, ${r.open} still open, ${r.notaclaim} not a claim`,
+      r.answered + r.open + r.notaclaim === r.total);
+    ok(`the record says the same four numbers the file does`,
+      new RegExp(`${r.answered} answered by a later item\\s+${r.open} still open\\s+` +
+                 `${r.notaclaim} not an open claim`).test(
+        require('fs').readFileSync(require('path').join(__dirname, '..', 'simulate.js'), 'utf8'))
+      && new RegExp(`FOUR of the seventeen`).test(
+        require('fs').readFileSync(require('path').join(__dirname, '..', 'simulate.js'), 'utf8'))
+      && r.open === 4 && r.total === 17);
     // The five known stale ones, by the words that were wrong, so a rewrite that quietly drops
     // the marker without settling the claim is caught rather than passing as tidied prose.
     const fs = require('fs'), path = require('path');
