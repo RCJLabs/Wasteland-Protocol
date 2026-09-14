@@ -2433,6 +2433,53 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O13: A THIRD OF O12's COST WAS MY OWN DRAFT, AND THE OTHER TWO THIRDS ARE REAL ─────
+// O12 measured LIGHT_ORDER and NO_HANDS at about ten and eleven wins below a default line and
+// called both traps. The arm it measured them with takes the FIRST satisfying arrangement off a
+// shuffled list. Those two cards constrain MEMBERSHIP only - any three bodies under the cap, or
+// any three without melee, in any order - so the body standing at rank 1 was arbitrary, and with
+// a Sniper in the pool it was regularly a Sniper. THE WALL is not that kind: its own rule demands
+// the front carry melee and be the toughest, so every arrangement it accepts is already sensible.
+// That is exactly why it made a clean control, and exactly why the comparison was unfair.
+//
+// `--arrange front` prefers, among the lines that hold, the one whose rank-1 body carries melee
+// and is heaviest - THE WALL's own two tests, used to rank instead of to reject, so the standard
+// is the game's rather than mine. Three careers of 150 an arm, against O12's on disk:
+//
+//                      wins (3 careers)   mean    vs baseline 21.33   sector 7   depth   score
+//   THE_WALL  any        21/21/23        21.67        +0.33  overlap    34.3     4.00   26.1k
+//   THE_WALL  front      22/27/19        22.67        +1.33  overlap    34.3     3.97   25.4k
+//   NO_HANDS  any        10/ 9/11        10.00       -11.33  no         13.7     2.73   14.8k
+//   NO_HANDS  front      14/12/17        14.33        -7.00  no         21.3     3.10   18.4k
+//   LIGHT_ORD any        12/ 9/13        11.33       -10.00  no         16.7     2.90   15.3k
+//   LIGHT_ORD front      15/17/10        14.00        -7.33  no         21.0     3.07   16.3k
+//
+// THE ARRANGEMENT IS WORTH +4.33 AND +2.67 WINS ON THE TWO CONSTRAINED CARDS AND +1.00 ON THE
+// WALL - and that last figure is the control on the new arm itself. Preferring a good front rank
+// where the card already forced one buys about a win, which is the residual; where the card
+// forced nothing it buys three to four. So roughly a third of what O12 charged these cards was
+// the harness drafting badly on their behalf.
+//
+// THE OTHER TWO THIRDS ARE THE CARDS. Seven wins each, still 3/3 with no overlap against the
+// baseline, and the depth rows move with them - sector 7 back from 13.7 and 16.7 to 21.3 and
+// 21.0, against a baseline of 33.0. A player who builds for either of these and arranges it as
+// well as the game's own best-front rule allows still finishes the road a third less often than
+// one who drafts a Bruiser and gets on with it.
+//
+// WHAT THIS CORRECTS AND WHAT IT DOES NOT. O12's direction, its control, its mechanism (these
+// lines stop sooner rather than dying faster) and its "trap" reading all stand. Its magnitude was
+// overstated by about a third, because an arm that picks arbitrarily among satisfying lines is
+// not the player the finding is about. The O12 record keeps its numbers with a correction marker
+// rather than being rewritten, which is what this file did for THICK_HIDE.
+//
+// AND THE GENERAL FORM IS WORTH MORE THAN THE ITEM. A policy arm that satisfies a constraint is
+// not the same as a policy arm that satisfies it WELL, and the difference is a third of the
+// effect here. Where a card constrains membership and leaves arrangement free, the arrangement
+// has to be named as part of the arm - the same discipline as naming the denominator, the scale
+// and the arm itself, one level further in.
+//
+// NO DIAL MOVES.
+
 // ── O12: THE TWO CARDS NOBODY TAKES ARE TRAPS, AND THE ARM THAT PROVED IT WAS BROKEN ───
 // O10 found LIGHT_ORDER and NO_HANDS offered 70-76 times in 150 expeditions and live zero, and
 // established they are keepable by 120 of 720 lines - so the zero is the draft, not the game.
@@ -2456,6 +2503,13 @@ const ROOT = path.join(__dirname, '..');
 // around a doctrine" costs nothing. The two cards that forbid the front rank cost about eleven
 // and ten wins, half the win rate, a third of the depth and 40% of the score, 3/3 with no
 // overlap on every depth row.
+//   ^^ THE ELEVEN AND TEN ARE OVERSTATED BY ABOUT A THIRD AND ARE LEFT STANDING SO O13 HAS
+//   SOMETHING TO POINT AT. This arm takes the FIRST satisfying arrangement off a shuffled list,
+//   and these two cards constrain membership only - so the body at rank 1 was arbitrary, and
+//   regularly a Sniper. THE WALL made a clean control precisely because its own rule forces a
+//   tough melee front, which is the asymmetry that makes the comparison unfair. Arranged well,
+//   the cost is about seven wins each rather than eleven and ten. The direction and the "trap"
+//   reading survive; the magnitude does not. See O13.
 //
 // THE MECHANISM IS IN THE LAST TWO ROWS AND IT IS NOT WHAT I EXPECTED. Wipes per RUN is flat
 // across all four arms - these lines do not go down more often. They clear nine fewer nodes
@@ -4371,6 +4425,19 @@ const SCAR_POLICY = flag('scars', 'treat');
 // offers rolled and read, and then nothing taken. That is the one comparison in which the
 // doctrine is the only thing that moved.
 const DOCTRINE_POLICY = flag('doctrine', 'on');
+// O13: WHICH of the satisfying lines a doctrine draft takes, which O12 left uncontrolled and
+// which may be most of what O12 measured. lineKeeping walks ordered selections and takes the
+// FIRST that holds, off a shuffled list - so for a doctrine that constrains membership only, the
+// body standing at rank 1 is arbitrary. LIGHT_ORDER and NO_HANDS are both that kind, and their
+// arms regularly fronted a Sniper. THE WALL is not: its own rule demands the front carry melee
+// and be the toughest, so every arrangement it accepts is already a sensible one - which is
+// exactly why it made a clean control, and exactly why the comparison may have been unfair.
+//
+// `--arrange front` prefers, among the lines that satisfy the card, the one whose rank-1 body
+// carries melee and is heaviest. That is not my taste imported from outside: it is THE WALL's
+// own stated notion of a good front rank, borrowed as a preference rather than a requirement.
+// `any` is the default and is what every O12 number was taken under, so those stay comparable.
+const ARRANGE = flag('arrange', 'any');
 // M04 made the five training cards situational, and M02 had already established that this file
 // picks among them uniformly at random. Under the OLD five that was harmless - every card was
 // worth the same on every body, so there was nothing for a policy to get right. Under the new
@@ -4685,7 +4752,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy }) => {
+const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -4858,7 +4925,22 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     const cands = ordered(playerRoster, Math.min(slots.length, playerRoster.length))
       .sort(() => Math.random() - 0.5);
     let held = null;
-    for (const cand of cands) { place(cand); if (d.holds(cand)) { held = cand; break; } }
+    if (arrange !== 'front') {
+      for (const cand of cands) { place(cand); if (d.holds(cand)) { held = cand; break; } }
+    } else {
+      // O13: the best front rank among the lines that hold, rather than the first line that
+      // holds. Melee first, then weight - THE WALL's own two tests, used to rank instead of to
+      // reject. Every candidate is still placed before being asked, because that is the whole
+      // point of this helper.
+      let best = -1;
+      for (const cand of cands) {
+        place(cand);
+        if (!d.holds(cand)) continue;
+        const f = cand[0];
+        const score = (carriesMelee(f) ? 1e6 : 0) + baseHpOf(f);
+        if (score > best) { best = score; held = cand; }
+      }
+    }
     playerRoster.forEach(p => { p.gridPos = 0; });   // the tail below does the real placing
     return held;
   };
@@ -6810,7 +6892,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY });
+    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }

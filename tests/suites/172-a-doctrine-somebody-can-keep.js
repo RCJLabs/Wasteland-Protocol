@@ -210,5 +210,22 @@ module.exports = {
     // is what the pooled branch already did and this one did not.
     ok('a named doctrine this roster cannot keep is recorded, not silently skipped',
       (sim.match(/stat\.doctrineUnfieldable = want;/g) || []).length === 2);
+
+    // ── O13: WHICH satisfying line, which is a third of what O12 measured ──────────────
+    // A doctrine that constrains MEMBERSHIP leaves the arrangement free, and the first satisfying
+    // line off a shuffled list regularly fronts a Sniper. THE WALL is the exception - its own rule
+    // demands a tough melee front - which is why it made a clean control and why comparing the
+    // other two against it was unfair. Arranged as well as that rule allows, they gain 4.33 and
+    // 2.67 wins; THE WALL, which already forced it, gains 1.00. A third of O12's charge was the
+    // draft, and the remaining seven wins each are the cards.
+    //
+    // The arm is held here so the default cannot drift: every number in the O12 record was taken
+    // under `any`, and a changed default would silently re-baseline them.
+    ok('the arrangement arm exists and the default is the one the records were taken under',
+      /const ARRANGE = flag\('arrange', 'any'\)/.test(sim));
+    ok('it ranks by the front rank rather than rejecting on it',
+      /carriesMelee\(f\) \? 1e6 : 0\) \+ baseHpOf\(f\)/.test(sim));
+    ok('and it still places every candidate before asking, which is the whole point of the helper',
+      /if \(!d\.holds\(cand\)\) continue;/.test(sim));
   }
 };

@@ -62,6 +62,12 @@
 // WHAT THE TWENTY ACTUALLY SAY, against the two rows #213 was opened on:
 //
 //   101  fight-log pair       0/20    not reproduced; 2 sightings before this, 0 in the 20
+//                                ^^ AND IT FIRED AGAIN AFTER THIS SWEEP, on the O13 battery, both
+//                                rows together at 9 -> 10 exactly as logged. Three sightings now,
+//                                against 0 in the twenty batteries run to find it. That is the
+//                                rate #192 calls actionable and this sweep could not reach - so
+//                                the next move on it is #209's, constructing the failure rather
+//                                than sampling for it, not another twenty batteries.
 //   166  mark multiplier      1/20    REPRODUCED - this is the one the report hid
 //   168  combo oil cost       1/20    new, first sighting - and the SAME defect as 166
 //
