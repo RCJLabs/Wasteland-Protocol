@@ -110,24 +110,68 @@ module.exports = {
         for (let i = 0; i < AVG; i++) t += runOnce(a, b, c);
         return t / AVG;
       };
+      // THE EXACT HALF, read off the engine instead of sampled out of it. resolveAction records
+      // the factors of the blow it is resolving into hitTrace as the real chain runs - the same
+      // breakdown the tap-to-explain card shows the player - and files it on hitLog. The 'combo'
+      // layer of a cashed mark IS the product this block is about: MARK_BONUS alone, or
+      // MARK_BONUS x CALLED_SHOT_MULT when the setter held the card. Read there it carries no
+      // damage roll at all, so the claim needs no tolerance and no sample.
+      const layer = (setterHolds, swingerHolds, ownMark) => {
+        runOnce(setterHolds, swingerHolds, ownMark);
+        const t = hitLog[hitLog.length - 1].trace.find(x => x.label === 'combo');
+        return t ? t.f : null;
+      };
       return { plain: run(false, false, true), setterHolds: run(true, false, true),
                swingerHolds: run(false, true, true),
                orphan: run(true, false, false), orphanControl: run(false, false, false),
-               mult: CALLED_SHOT_MULT };
+               fSetter: layer(true, false, true), fSwinger: layer(false, true, true),
+               fOrphan: layer(true, false, false), fPlain: layer(false, false, true),
+               mult: CALLED_SHOT_MULT, mark: MARK_BONUS };
     }, ids);
     const paid = arms;
-    const near = (v, want, tol) => Math.abs(v - want) <= tol;
+    // ── What the swing PAID, and what the engine RECORDED, kept as two different claims ──
+    // The three rows here used to be one claim each, all of the same shape: a ratio of two
+    // AVG-swing sample means judged against a +/- 0.06 tolerance. The O09 sweep caught the worst
+    // of them going red 1 battery in 20, and measuring that found the other two standing in the
+    // same place. Over twenty kept batteries, with the band each was judged by:
+    //
+    //   setter holds   mean 1.2370  sd 0.0249   1.89 sd inside [1.19, 1.31]   fired 1 of 20
+    //   swinger holds  mean 0.9902  sd 0.0215   2.33 sd inside [0.94, 1.06]   0 of 20
+    //   orphan mark    mean 0.9965  sd 0.0137   4.13 sd inside [0.94, 1.06]   0 of 20
+    //
+    // K03's shape exactly, and the first since K03 whose arithmetic actually supports it: a
+    // one-tailed 1.89 sd predicts about 1 battery in 34 against the 1 in 20 seen, and a probe at
+    // AVG=24 put it at 3 in 60 independently. (#200 was the opposite case - 1 in 1,240 predicted
+    // against 1 in 26 seen - and correctly moved no bound.) Raising the sample does work, and was
+    // measured: AVG 24/96/240/600 gives sd 0.0262/0.0141/0.0090/0.0058, a clean 1/sqrt(n), for
+    // 1.25s/4.75s/13.7s/45.8s of battery. But it takes AVG=240 to buy 6 sd, and it never fixes
+    // the second defect the same table shows - the MEAN itself climbs 1.2383 -> 1.2400 -> 1.2450
+    // -> 1.2483 as the sample grows, because a ratio of two noisy means is biased. At AVG=24 the
+    // row was judged against a centre sitting 0.012 low, a fifth of its own tolerance spent
+    // before any noise.
+    //
+    // So the multiplier is asserted where it is EXACT and the damage is asserted where it is a
+    // measurement. Neither row is a weaker claim than what it replaced: the layer says the engine
+    // applied the number the card advertises, the swing says that number reached real damage, and
+    // it takes both to know the card works. Twelve swings and no tolerance, against 120 and three.
     ok(`the setter holding it pays (${paid.plain.toFixed(1)} -> ${paid.setterHolds.toFixed(1)}, x${(paid.setterHolds / paid.plain).toFixed(2)})`,
       paid.setterHolds > paid.plain);
-    ok(`and lands on the multiplier it advertises (want x${paid.mult})`,
-      Math.abs(paid.setterHolds / paid.plain - paid.mult) < 0.06);
+    ok(`and the blow is recorded at the multiplier it advertises ` +
+       `(combo layer x${+paid.fSetter.toFixed(4)} = mark x${paid.mark} times card x${paid.mult})`,
+      paid.fSetter === paid.mark * paid.mult);
     // THE ROW THAT SAYS WHICH BODY IT READS. Under the old card this was the arm that paid and
     // the one above was the arm that did not; they have swapped, and asserting both is what
     // makes that a fact rather than a claim.
-    ok(`the body that SWINGS holding it pays nothing (${paid.swingerHolds.toFixed(1)} against ${paid.plain.toFixed(1)})`,
-      near(paid.swingerHolds / paid.plain, 1, 0.06));
-    ok(`and a mark with no owner pays the holder nothing (${paid.orphan.toFixed(1)} against ${paid.orphanControl.toFixed(1)} unheld)`,
-      near(paid.orphan / paid.orphanControl, 1, 0.06));
+    ok(`the body that SWINGS holding it pays nothing (layer x${+paid.fSwinger.toFixed(4)}, the mark alone, ` +
+       `${paid.swingerHolds.toFixed(1)} against ${paid.plain.toFixed(1)})`,
+      paid.fSwinger === paid.mark);
+    ok(`and a mark with no owner pays the holder nothing (layer x${+paid.fOrphan.toFixed(4)}, ` +
+       `${paid.orphan.toFixed(1)} against ${paid.orphanControl.toFixed(1)} unheld)`,
+      paid.fOrphan === paid.mark);
+    // The control, so the three above are read against a cashed mark that nobody's card touched
+    // rather than against the absence of a layer.
+    ok(`an unheld mark is the mark and nothing else (layer x${+paid.fPlain.toFixed(4)})`,
+      paid.fPlain === paid.mark);
 
     // ── A setter who has fallen still owns the mark ─────────────────────────────
     // loseOperator takes the fallen off playerRoster and leaves the body on the field, so the
@@ -208,10 +252,20 @@ module.exports = {
     const card = await page.evaluate(() => {
       const c = SIG_PERKS.find(p => p.id === 'CALLED_SHOT');
       const sib = SIG_PERKS.filter(p => p.fork === (c || {}).fork).map(p => p.id);
-      return { desc: (c || {}).desc, fork: (c || {}).fork, sib };
+      return { desc: (c || {}).desc, fork: (c || {}).fork, sib, mult: CALLED_SHOT_MULT };
     });
     ok(`CALLED SHOT's card describes the mark rather than the swing ("${card.desc}")`,
       /mark this sniper places/i.test(card.desc) && !/to marked targets/i.test(card.desc));
+    // AND THE NUMBER ON IT IS THE NUMBER IT IS PAID AT. Found by mutating CALLED_SHOT_MULT to
+    // 1.30 while checking the exact rows above: the whole suite stayed green and the card went
+    // on promising 25%. The card's figure was written by hand and nothing had ever read it back
+    // against the dial - the same divergence M08b and N02 each found once, where the code was
+    // right and the doc was quietly wrong. Read off the card's own text rather than asserted as
+    // a literal, so moving the dial moves this row instead of leaving a lie on the perk screen.
+    const advertised = Number((/(\d+(?:\.\d+)?)%/.exec(card.desc) || [])[1]);
+    ok(`and the percentage on it is the dial it is paid at (card says ${advertised}%, ` +
+       `CALLED_SHOT_MULT is ${card.mult})`,
+      Number.isFinite(advertised) && Math.abs(1 + advertised / 100 - card.mult) < 1e-9);
     ok(`and it still forks against SPOTTER_NETWORK, one trigger and two currencies (${card.sib.join(' / ')})`,
       card.sib.includes('SPOTTER_NETWORK') && card.sib.includes('CALLED_SHOT'));
   }

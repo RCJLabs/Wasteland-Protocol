@@ -38,6 +38,73 @@
 // needs samples before it settles. Twenty resolves a 3 sd margin comfortably and is what the K03
 // sweep used; ten will find the rows already firing and not much else.
 
+// ── THE O09 SWEEP: TWO RED IN TWENTY, AND THIS FILE REPORTED ONE ───────────────────────
+// Run because two distinct rows had gone red in four batteries and the next tuning item was
+// about to trust a single battery. Twenty batteries on the tree at 478942f, 83 minutes. 4,645
+// assertions, 349 printing a number that moves, 34 joined to a bound.
+//
+// THE FIRST FINDING IS THIS FILE. The batteries on disk hold two FAIL lines. The report named
+// one. `fired` was `rows.filter(r => r.fails > 0)`, and `rows` is what survives three filters
+// aimed at MEASUREMENT: the suite must assert the same number of times every battery, the label
+// must print the same count of numbers, and at least one of those numbers must MOVE. 166's mark
+// row prints the multiplier it WANTS - `(want x1.25)`, a constant the suite wrote down - and
+// judges a ratio it never prints. Its one column had sd 0, `if (!cols.length) continue` dropped
+// it, and the row the sweep was RUN FOR was invisible to the sweep.
+//
+// A row near a bound is an estimate and needs a number that moves. A row that fired is an event
+// and needs nothing. The red list is counted off the raw batteries now. Held by forcing all
+// three shapes the old list dropped, against both versions of this file:
+//
+//   a red on a constant-printing row   old 0/20   new 2/20   (the real one, plus a planted second)
+//   a red on a ragged label            old absent new listed (151-a-bar, whose number count moves)
+//   a red inside a wobbly suite        old absent new listed (suite dropped from keying, red kept)
+//
+// WHAT THE TWENTY ACTUALLY SAY, against the two rows #213 was opened on:
+//
+//   101  fight-log pair       0/20    not reproduced; 2 sightings before this, 0 in the 20
+//   166  mark multiplier      1/20    REPRODUCED - this is the one the report hid
+//   168  combo oil cost       1/20    new, first sighting, not seen before or since
+//
+// 166 IS K03's SHAPE AND THE FIRST SINCE K03 WHOSE ARITHMETIC SUPPORTS IT. Reconstructed off the
+// kept runs - the row above it prints the ratio this row judges - the measured ratio is mean
+// 1.2370, sd 0.0249, against a band of [1.19, 1.31]. The LOW edge sits 1.89 sd out. A one-tailed
+// 1.89 sd predicts about 1 battery in 34; one in twenty was observed, and an independent probe at
+// the shipped sample put it at 3 in 60. Those reconcile, which is exactly what #200's did not (1
+// in 1,240 predicted against 1 in 26 seen, and it correctly moved no bound). K03 acted on 83-
+// ground at 2.7 sd. This is worse than that one was.
+//
+// And measuring the row that fired found the two standing beside it, neither of which has fired:
+// the same block judges `swingerHolds/plain` at 2.33 sd and `orphan/orphanControl` at 4.13 sd,
+// all three ratios of two sampled means against the same +/- 0.06. One red row was the visible
+// end of three.
+//
+// ALL THREE ARE NOW EXACT AND NO BOUND WAS WIDENED. resolveAction already records the factors of
+// the blow it is resolving - the breakdown the player is shown - and files them on hitLog. The
+// 'combo' layer of a cashed mark IS the product these rows are about: 1.5 with the mark alone,
+// 1.875 when the setter held the card, three times in three while the damages swung 67/70/67 and
+// 49/47/51. Read there the claim carries no damage roll, so it needs no tolerance and no sample.
+// Raising the sample was measured as the alternative and rejected on both counts: AVG 24/96/240/
+// 600 gives sd 0.0262/0.0141/0.0090/0.0058 for 1.25s/4.75s/13.7s/45.8s of battery, so 6 sd costs
+// AVG=240 and +12.4s - and it never touches the second defect the same table shows, that the MEAN
+// climbs 1.2383 -> 1.2400 -> 1.2450 -> 1.2483 with the sample because a ratio of two noisy means
+// is biased. At the shipped AVG the row was judged against a centre 0.012 low, a fifth of its own
+// tolerance gone before any noise.
+//
+// A FOURTH THING FELL OUT OF MUTATING THE FIX. Moving CALLED_SHOT_MULT to 1.30 left all 24 rows
+// green while the perk card went on promising 25%: the figure on the card was written by hand and
+// nothing read it back against the dial. Pinned now, and held in both directions.
+//
+// AND THE TOP OF THE HEADROOM LIST WAS ALREADY ANSWERED HERE. 155's badge-growth row came back
+// 2.8 sd below its `<= 24`, seen 4 to 14 - the same row, the same sd and the same range the M04
+// record below predicts and explains as bimodal and one-sided, and which 155 itself carries a
+// comment about. Filing it would have been re-opening a closed item off a summary line. The check
+// that catches that costs one grep: read the row's own comment before believing the ranking.
+//
+// THE LESSON IS ABOUT THE INSTRUMENT, NOT THE GAME. A list built by filtering for one purpose
+// cannot be reused for another without re-asking what the filters were for. Three filters that
+// are exactly right for "which rows can be measured" were silently deciding "which rows went
+// red", and the answer they gave was wrong in the direction that matters - quietly short.
+
 // ── THE N-SWEEP: TWENTY BATTERIES, NOTHING RED, AND NEITHER ROW IT WAS RUN FOR ─────────
 // Run to settle two rows that had each gone red once under a full battery and passed ~20 of 20
 // in isolation: 87-recruit-routing's aware-vs-blind row, and 101-what-the-save-keeps' pre-fallen
@@ -451,11 +518,10 @@ for (const b of batteries) {
     for (const r of b) {
         if (!steady.has(r.suite)) continue;
         const k = keyOf(r);
-        if (!series.has(k)) series.set(k, { suite: r.suite, labels: [], runs: [], fails: 0 });
+        if (!series.has(k)) series.set(k, { suite: r.suite, labels: [], runs: [] });
         const s = series.get(k);
         s.labels.push(r.label);
         s.runs.push(r.nums);
-        if (r.verdict === 'FAIL') s.fails++;
     }
 }
 // Cut the shared head back to a word boundary: without it a head ends mid-number wherever two
@@ -526,7 +592,33 @@ for (const s of series.values()) {
 // ── The report ─────────────────────────────────────────────────────────────────────────
 const paired = rows.filter(r => r.closest);
 paired.sort((a, b) => Math.abs(a.closest.sd) - Math.abs(b.closest.sd));
-const fired = rows.filter(r => r.fails > 0);
+
+// THE RED LIST IS COUNTED OFF THE RAW BATTERIES, not off the rows that survived keying. It read
+// `rows.filter(r => r.fails > 0)`, which put a red through three filters first: its suite had to
+// assert the same number of times every battery, its label had to print the same COUNT of numbers
+// every battery, and at least one of those numbers had to MOVE. The last one is the one that bit.
+// 166's mark row prints the multiplier it WANTS - `(want x1.25)`, a constant the suite wrote down
+// - and judges a ratio it never prints, so its only column had sd 0, `if (!cols.length) continue`
+// dropped the series before it ever reached `rows`, and the O09 sweep reported one red when the
+// twenty batteries on disk held two. The one it hid was the row the sweep was run for.
+//
+// A row NEAR a bound is a row this file measures, and a measurement needs a number that moves. A
+// row that has actually FIRED needs nothing of the sort: it is not an estimate, it is an event,
+// and the header calls that list "what went red" with no qualification attached. So it is counted
+// here off every PASS/FAIL line the batteries printed - keyed by suite and by the label with its
+// numbers blanked, so one row's twenty spellings are one row.
+const fired = [];
+{
+    const by = new Map();
+    for (const b of batteries) for (const r of b) {
+        if (r.verdict !== 'FAIL') continue;
+        const k = r.suite + '\u0000' + r.label.replace(NUM, '#');
+        if (!by.has(k)) by.set(k, { suite: r.suite, label: r.label, n: 0 });
+        by.get(k).n++;
+    }
+    for (const v of by.values()) fired.push(v);
+    fired.sort((x, y) => y.n - x.n);
+}
 
 console.log('\nbatteries read                ' + batteries.length);
 console.log('suites keyed by position      ' + steady.size
@@ -538,7 +630,7 @@ console.log('labels whose number count moves ' + ragged.length);
 if (fired.length) {
     console.log('\nRED IN AT LEAST ONE BATTERY (' + fired.length + '):');
     for (const r of fired) {
-        console.log('  ' + r.fails + '/' + batteries.length + '  ' + r.suite + ' - ' + r.norm.slice(0, 100));
+        console.log('  ' + r.n + '/' + batteries.length + '  ' + r.suite + ' - ' + r.label.slice(0, 100));
     }
 }
 
