@@ -2549,6 +2549,13 @@ const ROOT = path.join(__dirname, '..');
 // runStats.retreats and runStats.retreatsFailed that no report reads because nothing generates
 // them. A `--retreat` arm is one item, and it is the only way to find out whether I01 bought
 // anything. NOT BUILT HERE - an audit that ships a measurement is an audit that stopped auditing.
+//   ^^ BUILT AND ANSWERED BY O16, the item directly above. The arm exists, the blocker was one
+//   line (I02 had already built engineOpened for it), and taking the door is a well-powered
+//   null: 500 presses a career, 700 scrap a run, and not one outcome row moves. Marked rather
+//   than deleted because the paragraph is why O16 exists - and because this is the SECOND time
+//   in two items that an O-series closing line was answered by the item that followed it. The
+//   first was O10's, marked the same way. A closing sentence written in the present tense goes
+//   stale the moment the next item picks it up, and nothing in this file re-reads them.
 //
 // THREE, STATED CAREFULLY BECAUSE THE OBVIOUS VERSION IS WRONG. The bench job has been measured
 // ONCE, and never on its own. G13 ran `--bench scout` bundled with `--tactics smart` and
@@ -6239,10 +6246,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // ever signed on". Retreat has never had that treatment, and this file has never pressed the
       // button, so nothing has ever checked.
       //
-      // Nothing here takes the retreat - this is the shipped baseline, measured without a policy
-      // on it, so the split below describes the game rather than a robot's taste. Splitting
-      // "the door was relevant" from "the door was affordable" is H10's lesson: a door nobody
-      // walks through is an empty purse or a closed gate before it is ever a dull offer.
+      // This census runs BEFORE the taking policy below and books every losing moment, so on the
+      // default arm it is the shipped baseline - the split describes the game rather than a
+      // robot's taste. Splitting "the door was relevant" from "the door was affordable" is H10's
+      // lesson: a door nobody walks through is an empty purse or a closed gate before it is ever
+      // a dull offer.
+      //
+      // O16: AND UNDER `--retreat losing` IT IS NOT A BASELINE, which the row has to say rather
+      // than leave to whoever reads it. The counts are still taken at the right moment, but a run
+      // that has been breaking off is a different run by the second sector - different purse,
+      // different depth, different nodes - so affordability on that arm describes the arm, not
+      // the game. Compare arms on it at your peril; the default is the one I01's figures came
+      // from and the one they are still comparable to.
       //
       // The gate is asked of the engine rather than rebuilt here. canRetreat() ends in
       // `scrap >= retreatCost()`, so lifting the purse and asking it again reads every OTHER
@@ -8726,8 +8741,9 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   const evOpt = tot('evOptions'), evBk = tot('evBookable'), evCould = tot('evCouldBook');
   // I01: the second chance, and whether it is on sale. `open` is every moment a squad was losing
   // and the engine would have let it break away but for the money; `afford` is how many of those
-  // it could actually pay for. Nothing in this file takes the retreat, so this is the door as the
-  // game offers it, not as a policy uses it.
+  // it could actually pay for. On the default arm nothing presses the button, so this is the door
+  // as the game offers it rather than as a policy uses it - O16 added `--retreat losing`, which
+  // does press it, and the taking rows below only print on that arm.
   {
     const open = tot('retreatOpen'), afford = tot('retreatAfford');
     const all = a => results.flatMap(r => r[a] || []);
