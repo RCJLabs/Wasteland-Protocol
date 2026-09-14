@@ -2433,6 +2433,64 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O10: THE DOCTRINE CENSUS, READ AT LAST - AND TWO DEAD CARDS THAT ARE NOT DEAD ──────
+// This block has printed since G13 and nobody had ever run it and written the numbers down. The
+// first 150-expedition career taken of it, default policy:
+//
+//   musters with a live offer   114 of 150        runs that took one       114 of 150
+//   offers live, mean of 3      1.03              still keeping it at end  114 of 114
+//
+//   OLD_GUARD        offered 62, live 61  (98%)   THE_WALL      offered 55, live 50  (91%)
+//   BROAD_SPECTRUM   offered 56, live 22  (39%)   FIELD_SURGERY offered 68, live 17  (25%)
+//   CONSCRIPTS       offered 63, live  5  ( 8%)   NO_HANDS      offered 76, live  0
+//   LIGHT_ORDER      offered 70, live  0
+//
+// Read flat that is two doctrines dead in a hundred and fifty expeditions and, at 1.03 live of
+// three cards offered, barely a choice at the muster.
+//
+// IT IS D05's TRAP AND I NEARLY FILED IT. `--draft line` opens every muster on a BRUISER or a
+// SHOTGUNNER and then takes a MEDIC 70% of the time. NO_HANDS forbids melee and both openers
+// carry it. LIGHT_ORDER caps the line at 55 health and a Bruiser is 80. FIELD_SURGERY forbids a
+// Medic. Three of the four lowest rows have one cause and it is this file's first pick.
+//
+// The question a career cannot answer is whether a line EXISTS that keeps each card, and that
+// one needs no sampling: ten classes, 120 three-class lines, six arrangements each, against each
+// doctrine's own holds(). Shipped as suite 172 and measured there rather than estimated here:
+//
+//   FIELD_SURGERY  504 of 720      BROAD_SPECTRUM  234      CONSCRIPTS  210
+//   THE_WALL       170             NO_HANDS        120      LIGHT_ORDER 120      OLD_GUARD 6
+//
+// NO_HANDS and LIGHT_ORDER are keepable by 120 arrangements each - a sixth of the space - and go
+// live zero times. Nothing is wrong with either card. What the census measures is the draft.
+//
+// AND THE FIRST CUT OF THAT ENUMERATION FELL INTO THE SAME TRAP FROM THE OTHER SIDE, which is
+// the part worth keeping. Built on level-1 bodies with an empty career it reported OLD_GUARD
+// keepable by NO line and CONSCRIPTS by EVERY line. Both are the fixture: OLD_GUARD reads
+// masteryRank off career mastery, CONSCRIPTS reads doctrineFavourites off fielding history, and
+// an empty save makes the first impossible and the second free. Judged instead at the state each
+// one's own offerable() gate waits for, they come back 6 and 210 - and 6 is right, because three
+// veteran classes make exactly one line, six ways round. I caught D05's trap in the career and
+// walked into it in the instrument built to check the career, inside an hour.
+//
+// WHAT SHIPPED. The census line now NAMES ITS ARM - "live = the offer THIS draft policy's line
+// could keep - draft line" - which is the fix N04 and D06 each got for the same reason, and the
+// one sentence that stops the next reader filing what I nearly filed. Suite 172 holds the
+// property the career cannot see: every card in the table is keepable by some line, and none is
+// keepable by every line. Held by three mutations - a health cap below every class in the game,
+// a rule inverted to hold on everything, and a lowered offer gate.
+//
+// AND MUTATING THAT GATE FOUND A REAL COUPLING NOBODY HAD WRITTEN DOWN. OLD_GUARD_VETS is how
+// many classes must reach veteran before the card is offered; holds() then asks all DEPLOYED
+// line slots to be veterans. At OLD_GUARD_VETS = 2 the muster offers a card a two-veteran save
+// can never keep - the exact offerable-but-unkeepable state the table's own comment says the
+// composition doctrines were added to end. The constants are three lines apart and neither
+// mentions the other; they are equal today and that is the only reason the card works. Pinned.
+//
+// NO DIAL MOVES, AND THE DRAFT POLICY IS LEFT ALONE ON PURPOSE. `--draft line` is the default
+// precisely so runs measured before doctrines existed stay comparable, and `--draft doctrine`
+// already exists for the other question. What a doctrine is WORTH is still unmeasured: G13 only
+// ever ran it bundled with two other levers, where nothing separated under D17.
+
 // ── O08: THE WOUNDED RUN IS ALREADY BUILT - AND WHY FOUR PITCHES IN A ROW WERE WRONG ───
 // Filed as a phase: 71% of runs wipe, so the middle of a collapsing run is the most-played part
 // of the game and the least designed - triage, carrying wounded, choosing what to abandon.
@@ -7108,6 +7166,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // Whether the muster put a real question is the thing to read first. Four prohibitions
     // greyed out is not a choice, and a block that only printed when somebody TOOK one could
     // not say so - it just did not print.
+    //
+    // O10: AND "LIVE" IS A FACT ABOUT THE DRAFT POLICY, NOT ABOUT THE GAME. It counts offers
+    // this file's line could have kept, so `--draft line` - which opens on a Bruiser or a
+    // Shotgunner and then takes a Medic 70% of the time - reports NO_HANDS and LIGHT_ORDER at
+    // zero live over 150 expeditions, because both openers carry melee and a Bruiser is 25
+    // health over LIGHT ORDER's cap. Enumerated exhaustively in suite 172 rather than sampled,
+    // each is keepable by 120 of 720 lines. A zero here is the policy's first pick, and the
+    // arm is named on the line so nobody reads it as a dead card. D05's trap, and this block
+    // was one careless sentence away from it.
+    console.log(`  (live = the offer THIS draft policy's line could keep - draft ${DRAFT})`);
     if (offered.length) {
       const liveCounts = offered.map(r => (r.doctrineLive || []).length);
       const anyLive = liveCounts.filter(c => c > 0).length;
