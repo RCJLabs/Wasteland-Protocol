@@ -2440,6 +2440,59 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O19: THE DOCTRINE RE-ASKS NOW - AND THE CENSUS THAT FOUND THE HOLE WAS BROKEN ──
+// O18 closed on a plan: call checkDoctrine on promotion and on gear, re-measure, then decide the
+// card's edge. The first half is done and the second half turned into something else.
+//
+// WHAT SHIPPED, three changes and the third is the one that matters:
+//   awardXp re-asks when the mastery RANK moves - gated on the rank rather than called on every
+//   award, because awardXp fires on every kill and doctrineHolds walks the line each time.
+//   equipGear re-asks after a piece goes on.
+//   carriesMelee reads reach through moveReachFor instead of off the ability's declaration. The
+//   first two cannot help without this one: a deck read cannot see a mod, and moveReachFor is
+//   the function the fight itself asks. One source of truth for reach.
+//
+// AND TWO THINGS O18 GOT WRONG, both found by trying to construct what it asserted.
+//
+// THE PROMOTION HOLE NEEDS A CHOICE. O18 said a line legal at the muster stops being legal as
+// the career runs. It does not: benchedFor DEFAULTS TO BENCHING THE FOURTH, so ranking up alone
+// changes nothing and the first cut of the row went red saying so. The hole opens only when the
+// operator BRINGS the fourth by benching a basic - a choice on the promotion screen, which this
+// file's applyBench makes for every rank III body it fields and a player may never make.
+//
+// THE MOD HOLE IS REAL AND CONTRIBUTED NOTHING. This file never fits a BAYONET. So whatever the
+// leak was, the mod half was not in it - a hole a PLAYER can walk into that the instrument
+// cannot, which is D05's trap with the sides swapped.
+//
+// AND THEN THE MEASUREMENT REFUSED TO CONFIRM ANY OF IT. Three careers with the fix in:
+// "still keeping it at the end" stayed 150 of 150, and the squad's melee share stayed at
+// 22-24.5%. Nothing broke. Chasing that found the real defect, and it is mine:
+//
+//   O15's census asked moveReachFor(pendingAction, attacker) for the OUTGOING half. pendingAction
+//   is set to null at the top of processTurn and again after every resolve, so by the time a blow
+//   reaches the damage door it is routinely null or stale. applyDamageHit is handed abilityStr -
+//   the move actually being thrown - and that is what both the door and the pierce shortcut read
+//   now.
+//
+// SUITE 170 WAS PASSING BECAUSE OF THE BUG, which is how it survived two items. Its fixture set
+// the global pendingAction and passed null as abilityStr; the census read the global the test
+// had set rather than the move the engine resolves. Fixed to hand the door the move, and it then
+// reads melee correctly.
+//
+// SO TWO PUBLISHED FIGURES ARE WITHDRAWN, marked ^^ at their own records: O15's "the squad
+// throws 37.7% of its damage in melee" and the 5.5:1 trade shape built on it, and O18's "22-27%
+// of a NO HANDS career is melee". THE INCOMING FOUR BUCKETS ARE UNAFFECTED - they read
+// attacker.range and gridPos, properties of the bodies rather than a global - so 33.8-34.1% onto
+// the front rank and the 6.8% the edge covers both stand.
+//
+// WHAT IS SETTLED: the doctrine re-asks, carriesMelee and the fight agree about reach, and both
+// holes are held by construction in suite 79 rather than by a sampled figure.
+// WHAT IS NOT: how much melee a NO HANDS line actually throws, and therefore what the card is
+// worth. That needs the corrected census re-run, and it is the next item rather than this one -
+// a measurement taken to confirm a fix should not also be the measurement the fix is judged by.
+//
+// NO DIAL MOVES beyond the three above, none of which is a tuning number.
+
 // ── O18: NO HANDS CANNOT BE PRICED, BECAUSE ITS RULE DOES NOT HOLD IN PLAY ─────────
 // O15 measured the card's trade for the first time and the owner picked the direction: pay in
 // the currency it charges in. The line gives up its knives, so what it still carries hits
@@ -2467,14 +2520,28 @@ const ROOT = path.join(__dirname, '..');
 // NO HANDS career deals is MELEE, on a card whose entire rule is that nobody in the line owns a
 // melee ability, taken 150 of 150 and "still keeping it at the end" 150 of 150. Two holes, and
 // neither is visible to the rule:
+//   ^^ O19 WITHDRAWS THE 22-27% TOO, and for the same reason: it is the same broken census. What
+//   remains true is that the two holes below are real - both are constructed in suite 79 - and
+//   that a doctrine could not be priced while they were open. How much melee a NO HANDS line
+//   actually threw is now unknown and needs the corrected census re-run.
 //
 //   carriesMelee reads deckFor(), and deckFor GROWS - at mastery rank 3 it appends the class's
 //   fourth ability, and the Scavenger's fourth is SHIV, reach melee. A line legal at the muster
 //   stops being legal as the career runs.
+//     ^^ O19 CORRECTS THIS, having tried to construct it and failed on the first attempt: rank
+//     alone changes nothing, because benchedFor DEFAULTS TO BENCHING THE FOURTH. The hole needs
+//     the operator to BRING the fourth by benching a basic instead - a choice on the promotion
+//     screen. This file's own applyBench makes that choice for every rank III body it fields,
+//     which is why the leak showed up in the measurement above; a player who never touches the
+//     screen is safe from this half.
 //
 //   moveReachFor returns melee for PIPE_RIFLE on any body wearing a BAYONET. The engine's own
 //   comment says so - "the same move can be melee in one pair of hands and ranged in another" -
 //   and a deck read cannot see a mod at all.
+//     ^^ O19: REAL, AND IT CONTRIBUTED NOTHING TO THE FIGURE ABOVE. This file never fits a
+//     BAYONET - the word appears in no policy in it - so the 22-27% was the promotion half
+//     alone. The mod half is a hole a PLAYER can walk into and this instrument cannot, which is
+//     the mirror of D05's trap and worth naming as one.
 //
 // AND NOTHING RE-ASKS: checkDoctrine has three callers, two in the draft and one in assignSlot.
 // Not promotion, not gear. The promise is checked when it is made and when a body changes slot,
@@ -2741,6 +2808,13 @@ const ROOT = path.join(__dirname, '..');
 // squad's melee away. The squad's melee is 37.4% / 38.0% of the damage it deals.
 //
 //   NO HANDS gives up ~37.7% of output to get 6.8% off what it takes.
+//     ^^ O19 WITHDRAWS THE 37.7%. The outgoing half of this census classified reach by asking
+//     moveReachFor(pendingAction, ...) - and pendingAction is nulled at the top of processTurn
+//     and after every resolve, so at the damage door it is routinely null or stale. mitigate is
+//     handed abilityStr, the move actually being thrown; that is what it reads now. The INCOMING
+//     four buckets are unaffected - they read attacker.range and gridPos, which are properties of
+//     the bodies rather than a global - so 33.8-34.1% and the 6.8% stand. What the squad throws
+//     in melee has to be re-measured, and with it the 5.5:1 shape this item concluded on.
 //
 // Lopsided about 5.5 to 1. Neither number is wrong on its own - the ask is a third of your
 // damage and the pay is a real defensive edge - but the card is trading offence for defence in a

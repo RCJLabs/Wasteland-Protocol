@@ -830,6 +830,11 @@ function equipGear(charId, gearId) {
     gearStash.splice(idx, 1);
     ch[slotKey] = g.id;
     if (g.apply) g.apply(ch);
+    // O19: and a mod can change the REACH of a move without touching the deck. moveReachFor
+    // returns melee for PIPE_RIFLE on a body wearing a BAYONET - the comment above that function
+    // says so in as many words - so fitting one puts melee in the hands of a line whose deck
+    // still reads as clean. carriesMelee cannot see a mod, so the ask has to happen here.
+    checkDoctrine();
     // K06: which piece went on, and for how long. The trinket slot sells one trade three times
     // over - a resistance against +3 DMG or +15 HP - and a resistance pays only on the blows of
     // its own type, which is 48% phys / 32% bio / 20% energy (K08's figure; K02's 13% for bio
@@ -2560,8 +2565,15 @@ const OLD_GUARD_VETS = 3;      // how many classes must reach it before the doct
 // than asserted here. Two things a hand-kept list gets wrong: the Shotgunner reads as a
 // front-liner and is two-thirds ranged, and the Scavenger picks up a knife at dossier rank III
 // - which they can bench, so the answer depends on the loadout and not on the class.
+// O19: asked through moveReachFor rather than off the ability's declared reach, because those
+// two are not the same question. MOVE_REACH is derived from the same declarations, so for every
+// move but one they agree - and the one is the BAYONET, which makes PIPE_RIFLE a melee swing in
+// the hands wearing it. moveReachFor's own comment says why that exists: "the same move can be
+// melee in one pair of hands and ranged in another." A deck read cannot see a mod, so NO HANDS
+// was signing off a line that went on to throw melee, and O18 measured the leak at 22-27% of a
+// career's damage. One source of truth for reach now, and it is the one the fight uses.
 function carriesMelee(ch) {
-    return deckFor(ch).some(a => a.reach === 'melee');
+    return deckFor(ch).some(a => moveReachFor(a.move, ch) === 'melee');
 }
 function baseHpOf(ch) {
     const t = ROSTER_TEMPLATE.find(r => r.classType === ch.classType)
@@ -12533,8 +12545,15 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     // the move being thrown rather than off the body throwing it - a Scavenger who picked up a
     // knife at rank III is a melee swing when they use it and a rifle shot when they do not,
     // which is the same distinction carriesMelee draws off the deck.
+    // O19: READ OFF THE MOVE BEING RESOLVED, not off the global. The first cut asked
+    // moveReachFor(pendingAction, ...) - and pendingAction is set to null at the top of
+    // processTurn and again after every resolve, so by the time a blow reaches this door it is
+    // routinely null or stale. mitigate is handed abilityStr, which IS the move being thrown;
+    // that is what the question was always about. O15's outgoing share and O18's "22-27% of a
+    // NO HANDS career is melee" were both read through the broken version - see the corrections
+    // at both records.
     const meleeOut = !!(!t.isPlayer && attacker && attacker.isPlayer &&
-                        moveReachFor(pendingAction, attacker) === 'melee');
+                        moveReachFor(abilityStr, attacker) === 'melee');
     if (hasDoctrine('NO_HANDS') && t.isPlayer && t.gridPos === 1 && attacker && !attacker.isPlayer
         && attacker.range === 'melee') cd = Math.floor(cd * 0.8);
     if (hasRelic('CHEM_ETCHER') && !t.isPlayer && (t.corrodedTurns || 0) > 0) cd = Math.floor(cd * 1.25);
@@ -12783,7 +12802,7 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
                                   meleeIn: !!(t.isPlayer && attacker && !attacker.isPlayer && attacker.range === 'melee'),
                                   atFront: !!(t.isPlayer && t.gridPos === 1),
                                   meleeOut: !!(!t.isPlayer && attacker && attacker.isPlayer &&
-                                               moveReachFor(pendingAction, attacker) === 'melee') }
+                                               moveReachFor(abilityStr, attacker) === 'melee') }
                                : mitigate(attacker, t, calcDmg, atkType, abilityStr);
     let cut = figure(target);
     let { n: netDmg, rv: resistValue, ac: armourTaken, cd: preSoak } = cut;
@@ -13675,7 +13694,17 @@ function awardXp(char, amount) {
     // CONSCRIPTS pays in the currency the problem is made of: the classes you never field are
     // the ones with no dossier, and a dossier is what makes a class worth fielding again.
     // Only the dossier doubles - the operator's own level curve is untouched.
+    // O19: A PROMOTION CAN CHANGE WHAT THE LINE OWNS. deckFor appends the class's fourth ability
+    // at mastery rank 3, and five of the ten fourths are melee - so a line that legally kept
+    // NO HANDS at the muster stops keeping it the moment somebody ranks up, and until O18
+    // nothing re-asked. Measured there: 22-27% of the damage a NO HANDS career dealt was melee,
+    // on a card taken 150 of 150 and reported as kept 150 of 150.
+    //
+    // Gated on the RANK moving rather than called on every award, because awardXp fires on every
+    // kill and doctrineHolds walks the line each time.
+    const rankWas = masteryRank(char.classType);
     noteMastery(char.classType, hasDoctrine('CONSCRIPTS') && char.gridPos > 0 ? amount * 2 : amount);
+    if (masteryRank(char.classType) !== rankWas) checkDoctrine();
     char.xp += amount;
     while (char.xp >= char.xpToNext) {
         char.level++; char.xp -= char.xpToNext; char.xpToNext = Math.floor(char.xpToNext * XP_CURVE); char.perkPoints++;

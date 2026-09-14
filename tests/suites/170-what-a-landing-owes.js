@@ -117,8 +117,12 @@ module.exports = {
       // Then one blow each way, on a field where the reach of both is known.
       foe.range = 'melee'; who.gridPos = 1;
       applyDamageHit(foe, who, 100, 'phys', null);
-      activeIndex = turnQueue.indexOf(who); pendingAction = 'SCRAP_BLADE';
-      applyDamageHit(who, foe, 100, 'phys', null);
+      // O19: the MOVE is handed to the door as abilityStr, which is what the census reads now.
+      // This fixture used to set the global pendingAction and pass null here, and it passed -
+      // which is exactly how the bug survived: the census was reading the global the test set
+      // rather than the move the engine resolves. Passing null now correctly reads as ranged.
+      activeIndex = turnQueue.indexOf(who); pendingAction = null;
+      applyDamageHit(who, foe, 100, 'phys', 'SCRAP_BLADE');
       return { asked, inb: { ...runStats.reach }, outb: { ...runStats.out },
                blows: runStats.mit.blows || 0 };
     });
@@ -183,7 +187,7 @@ module.exports = {
     const ret = keysOf((src.match(/return \{ n, rv, ac, cd, cover, thick[^}]*\}/) || [''])[0]);
     const pierceFig = (src.match(/pierce \? \{ n: Math\.max\(1, t\.hp\)[\s\S]*?\}/) || [''])[0];
     const pk = keysOf(pierceFig).filter(k => !['Math', 'max', 't', 'hp', 'isPlayer', 'attacker',
-      'range', 'gridPos', 'moveReachFor', 'pendingAction', 'null', 'false', 'true'].includes(k));
+      'range', 'gridPos', 'moveReachFor', 'abilityStr', 'null', 'false', 'true'].includes(k));
     ok(`a pierced blow is built with the same shape so the door can take it ` +
        `(${ret.join(',')} against ${pk.join(',')})`,
       ret.length > 0 && ret.every(k => pk.includes(k)) && pk.every(k => ret.includes(k)));

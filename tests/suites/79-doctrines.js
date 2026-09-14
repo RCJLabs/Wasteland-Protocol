@@ -241,12 +241,58 @@ module.exports = {
     ok(`and a BAYONET makes the rifle a melee swing without touching the deck ` +
        `(PIPE_RIFLE ${leak.plain} -> ${leak.bayonet})`,
       leak.plain === 'ranged' && leak.bayonet === 'melee');
-    // THE ROW THAT SAYS WHY IT IS NEVER CAUGHT. Written against the caller list rather than a
-    // count, so adding a call from promotion or gear - the fix - reds it and asks for an update.
+    // O19: AND BOTH HOLES ARE CLOSED. The row here used to assert the opposite - that
+    // checkDoctrine was asked from three places, none of them promotion or gear - and it reddened
+    // the moment the calls went in, which is what it was written for. It now holds the fix.
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', '..', 'game.js'), 'utf8');
-    const callers = (src.match(/checkDoctrine\(\)/g) || []).length - 1;   // minus the declaration
-    ok(`checkDoctrine is asked from ${callers} places, none of them promotion or gear`,
-      callers <= 3 && !/masteryRank[\s\S]{0,400}checkDoctrine\(\)/.test(src));
+    ok('a promotion re-asks the doctrine, gated on the RANK moving rather than every award',
+      /const rankWas = masteryRank\(char\.classType\);[\s\S]{0,260}?if \(masteryRank\(char\.classType\) !== rankWas\) checkDoctrine\(\);/.test(src));
+    ok('and fitting a piece of gear re-asks it too',
+      /if \(g\.apply\) g\.apply\(ch\);[\s\S]{0,420}?checkDoctrine\(\);/.test(src));
+    // THE ONE THAT MATTERS MORE, because the call above cannot help without it: carriesMelee has
+    // to ask the same question the fight asks. A deck read cannot see a mod.
+    ok('and carriesMelee reads reach through moveReachFor rather than off the declaration',
+      /function carriesMelee\(ch\) \{\s*\n\s*return deckFor\(ch\)\.some\(a => moveReachFor\(a\.move, ch\) === 'melee'\);/.test(src));
+
+    // ── AND BOTH MECHANISMS, CONSTRUCTED ────────────────────────────────────────────────
+    // Forced rather than sampled: O18 found this at 150 expeditions a career and it took a
+    // paired measurement to notice. Two lines of setup reproduce each half exactly.
+    const closed = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      const scav = playerRoster.find(c => c.classType === 'SCAVENGER');
+      const out = {};
+      // THE MOD. A clean Scavenger, then a bayonet on the same body.
+      scav.weaponMod = null;
+      out.cleanDeck = carriesMelee(scav);
+      scav.weaponMod = 'BAYONET';
+      out.withBayonet = carriesMelee(scav);
+      scav.weaponMod = null;
+      // THE PROMOTION, and it needs one more thing than O18's write-up said. deckFor appends the
+      // fourth at rank 3 - the Scavenger's is SHIV, melee - but benchedFor DEFAULTS TO BENCHING
+      // THE FOURTH, so rank alone changes nothing and the first cut of this row went red saying
+      // so. The hole opens only when the operator brings the fourth by benching something else,
+      // which is a choice the player makes on the promotion screen and which the simulator's own
+      // policy makes for every rank III body it fields.
+      const before = mastery.SCAVENGER, benchWas = scav.benchedMove;
+      mastery.SCAVENGER = 10 ** 9;
+      out.rankNow = masteryRank('SCAVENGER');
+      scav.benchedMove = null;                       // the default: the fourth sits out
+      out.rank3Default = carriesMelee(scav);
+      scav.benchedMove = 'PIPE_RIFLE';               // bring the fourth instead, as the sim does
+      out.rank3Bringing = carriesMelee(scav);
+      out.deckThen = deckFor(scav).map(a => a.move);
+      mastery.SCAVENGER = before; scav.benchedMove = benchWas;
+      return out;
+    });
+    ok(`a bayonet alone puts melee in a clean Scavenger's hands ` +
+       `(${closed.cleanDeck} -> ${closed.withBayonet})`,
+      closed.cleanDeck === false && closed.withBayonet === true);
+    // The default is SAFE, which is the half O18's write-up got wrong and this row now states.
+    ok(`ranking up to ${closed.rankNow} alone does not, because the fourth is benched by default ` +
+       `(${closed.rank3Default})`,
+      closed.rankNow === 3 && closed.rank3Default === false);
+    ok(`but bringing it instead of a basic does (${closed.rank3Bringing}, deck ${closed.deckThen.join('/')})`,
+      closed.rank3Bringing === true && closed.deckThen.includes('SHIV'));
 
     // ── OLD GUARD: veterans only ─────────────────────────────────────────────────────────
     const guard = await page.evaluate(() => {
