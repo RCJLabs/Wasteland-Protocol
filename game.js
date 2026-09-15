@@ -3454,7 +3454,7 @@ const CODEX = [
     ] },
     { id: 'BENCH', title: 'THE BENCH', body: () => [
         `Ten on the roster and three on the line. The other seven earn XP at ${Math.round(RESERVE_XP_RATE * 100)}% - and one of them takes a job for the expedition, chosen at the muster.`,
-        ...BENCH_JOBS.map(j => `${j.name} \u2014 ${j.desc}`),
+        ...BENCH_JOBS.map(j => `${j.name} \u2014 ${j.desc} ${BENCH_JOB_CONDITION}`),
         'One job, one holder, and it only holds while they are on the bench: put them on the line later and the job lapses. That is the whole point of it - the class you bench to get the job is a class you are not fighting with.'
     ] },
     { id: 'THE_FACES', title: 'THE FACES ON THE ROAD', body: () => [
@@ -5354,10 +5354,16 @@ function closeRanks() {
         };
         const next = bench.find(keeps) || (activeDoctrine && !doctrineBroken ? null : bench[0]);
         if (!next) return;
+        // P03: whether this body was working the bench, read BEFORE the step-up, because
+        // benchJobHolder gates on gridPos === 0 and the next line makes that false.
+        const wasWorking = benchJobHolder() === next ? benchJobName() : null;
         next.gridPos = pos;
         syncRankPerks(next);
         filled.push(next.name);
         log(`> ${next.name} steps up into the ${(RANK_LABELS[pos] || '').toLowerCase()} rank.`, 'log-status');
+        // The step-up was always logged and the consequence never was, so a player had to know
+        // the rule to connect them. This is the whole of P03's second half.
+        if (wasWorking) log(`> ${next.name} leaves the ${wasWorking} work. No one is on it now.`, 'log-dmg');
     });
     applyDoctrineEdge();
     after();
@@ -6882,7 +6888,7 @@ function renderMuster() {
         if (pos === 0) {
             const mine = benchJob && benchJob.charId === ch.id ? benchJob.job : null;
             jobs = `<div class="muster-jobs">` + BENCH_JOBS.map(j =>
-                `<button class="job-chip ${mine === j.id ? 'job-on' : ''}" title="${j.desc}" data-action="bench-job" data-id="${ch.id}" data-job="${j.id}">${mine === j.id ? '\u2611 ' : ''}${j.short}</button>`).join('') + `</div>`;
+                `<button class="job-chip ${mine === j.id ? 'job-on' : ''}" title="${j.desc} ${BENCH_JOB_CONDITION}" data-action="bench-job" data-id="${ch.id}" data-job="${j.id}">${mine === j.id ? '\u2611 ' : ''}${j.short}</button>`).join('') + `</div>`;
         }
         return `<div class="muster-row ${pos > 0 ? 'muster-deployed' : ''} ${benchJob && benchJob.charId === ch.id && pos === 0 ? 'muster-working' : ''}">
             <div class="muster-who">
@@ -6908,7 +6914,7 @@ function renderMuster() {
     if (jobEl) {
         const holder = benchJobHolder();
         jobEl.innerText = holder
-            ? `${holder.name} works the expedition as ${benchJobName()}. ${benchJobById(benchJob.job).desc}`
+            ? `${holder.name} works the expedition as ${benchJobName()}. ${benchJobById(benchJob.job).desc} ${BENCH_JOB_CONDITION}`
             : `Nobody on the bench has a job. One of them can take one - and the class you bench for it is a class you are not fighting with.`;
         jobEl.className = holder ? 'muster-jobline job-taken' : 'muster-jobline';
     }
@@ -13702,6 +13708,14 @@ const RESERVE_XP_RATE = 0.5;
 // the ones the last node happened to connect to.
 const CAMP_TRIAGE = 0.35;       // what a camp puts back without a field medic
 const CAMP_TRIAGE_JOB = 0.55;   // and with one keeping it
+// P03: the condition every job carries, written once. The P-audit found the rule real, stated
+// in benchJobHolder's own comment, enforced on every payout - and told to the player NOWHERE.
+// Three descs each said what the job does and none said it ends the moment its holder is pulled
+// into the line, which closeRanks does whenever a rank falls empty and they are the best body
+// on the bench. A lever that turns itself off silently is the N02 class. One constant rather
+// than three copies, because two spellings of one rule kept in step by hand is how N04's guard
+// went wrong.
+const BENCH_JOB_CONDITION = 'Held only while they stay on the bench: step them into the line and the job ends for the run.';
 const BENCH_JOBS = [
     { id: 'SCOUT', name: 'SCOUT', short: 'SCOUT',
       desc: 'Walks ahead and finds the ways across. The route never closes behind you: every node on the tier stays open, not just the ones your last one led to.' },

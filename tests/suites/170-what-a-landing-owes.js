@@ -139,6 +139,54 @@ module.exports = {
     ok(`every landed blow is in exactly one bucket (${reach.blows} landings)`,
       Object.values(reach.inb).reduce((a, v) => a + v.blows, 0)
       + Object.values(reach.outb).reduce((a, v) => a + v.blows, 0) === reach.blows);
+
+    // ── P01: AND THE TWO MAPS THAT NAMED THE SWING, WHICH NOTHING HELD ─────────────────
+    // The P-audit found runStats.outMoves and runStats.outMelee written at one site, read at one
+    // site in the simulator, and named by no suite at all - the test the O-audit used to clear
+    // ten other thin keys. They are not ornamental. outMoves is what O20 printed when a share
+    // could not say what was throwing the melee, and outMelee is what O21 read to report that
+    // ZERO melee was thrown under a live card, which is the row that closed a question three
+    // items had been spent on. Break cut.who, or the activeDoctrine read sitting beside it, and
+    // every one of those conclusions goes quiet rather than red.
+    //
+    // Held through the real door - applyDamageHit, the same call the rows above use - because a
+    // census asserted against a hand-built figure is the bug O19 found, not a guard against it.
+    const named = await page.evaluate(() => {
+      const who = activeEntities.find(e => e.isPlayer);   // the BRUISER this suite fields
+      const foe = activeEntities.find(e => !e.isPlayer);
+      const out = { cls: who.classType };
+      const swing = (move, doctrine) => {
+        activeDoctrine = doctrine; doctrineBroken = false;
+        activeIndex = turnQueue.indexOf(who); pendingAction = null;
+        applyDamageHit(who, foe, 100, 'phys', move);
+      };
+      runStats.outMoves = {}; runStats.outMelee = {};
+      swing('SCRAP_BLADE', null);
+      out.loose = { moves: { ...runStats.outMoves }, who: { ...runStats.outMelee } };
+      runStats.outMoves = {}; runStats.outMelee = {};
+      swing('SCRAP_BLADE', 'NO_HANDS');
+      out.live = { moves: { ...runStats.outMoves }, who: { ...runStats.outMelee } };
+      // A ranged swing is the control: neither map may grow, or the census is counting blows
+      // rather than melee and every share read off it is wrong in the same direction.
+      runStats.outMoves = {}; runStats.outMelee = {};
+      swing('PISTOL', null);
+      out.ranged = { moves: { ...runStats.outMoves }, who: { ...runStats.outMelee } };
+      activeDoctrine = null; doctrineBroken = false;
+      return out;
+    });
+    ok(`a melee swing books the move it threw (${JSON.stringify(named.loose.moves)})`,
+      named.loose.moves.SCRAP_BLADE === 1 && Object.keys(named.loose.moves).length === 1);
+    ok(`and the body that threw it, with no card in force (${JSON.stringify(named.loose.who)})`,
+      named.loose.who[`${named.cls} under no doctrine`] === 1
+      && Object.keys(named.loose.who).length === 1);
+    // THE KEY O21 READ. If this stops naming the doctrine, "0 melee under a live card" becomes
+    // unfalsifiable rather than false, which is the worse of the two.
+    ok(`the same swing under a live card names the card (${JSON.stringify(named.live.who)})`,
+      named.live.who[`${named.cls} under NO_HANDS`] === 1
+      && Object.keys(named.live.who).length === 1);
+    ok(`and a ranged swing books nothing in either map (${JSON.stringify(named.ranged.moves)}, ` +
+       `${JSON.stringify(named.ranged.who)})`,
+      Object.keys(named.ranged.moves).length === 0 && Object.keys(named.ranged.who).length === 0);
     const pierced = await page.evaluate(() => {
       const who = activeEntities.find(e => e.isPlayer);
       const foe = activeEntities.find(e => !e.isPlayer);

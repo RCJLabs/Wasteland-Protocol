@@ -1085,7 +1085,11 @@
 //   that the draft POLICY never adapts to mastery - confirmNewGame does not touch `mastery`, so
 //   a career accumulates ranks while `--draft line` opens with a Bruiser or a Shotgunner on
 //   expedition 1 and on expedition 150 alike, though by then every class has a fourth ability.
-//   The capstone half STANDS: no policy banks one to take later.
+//   THE CAPSTONE HALF STANDS AND IS STILL OPEN: no policy banks one to take later.
+//   ^^ READ: STILL OPEN. Nothing since has banked a capstone to take later.
+//   Split out deliberately, because the P-audit's correction above reclassified this whole entry
+//   in one stroke while its own text said half of it still stood - and stale.js then stopped
+//   counting a live claim. A marker that settles two claims at once can only be right about one.
 //   Worth noting how long this survived: the claim is present-tense AND marked, so stale.js
 //   counts it as read and never looks again. A marker is only as good as the reading behind it.
 
@@ -2449,6 +2453,66 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── P01-P03: THE BENCH LEVER IS OFF HALF THE TIME, AND THE FILE SAID IT WAS ON ────
+// The P-audit's three findings, converted into fixes, and the open claim behind them cashed.
+//
+// P02 IS THE ONE WITH A NUMBER. stat.benchHeld was set in the muster block and printed as "held
+// on all N runs"; the game pays the job through hasBenchJob -> benchJobHolder, whose own comment
+// states the condition - "a job whose holder was deployed after the muster is not in force" -
+// and closeRanks draws its replacement from exactly that pool without excluding them. Asked at
+// the door instead of at the muster, over three 150-expedition careers:
+//
+//   taken at the muster        150 of 150 runs, every career
+//   still in force at the door 49.2% / 48.7% / 56.4%
+//
+// THE LEVER IS OFF ABOUT HALF THE TIME IT WAS BELIEVED ON. Two rows now, because they are two
+// questions: what was taken, and what was in force. The second is the one worth anything.
+//
+// AND THAT IS WHY THE O-AUDIT'S OPEN CLAIM COULD NOT BE CASHED. "The bench job measured alone"
+// has been open since that audit; measured through the old row it would have been a blend of a
+// lever that is on and a lever that is off, read as a lever that is on. Run alone now, --bench
+// scout against the default, three careers an arm, interleaved:
+//
+//                     no job             scout
+//   ended the road    21 / 20 / 21       22 / 26 / 22        mean 20.67 -> 23.33, +2.66
+//   nodes, median     74 / 74 / 75       77 / 78 / 70
+//   score, median   24.6/25.3/24.4k    26.9/30.1/26.1k
+//
+// THE DIRECTION IS CONSISTENT AND THE SIZE IS NOT SETTLED, and the second half matters more.
+// This file prints its own bar for these arms and it says so: "+-4.2 wins on one career; an arm
+// of three means +-2.5, so two arms of three only settle a gap wider than about 10 wins." The
+// gap is 2.66. The raw win counts happen not to overlap - 21 against 22 - and that is a
+// coincidence of three small samples rather than evidence; the bootstrap SCORE intervals do
+// overlap (22.3-27.2k against 24.8-31.2k on the first pair), which is the reading to trust. I
+// nearly published "score separates 3/3" off the medians alone, which is comparing the wrong
+// thing: ordered medians with overlapping intervals are what a null looks like from the side.
+//
+// SO THE CLAIM IS CASHED IN THE SENSE IT ASKED FOR - the job has been run on its own for the
+// first time - and the answer is "positive, under three wins, unresolved at this sample". K11's
+// shape: the direction, and what it would cost to settle it, which here is roughly twelve
+// careers an arm on the wins column or a metric with a tighter bar.
+//
+// P03 IS A GAME FIX WITH NO DIAL IN IT. Nothing told the player either. The step-up was logged
+// and the consequence was not, so a player had to know the rule to connect them, and none of the
+// three job descriptions named it. One constant - BENCH_JOB_CONDITION - used at all three render
+// sites rather than three copies, because two spellings of one rule kept in step by hand is
+// exactly what N04's guard got wrong. And closeRanks now says it when it happens, reading the
+// holder BEFORE the step-up because benchJobHolder gates on gridPos === 0 and the next line
+// makes that false.
+//
+// P01 IS A RATCHET ON A CENSUS THREE ITEMS REST ON. runStats.outMoves and outMelee were named by
+// no suite. Suite 170 holds them now through applyDamageHit - the real door, not a hand-built
+// figure, which is the bug O19 found rather than a guard against it: a melee swing books its
+// move and its thrower, the same swing under a live card names the card, and a ranged swing
+// books nothing in either map.
+//
+// AND A MARKER SPLIT, because the P-audit's own correction was too broad. It settled F10's entry
+// whole while its own text said the capstone half still stood, and stale.js stopped counting a
+// live claim - open read three for one commit and is four again. A correction that touches two
+// claims has to say something about each.
+//
+// NO DIAL MOVES. One log line, one shared sentence of card text, two instrument rows.
+//
 // ── P-AUDIT: THREE FINDINGS, AND TWO OF THEM ARE O21's BUG WEARING A DIFFERENT HAT ─
 // Nine items since the O-audit and four of them consecutive doctrine follow-ups, which is how a
 // line of work goes narrow. Audited the tree fresh at c2dd3cb rather than mining further, hunting
@@ -2493,7 +2557,13 @@ const ROOT = path.join(__dirname, '..');
 // empty-line guard and belongs there, doctrineOffered and doctrineLive are what was on the table
 // rather than what survived, and gearMit/gearAnswers are probes of the pool.
 //
-// AND ONE RECORD CORRECTION, made at its own site above. F10's open claim says "none re-drafts
+// AND ONE RECORD CORRECTION, made at its own site above - WHICH I THEN MADE TOO BROADLY, marked
+// here rather than quietly repaired. The correction settled F10's entry whole, and the same
+// paragraph said its capstone half still stood; stale.js promptly stopped counting a live claim
+// and the open count read three for one commit. The marker is split now. A correction that
+// touches two claims has to say something about each.
+//
+// F10's open claim says "none re-drafts
 // its line between expeditions as the roster changes". The line IS re-drafted every expedition,
 // because EXPEDITION calls confirmNewGame per run. The true half is that the draft policy never
 // adapts to mastery, which confirmNewGame leaves alone. It survived because the claim is
@@ -2945,13 +3015,15 @@ const ROOT = path.join(__dirname, '..');
 // exact and the judgement stays with whoever reads it.
 //
 // THE RATCHET IS NOT "NO CLAIM MAY BE OPEN". Open claims are how this file says what it does not
-// know and there should be plenty - THREE of the seventeen are marked STILL OPEN, including two
-// on the queue right now (the bench job alone, and K11's twelve-careers-an-arm question). It was
-// FOUR until the P-audit read F10's marker instead of trusting it: the claim it endorsed said no
-// policy re-drafts between expeditions, and the line is re-drafted every expedition. A claim that
-// is present-tense AND marked is invisible to the scanner, which checks that a marker exists and
-// cannot check that it is right - so the count moving DOWN by a correction rather than by an
-// answer is a thing this row should expect. The bar
+// know and there should be plenty - FOUR of the seventeen are marked STILL OPEN, including two
+// on the queue right now (the bench job alone, and K11's twelve-careers-an-arm question). It read
+// THREE for one commit and that was my error, not a settlement: the P-audit read F10's marker
+// instead of trusting it, found the re-draft half false, and reclassified the WHOLE entry while
+// its own text said the capstone half still stood. The marker is split now and the live half is
+// counted again. Two lessons, and the second is the one that cost something: a claim that is
+// present-tense AND marked is invisible to the scanner, which checks that a marker EXISTS and
+// cannot check that it is RIGHT; and a marker that settles two claims at once can only be right
+// about one of them. The bar
 // is that none sits UNREAD. An item that closes on an open question marks it in the same breath,
 // which costs one line. Suite 173 holds the count at zero and pins the five settled ones at their
 // own sites, so a rewrite that tidies a marker away without settling the claim goes red rather
@@ -2969,7 +3041,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   6 answered by a later item     3 still open     8 not an open claim after reading
+//   6 answered by a later item     4 still open     7 not an open claim after reading
 //
 // NO DIAL MOVES. game.js is untouched.
 
@@ -5613,7 +5685,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
                  extracted: false, walkedAt: 0, formations: {}, factionFights: {}, loose: 0, doctrine: null, doctrineKept: false,
                  benchHeld: null,
-                 docDoorAll: 0, doorBodies: [], doorBodiesLive: [], docDark: {}, docDoor: 0, docBreach: 0, docBreachLine: {}, docBreachFirst: null, docArrived: {},
+                 docDoorAll: 0, doorBodies: [], doorBodiesLive: [], benchNodes: 0, benchInForce: 0, docDark: {}, docDoor: 0, docBreach: 0, docBreachLine: {}, docBreachFirst: null, docArrived: {},
                  booked: 0, bookedKinds: {}, augments: 0,
                  offeredNodes: {}, takenNodes: {}, forks: 0, forksWithChoice: 0, forksAllFights: 0,
                  cachesMet: 0, cachesClean: 0, cachesForced: 0, cacheScrap: 0, cacheLocks: {}, cacheOpener: {},
@@ -6766,6 +6838,17 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // true of the field. That is the whole finding, and it needs no interpretation: the line's
     // own classes are the answer, and whether each body was at the muster or arrived later.
     stat.docDoorAll++;
+    // P02: WHETHER THE BENCH JOB IS STILL IN FORCE, asked at the door rather than at the muster.
+    // stat.benchHeld below records that a job was TAKEN, and the report printed that as "held on
+    // all N runs" - but the game pays the job through hasBenchJob -> benchJobHolder, and that
+    // function's own comment states the condition: "The holder has to be on the roster and on the
+    // bench: a job whose holder was deployed after the muster is not in force." closeRanks draws
+    // its replacement from exactly that pool and does not exclude them, so the job ends the first
+    // time a rank falls empty and they are the healthiest body left. Two questions, two numbers.
+    if (benchPolicy !== 'off') {
+      stat.benchNodes++;
+      if (benchJobHolder()) stat.benchInForce++;
+    }
     // O22: HOW MANY BODIES ARE ACTUALLY STANDING. Named doorBodies and not lineSize, because
     // lineSize is TAKEN - G13 books it once per run as a number and the report reads it as
     // `r.lineSize === 0` to find runs that fielded nobody. Seeding it as an array here turned
@@ -8377,8 +8460,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   if (BENCH !== 'off') {
     const held = results.filter(r => r.benchHeld);
     console.log('\n\u2500\u2500 THE BENCH ' + '\u2500'.repeat(45));
-    line(`asked for ${BENCH}`, held.length === n ? `held on all ${n} runs`
-      : held.length ? `held on ${held.length} of ${n}` : `HELD ON NONE - the lever did nothing`);
+    line(`asked for ${BENCH}`, held.length === n ? `taken at the muster on all ${n} runs`
+      : held.length ? `taken at the muster on ${held.length} of ${n}` : `TAKEN ON NONE - the lever did nothing`);
+    // P02: and what it was worth is a question about DOORS, not musters. This row used to say
+    // "held on all N runs" off the muster reading alone, which could only ever come back 100%
+    // and is the same mistake O21 found in doctrineKept one lever over.
+    const bNodes = results.reduce((a, r) => a + (r.benchNodes || 0), 0);
+    const bForce = results.reduce((a, r) => a + (r.benchInForce || 0), 0);
+    line('  and still in force at the door', bNodes
+      ? `${bForce} of ${bNodes} (${(100 * bForce / bNodes).toFixed(1)}%)`
+      : 'no doors counted');
     const jobs = {};
     held.forEach(r => { jobs[r.benchHeld] = (jobs[r.benchHeld] || 0) + 1; });
     Object.entries(jobs).forEach(([k, v]) => line('  ' + k, v));
