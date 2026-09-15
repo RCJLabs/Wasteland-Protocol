@@ -2440,6 +2440,55 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O24: THE TWO FAMILIES HAVE OPPOSITE SIGNS, AND THE CARD DOES NOT SAY WHICH ────
+// O23 split the seven by the shape of their rule and priced neither. The split rested on a
+// mechanism - share of doors fought under strength - and the WIN cost was measured for exactly
+// one card. If a membership card charged bodies and cost nothing, O23's framing would have been
+// a story about a statistic. One card from each family, priced the way O22 priced NO HANDS:
+// --doctrine off as the control, which holds the drafted line fixed and moves only the take.
+// Three 150-expedition careers an arm, interleaved.
+//
+//                        card taken        take withheld     gap
+//   CONSCRIPTS wins       6 /  5 /  6       8 /  9 / 11      -3.66
+//     nodes, median      61 / 63 / 62      69 / 70 / 68
+//     score, median    13.8/14.8/13.4k   17.8/16.4/18.1k
+//     doors under strength 24.3/26.6/17.8%  5.7/5.0/2.9%
+//
+//   THE WALL wins        23 / 13 / 23      13 / 15 / 12      +6.34
+//     nodes, median      75 / 77 / 73      72 / 77 / 76
+//     score, median    28.0/25.1/25.5k   21.8/22.8/22.2k
+//     doors under strength  0.0/0.0/0.0%   7.3/7.5/5.9%
+//
+// THE MEMBERSHIP FAMILY COSTS WINS, AND THE TWO CARDS AGREE TO WITHIN A WIN. CONSCRIPTS is
+// -3.66 against NO HANDS' -4.34, and the arms land on top of each other: both withheld arms sit
+// near 9.3-9.7 wins and both taken arms near 5.3-5.7. Three careers, same direction, and wins,
+// nodes and score all non-overlapping. O23's grouping is a property of the game rather than of
+// one card.
+//
+// THE COMPOSITION CARD RUNS THE OTHER WAY, AND THE WIN COLUMN DOES NOT SETTLE IT. THE WALL's
+// mean is +6.34, every column points the same way, and its score intervals separate 3/3 -
+// 25.1-28.0k against 21.8-22.8k. But one taken career read 13 against a withheld arm holding a
+// 13 and a 15, so the win counts OVERLAP and the D17 rule is not met on them. Directionally
+// positive and score-separated; not a settled +6.34. Settling the win column would take more
+// careers than this item bought, and the score separation is the stronger evidence anyway.
+//
+// WHAT THAT MEANS FOR A PLAYER AT THE MUSTER. The draw offers three of seven, and two cards of
+// almost the same advertised size sit on opposite sides of zero: CONSCRIPTS pays +15% and costs
+// about four wins, THE WALL pays +12% and appears to gain. Nothing on either card distinguishes
+// them - both read as a rule and an edge, and the difference is whether the rule survives losing
+// somebody. The bonus number does not track the sign, and it is the only number shown.
+//
+// THIS IS A DESIGN FINDING AND IT IS NOT MINE TO ACT ON. It joins the parked NO HANDS decision
+// rather than moving a dial, and it should be read with that one: the same mechanism, priced
+// twice more, now with a card on the other side of it for contrast.
+//
+// TWO THINGS REPLICATED ON THE WAY. THE WALL read 0.0% under strength on all three careers at
+// 150 expeditions, having read 0.0% on all three at 60 - the structural claim holds at both
+// sample sizes. And CONSCRIPTS bites HARDER at 150 than at 60 (24.3-26.6% against 15.2%), which
+// is what its rule predicts: doctrineFavourites is a habit, and a longer career has one.
+//
+// NO DIAL MOVES. Nothing shipped but the measurement.
+//
 // ── O23: TWO PRICES, AND THE CARD'S OWN RULE DECIDES WHICH ONE YOU PAY ─────────────
 // O22 priced the NO HANDS card alone at -4.34 wins and found the mechanism in closeRanks, which
 // leaves a vacated rank empty rather than step a forbidden body into it. closeRanks does not
