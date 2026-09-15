@@ -2440,6 +2440,71 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O22: NO HANDS RE-PRICED - MY PREMISE WAS WRONG AND THE CARD COSTS FOUR WINS ────
+// I pitched this item on a prediction: O12 priced NO HANDS at -11.33 wins on an arm where O21
+// later found the card dark four fights in five, so the gap had to be a handicap without its
+// compensation. IT IS NOT. Re-run in O12's own shape - baseline against --draft
+// doctrine:NO_HANDS, three 150-expedition careers each, interleaved - with the card now live at
+// 85-91% of fight doors and kept on 120-126 runs of 150:
+//
+//                        baseline          NO HANDS line    same line, take withheld
+//   ended the road        15 / 22 / 14      7 /  5 /  4      9 /  9 / 11
+//   reached sector 7      21 / 34 / 27      9 /  6 /  4     15 / 13 / 23
+//   nodes cleared, median 72 / 75 / 72     51 / 48 / 51     68 / 66 / 70
+//   score, median      23.4/25.6/24.1k    8.5/ 4.1/ 7.8k  17.5/17.5/16.6k
+//   wipes per run       6.46/6.24/6.31   5.90/5.53/5.71   6.38/5.91/6.51
+//
+//   wins mean   baseline 17.00   NO HANDS 5.33   gap -11.67, against O12's -11.33
+//
+// THE GAP DID NOT MOVE. O12's finding is CONFIRMED, and now on an instrument that can see the
+// card. The file's own error bars make the separation legible rather than asserted: it prints
+// +-2.1 wins for the baseline arm and +-1.5 for the NO HANDS arm and says two arms of three
+// settle a gap wider than about nine and about six. 11.67 clears both, same direction 3/3, and
+// no column overlaps - the score intervals are 20.8-29.3k against 3.7-10.7k.
+//
+// AND THE CONTROL ARM O11 BUILT AND NOBODY HAD EVER USED SPLITS IT. `--doctrine off` withholds
+// only the BANK: the same draft, the same line, the same three offers rolled and read, and then
+// nothing taken. That is the one comparison in which the card is the only thing that moved.
+//
+//   the LINE costs   17.00 -> 9.67    -7.33 wins    (drafting melee-free)
+//   the CARD costs    9.67 -> 5.33    -4.34 wins    (taking the thing you drafted for)
+//
+// A +15% score multiplier that also softens incoming front-rank melee by a fifth COSTS FOUR
+// WINS AND HALVES THE SCORE MEDIAN. That cannot come from a multiplier, so it comes from
+// somewhere else, and closeRanks says where in its own comment: "Better to leave the rank
+// empty." A doctrine is a promise the game will not break on the player's behalf, so when a body
+// falls it will not step a forbidden class into the gap - and under NO HANDS most of the bench
+// is forbidden. The loss is permanent for the rest of the run.
+//
+// MEASURED AT THE DOOR RATHER THAN ARGUED, 60 expeditions an arm, same line both sides:
+//
+//                                   card taken    card withheld
+//   bodies standing, mean              2.80          2.92
+//   doors fought under strength     18.6%          6.9%
+//
+// And constructed in suite 79, which is where it belongs: one melee body on the bench, rank 2
+// falls, and the line comes out at 2 standing with the card live and 3 with it withheld. Same
+// loss, same bench, same everything else.
+//
+// WHAT THIS SAYS ABOUT O18. Its null is no longer a puzzle. A quarter more damage on every swing
+// bought one win because it was being paid into a hole four wins deep that damage does not
+// touch - the card's price is bodies, and O18 was paying in output.
+//
+// WHAT I AM NOT DOING. The step-in rule is deliberate, and the codex already carries it: "the
+// game will never break it for you when it closes ranks behind a loss." That sentence is true
+// and it reads as a reassurance, which is the wrong register for the dominant term in the card's
+// price - but rewording a card whose shape is already parked with the owner is a design call and
+// not mine. Filed with the parked NO HANDS decision rather than acted on.
+//
+// A NOTE ON THE COMPARISON. The -7.33 for the line is not "melee-free costs seven wins" in
+// general; it is what THIS draft policy's melee-free line costs against THIS default opener,
+// which is a Bruiser or a Shotgunner and then usually a Medic. O13 already measured 4.33 wins of
+// arrangement inside a NO HANDS line, so the line term is a policy figure and the CARD term is
+// the one that is about the game.
+//
+// NO DIAL MOVES. One diagnostic added: bodies standing at each fight door, and the share fought
+// under strength.
+//
 // ── O21: THE CARD WAS NEVER LIVE - THIS FILE READ THE PROMISE FOUR LINES TOO EARLY ─
 // O20 closed on one question with one answer: how does a Bruiser reach a line that owns no
 // melee? It does not. No Bruiser has ever stood in a live NO HANDS line. The card was DARK for
@@ -3048,6 +3113,12 @@ const ROOT = path.join(__dirname, '..');
 //   score, median         24.4/25.9/24.5k 26.2/25.0/27.0k 17.0/13.1/14.5k 18.4/13.7/13.8k
 //
 //   means                 21.33 wins    21.67         10.00         11.33
+//   ^^ O22 CONFIRMS THE NO_HANDS COLUMN on a repaired instrument, and refutes the reason I
+//   expected it to move. O21 found the card dark at four doors in five on this very arm, so the
+//   -11.33 looked like a handicap charged without its compensation; re-measured with the card
+//   live 85-91% of the time the gap is -11.67. Do not read the ABSOLUTE numbers across the two
+//   items - the baseline is 17.00 now against 21.33 here, because the wall has been re-cut since
+//   - only the paired gap, which is what both arms were run for.
 //   wipes per NODE        0.0831        0.0831        0.0942        0.0941
 //
 // BOTH ARE TRAPS AND THE CONTROL IS WHAT SAYS SO. THE_WALL, built around deliberately in exactly
@@ -5370,7 +5441,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
                  extracted: false, walkedAt: 0, formations: {}, factionFights: {}, loose: 0, doctrine: null, doctrineKept: false,
                  benchHeld: null,
-                 docDoorAll: 0, docDark: {}, docDoor: 0, docBreach: 0, docBreachLine: {}, docBreachFirst: null, docArrived: {},
+                 docDoorAll: 0, doorBodies: [], docDark: {}, docDoor: 0, docBreach: 0, docBreachLine: {}, docBreachFirst: null, docArrived: {},
                  booked: 0, bookedKinds: {}, augments: 0,
                  offeredNodes: {}, takenNodes: {}, forks: 0, forksWithChoice: 0, forksAllFights: 0,
                  cachesMet: 0, cachesClean: 0, cachesForced: 0, cacheScrap: 0, cacheLocks: {}, cacheOpener: {},
@@ -6523,6 +6594,19 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // true of the field. That is the whole finding, and it needs no interpretation: the line's
     // own classes are the answer, and whether each body was at the muster or arrived later.
     stat.docDoorAll++;
+    // O22: HOW MANY BODIES ARE ACTUALLY STANDING. Named doorBodies and not lineSize, because
+    // lineSize is TAKEN - G13 books it once per run as a number and the report reads it as
+    // `r.lineSize === 0` to find runs that fielded nobody. Seeding it as an array here turned
+    // that guard's own field into a list and the arm died at the first door with "push is not a
+    // function", which is the cheap version of this mistake; the expensive version is the one
+    // that keeps running and quietly answers a different question. The control arm priced the CARD alone - same
+    // line, take withheld - at -4.34 wins, and a card that pays +15% and softens incoming melee
+    // cannot cost four wins through its multiplier. closeRanks is where it goes: it will not step
+    // a body into a vacated rank when that would break the promise, and says so in as many words
+    // ("Better to leave the rank empty"). Under NO HANDS most of the bench carries melee, so a
+    // casualty is not replaced for the rest of the run. That is a structural claim about the SIZE
+    // of the line, so it is counted at the door rather than argued from the win column.
+    stat.doorBodies.push(playerRoster.filter(p => p.gridPos > 0).length);
     if (!activeDoctrine || doctrineBroken) {
       const k = (!activeDoctrine ? 'never taken' : 'broken') + ' s' + currentSector;
       stat.docDark[k] = (stat.docDark[k] || 0) + 1;
@@ -8163,6 +8247,14 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // the field at the muster, so the line became wrong rather than starting wrong.
     const doors = results.reduce((a, r) => a + (r.docDoor || 0), 0);
     const breaches = results.reduce((a, r) => a + (r.docBreach || 0), 0);
+    // O22: the line's own size at every fight door, which is what a refused step-in costs.
+    const sizes = results.flatMap(r => r.doorBodies || []);
+    if (sizes.length) {
+      const mean = sizes.reduce((a, v) => a + v, 0) / sizes.length;
+      const short = sizes.filter(v => v < 3).length;
+      line('bodies standing at a fight door, mean', mean.toFixed(2));
+      line('  doors fought under strength', `${short} of ${sizes.length} (${(100 * short / sizes.length).toFixed(1)}%)`);
+    }
     const doorsAll = results.reduce((a, r) => a + (r.docDoorAll || 0), 0);
     line('fight doors under a live doctrine', `${doors} of ${doorsAll}`);
     line('  where its own rule was false', `${breaches} (${(100 * breaches / Math.max(1, doors)).toFixed(1)}%)`);

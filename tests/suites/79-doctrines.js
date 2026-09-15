@@ -346,6 +346,64 @@ module.exports = {
     ok(`and then it pays nothing (${benched.paysClean.toFixed(2)} -> ${benched.paysAfter.toFixed(2)})`,
       benched.paysAfter === 1);
 
+    // ── O22: WHAT A KEPT PROMISE COSTS WHEN SOMEBODY FALLS ──────────────────────────────
+    // The control arm priced the CARD alone - the same NO HANDS line, the take withheld - at
+    // -4.34 wins across three 150-expedition careers, and halved the score median. A +15%
+    // multiplier and a 20% softening of incoming front-rank melee cannot do that, so the cost
+    // is somewhere else, and closeRanks says where in its own comment: "Better to leave the rank
+    // empty." Under a live NO HANDS most of the bench carries melee, so a body that falls is not
+    // replaced for the rest of the run. Measured at the fight door over 60 expeditions an arm:
+    // 18.6% of doors fought under strength with the card live against 6.9% with it withheld.
+    //
+    // That is deliberate behaviour and the codex documents it. It is held here because it is the
+    // dominant term in the card's price and nothing asserted it - the rule was only ever visible
+    // as a sentence in a comment and a sentence in the codex.
+    const ranks = await page.evaluate(() => {
+      const out = {};
+      const setup = (doctrine) => {
+        window.__line(['SCAVENGER', 'MEDIC', 'SNIPER']);
+        activeDoctrine = doctrine; doctrineBroken = false;
+        // A bench with exactly one body on it, and that body carries melee.
+        const bruiser = playerRoster.find(c => c.classType === 'BRUISER');
+        playerRoster = playerRoster.filter(c => c.gridPos > 0 || c.id === bruiser.id);
+        bruiser.gridPos = 0;
+        return bruiser;
+      };
+      // Rank 2 falls, and the only body left to fill it is one the promise forbids. The body is
+      // REMOVED rather than benched, because that is what loseOperator does - the first cut of
+      // this benched it, which left the fallen medic on the bench as a legal candidate, and it
+      // stepped straight back into its own rank. The row went red saying "3 standing", which was
+      // the fixture answering a question about itself rather than about closeRanks.
+      const fall = () => {
+        const gone = playerRoster.find(c => c.gridPos === 2);
+        vacatedRanks = [2];
+        playerRoster = playerRoster.filter(c => c.id !== gone.id);
+      };
+      const live = setup('NO_HANDS');
+      out.benchCarriesMelee = carriesMelee(live);
+      fall();
+      closeRanks();
+      out.filledUnderCard = live.gridPos;
+      out.lineUnderCard = deployedLine().length;
+      out.stillLive = !!activeDoctrine && !doctrineBroken;
+
+      // The identical loss with no card in force: the same body steps up.
+      const off = setup(null);
+      fall();
+      closeRanks();
+      out.filledWithout = off.gridPos;
+      out.lineWithout = deployedLine().length;
+      activeDoctrine = null; doctrineBroken = false;
+      return out;
+    });
+    ok('the only body on the bench carries melee, which NO HANDS forbids', ranks.benchCarriesMelee === true);
+    ok(`so the rank stays empty and the line fights a body short (${ranks.lineUnderCard} standing)`,
+      ranks.filledUnderCard === 0 && ranks.lineUnderCard === 2);
+    ok('and the promise is still live, which is the point - it was kept, not broken',
+      ranks.stillLive === true);
+    ok(`the same loss with no card in force fills the rank (${ranks.lineWithout} standing)`,
+      ranks.filledWithout === 2 && ranks.lineWithout === 3);
+
     // ── OLD GUARD: veterans only ─────────────────────────────────────────────────────────
     const guard = await page.evaluate(() => {
       const vet = MASTERY_RANKS[VETERAN_RANK];

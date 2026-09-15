@@ -270,5 +270,24 @@ module.exports = {
       /if \(d && !d\.holds\(line\)\) \{[\s\S]{0,200}?stat\.docBreach\+\+;/.test(sim));
     ok('and a dark one records whether it was never taken or broken, and where',
       /\(!activeDoctrine \? 'never taken' : 'broken'\) \+ ' s' \+ currentSector/.test(sim));
+
+    // ── O22: THE SIZE OF THE LINE, WHICH IS WHAT THE CARD ACTUALLY CHARGES ──────────────
+    // The control arm priced the card alone at -4.34 wins and half the score median, which a
+    // +15% multiplier cannot do. closeRanks is where it goes - it leaves a vacated rank empty
+    // rather than step a forbidden class into it - so the cost is bodies, and bodies are counted
+    // at the door. Suite 79 holds the mechanism by construction; this holds the instrument that
+    // priced it, and the name it had to be given.
+    ok('bodies standing are counted at every fight door',
+      /stat\.doorBodies\.push\(playerRoster\.filter\(p => p\.gridPos > 0\)\.length\);/.test(sim));
+    ok('and the report says what share of doors were fought under strength',
+      /doors fought under strength/.test(sim) && /sizes\.filter\(v => v < 3\)\.length/.test(sim));
+    // lineSize is G13's field, booked once per run as a NUMBER and read as `r.lineSize === 0` to
+    // find runs that fielded nobody. Seeding it as an array for this census turned that guard's
+    // own field into a list and the arm died at the first door. Cheap to catch, and the reason
+    // the row below exists: a census that quietly answers a different question is not cheap.
+    ok('the empty-line guard still reads its own field as a number',
+      /r\.lineSize === 0/.test(sim) && !/lineSize\.push/.test(sim));
+    ok('and the door census does not share a name with it',
+      /doorBodies: \[\]/.test(sim) && !/lineSize: \[\]/.test(sim));
   }
 };
