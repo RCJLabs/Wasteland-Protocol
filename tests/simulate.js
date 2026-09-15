@@ -2453,6 +2453,60 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── K11b: TWELVE CAREERS AN ARM, AND OUTPUT STILL DOES NOT BEAT ARMOUR ────────────
+// K11 left one debt and named its own price: "+3 DMG reads ten wins and +6 phys reads six, and
+// head to head every row overlaps - the widest is 1.1 sd on the win count. An arm cannot say. It
+// would take about twelve." Paid. Twelve 150-expedition careers an arm, interleaved, 3,600
+// expeditions:
+//   ^^ READ: this line QUOTES K11's claim rather than making one; the claim is marked ANSWERED at
+//   its own site below. Third time a record has tripped its own scanner by quoting the thing it
+//   answers, which is the cost of the scanner matching on phrasing - and the right cost, because
+//   the alternative is a scanner that misses a claim made in the same words.
+//
+//                    IRON_KNUCKLES (+3 DMG)          RIOT_SHIELD (+6 phys)
+//   wins            32 30 28 24 15 16 28 27 23 24 17 21   22 19 24 23 21 28 25 18 17 25 24 26
+//   mean                 23.75   sd 5.36                      22.67   sd 3.22
+//   reached sector 7     34.17                               34.25
+//   nodes, median mean   75.83                               77.33
+//   score, median mean  25,950                              27,710
+//   wipes per run         6.26                                6.23
+//
+// IT DOES NOT SEPARATE, AND THE FAILURE IS NOT THE INTERESTING KIND. +1.08 wins at 0.60 sd would
+// be "too small to see at this sample". What is actually there is worse for the hypothesis: the
+// COLUMNS DISAGREE ON A SIGN. Wins lean output by a win; score leans armour by 1,760 and nodes
+// by 1.5; sector-7 reach is level to within a tenth of a career. Four rows, no agreed direction.
+// A real effect hiding under noise moves every row the same way and loses on significance. This
+// loses on direction.
+//
+// SO K05's COMPOUNDING ARGUMENT IS UNSUPPORTED, and that is the finding. K05 reasoned that
+// output compounds where mitigation cannot, because a shorter fight cuts incoming damage on
+// every later turn - a mechanism that predicts output pulls ahead AND pulls further ahead as the
+// sample grows. Six careers an arm could not see it. Twelve cannot either, and the rows that
+// should have firmed up are the ones pointing the other way. The argument is not refuted - a
+// mechanism can be real and worth a fraction of a win - but it has now had its best shot at the
+// sample its own file asked for, and it should stop being cited as though it were established.
+//
+// AND THE COST ESTIMATE WAS WRONG BY AN ORDER OF MAGNITUDE, which is the methodological half.
+// "About twelve" assumed both arms behave alike. They do not: the output arm's spread is 1.7x
+// the armour arm's (sd 5.36 against 3.22, and the raw range is 15-32 against 17-28). The noisier
+// arm sets the sample. Bringing a 1.08-win gap to 2 sd with these spreads needs
+// sqrt((5.36^2 + 3.22^2)/n) <= 0.54, which is n >= 134 CAREERS AN ARM - 268 careers, better than
+// a day of compute, for a difference of one win in twenty-three. That is not a measurement worth
+// buying, and saying so is more useful than another arm.
+//
+// WHAT TO DO WITH THE QUESTION INSTEAD. Win counts are the wrong instrument for it: they are the
+// coarsest thing this file prints and the one with the heaviest tail. If output-vs-mitigation
+// matters, it should be asked of something that moves per FIGHT rather than per career - turns
+// to clear a fight, damage taken per fight cleared - where the sample is thousands rather than
+// twelve and the compounding claim makes a sharper prediction anyway. Filed rather than built.
+//
+// A NOTE ON THE VARIANCE ITSELF, because it is a finding and not just an obstacle. An output
+// trinket makes careers less predictable and an armour trinket makes them more so, at the same
+// mean. Nothing in this file has said that before, and it is the kind of thing a player feels
+// long before a win rate shows it.
+//
+// NO DIAL MOVES. Nothing shipped but the measurement and the correction to its price.
+//
 // ── P01-P03: THE BENCH LEVER IS OFF HALF THE TIME, AND THE FILE SAID IT WAS ON ────
 // The P-audit's three findings, converted into fixes, and the open claim behind them cashed.
 //
@@ -3015,9 +3069,10 @@ const ROOT = path.join(__dirname, '..');
 // exact and the judgement stays with whoever reads it.
 //
 // THE RATCHET IS NOT "NO CLAIM MAY BE OPEN". Open claims are how this file says what it does not
-// know and there should be plenty - THREE of the seventeen are marked STILL OPEN, and the one on
-// the queue right now is K11's twelve-careers-an-arm question (the bench job alone was the other,
-// answered by P01-P03). It read
+// know and there should be plenty - TWO of the eighteen are marked STILL OPEN. The two that were
+// on the queue are both answered now: the bench job alone by P01-P03, and K11's
+// twelve-careers-an-arm question by K11b, which paid the price K11 quoted and found the quote
+// was an order of magnitude light. It read
 // THREE for one commit and that was my error, not a settlement: the P-audit read F10's marker
 // instead of trusting it, found the re-draft half false, and reclassified the WHOLE entry while
 // its own text said the capstone half still stood. The marker is split now and the live half is
@@ -3042,7 +3097,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   7 answered by a later item     3 still open     7 not an open claim after reading
+//   9 answered by a later item     2 still open     7 not an open claim after reading
 //
 // NO DIAL MOVES. game.js is untouched.
 
@@ -4893,6 +4948,12 @@ const ROOT = path.join(__dirname, '..');
 // shield takes 9.0 points off every hundred incoming against the knuckles' nothing - is not in
 // dispute; what is unresolved is whether that soak is worth as much as the swing, and six careers
 // an arm cannot say. It would take about twelve.
+//   ^^ ANSWERED by K11b, and the estimate was wrong. Twelve an arm reads +1.08 wins at 0.60 sd,
+//   with score and nodes leaning the OTHER way and sector-7 reach level - four rows that do not
+//   agree on a sign. The twelve was costed assuming both arms behave alike; the output arm is
+//   1.7x noisier (sd 5.36 against 3.22), and settling a gap this small actually needs about 134
+//   careers an arm. Not bought. K05's compounding argument has had its best shot and should not
+//   be cited as established.
 //   ^^ READ: STILL OPEN, and priced - twelve careers an arm. Nothing since has spent them.
 //
 // AND THE ARMS ARE STILL A BENCH. Every one of them fits the whole deployed line with one piece
