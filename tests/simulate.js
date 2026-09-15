@@ -2453,6 +2453,49 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── K11c: THE MECHANISM IS REAL, IT IS HUGE, AND IT CANCELS - K11b CORRECTED ──────
+// K11b closed by filing its own follow-up: win counts are the wrong instrument, and the question
+// belongs on something that moves per FIGHT. It also wrote that K05's compounding argument was
+// "unsupported". THE SECOND HALF WAS WRONG, and the first half is why. The same twenty-four
+// careers already carried the answer; no new run was needed, only the right column.
+//
+//                             IRON_KNUCKLES (+3 DMG)   RIOT_SHIELD (+6 phys)   gap
+//   actor turns per fight            34.08                   37.31           -3.23   6.9 sd
+//   blows taken, a career          146,821                 162,451         -15,630   6.5 sd
+//   points per blow                 14.272                  12.945          +1.327   8.9 sd
+//   POINTS TAKEN, A CAREER       2,094,142               2,101,863          -7,721   0.27 sd
+//
+// OUTPUT TAKES 9.6% FEWER BLOWS BECAUSE ITS FIGHTS ARE 8.7% SHORTER. ARMOUR TAKES 9.3% LESS PER
+// BLOW. THE TOTALS DIFFER BY 0.4%. Two mechanisms, each measured at better than six sd, whose
+// product is a null at a quarter of one. K05 was right: output compounds, a shorter fight cuts
+// incoming damage on every later turn, and the effect is enormous. What is not true is that it
+// makes output BETTER - the game prices +3 DMG and +6 phys to the same survival by opposite
+// routes, and that is why every career-level arm since K05 has come back flat.
+//
+// SO K11b's "UNSUPPORTED" IS WITHDRAWN and marked at its own site. The null it measured is real
+// and its arithmetic stands; the inference from it was wrong. A null at the top of a causal chain
+// does not license "no mechanism" when nothing measured the middle - and K11b had the middle on
+// disk while it was writing that sentence.
+//
+// WHY WIN COUNTS COULD NEVER HAVE SEEN THIS, stated because it is the reusable part. A career is
+// one number off a heavy tail; turns-per-fight is a median over roughly 7,500 fights. K11b
+// costed 134 careers an arm to resolve a one-win gap. The same twelve careers resolve the
+// mechanism at 6-9 sd, because the question was never about careers. When an argument is about a
+// per-fight mechanism, measure the fight.
+//
+// AND THE REPORT SAYS IT NOW. Every row in WHAT REACHES THE SQUAD was a SHARE, and a share cannot
+// tell the two apart: fewer blows and less per blow shrink the same total. One line prints blows,
+// points a blow, and the product - which is the whole of this item in the place someone reading
+// the output would look.
+//
+// WHAT THIS DOES NOT SAY. These are two specific trinkets sized to be comparable, not "output"
+// and "mitigation" in general; +3 DMG against +6 phys is one point on a curve. And the careers
+// are not exposure-matched - the armour arm cleared 77.3 nodes against 75.8 - so the TOTAL row
+// carries about 2% more exposure on the armour side, which flatters it slightly and does not
+// come close to mattering at 0.27 sd.
+//
+// NO DIAL MOVES. One report line, and a withdrawal.
+//
 // ── K11b: TWELVE CAREERS AN ARM, AND OUTPUT STILL DOES NOT BEAT ARMOUR ────────────
 // K11 left one debt and named its own price: "+3 DMG reads ten wins and +6 phys reads six, and
 // head to head every row overlaps - the widest is 1.1 sd on the win count. An arm cannot say. It
@@ -2478,7 +2521,12 @@ const ROOT = path.join(__dirname, '..');
 // A real effect hiding under noise moves every row the same way and loses on significance. This
 // loses on direction.
 //
-// SO K05's COMPOUNDING ARGUMENT IS UNSUPPORTED, and that is the finding. K05 reasoned that
+// SO K05's COMPOUNDING ARGUMENT IS UNSUPPORTED, and that is the finding.
+//   ^^ WITHDRAWN by K11c, from these same twenty-four careers. The mechanism is real and large:
+//   the output arm clears fights 3.23 turns sooner (6.9 sd) and takes 15,630 fewer blows a career
+//   (6.5 sd), exactly as K05 described. It cancels because armour takes 9.3% less per blow, and
+//   the totals land 0.4% apart. The null below is sound; this inference from it was not. Nothing
+//   here measured the middle of the chain, and the middle was already in these files. K05 reasoned that
 // output compounds where mitigation cannot, because a shorter fight cuts incoming damage on
 // every later turn - a mechanism that predicts output pulls ahead AND pulls further ahead as the
 // sample grows. Six careers an arm could not see it. Twelve cannot either, and the rows that
@@ -9415,6 +9463,18 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
           line('  ' + label, `${pc(v)} of damage taken (${v.blows.toLocaleString()} blows, ` +
                              `${Math.round(v.dmg).toLocaleString()} points)`);
         });
+        // K11c: THE TWO WAYS A SQUAD SURVIVES, ON ONE LINE. Every row above is a SHARE, and a
+        // share cannot tell the two apart: taking fewer blows and taking less per blow both
+        // shrink the same total. K11b spent twenty-four careers failing to separate output from
+        // armour on win counts and concluded the mechanism was unsupported; these two numbers
+        // separate them at better than six sd from the same runs. Printed together because the
+        // product is what matters and either half alone is a story.
+        const allB = Object.values(r).reduce((a, v) => a + v.blows, 0);
+        if (allB > 0) {
+          line('blows taken, and points a blow',
+               `${allB.toLocaleString()} blows at ${(tot / allB).toFixed(2)} points each ` +
+               `= ${Math.round(tot).toLocaleString()} taken`);
+        }
         const mf = r.meleeFront || { dmg: 0 };
         line('what NO HANDS\' edge covers', `${pc(mf)} of what the squad takes, and it cuts a ` +
              `fifth of that - so ${(100 * 0.2 * mf.dmg / tot).toFixed(1)}% of damage taken`);
