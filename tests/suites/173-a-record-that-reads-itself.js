@@ -52,9 +52,15 @@ module.exports = {
       new RegExp(`${r.answered} answered by a later item\\s+${r.open} still open\\s+` +
                  `${r.notaclaim} not an open claim`).test(
         require('fs').readFileSync(require('path').join(__dirname, '..', 'simulate.js'), 'utf8'))
-      && new RegExp(`FOUR of the seventeen`).test(
+      && new RegExp(`THREE of the seventeen`).test(
         require('fs').readFileSync(require('path').join(__dirname, '..', 'simulate.js'), 'utf8'))
-      && r.open === 4 && r.total === 17);
+      // Was four until the P-audit READ one of the markers instead of trusting it. F10's said
+      // STILL OPEN over a claim that is false as written - the line is re-drafted every
+      // expedition - so the claim became a correction rather than an answer. This row went red
+      // for exactly the right reason: the prose and the file disagreed, and the prose was the
+      // half that had to move. What the scanner cannot do is check a marker's CONTENT, so a
+      // count that falls without an item answering anything is the signature of that gap.
+      && r.open === 3 && r.total === 17);
     // The five known stale ones, by the words that were wrong, so a rewrite that quietly drops
     // the marker without settling the claim is caught rather than passing as tidied prose.
     const fs = require('fs'), path = require('path');

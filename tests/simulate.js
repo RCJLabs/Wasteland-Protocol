@@ -1078,7 +1078,16 @@
 // further things a real player does are still unmeasured and worth naming rather than
 // forgetting: no policy here banks a capstone to take later, and none re-drafts its line
 // between expeditions as the roster changes.
-//   ^^ READ: STILL OPEN. Nothing since has banked a capstone or re-drafted between expeditions.
+//   ^^ READ: HALF OF THIS IS WRONG AS WRITTEN, corrected by the P-audit. The line IS re-drafted
+//   every expedition: EXPEDITION calls confirmNewGame per run, which rebuilds playerRoster from
+//   ROSTER_TEMPLATE, and the draft block runs after it. There is no roster to "change between
+//   expeditions" because the roster resets. What is true, and what this was reaching for, is
+//   that the draft POLICY never adapts to mastery - confirmNewGame does not touch `mastery`, so
+//   a career accumulates ranks while `--draft line` opens with a Bruiser or a Shotgunner on
+//   expedition 1 and on expedition 150 alike, though by then every class has a fourth ability.
+//   The capstone half STANDS: no policy banks one to take later.
+//   Worth noting how long this survived: the claim is present-tense AND marked, so stale.js
+//   counts it as read and never looks again. A marker is only as good as the reading behind it.
 
 // G06: A NULL, MEASURED ON THE ARM WHERE THE THING ACTUALLY HAPPENS.
 //
@@ -2440,6 +2449,59 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── P-AUDIT: THREE FINDINGS, AND TWO OF THEM ARE O21's BUG WEARING A DIFFERENT HAT ─
+// Nine items since the O-audit and four of them consecutive doctrine follow-ups, which is how a
+// line of work goes narrow. Audited the tree fresh at c2dd3cb rather than mining further, hunting
+// the classes this repo keeps producing. Findings are filed here with evidence and a check; none
+// is fixed in the audit itself.
+//
+// P01. THE CENSUS THAT SETTLED THREE ITEMS HAS NO RATCHET. runStats.outMoves and
+// runStats.outMelee are written at one site in game.js, read at one site here, and named by NO
+// SUITE. The O-audit cleared ten thin runStats keys on exactly this test - "all have readers in
+// game.js and are named by suites, so none is an L02-style dead field" - and these two are the
+// first additions since that fail it. They are not ornamental: outMelee is what answered O20's
+// open question and what O21 reported as "0 melee thrown under a live card". Break cut.who, or
+// the activeDoctrine read beside it, and nothing goes red. CHECK: a suite row that books a melee
+// swing through the real door and reads both maps back, the way suite 170 holds the landing
+// figure.
+//
+// P02. THE BENCH LEVER IS READ AT THE MUSTER AND PRINTED AS THE WHOLE RUN. stat.benchHeld is set
+// in the muster block and the report prints it as "held on all N runs", under a comment saying
+// it is "printed as what was actually held". But the game decides whether the job PAYS through
+// hasBenchJob -> benchJobHolder, and that function's own comment says the condition out loud:
+// "The holder has to be on the roster and on the bench: a job whose holder was deployed after
+// the muster is not in force." closeRanks draws its replacement from exactly that pool -
+// playerRoster.filter(c => c.gridPos === 0) - and does not exclude the holder. So the job stops
+// paying the moment casualties pull them into the line, and this row says it was held all run.
+// Same shape as O21's doctrineKept, in a second lever, and it lands on a claim that is open
+// right now: the O-audit's "the bench job measured alone" would be measured through this row.
+// CHECK: book whether the job was still in force at each node, not whether it was taken at the
+// muster; then the bench arm can be measured at all.
+//
+// P03. AND THE PLAYER IS NOT TOLD EITHER, which is the same root with a game face. Nothing logs
+// the job ending. closeRanks logs the step-up - "X steps up into the second rank" - and the
+// consequence is silent, so a player must already know the rule to connect the two. None of the
+// three BENCH_JOBS descriptions names the condition: SCOUT, QUARTERMASTER and MEDIC each say
+// what the job does and none says it ends if its holder is ever deployed. A lever that turns
+// itself off without saying so is the N02 class, and the fix is a line of text rather than a
+// dial. CHECK: the card text, and a log line where benchJobHolder first returns null.
+//
+// WHAT THE AUDIT DID NOT FIND, because an audit that only reports hits is not an audit. Every
+// BENCH_JOBS id has exactly one hasBenchJob reader, so no bench content is dead. The ten thin
+// runStats keys the O-audit cleared are still clean. The muster block holds fifteen other
+// stat.X assignments and the rest are genuinely muster-time questions - lineSize is G13's
+// empty-line guard and belongs there, doctrineOffered and doctrineLive are what was on the table
+// rather than what survived, and gearMit/gearAnswers are probes of the pool.
+//
+// AND ONE RECORD CORRECTION, made at its own site above. F10's open claim says "none re-drafts
+// its line between expeditions as the roster changes". The line IS re-drafted every expedition,
+// because EXPEDITION calls confirmNewGame per run. The true half is that the draft policy never
+// adapts to mastery, which confirmNewGame leaves alone. It survived because the claim is
+// present-tense AND marked, so stale.js counts it read and never looks again - the instrument
+// checks that every claim HAS a marker, not that the marker is right.
+//
+// NOTHING SHIPPED BUT THE FINDINGS AND THAT CORRECTION.
+//
 // ── O24: THE TWO FAMILIES HAVE OPPOSITE SIGNS, AND THE CARD DOES NOT SAY WHICH ────
 // O23 split the seven by the shape of their rule and priced neither. The split rested on a
 // mechanism - share of doors fought under strength - and the WIN cost was measured for exactly
@@ -2883,8 +2945,13 @@ const ROOT = path.join(__dirname, '..');
 // exact and the judgement stays with whoever reads it.
 //
 // THE RATCHET IS NOT "NO CLAIM MAY BE OPEN". Open claims are how this file says what it does not
-// know and there should be plenty - FOUR of the seventeen are marked STILL OPEN, including two on
-// the queue right now (the bench job alone, and K11's twelve-careers-an-arm question). The bar
+// know and there should be plenty - THREE of the seventeen are marked STILL OPEN, including two
+// on the queue right now (the bench job alone, and K11's twelve-careers-an-arm question). It was
+// FOUR until the P-audit read F10's marker instead of trusting it: the claim it endorsed said no
+// policy re-drafts between expeditions, and the line is re-drafted every expedition. A claim that
+// is present-tense AND marked is invisible to the scanner, which checks that a marker exists and
+// cannot check that it is right - so the count moving DOWN by a correction rather than by an
+// answer is a thing this row should expect. The bar
 // is that none sits UNREAD. An item that closes on an open question marks it in the same breath,
 // which costs one line. Suite 173 holds the count at zero and pins the five settled ones at their
 // own sites, so a rewrite that tidies a marker away without settling the claim goes red rather
@@ -2902,7 +2969,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   6 answered by a later item     4 still open     7 not an open claim after reading
+//   6 answered by a later item     3 still open     8 not an open claim after reading
 //
 // NO DIAL MOVES. game.js is untouched.
 
