@@ -277,8 +277,14 @@ module.exports = {
     // rather than step a forbidden class into it - so the cost is bodies, and bodies are counted
     // at the door. Suite 79 holds the mechanism by construction; this holds the instrument that
     // priced it, and the name it had to be given.
+    // O23 REDDENED THIS ROW BY REFACTORING THE LINE IT NAMED, which is the row's fault and not
+    // the refactor's: it pinned one exact spelling of a count instead of the rule that the count
+    // reads who is STANDING. Hoisting the filter into a local so the live-only census could share
+    // it broke the literal and changed nothing about the behaviour. Written against the rule now,
+    // the way N04 rewrote its own guard after the same lesson.
     ok('bodies standing are counted at every fight door',
-      /stat\.doorBodies\.push\(playerRoster\.filter\(p => p\.gridPos > 0\)\.length\);/.test(sim));
+      /const standing = playerRoster\.filter\(p => p\.gridPos > 0\)\.length;/.test(sim) &&
+      /stat\.doorBodies\.push\(standing\);/.test(sim));
     ok('and the report says what share of doors were fought under strength',
       /doors fought under strength/.test(sim) && /sizes\.filter\(v => v < 3\)\.length/.test(sim));
     // lineSize is G13's field, booked once per run as a NUMBER and read as `r.lineSize === 0` to
@@ -289,5 +295,16 @@ module.exports = {
       /r\.lineSize === 0/.test(sim) && !/lineSize\.push/.test(sim));
     ok('and the door census does not share a name with it',
       /doorBodies: \[\]/.test(sim) && !/lineSize: \[\]/.test(sim));
+
+    // ── O23: AND THE SAME COUNT ON LIVE DOORS ONLY, WHICH IS WHAT CHANGED THE ANSWER ────
+    // Counting every door blends "the card is refusing step-ins" with "the card is dark and
+    // refusing nothing", and it understates exactly the cards whose rule is hardest to keep -
+    // THE WALL and BROAD SPECTRUM ran live at about a third of their doors. THE WALL read 7.2%
+    // on the blended count and 0.0% on the live-only one, which is the difference between a mild
+    // finding and a structural one.
+    ok('the door census is split by whether the card was live',
+      /if \(activeDoctrine && !doctrineBroken\) stat\.doorBodiesLive\.push\(standing\);/.test(sim));
+    ok('and the report prints the live-only row whenever the two differ',
+      /and on live-doctrine doors only/.test(sim) && /liveSizes\.length !== sizes\.length/.test(sim));
   }
 };

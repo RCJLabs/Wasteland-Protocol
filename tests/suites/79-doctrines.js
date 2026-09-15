@@ -404,6 +404,73 @@ module.exports = {
     ok(`the same loss with no card in force fills the rank (${ranks.lineWithout} standing)`,
       ranks.filledWithout === 2 && ranks.lineWithout === 3);
 
+    // ── O23: AND WHICH CARDS CAN CHARGE YOU THAT WAY, WHICH IS ABOUT THE SHAPE OF THE RULE ──
+    // O22 found the step-in cost on NO HANDS and I expected it to be a doctrine fact. It is not.
+    // Measured across all seven at 60 expeditions a career, three careers each, counting only
+    // doors where the card was live - share of fights fought under strength, against the same
+    // line with the take withheld:
+    //
+    //   NO HANDS   29.0% vs  8.3%      OLD GUARD        6.7% vs 7.2%
+    //   CONSCRIPTS 15.2% vs  7.2%      LIGHT ORDER      5.8% vs 8.8%
+    //   FIELD SURG  8.5% vs  6.3%      BROAD SPECTRUM   0.4% vs 6.6%
+    //                                  THE WALL         0.0% vs 4.4%
+    //
+    // THE WALL read exactly 0.0% on all three careers, and that is structural rather than lucky.
+    // A rule that constrains MEMBERSHIP - nobody owns melee, nobody is a favourite - is still
+    // true of a line that has lost somebody, so the card stays live, the rank stays empty, and
+    // the squad fights short for the rest of the run. A rule that constrains COMPOSITION cannot
+    // be true of a short line at all: THE WALL wants a front rank and at least two bodies,
+    // BROAD SPECTRUM wants three damage types across three operators. So the loss breaks the
+    // card, doctrineBroken latches, keeps() goes back to returning true, and the rank refills.
+    //
+    // Two prices, and the card's own rule decides which one you pay: a membership prohibition
+    // charges you in BODIES, a composition rule charges you in MULTIPLIER. Both families ran
+    // live for about a third of a run or nearly all of it respectively, which is the same fact
+    // seen from the other side.
+    const families = await page.evaluate(() => {
+      const out = {};
+      // THE WALL over a line that keeps it, then the front rank falls.
+      window.__line(['BRUISER', 'MEDIC', 'SNIPER']);
+      const bench = playerRoster.find(c => c.gridPos === 0 && c.classType === 'SHOTGUNNER');
+      playerRoster = playerRoster.filter(c => c.gridPos > 0 || (bench && c.id === bench.id));
+      activeDoctrine = 'THE_WALL'; doctrineBroken = false;
+      out.wallHolds = doctrineHolds();
+      const front = playerRoster.find(c => c.gridPos === 1);
+      vacatedRanks = [1];
+      playerRoster = playerRoster.filter(c => c.id !== front.id);
+      checkDoctrine();                       // the loss itself is what breaks a composition rule
+      out.wallBrokeOnTheLoss = doctrineBroken;
+      closeRanks();
+      out.wallLineAfter = deployedLine().length;
+
+      // NO HANDS over a line that keeps it: the same shape of loss leaves the card standing.
+      window.__line(['SCAVENGER', 'MEDIC', 'SNIPER']);
+      const spare = playerRoster.find(c => c.gridPos === 0 && c.classType === 'BRUISER');
+      playerRoster = playerRoster.filter(c => c.gridPos > 0 || c.id === spare.id);
+      activeDoctrine = 'NO_HANDS'; doctrineBroken = false;
+      out.handsHolds = doctrineHolds();
+      const gone = playerRoster.find(c => c.gridPos === 1);
+      vacatedRanks = [1];
+      playerRoster = playerRoster.filter(c => c.id !== gone.id);
+      checkDoctrine();
+      out.handsBrokeOnTheLoss = doctrineBroken;
+      closeRanks();
+      out.handsLineAfter = deployedLine().length;
+      out.handsStillLive = !!activeDoctrine && !doctrineBroken;
+      activeDoctrine = null; doctrineBroken = false;
+      return out;
+    });
+    ok('THE WALL holds over a line built for it', families.wallHolds === true);
+    ok('and losing the front rank breaks it, because its rule is about composition',
+      families.wallBrokeOnTheLoss === true);
+    ok(`so the rank refills and the line is whole again (${families.wallLineAfter} standing)`,
+      families.wallLineAfter === 3);
+    ok('NO HANDS holds over a line built for it', families.handsHolds === true);
+    ok('and the same loss does NOT break it, because its rule is about membership',
+      families.handsBrokeOnTheLoss === false && families.handsStillLive === true);
+    ok(`so the rank stays empty and the squad fights short (${families.handsLineAfter} standing)`,
+      families.handsLineAfter === 2);
+
     // ── OLD GUARD: veterans only ─────────────────────────────────────────────────────────
     const guard = await page.evaluate(() => {
       const vet = MASTERY_RANKS[VETERAN_RANK];

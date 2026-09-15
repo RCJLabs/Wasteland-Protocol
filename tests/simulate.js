@@ -2440,6 +2440,62 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O23: TWO PRICES, AND THE CARD'S OWN RULE DECIDES WHICH ONE YOU PAY ─────────────
+// O22 priced the NO HANDS card alone at -4.34 wins and found the mechanism in closeRanks, which
+// leaves a vacated rank empty rather than step a forbidden body into it. closeRanks does not
+// special-case NO HANDS, so I expected a doctrine fact. IT IS NOT ONE. It is a fact about the
+// SHAPE of a card's rule, and the seven split into three groups that nothing here has ever
+// named. Share of fight doors fought under strength, counted only where the card was LIVE,
+// against the same drafted line with the take withheld. Three careers of 60 expeditions a cell:
+//
+//                    withheld   live-only, three careers      mean   live share
+//   NO HANDS           8.3%     25.8 / 31.2 / 30.1            29.0   84-96%
+//   CONSCRIPTS         7.2%     16.7 / 14.0 / 14.9            15.2   94-100%
+//   FIELD SURGERY      6.3%     10.0 /  8.3 /  7.2             8.5   100%
+//   OLD GUARD          7.2%      6.7 /  6.7 /  6.8             6.7   94-95%
+//   LIGHT ORDER        8.8%      4.7 /  6.3 /  6.4             5.8   71-86%
+//   BROAD SPECTRUM     6.6%      1.3 /  0.0 /  0.0             0.4   38-40%
+//   THE WALL           4.4%      0.0 /  0.0 /  0.0             0.0   29-36%
+//
+// A RULE ABOUT MEMBERSHIP IS STILL TRUE OF A LINE THAT HAS LOST SOMEBODY. Nobody owns melee;
+// nobody is one of your three favourites - a squad of two satisfies both as readily as a squad
+// of three. So the card stays live, closeRanks keeps refusing the bench, and the hole is
+// permanent. That is the family that charges you in BODIES, and NO HANDS is its extreme because
+// melee is the commonest thing on a bench.
+//
+// A RULE ABOUT COMPOSITION CANNOT BE TRUE OF A SHORT LINE AT ALL. THE WALL wants a front rank
+// and at least two behind it; BROAD SPECTRUM wants three damage types across three operators.
+// The loss itself breaks the card, doctrineBroken latches, keeps() goes back to returning true,
+// and the rank refills on the same call. That family charges you in MULTIPLIER instead - and the
+// live-share column is the receipt: those two ran live for about a third of a run, the others
+// for nearly all of it. THE WALL's 0.0% is not luck, it is arithmetic, and it printed three
+// times out of three.
+//
+// CONSTRUCTED IN SUITE 79 rather than left as a table. The same shape of loss, both families:
+// THE WALL over a line built for it breaks on the loss and comes out 3 standing; NO HANDS over a
+// line built for it does not break and comes out 2 standing, still live, still paying.
+//
+// WHAT I WOULD NOT READ OFF THIS TABLE. The bottom three rows sit BELOW their withheld arm, and
+// that is at least partly a depth confound rather than protection: the withheld arm survives
+// longer, so it meets harder content and takes more casualties per door. The confound runs
+// against the top of the table and with the bottom, so NO HANDS at 3.5x is if anything
+// understated and LIGHT ORDER's 0.7x should not be read as the card helping. Separating that
+// needs depth-matched arms and this item did not run them.
+//
+// AND ONE INSTRUMENT NOTE THAT CHANGED THE ANSWER. The first pass counted every door rather than
+// every LIVE door, which blends "the card is refusing step-ins" with "the card is dark and
+// refusing nothing" - and it understates exactly the two cards whose rule is hardest to keep.
+// THE WALL read 7.2% that way and 0.0% correctly, which is the difference between a mild finding
+// and a structural one. The census books both now and the report prints the live-only row
+// whenever the two differ.
+//
+// A CAVEAT ON THE CELL SIZE, found the same way. LIGHT ORDER read 8.6% and then 4.0% on two
+// identical 60-expedition careers, which is why every cell above is three careers and not one.
+// Casualties cluster by run, so thousands of doors do not buy the precision the door count
+// suggests.
+//
+// NO DIAL MOVES. One census split, one report row.
+//
 // ── O22: NO HANDS RE-PRICED - MY PREMISE WAS WRONG AND THE CARD COSTS FOUR WINS ────
 // I pitched this item on a prediction: O12 priced NO HANDS at -11.33 wins on an arm where O21
 // later found the card dark four fights in five, so the gap had to be a handicap without its
@@ -5441,7 +5497,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
                  extracted: false, walkedAt: 0, formations: {}, factionFights: {}, loose: 0, doctrine: null, doctrineKept: false,
                  benchHeld: null,
-                 docDoorAll: 0, doorBodies: [], docDark: {}, docDoor: 0, docBreach: 0, docBreachLine: {}, docBreachFirst: null, docArrived: {},
+                 docDoorAll: 0, doorBodies: [], doorBodiesLive: [], docDark: {}, docDoor: 0, docBreach: 0, docBreachLine: {}, docBreachFirst: null, docArrived: {},
                  booked: 0, bookedKinds: {}, augments: 0,
                  offeredNodes: {}, takenNodes: {}, forks: 0, forksWithChoice: 0, forksAllFights: 0,
                  cachesMet: 0, cachesClean: 0, cachesForced: 0, cacheScrap: 0, cacheLocks: {}, cacheOpener: {},
@@ -6606,7 +6662,16 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
     // ("Better to leave the rank empty"). Under NO HANDS most of the bench carries melee, so a
     // casualty is not replaced for the rest of the run. That is a structural claim about the SIZE
     // of the line, so it is counted at the door rather than argued from the win column.
-    stat.doorBodies.push(playerRoster.filter(p => p.gridPos > 0).length);
+    {
+      const standing = playerRoster.filter(p => p.gridPos > 0).length;
+      stat.doorBodies.push(standing);
+      // O23: AND THE SAME COUNT ON LIVE DOORS ONLY, because two of the seven cards spend most of
+      // a run broken - BROAD SPECTRUM ran live at 42% of doors and THE WALL at 37% - and a share
+      // taken over every door is then a blend of "the card is refusing step-ins" and "the card is
+      // dark and refusing nothing". That blend understates the live effect on exactly the two
+      // cards whose rule is hardest to keep, which is the wrong direction to be wrong in.
+      if (activeDoctrine && !doctrineBroken) stat.doorBodiesLive.push(standing);
+    }
     if (!activeDoctrine || doctrineBroken) {
       const k = (!activeDoctrine ? 'never taken' : 'broken') + ' s' + currentSector;
       stat.docDark[k] = (stat.docDark[k] || 0) + 1;
@@ -8254,6 +8319,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       const short = sizes.filter(v => v < 3).length;
       line('bodies standing at a fight door, mean', mean.toFixed(2));
       line('  doors fought under strength', `${short} of ${sizes.length} (${(100 * short / sizes.length).toFixed(1)}%)`);
+      const liveSizes = results.flatMap(r => r.doorBodiesLive || []);
+      if (liveSizes.length && liveSizes.length !== sizes.length) {
+        const ls = liveSizes.filter(v => v < 3).length;
+        line('  and on live-doctrine doors only',
+             `${ls} of ${liveSizes.length} (${(100 * ls / liveSizes.length).toFixed(1)}%), ` +
+             `mean ${(liveSizes.reduce((a, v) => a + v, 0) / liveSizes.length).toFixed(2)}`);
+      }
     }
     const doorsAll = results.reduce((a, r) => a + (r.docDoorAll || 0), 0);
     line('fight doors under a live doctrine', `${doors} of ${doorsAll}`);
