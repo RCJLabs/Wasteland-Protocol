@@ -52,7 +52,7 @@ module.exports = {
       new RegExp(`${r.answered} answered by a later item\\s+${r.open} still open\\s+` +
                  `${r.notaclaim} not an open claim`).test(
         require('fs').readFileSync(require('path').join(__dirname, '..', 'simulate.js'), 'utf8'))
-      && new RegExp(`FOUR of the seventeen`).test(
+      && new RegExp(`THREE of the seventeen`).test(
         require('fs').readFileSync(require('path').join(__dirname, '..', 'simulate.js'), 'utf8'))
       // This went to three for one commit and came back, and the round trip is the point. The
       // P-audit READ one of the markers instead of trusting it. F10's said
@@ -64,7 +64,7 @@ module.exports = {
       // gap and the worse one. The scanner cannot check a marker's CONTENT, and it cannot check
       // that a marker covers only what it claims to. A count that falls without an item
       // answering anything is the signature of both.
-      && r.open === 4 && r.total === 17);
+      && r.open === 3 && r.total === 17);
     // The five known stale ones, by the words that were wrong, so a rewrite that quietly drops
     // the marker without settling the claim is caught rather than passing as tidied prose.
     const fs = require('fs'), path = require('path');

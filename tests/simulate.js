@@ -3015,8 +3015,9 @@ const ROOT = path.join(__dirname, '..');
 // exact and the judgement stays with whoever reads it.
 //
 // THE RATCHET IS NOT "NO CLAIM MAY BE OPEN". Open claims are how this file says what it does not
-// know and there should be plenty - FOUR of the seventeen are marked STILL OPEN, including two
-// on the queue right now (the bench job alone, and K11's twelve-careers-an-arm question). It read
+// know and there should be plenty - THREE of the seventeen are marked STILL OPEN, and the one on
+// the queue right now is K11's twelve-careers-an-arm question (the bench job alone was the other,
+// answered by P01-P03). It read
 // THREE for one commit and that was my error, not a settlement: the P-audit read F10's marker
 // instead of trusting it, found the re-draft half false, and reclassified the WHOLE entry while
 // its own text said the capstone half still stood. The marker is split now and the live half is
@@ -3041,7 +3042,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   6 answered by a later item     4 still open     7 not an open claim after reading
+//   7 answered by a later item     3 still open     7 not an open claim after reading
 //
 // NO DIAL MOVES. game.js is untouched.
 
@@ -3174,7 +3175,15 @@ const ROOT = path.join(__dirname, '..');
 // the finding. So SCOUT, QUARTERMASTER and MEDIC have a door, it has been walked through, and
 // what any one of them is worth is unmeasured. That is a smaller claim than "C10 shipped content
 // nothing has ever exercised", which is what the flag default alone would have suggested.
-//   ^^ READ: STILL OPEN. No item since has run --bench on its own.
+//   ^^ ANSWERED by P01-P03, and the answer needed the row fixed first. --bench scout against the
+//   default, three 150-expedition careers an arm: 20.67 -> 23.33 wins, +2.66, with nodes and
+//   score medians moving the same way and NONE of it settling - this file's own bar for those
+//   arms is about ten wins. The claim asked for the job to be run on its own and it has been; the
+//   size is open and would take roughly twelve careers an arm. What the run found instead is
+//   bigger than the pricing: the job is in force at 49-56% of fight doors, not the 100% the
+//   muster-time row reported, so any earlier measurement through it would have been a blend.
+//   Marked late, which is the rule this file states and I broke: P01-P03 cashed this claim and
+//   committed without touching it, and the mark is a separate commit it should not have needed.
 //
 // WHAT THE AUDIT DID NOT FIND, stated because an audit that only reports hits is not an audit.
 // The other never-named arms are documented at their definitions and deliberate: `--order long`
