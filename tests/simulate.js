@@ -1086,7 +1086,11 @@
 //   a career accumulates ranks while `--draft line` opens with a Bruiser or a Shotgunner on
 //   expedition 1 and on expedition 150 alike, though by then every class has a fourth ability.
 //   THE CAPSTONE HALF STANDS AND IS STILL OPEN: no policy banks one to take later.
-//   ^^ READ: STILL OPEN. Nothing since has banked a capstone to take later.
+//   ^^ ANSWERED by F10b, and the reason nobody had is that the play does not exist. `--perks
+//   bank` walks the BANK THE POINT button now; capstones arrive through the promotion screen at
+//   1.9-2.9 a run and off the Outpost shelf at 0.14-0.22, so banking skips the door capstones
+//   come through to queue at the one that barely stocks them. The point becomes a stat card: 11
+//   signatures a run traded away, wins unmoved at +0.67 across three careers an arm.
 //   Split out deliberately, because the P-audit's correction above reclassified this whole entry
 //   in one stroke while its own text said half of it still stood - and stale.js then stopped
 //   counting a live claim. A marker that settles two claims at once can only be right about one.
@@ -2453,6 +2457,86 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── O05b / F10b: THE LAST TWO OPEN CLAIMS, BOTH WALKED AND BOTH NULL ──────────────
+// Two claims had sat open since their own items. Both asked for a door to be built before the
+// question could be asked at all, and both are built now.
+//
+// O05b: THE ELITE OFFER, PLUMBED. O05 built the offer, watched every card fall on the floor and
+// reverted, leaving "re-doing it needs the offer plumbed through a path the harness actually
+// walks". Two fixes get there. The harness's offer RESOLVER lived inside `if (node.type ===
+// 'BOSS')`, so a commander's cards were picked up and anything else's could not be, whoever
+// staged them - lifted to the node, which is the whole of the plumbing. And the elite drop
+// itself is now a lever in game.js, ELITE_OFFER_CARDS, defaulted to 0 so nothing about the
+// shipped game moves. Proven armed rather than assumed: the `staged by an elite` row reads 0
+// with it off and 5.00 / 5.69 / 5.11 a run with it on.
+//
+// THAT THE LIFT IS A NO-OP AT THE DEFAULT IS STRUCTURAL, NOT MEASURED, and the difference
+// matters because I first wrote it the other way round. Nothing but the commander branch stages
+// an offer while the lever is off - which is what the 0 above says across 450 runs - so where
+// the resolver sits cannot change which offers get resolved. The paired 60-run arms I reached
+// for instead read 172 offers against 150, a 13% spread that is noise at that size and carries
+// no claim in either direction; the figures I published off them, "175 vs 177", were the RECRUIT
+// offer row four lines further down the report. That is the second time in this item that two
+// rows named `offers` got crossed - the first read as a dead lever for about a minute while I
+// was checking whether the arm was armed at all - and the report prints both under a heading
+// containing the word `offers`, which is how a grep finds the wrong one twice in a day.
+//
+//                       grant (0)            two cards (2)
+//   ended the road      16 / 17 / 22          21 / 20 / 18     18.33 -> 19.67
+//   score, median    21.1/25.6/24.6k       24.0/25.2/23.3k
+//   nodes, median       70 / 76 / 73          70 / 77 / 72
+//   relics held, mean  9.1/10.7/10.8       10.3/11.1/10.3     10.20 -> 10.57
+//
+// NOTHING SEPARATES, and the row that matters is the last one. O05's fear was that touching this
+// channel would cut it - it priced the elite relic at 5.8 a run and a large share of the wins -
+// and the count is intact, marginally up and well inside noise. So the asking is FREE: the
+// player gets a decision where they had a die roll, and pays nothing measurable for it at three
+// careers an arm. That is a decision-ready result rather than a recommendation; the lever stays
+// at 0 and moving it is the owner's call, like every other card in this file.
+//
+// F10b: BANKING A CAPSTONE, AND YOU CANNOT. F10's other half said no policy banks a capstone to
+// take later. The door is real - BANK THE POINT (spend it at the Outpost), on the promotion
+// screen - and `--perks bank` now walks it: refuse anything that is not a capstone, and let the
+// Outpost's spend path buy one when it opens.
+//
+//                                take (default)              bank
+//   ended the road              12 / 14 / 18            14 /  9 / 23        14.67 -> 15.33
+//   promotions a run         18.3 / 20.4 / 20.5      19.9 / 18.4 / 23.2
+//     of them a signature    10.8 / 11.1 / 11.2        0.0 / 0.0 / 0.0
+//   capstones, promotion screen 2.35 / 2.82 / 2.87    2.32 / 1.90 / 2.92
+//   capstones, Outpost shelf    0.00 / 0.00 / 0.00    0.18 / 0.14 / 0.22
+//   points at the Outpost, stat  89% / 89% / 90%       75% / 74% / 76%
+//     on a signature             11% / 11% / 10%       24% / 26% / 24%
+//     on a capstone               0% / 0% / 0%          0% / 0% / 0%
+//
+// All three careers per cell, because the first draft of this table printed career 1 alone in
+// every row but the wins and read as though it were the arm. Nothing in the conclusion changes
+// - the shelf column is 0.00 three times and the signature column is 0.0 three times, which is
+// the whole finding - but a table that shows one career while the row above it shows three is
+// how a spread gets lost, and losing spreads is what this file corrects itself for most.
+//
+// The `points banked instead` row was added after these careers ran and is not in the table,
+// because putting a number there that this measurement did not produce is how a figure gets
+// believed past what it measured. What it shows is structural and holds at any sample size: in
+// the bank arm every promotion is either a capstone taken or a point banked, and the two add up
+// to the promotion count.
+//
+// THE PREMISE IS REFUTED MECHANICALLY, WHICH IS BETTER THAN A NULL. Capstones arrive through the
+// promotion screen at 1.9-2.9 a run in BOTH arms, and the Outpost shelf sells 0.14-0.22 a run
+// and only to the arm that banks. Banking skips the one door capstones come through in order to
+// queue at the one that barely stocks them. What the point actually becomes is a stat card: the
+// bank arm throws away 11 signatures a run to buy a fifth of a capstone and a pile of +5 DMG.
+// The win column does not separate (+0.67, ranges 12-18 against 9-23) because stat cards partly
+// pay for what the signatures did, which is the least interesting thing in the table.
+//
+// SO THE CLAIM IS ANSWERED AND THE ANSWER IS "THE PLAY DOES NOT EXIST". Nobody banked for a
+// capstone because banking cannot buy one. Whether it SHOULD - whether the Outpost shelf ought
+// to stock capstones so the BANK button means what its own label implies - is a design question
+// and goes to the owner with the rest.
+//
+// NO DIAL MOVES. Two levers, both defaulted off, and the shipped game is byte-identical in
+// behaviour at those defaults.
+//
 // ── K11c: THE MECHANISM IS REAL, IT IS HUGE, AND IT CANCELS - K11b CORRECTED ──────
 // K11b closed by filing its own follow-up: win counts are the wrong instrument, and the question
 // belongs on something that moves per FIGHT. It also wrote that K05's compounding argument was
@@ -3117,35 +3201,57 @@ const ROOT = path.join(__dirname, '..');
 // exact and the judgement stays with whoever reads it.
 //
 // THE RATCHET IS NOT "NO CLAIM MAY BE OPEN". Open claims are how this file says what it does not
-// know and there should be plenty - TWO of the eighteen are marked STILL OPEN. The two that were
-// on the queue are both answered now: the bench job alone by P01-P03, and K11's
-// twelve-careers-an-arm question by K11b, which paid the price K11 quoted and found the quote
-// was an order of magnitude light. It read
-// THREE for one commit and that was my error, not a settlement: the P-audit read F10's marker
-// instead of trusting it, found the re-draft half false, and reclassified the WHOLE entry while
-// its own text said the capstone half still stood. The marker is split now and the live half is
-// counted again. Two lessons, and the second is the one that cost something: a claim that is
-// present-tense AND marked is invisible to the scanner, which checks that a marker EXISTS and
-// cannot check that it is RIGHT; and a marker that settles two claims at once can only be right
-// about one of them. The bar
-// is that none sits UNREAD. An item that closes on an open question marks it in the same breath,
-// which costs one line. Suite 173 holds the count at zero and pins the five settled ones at their
-// own sites, so a rewrite that tidies a marker away without settling the claim goes red rather
-// than passing as better prose. Two mutations: a new unread claim reds the ratchet by line
-// number, and deleting one marker reds both the ratchet and that claim's own row.
+// know, and there should be plenty. The bar is that none sits UNREAD: an item that closes on an
+// open question marks it in the same breath, which costs one line. The count has run 4 -> 3 -> 4
+// -> 2 -> ZERO, and this is the first time the record has held no open claim at all - not
+// because nothing is unknown, which would be a lie, but because every question this file has
+// raised in its own words has now been walked to an answer, a refutation or a price nobody is
+// paying. What is still unknown sits in two other places that this scan deliberately does not
+// read: the design decisions parked with the owner, and the items priced and declined on
+// arithmetic. Zero here is a statement about MARKERS, not about knowledge, and reading it as
+// "nothing left to do" would be the same mistake as every other number in this file that got
+// believed past what it measured.
 //
-// AND THAT SENTENCE FIRST SAID "five of the fifteen", WHICH IS WRONG ON BOTH NUMBERS. Four are
-// open, not five; seventeen claims exist, not fifteen, because the write-up above added two of
+// THE LAST TWO WENT TOGETHER IN O05b/F10b, and both needed a door built before the question was
+// askable: the elite offer had to be plumbed through a path the harness walks, and the capstone
+// bank had to have a policy that presses the button. Both came back null on the win column and
+// both said something mechanical instead - the asking is free, and the banking cannot buy what
+// it is banking for.
+//
+// IT READ THREE FOR ONE COMMIT AND THAT WAS MY ERROR, not a settlement: the P-audit read F10's
+// marker instead of trusting it, found the re-draft half false, and reclassified the WHOLE entry
+// while its own text said the capstone half still stood. The marker is split now and the live
+// half was counted again until F10b answered it. Two lessons, and the second is the one that
+// cost something: a claim that is present-tense AND marked is invisible to the scanner, which
+// checks that a marker EXISTS and cannot check that it is RIGHT; and a marker that settles two
+// claims at once can only be right about one of them.
+//
+// AND THE THIRD LESSON CAME OUT OF WRITING THIS PARAGRAPH, which is the third time that has
+// happened. Syncing these numbers meant reading every marker, and one of them - K11's - carried
+// TWO, disagreeing: K11b wrote its answer above the existing "STILL OPEN" line and left it
+// standing, so the last word a reader got was the stale one. The scan passed it silently,
+// because it tested the whole window for an answer, took the first hit and stopped. An
+// instrument built for exactly one failure mode was blind to that failure mode occurring inside
+// a claim it had already cleared. stale.js reads marker BLOCKS now: the last DECLARED verdict is
+// the live one, quoted spans are stripped so a correction quoting its own old text is not read
+// as still making it, and an answer followed by a re-opening is reported rather than swallowed.
+// Restoring the stale line reds three rows at once - the conflict count, the open count, and
+// that claim's verdict - where before it reddened nothing.
+//
+// AND THAT SENTENCE ONCE SAID "five of the fifteen", WHICH WAS WRONG ON BOTH NUMBERS. Four were
+// open, not five; seventeen claims existed, not fifteen, because the write-up above added two of
 // its own. I wrote it an hour after doing the marking, in the item whose entire subject is claims
 // in this record being wrong, and found it only when somebody asked "so nothing left?" and I
 // grepped for the answer rather than repeating myself.
 //
 // SO THE COUNTS ARE NO LONGER PROSE. tests/stale.js reads what each mark SAYS - answered, still
-// open, or not a claim after reading - and suite 173 pins all four numbers. A miscount now reds
+// open, or not a claim after reading - and suite 173 pins all five numbers. A miscount now reds
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   9 answered by a later item     2 still open     7 not an open claim after reading
+//   11 answered by a later item     0 still open     7 not an open claim after reading
+//
+// and 0 carrying two verdicts that disagree.
 //
 // NO DIAL MOVES. game.js is untouched.
 
@@ -3816,7 +3922,11 @@ const ROOT = path.join(__dirname, '..');
 // REVERTED. game.js is byte-identical to before the attempt; what stands is O04's census and this
 // price. Re-doing it needs the offer plumbed through a path the harness actually walks, which is
 // its own piece of work rather than a line in the elite branch.
-//   ^^ READ: STILL OPEN. Nothing since has plumbed the elite offer through a walked path.
+//   ^^ ANSWERED by O05b. The resolver was lifted out of the commander branch to the node - that
+//   was the whole of the path - and the elite drop is a defaulted-off lever now, armed and proven
+//   (0 offers staged off, 5.00-5.69 a run on). Nothing separates on wins, score or nodes, and the
+//   relic COUNT is intact at 10.20 -> 10.57, which was the one thing O05 said must not move. The
+//   asking is free; taking it is the owner's call.
 
 // ── O04: WHERE THE RELIC SHELF COMES FROM, AND IT IS NOT THE DECISION ──────────────────
 // A run ends holding 10.6 relics of a pool of 20, and every non-cursed one lands in 67-86% of
@@ -5002,7 +5112,14 @@ const ROOT = path.join(__dirname, '..');
 //   1.7x noisier (sd 5.36 against 3.22), and settling a gap this small actually needs about 134
 //   careers an arm. Not bought. K05's compounding argument has had its best shot and should not
 //   be cited as established.
-//   ^^ READ: STILL OPEN, and priced - twelve careers an arm. Nothing since has spent them.
+//   ^^ AND THIS MARKER USED TO SAY "STILL OPEN, and priced - twelve careers an arm. Nothing
+//   since has spent them." K11b spent them and wrote its answer ABOVE this line without taking
+//   the old one out. For two commits the claim carried two markers that disagreed, the last
+//   word a reader got was the stale one, and the scan said nothing: it tested the whole window
+//   for an answer, found K11b's, and stopped. The one instrument built to catch a stale verdict
+//   was blind to a stale verdict sitting inside a claim it had already passed. Fixed at the
+//   site, and stale.js reads marker BLOCKS now - last declared verdict wins, and an answer
+//   followed by a re-opening is reported rather than swallowed.
 //
 // AND THE ARMS ARE STILL A BENCH. Every one of them fits the whole deployed line with one piece
 // at every muster, which no player can do: K07 measured that the Armory sells one piece per visit
@@ -5480,6 +5597,14 @@ const ARRANGE = flag('arrange', 'any');
 // deciding which of the five is strongest and measuring that would be measuring my own taste
 // rather than the game's, which is the trap M02 named when it declined to fix the policy and
 // the census in one step.
+// F10 left a claim open that nothing has walked since: "no policy here banks a capstone to take
+// later". The door is real and it is on the promotion screen - BANK THE POINT (spend it at the
+// Outpost) - and this file has always pressed one of the cards instead, taking a capstone when
+// the offer happened to hold one and a signature or the first card when it did not. `bank` is
+// the other player: refuse anything that is not a capstone, and let the Outpost's own spend path
+// buy one when it opens. It is not obviously better - a banked point buys nothing until a
+// capstone is reachable, and a signature taken now compounds for the rest of the run - which is
+// why it is a measurement rather than a fix.
 const PERK_POLICY = flag('perks', 'random');
 // M09: whether the targeting knows a mark exists. CALLED_SHOT pays its holder +25% against a
 // marked target, and M06 measured it at 1% of that sniper's swings. The mark is reachable -
@@ -5577,6 +5702,10 @@ const SHOP_PICK = flag('shoppick', 'first');
 // trinket slot is worth can be asked without the drop rate answering first. Off by default; this
 // is a bench test for a measurement, not a player anybody has.
 const TRINKET_ARM = flag('trinket', '');
+// O05: the elite drop as a choice. 0 is the grant that ships; 2 hands over two cards drawn at
+// rollRelic's own odds, the count deliberately unchanged. The lever lives in game.js so the arm
+// measures the GAME rather than a harness impersonation of it; this only turns it on.
+const ELITE_OFFER = Number(flag('eliteoffer', '0')) || 0;
 // A sim that never walks out measures a game with one ending. `--extract N` gives it the
 // player who leaves once the run is worth banking: from sector N on, it takes the camp's door
 // when the squad is worn down. `off` (the default) is the old behaviour, for comparison.
@@ -5780,7 +5909,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange, retreatPolicy }) => {
+const EXPEDITION = ({ eliteOffer, difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange, retreatPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -5798,7 +5927,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
                  wipes: 0, withdrawals: 0, facesMet: {}, threads: [], standings: {}, field: {}, settled: {}, posted: null, regroupsSpent: 0, bosses: 0, elites: 0, events: 0, camps: 0,
                  moves: {}, items: {}, relics: [], bountiesDone: 0, consequences: 0, crafted: 0,
                  affixes: {}, champions: 0, eliteUnits: 0, affixedUnits: 0,
-                 promotions: 0, promoEmpty: 0, held: 0, turnsPlayer: 0, ranked: 0, basicPicked: 0, basicForced: 0, freeActions: 0, sigsTaken: 0, sigsBought: 0, capsTaken: 0, capsBought: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
+                 promotions: 0, promoEmpty: 0, capsBanked: 0, held: 0, turnsPlayer: 0, ranked: 0, basicPicked: 0, basicForced: 0, freeActions: 0, sigsTaken: 0, sigsBought: 0, capsTaken: 0, capsBought: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
                  extracted: false, walkedAt: 0, formations: {}, factionFights: {}, loose: 0, doctrine: null, doctrineKept: false,
@@ -5911,6 +6040,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   }
   ascension = Math.min(rungPolicy, PROTOCOLS.length);
   confirmNewGame(difficulty);
+  // Set after confirmNewGame for the same reason odChoices is - a fresh run must not reset it.
+  ELITE_OFFER_CARDS = eliteOffer;
   // M-audit: AFTER confirmNewGame, which zeroes odChoices - the first cut set it before and the
   // arm silently did nothing, which is the same shape as every other harness bug this phase
   // found. Set here rather than at the fire site because odChoices is exactly what the engine's
@@ -6322,6 +6453,15 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       const capId = (typeof capstoneFor === 'function' && who && capstoneFor(who)) ? capstoneFor(who).id : null;
       const capIdx = capId ? offer.options.indexOf(capId) : -1;
       const sigIdx = offer.options.findIndex(id => SIG_PERKS.some(p => p.id === id));
+      // F10: the banking arm. A capstone on the table is taken by every policy - that is not the
+      // question - and what `bank` changes is the OTHER branch, where this file used to press a
+      // signature or, failing that, whatever card sat first.
+      if (perkPolicy === 'bank' && capIdx < 0) {
+        stat.capsBanked = (stat.capsBanked || 0) + 1;
+        bankPerkOffer();
+        stat.promotions++;
+        continue;
+      }
       if (capIdx >= 0) stat.capsTaken = (stat.capsTaken || 0) + 1;
       else if (sigIdx >= 0) stat.sigsTaken++;
       const had = (who && who.traits ? who.traits.length : 0);
@@ -7777,20 +7917,33 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
       // made it defer to the engine's own count, every commander relic was staged and then
       // dropped on the floor: 108 boss kills across sixty runs produced 11 relics. Everything
       // read off "relics held" since then, the cursed tier included, was measuring that leak.
-      if (pendingRelicOffer && pendingRelicOffer.length) {
-        const offer = pendingRelicOffer;
-        stat.relicOffers++;
-        const curse = offer.find(r => r.tier === 'CURSED');
-        if (curse) stat.cursedOffered++;
-        const any = a => a[Math.floor(Math.random() * a.length)];
-        const clean = offer.filter(r => r.tier !== 'CURSED');
-        const pick = relicPolicy === 'curse'  ? (curse || offer.find(r => r.tier === 'RARE') || any(offer))
-                   : relicPolicy === 'avoid'  ? (offer.find(r => r.tier === 'RARE') || any(clean.length ? clean : offer))
-                   : relicPolicy === 'random' ? any(offer)
-                   : (offer.find(r => r.tier === 'RARE') || any(offer));
-        if (pick.tier === 'CURSED') stat.cursedTaken++;
-        takeRelic(offer.indexOf(pick));
-      }
+    }
+    // O05: AND THE RESOLVER SITS AT THE NODE NOW, NOT INSIDE THE COMMANDER BRANCH. O05 built an
+    // elite offer, watched every card fall on the floor, and reverted - the engine stages an
+    // offer from checkWinState and shows it through afterNode, a path this file deliberately does
+    // not take (it banks so it can drive resolveConsequence itself, see G04). But the half that
+    // was actually in this file's gift was never the path: it was that the only code here which
+    // PICKS a card lived inside `if (node.type === 'BOSS')`. A commander's offer resolved; an
+    // offer staged by anything else could not, whoever staged it.
+    //
+    // Lifted out, it is a no-op today - nothing but the commander branch stages one, and the
+    // relic rows below are identical across a paired run - and it is the whole of "plumbed
+    // through a walked path". The elite drop is still a grant (rollRelic straight into
+    // activeRelics, 56% of the shelf by O04's census); what changes is that an offer from ANY
+    // node would now be picked up rather than staged and dropped.
+    if (pendingRelicOffer && pendingRelicOffer.length) {
+      const offer = pendingRelicOffer;
+      stat.relicOffers++;
+      const curse = offer.find(r => r.tier === 'CURSED');
+      if (curse) stat.cursedOffered++;
+      const any = a => a[Math.floor(Math.random() * a.length)];
+      const clean = offer.filter(r => r.tier !== 'CURSED');
+      const pick = relicPolicy === 'curse'  ? (curse || offer.find(r => r.tier === 'RARE') || any(offer))
+                 : relicPolicy === 'avoid'  ? (offer.find(r => r.tier === 'RARE') || any(clean.length ? clean : offer))
+                 : relicPolicy === 'random' ? any(offer)
+                 : (offer.find(r => r.tier === 'RARE') || any(offer));
+      if (pick.tier === 'CURSED') stat.cursedTaken++;
+      takeRelic(offer.indexOf(pick));
     }
     if (node.elite) {
       stat.elites++;
@@ -7900,7 +8053,8 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   stat.reach = runStats.reach || {};       // O15: what reaches the squad, by attacker reach x rank
   stat.out = runStats.out || {};
   stat.outMoves = runStats.outMoves || {};   // O20: which move, when it reads as melee
-  stat.outMelee = runStats.outMelee || {};   // O21: and which body, under which promise           // O15: and what the squad throws, by the reach of the move
+  stat.outMelee = runStats.outMelee || {};   // O21: and which body, under which promise
+  stat.eliteOffers = runStats.eliteOffers || 0;   // O05: did the elite branch stage anything           // O15: and what the squad throws, by the reach of the move
   // O16: read back what the ENGINE booked, not what the policy thinks it pressed - G13's rule.
   // The two are printed against each other so a policy that silently does nothing says so.
   stat.engineRetreats = runStats.retreats || 0;
@@ -8071,7 +8225,7 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE, retreatPolicy: RETREAT_POLICY });
+    const r = await page.evaluate(EXPEDITION, { eliteOffer: ELITE_OFFER, difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE, retreatPolicy: RETREAT_POLICY });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -8808,6 +8962,13 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // shuts once the trait is held - so the right-hand door is reachable, just not by this policy.
   line('capstones bought', `${mean(nums('capsTaken')).toFixed(2)} through the promotion screen, `
     + `${mean(nums('capsBought')).toFixed(2)} off the Outpost shelf, per run - same card, same price`);
+  // F10b: and how many points went into the bank instead of onto a card, which is the row that
+  // says the `bank` arm is armed rather than quietly reading the default. Booked and not printed
+  // for one draft, which is the dead-field shape every audit here has caught at least once. Read
+  // it against the two figures directly above: banking queues at the right-hand door, and the
+  // right-hand door is the one that barely stocks the card being queued for.
+  line('  points banked instead', `${mean(nums('capsBanked')).toFixed(1)} per run`
+    + (mean(nums('capsBanked')) > 0 ? '' : ' - no policy here banks one'));
   // M02: what the five training cards actually get. A census - a point either bought a stat card
   // or it did not - so it reads at any sample size. M04 then made the five situational and gave
   // this harness a policy (--perks), so the split below is read against the policy that produced
@@ -9605,7 +9766,12 @@ const EXPEDITION = ({ difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_A
   // does not reach many commanders. Counts, then rates off those counts.
   const tot = k => results.reduce((a, r) => a + (r[k] || 0), 0);
   const relOffers = tot('relicOffers'), cOff = tot('cursedOffered'), cTook = tot('cursedTaken');
+  // O05: how many of those offers came from an elite node rather than a commander. Zero with the
+  // lever off is the point - the elite drop is a grant and stages nothing - and a non-zero here
+  // is the only proof that the arm is actually armed rather than quietly reading the baseline.
+  const eOffers = tot('eliteOffers');
   line('relic offers seen', `${relOffers} across ${n} runs (${(relOffers / n).toFixed(2)} per run)`);
+  line('  of them staged by an elite', `${eOffers} (${(eOffers / n).toFixed(2)} per run)`);
   line('offers holding a curse', relOffers ? `${cOff} of ${relOffers} (${(cOff / relOffers * 100).toFixed(0)}%)` : '0 - no offers');
   const cacheOff = tot('cacheOffered'), cacheTk = tot('cacheTaken');
   line('camp caches offered', `${cacheOff} across ${n} runs (${(cacheOff / n).toFixed(2)} per run)`);

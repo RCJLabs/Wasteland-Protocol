@@ -48,11 +48,11 @@ module.exports = {
     // these are read off the file, so the paragraph and the record cannot disagree again.
     ok(`${r.answered} answered by a later item, ${r.open} still open, ${r.notaclaim} not a claim`,
       r.answered + r.open + r.notaclaim === r.total);
-    ok(`the record says the same four numbers the file does`,
+    ok(`the record says the same numbers the file does`,
       new RegExp(`${r.answered} answered by a later item\\s+${r.open} still open\\s+` +
                  `${r.notaclaim} not an open claim`).test(
         require('fs').readFileSync(require('path').join(__dirname, '..', 'simulate.js'), 'utf8'))
-      && new RegExp(`TWO of the eighteen`).test(
+      && new RegExp(`and ${r.conflict} carrying two verdicts that disagree`).test(
         require('fs').readFileSync(require('path').join(__dirname, '..', 'simulate.js'), 'utf8'))
       // This went to three for one commit and came back, and the round trip is the point. The
       // P-audit READ one of the markers instead of trusting it. F10's said
@@ -64,7 +64,15 @@ module.exports = {
       // gap and the worse one. The scanner cannot check a marker's CONTENT, and it cannot check
       // that a marker covers only what it claims to. A count that falls without an item
       // answering anything is the signature of both.
-      && r.open === 2 && r.total === 18);
+      && r.open === 0 && r.total === 18);
+    // AND NO CLAIM CARRIES TWO VERDICTS THAT DISAGREE. K11's did for two commits: K11b wrote its
+    // answer ABOVE the marker already there and left the old one standing, so the last word a
+    // reader got was the stale one. The scan passed it, because it tested the window for an
+    // answer, took the first hit and stopped. This is the row that would have caught it, and
+    // nothing above it would have - the total stayed whole, every claim stayed marked, and the
+    // verdict it reported was the true one arrived at by the wrong reading.
+    ok(`no claim reads answered and then open again${r.conflict ? ' - line ' +
+        r.found.filter(f => f.conflict).map(f => f.line).join(', ') : ''}`, r.conflict === 0);
     // The five known stale ones, by the words that were wrong, so a rewrite that quietly drops
     // the marker without settling the claim is caught rather than passing as tidied prose.
     const fs = require('fs'), path = require('path');
@@ -75,6 +83,11 @@ module.exports = {
       ['M-audit -> M10', /WHICH HALF IS BETTER IS NOT MEASURED HERE[\s\S]{0,400}?\^\^ ANSWERED BY M10/],
       ['I01 -> O16', /does walking through it change anything\?" is not\.\s*\n\/\/\s*\^\^ ANSWERED BY O16/],
       ['K06 -> M-audit\/M10', /no reading in this project has ever come off the second half[\s\S]{0,200}?\^\^ ANSWERED/],
+      // The last two the record ever carried, pinned for the same reason as the five above: an
+      // item that answers a claim says so AT THE CLAIM, not in a commit message nobody reads
+      // twice. Both needed a door built before the question could be asked at all.
+      ['O05 -> O05b', /its own piece of work rather than a line in the elite branch\.\s*\n\/\/\s*\^\^ ANSWERED by O05b/],
+      ['F10 -> F10b', /no policy banks one to take later\.\s*\n\/\/\s*\^\^ ANSWERED by F10b/],
     ];
     settled.forEach(([who, re]) => ok(`${who} is marked at the claim, not just in a commit message`,
       re.test(sim)));
@@ -83,5 +96,41 @@ module.exports = {
     const tool = fs.readFileSync(path.join(__dirname, '..', 'stale.js'), 'utf8');
     ok('tests/stale.js records the approach that was tried and discarded',
       /WHAT I TRIED FIRST AND THREW AWAY/.test(tool) && /three-quarters wrong/.test(tool));
+    // AND HOW IT READS A MARKER, held on constructed windows rather than on the record, because
+    // both corrections that made it right are invisible in the output while they work. Fed by
+    // hand so the rows say what the rule IS, not that today's file happens to satisfy it.
+    const { read } = require('../stale');
+    const w = t => t.trim().split('\n').map(x => x.trim());
+    ok('the claim\'s own prose is not a verdict - only a ^^ marker is', (() => {
+      // The F10 shape: the claim says "still open" in its own words and the marker answers it.
+      const a = read(w(`
+        // no policy here banks a capstone to take later.
+        //   ^^ ANSWERED by F10b, and the reason nobody had is that the play does not exist.`));
+      return a.kind === 'answered' && a.conflict === false;
+    })());
+    ok('a later marker overrules an earlier one, and the stale half is reported', (() => {
+      // The K11 shape, which is what went wrong: answer written ABOVE, old marker left below.
+      const bad = read(w(`
+        // It would take about twelve.
+        //   ^^ ANSWERED by K11b, and the estimate was wrong.
+        //   ^^ READ: STILL OPEN, and priced - twelve careers an arm.`));
+      // And the healthy direction, which must still pass: open first, answered after.
+      const good = read(w(`
+        // It would take about twelve.
+        //   ^^ READ: STILL OPEN, and priced - twelve careers an arm.
+        //   ^^ ANSWERED by K11b, and the estimate was wrong.`));
+      return bad.kind === 'open' && bad.conflict === true
+          && good.kind === 'answered' && good.conflict === false;
+    })());
+    ok('a marker quoting what it used to say is not still saying it', (() => {
+      // How every correction in this record is written. Without the strip, the quotation reads
+      // as a live verdict and the claim goes back to open - which is the trap this file has
+      // fallen into three times in other clothes.
+      const q = read(w(`
+        // It would take about twelve.
+        //   ^^ ANSWERED by K11b, and the estimate was wrong.
+        //   ^^ AND THIS MARKER USED TO SAY "STILL OPEN, and priced - twelve careers an arm."`));
+      return q.kind === 'answered' && q.conflict === false;
+    })());
   }
 };

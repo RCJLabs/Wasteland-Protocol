@@ -90,6 +90,16 @@ let tuneUpBattles = 0;
 let activeBounties = []; 
 let momentum = 0;
 let activeRelics = []; let pendingRelicOffer = null;
+// O05: THE ELITE DROP AS A CHOICE, BEHIND A LEVER THAT IS OFF. O04's census put 56% of the relic
+// shelf on the elite node, arriving as a die roll with nothing asked. O05 built the choice, found
+// every card fell on the floor - the harness banks rather than collecting, so a staged offer was
+// never picked up - and reverted whole. The plumbing is fixed now (the harness resolves an offer
+// at the node rather than inside the commander branch), so the question is askable again and this
+// is the lever that asks it. 0 is the grant that ships and nothing about the game changes at 0.
+// The count is deliberately NOT cut when it is on: a game that wipes most runs is not one to take
+// relics from, and O05's own arm priced that channel at a large share of the wins. What moves is
+// whether the player chooses, not how much they get.
+let ELITE_OFFER_CARDS = 0;
 
 let combatBgFile = 'bg_combat.webp'; let pendingCombat = null;
 // What the squad ran from, waiting at the next fight. Persisted, because a run that reloads
@@ -13824,9 +13834,29 @@ function checkWinState() {
                 const gDrop = rollGear();
                 if (gDrop) { gearStash.push(gDrop); firePrompt('GEAR'); log(`> GEAR SALVAGED: ${gearById(gDrop).name} (equip at the Outpost).`, "log-combo"); }
             }
-            const rDrop = rollRelic();
-            if (rDrop) { activeRelics.push(rDrop); log(`> RELIC ACQUIRED: ${rDrop.name}!`, "log-combo"); announceSets(); }
-            else { const b = emptyPoolScrap(); scrap += b; log(`> No relic left to find. Salvaged ${b} Scrap instead.`, "log-heal"); }
+            // Drawn one card at a time at rollRelic's OWN odds, and never through
+            // rollRelicOffer - that builder seeds a rare first by construction, so an offer built
+            // from it hands a rare-preferring player one every time and turns a 30% rare rate
+            // into 100% while calling itself a choice. O05 caught that in the building and it is
+            // the reason this loop exists. Repeated draws put a rare on at least one of two cards
+            // about half the time, which is what choosing is actually worth.
+            const cards = [];
+            if (ELITE_OFFER_CARDS > 1) {
+                const seen = new Set();
+                for (let i = 0; i < ELITE_OFFER_CARDS * 6 && cards.length < ELITE_OFFER_CARDS; i++) {
+                    const r = rollRelic();
+                    if (r && !seen.has(r.id)) { seen.add(r.id); cards.push(r); }
+                }
+            }
+            if (cards.length > 1) {
+                pendingRelicOffer = cards;
+                if (runStats) runStats.eliteOffers = (runStats.eliteOffers || 0) + 1;
+                log(`> The elite was carrying more than one thing worth taking.`, "log-combo");
+            } else {
+                const rDrop = cards[0] || rollRelic();
+                if (rDrop) { activeRelics.push(rDrop); log(`> RELIC ACQUIRED: ${rDrop.name}!`, "log-combo"); announceSets(); }
+                else { const b = emptyPoolScrap(); scrap += b; log(`> No relic left to find. Salvaged ${b} Scrap instead.`, "log-heal"); }
+            }
         }
         // A commander is worth a decision rather than a die roll, so it hands over three to
         // choose between. The choice is staged and shown once the loot has been collected.
@@ -14066,6 +14096,7 @@ globalThis.WP = {
     get forecastTerrain() { return forecastTerrain; }, set forecastTerrain(v) { forecastTerrain = v; },
     get forecastFormation() { return forecastFormation; }, set forecastFormation(v) { forecastFormation = v; },
     get doctrineOffer() { return doctrineOffer; }, set doctrineOffer(v) { doctrineOffer = v; },
+    get ELITE_OFFER_CARDS() { return ELITE_OFFER_CARDS; }, set ELITE_OFFER_CARDS(v) { ELITE_OFFER_CARDS = v; },
     get activeDoctrine() { return activeDoctrine; }, set activeDoctrine(v) { activeDoctrine = v; },
     get doctrineBroken() { return doctrineBroken; }, set doctrineBroken(v) { doctrineBroken = v; },
     get doctrineFavourites() { return doctrineFavourites; }, set doctrineFavourites(v) { doctrineFavourites = v; },

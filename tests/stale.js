@@ -76,24 +76,64 @@ items.forEach(it => { it.tokens = tokensOf(it.title); });
 
 const itemAt = i => { for (let k = items.length - 1; k >= 0; k--) if (items[k].at <= i) return k; return -1; };
 
+// WHAT THE MARKS SAY, not just that there is one. The O17 write-up put "five of the fifteen are
+// marked STILL OPEN" into the record and the answer was four - a miscount in the very item about
+// miscounts, written an hour after the marks went in. A number in prose drifts; this one is read
+// off the file so the suite can pin it.
+//
+// A CLAIM CAN CARRY MORE THAN ONE MARKER, so the window is read as a sequence of marker BLOCKS
+// rather than as one bag of words. A block starts at a ^^ line and runs to the next one; the
+// claim's own prose, above the first ^^, is not a marker and gets no vote - it is the thing
+// being judged, and it is exactly where the words "still open" naturally live.
+//
+// AND A VERDICT IS WHAT A BLOCK DECLARES, NOT WHAT IT QUOTES. Three times in this record a line
+// has been read as making a claim when it was repeating somebody else's, so quoted spans come
+// out before any verdict is read. Without that, a marker saying what it USED to say - which is
+// how a correction gets written here - still reads as saying it.
+//
+// Taken out of the scan loop so a suite can put a window in by hand and read the verdict back.
+// Everything below went wrong ONCE, silently, inside the file that exists to catch exactly this,
+// and none of it shows in the output while it is working.
+const read = window => {
+  const first = window.findIndex(x => MARK.test(x));
+  const blocks = [];
+  if (first >= 0) window.slice(first).forEach(x => {
+    if (MARK.test(x)) blocks.push(x); else if (blocks.length) blocks[blocks.length - 1] += ' ' + x;
+  });
+  const verdictOf = b => {
+    const t = b.replace(/"[^"]*"/g, ' ');
+    return /ANSWERED/i.test(t) ? 'answered' : /STILL OPEN/i.test(t) ? 'open' : null;
+  };
+  // THE LAST DECLARED VERDICT IS THE LIVE ONE, and blocks that declare neither are notes that
+  // leave it alone. This used to test ANSWERED against the whole window and take the first hit,
+  // which is how a stale marker below a fresh one stayed invisible.
+  const verdicts = blocks.map(verdictOf).filter(Boolean);
+  // A CLAIM THAT READS ANSWERED AND THEN OPEN AGAIN IS ONE OF TWO THINGS, and both want a human.
+  // K11b answered a claim by writing its marker ABOVE the marker already there and leaving the
+  // old one in place, so the claim carried two verdicts and the last word a reader got was the
+  // stale one. Open-then-answered is the healthy direction and passes; answered-then-open is
+  // either an uncleaned marker or a real re-opening, and neither should go by in silence.
+  return {
+    marked: first >= 0,
+    kind: first < 0 ? 'unread' : verdicts.length ? verdicts[verdicts.length - 1] : 'notaclaim',
+    conflict: verdicts.indexOf('answered') >= 0 &&
+              verdicts.lastIndexOf('open') > verdicts.indexOf('answered'),
+  };
+};
+
 const found = [];
 lines.forEach((l, i) => {
   if (!l.startsWith('//')) return;
   if (!OPEN.test(l)) return;
   const k = itemAt(i);
   if (k < 0) return;
-  // Already read and marked? The marker sits within a few lines of the claim it settles.
-  const marked = lines.slice(i, i + 10).some(x => MARK.test(x));
-  // WHAT THE MARK SAYS, not just that there is one. The O17 write-up put "five of the fifteen
-  // are marked STILL OPEN" into the record and the answer was four - a miscount in the very item
-  // about miscounts, written an hour after the marks went in. A number in prose drifts; this one
-  // is read off the file so the suite can pin it.
-  const near = lines.slice(i, i + 12).join(' ');
-  const kind = !marked ? 'unread'
-             : /\^\^[^\n]*ANSWERED/i.test(near) ? 'answered'
-             : /STILL OPEN/i.test(near) ? 'open'
-             : 'notaclaim';
-  found.push({ line: i + 1, text: l.replace(/^\/\/\s*/, '').trim(), item: items[k].title, marked, kind });
+  // The marker sits within a few lines of the claim it settles. ONE window for both questions -
+  // whether a marker exists and what it says - because they were 10 lines and 12 before, so a
+  // marker at the far edge could be read for its verdict by a claim counted as unread. No claim
+  // in the record sits in that gap today and the counts are identical either way; it is closed
+  // because a rule with two answers to "how far down does a marker count?" has no rule.
+  const { marked, kind, conflict } = read(lines.slice(i, i + 12));
+  found.push({ line: i + 1, text: l.replace(/^\/\/\s*/, '').trim(), item: items[k].title, marked, kind, conflict });
 });
 
 const live = found.filter(f => !f.marked);
@@ -104,7 +144,10 @@ console.log(`  ${found.length - live.length} read since, and marked`);
 const by = k => found.filter(f => f.kind === k).length;
 console.log(`    ${by('answered')} answered by a later item   ${by('open')} still open   ` +
             `${by('notaclaim')} not an open claim after reading`);
-console.log(`  ${live.length} unread\n`);
+console.log(`  ${live.length} unread`);
+const clash = found.filter(f => f.conflict);
+console.log(`  ${clash.length} carrying two verdicts that disagree` +
+            (clash.length ? ' at line ' + clash.map(f => f.line).join(', ') : '') + '\n');
 
 show.forEach(f => {
   console.log(`  ${SRC.split('/').pop()}:${f.line}${f.marked ? '  [read]' : ''}`);
@@ -117,9 +160,12 @@ show.forEach(f => {
 // after it, and carries a mark saying so. A new item that closes on an open question has to
 // mark it in the same breath, which costs a line and is the whole of the fix.
 if (!ALL) {
-  console.log(live.length === 0
+  console.log(live.length === 0 && clash.length === 0
     ? 'CLEAN: every open claim in the record has been read against what followed it.'
-    : `${live.length} unread. Mark each ^^ with what settled it, or with why it still stands.`);
+    : live.length
+    ? `${live.length} unread. Mark each ^^ with what settled it, or with why it still stands.`
+    : `${clash.length} marked both answered and still open. Take out the half that is stale.`);
 }
-module.exports = { scan: () => ({ total: found.length, live: live.length, found,
-  answered: by('answered'), open: by('open'), notaclaim: by('notaclaim') }) };
+module.exports = { read, scan: () => ({ total: found.length, live: live.length, found,
+  answered: by('answered'), open: by('open'), notaclaim: by('notaclaim'),
+  conflict: clash.length }) };
