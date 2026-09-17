@@ -2457,11 +2457,12 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
-// ── R03: A SIDE THAT LOSES HEART - BUILT AND REACHABLE, NOT YET PRICED ────────────
-// Filed like R04 was, in two commits, and for the same reason: the careers that price it are
-// running as this is written and the build should not sit on one machine's disk waiting for
-// them. The table lands in the commit that follows. Everything below is either a census that
-// reads at any sample size or a twelve-expedition smoke, and each says which it is.
+// ── R03: A SIDE THAT LOSES HEART - AND IT COSTS BODIES, NOT WINS ──────────────────
+// Filed in two commits, the build then this table. The build commit wrote down its own worry:
+// "fight payout and XP are both per-NODE rather than per-kill, so a fight that ends early costs
+// the player nothing... if the arms separate upward this is a difficulty cut wearing a tactics
+// hat". They did not separate upward. They separated somewhere else entirely, and the chain
+// that gets there closes on arithmetic.
 //
 // WHAT THE R-AUDIT FOUND. The squad has four ways out of a fight - withdraw (N07), retreat
 // (I01), fall back, extract (A01). The road has none. Every hostile in the game stood to the
@@ -2515,11 +2516,59 @@ const ROOT = path.join(__dirname, '..');
 // rather than what a player who wanted the kill would take. Named because the row it sits in is
 // the one that reads most like a finding, and it is the one least entitled to.
 //
-// WHAT THE CAREERS ARE FOR. `--morale off` withholds it whole. The honest worry, written down
-// before the numbers: fight payout and XP are both per-NODE rather than per-kill, so a fight
-// that ends early costs the player nothing in scrap or experience - the only automatic costs
-// are momentum and bounty progress. If the arms separate upward this is a difficulty cut
-// wearing a tactics hat, and it should be read as one.
+// THREE CAREERS OF 150 AN ARM, `--morale off` withholding it whole:
+//
+//                              on (the break)         off (control)
+//   ended the road             19 / 16 / 15          21 / 14 / 25      16.67 -> 20.00
+//   actor turns per fight    32.7 / 31.7 / 31.3    33.8 / 34.2 / 33.7   SEPARATED
+//   lost for good, per run   4.39 / 4.42 / 4.46    3.55 / 4.04 / 3.85   SEPARATED
+//   wipes per run            6.59 / 6.44 / 6.65    6.37 / 6.29 / 6.37   SEPARATED
+//   put on the floor, per run 20.9 / 20.4 / 20.1    20.2 / 19.7 / 20.2   flat
+//   dragged clear, per run   17.0 / 16.1 / 16.3    16.9 / 16.5 / 17.1   flat
+//
+// THE WIN COLUMN IS A CLEAN NULL, and this one does not even need the floor argument R04 needed:
+// 16.67 against 20.00 is a 3.33 gap whose ranges OVERLAP - 15-19 against 14-25 - and which is
+// not even the same direction 3/3. Nothing to argue about.
+//
+// THE FIGHT IS TWO TURNS SHORTER AND THAT DOES SEPARATE. 31.9 against 33.9, 3/3, no overlap.
+// This is the reading K11c's lesson says to take: turns-per-fight is a median over roughly
+// 7,500 fights a career, not one number off a heavy tail, so it resolves where a win count
+// cannot. The mechanism is real and it is 6% of a fight.
+//
+// AND THE SQUAD LOSES MORE PEOPLE. 4.42 a run against 3.81, 3/3, no overlap - while the number
+// PUT ON THE FLOOR is flat and the number DRAGGED CLEAR is flat. So the same bodies go down and
+// fewer of them come back: recovery runs 80% against 84%.
+//
+// THE CHAIN, AND IT CLOSES ON ARITHMETIC RATHER THAN ON A STORY.
+//
+//   a fled body pays no momentum       4,254 of them a career x 15 = ~63,800 forgone
+//   which is STIMs not bought          ~2,127 at 30 each
+//   and the fight is 7% shorter        ~10,000 fewer turns x the 22% that are STIM = ~2,200
+//   so STIMs should fall by            ~4,327
+//   observed                            3,709 / 5,022 / 4,543, mean 4,425
+//
+// Within 2% of the sum. And STIM is 88% of every rescue in the game, so fewer STIMs is fewer
+// bodies picked up, which is the 84% -> 80% and the extra half-operator a run. The cost the
+// build commit hoped for is real, it is paid in people, and it is paid through momentum - a
+// channel nothing in the feature touches directly.
+//
+// SO THE WORRY IS REFUTED RATHER THAN CONFIRMED. This is not a difficulty cut wearing a tactics
+// hat: fights get shorter AND the squad gets thinner, and the win column absorbs both without
+// moving. What the item bought is a trade, which is what it was for.
+//
+// WHAT IS NOT SETTLED, said plainly: the chain above is arithmetic plus three careers an arm.
+// The sum landing within 2% is strong for a mechanism and is not a controlled measurement of
+// one: nothing here withheld the momentum term on its own, so the momentum half is not measured.
+// That arm exists if somebody wants it - pay a fled body its 15 and re-run - and it is the
+// honest way to close this rather than a second pass at the same six careers.
+//   ^^ READ: STILL OPEN, and priced at one more arm of three. Marked rather than left unread
+//   because an item that files its own follow-up and does not count it is how the record used
+//   to go stale; the scanner counts this one now.
+//
+// AND THE 15% CAUGHT IS STILL A POLICY FIGURE. 4,313 of 5,104 broken bodies got away in the
+// first career and the ratio held at 85% in all three, because this file has no rule about
+// chasing a runner. A player who wanted the kill credit - and the momentum, which the chain
+// above makes worth wanting - would catch more, and every number in this entry would move.
 
 // ── R04: A RECRUIT WHO WANTS A RANK - AND MY PREDICTION WAS WRONG ─────────────────
 // Filed in two commits: the build, then this table. The prediction written into the first one
@@ -3644,7 +3693,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   11 answered by a later item     2 still open     7 not an open claim after reading
+//   11 answered by a later item     3 still open     7 not an open claim after reading
 //
 // and 0 carrying two verdicts that disagree.
 //
