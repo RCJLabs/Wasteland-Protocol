@@ -2457,6 +2457,65 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── R04: A RECRUIT WHO WANTS A RANK - BUILT, NOT YET PRICED ───────────────────────
+// THE TABLE IS NOT IN THIS ENTRY YET. The build is on disk and green; the three careers an arm
+// that price it are still running as this is written, and the entry is filed without them
+// rather than held back, because losing the build to a container restart would cost more than
+// a two-commit item does. Read every number below as a SMOKE READING - six expeditions - and
+// read nothing here as a price. The career table lands in the commit that follows this one.
+//
+// WHAT THE R-AUDIT FOUND. Every recruit node in the game offered a card and a price, and 166 of
+// 187 offers went to a line that was ALREADY FULL. Nine times in ten "can you afford this" was
+// really "will you replace somebody", asked in the wrong currency. I03 and I05 measured that
+// decision carefully; neither could change that the node only knows one way to ask.
+//
+// A TERM IS WHAT THE BODY WANTS INSTEAD. PRICE is the offer that has always been here and
+// nothing about it moves - the scrap, the bench, the player's choice of where to stand them.
+// LINE wants a rank: no scrap at all, straight into the deployed line over the weakest hand
+// standing in it, and no bench afterwards - put them there and they are gone for the run.
+// RECRUIT_LINE_SHARE is 50, so half the nodes ask it.
+//
+// THE TERM BELONGS TO THE NODE, not to the visit. Same construction as the cache's lock and for
+// the same reason: seeded off the node id and the sector, so walking away and coming back asks
+// the same thing, reload included. A per-visit roll would let a player shop for the term they
+// wanted, which is not a decision.
+//
+// THREE THINGS NEEDED CARE AND SUITE 176 HOLDS ALL THREE.
+//
+//   the card NAMES the body that steps down, and the body it names is the body that moves.
+//     Both read handRate, one function, because a card that promised one thing and moved
+//     another is F03's defect wearing a recruit's coat.
+//   the bench rule is enforced AFTER the assignment. assignSlot SWAPS: putting somebody else
+//     into a rank-holder's slot hands the rank-holder the OTHER body's old slot, which can be
+//     the bench. A check on the requested move walks straight past every one of those, and it
+//     is the case a suite would not think to write.
+//   a LINE offer is not an affordability question. The rank IS the price, so the harness's purse
+//     gate cannot decide it - a policy that only read the purse would take every free body and
+//     report that free bodies are popular. That is D05's trap for the third time this session,
+//     and it was caught in the writing rather than in the reading. Both policies ask the merit
+//     question the card asks, compared on the ARRIVAL rather than the template and therefore on
+//     a different basis from the `value` policy twenty lines down, which compares a raw template
+//     against an upgraded incumbent and says in its own comment that this understates the
+//     recruit. Here that understatement would be a thumb on the scale for the arm being
+//     measured. The two bases differ on purpose and the difference is named at both sites.
+//
+// THE SMOKE, six expeditions, which proves the thing is ARMED and prices nothing:
+//
+//   offers asking for a rank     9 of 20 (45%)
+//   signed for a rank            4 of 9 (44%)
+//   signed for scrap             7 of 11 (64%)
+//   rank-holders later benched, who left   1
+//
+// WHAT THE CAREERS ARE FOR. `--recruitterm off` withholds the whole thing, which is the O11
+// shape: one build, one difference, nothing else moved. The win column is expected to be a null
+// - it has been for O05b, F10b and M10 - and the reading that matters is mechanical: how often a
+// rank is refused, what a refused rank costs against a refused price, and whether the walk-off
+// ever actually bites. Written down BEFORE the numbers arrive so the prediction can be wrong in
+// public.
+//
+// NO DIAL MOVES on the old half: a PRICE offer charges what it charged, arrives where it
+// arrived, and holds nothing. Suite 176 pins that as carefully as it pins the new term.
+
 // ── R-AUDIT: A BRAINSTORM RUN THE WAY THIS FILE RUNS AUDITS ───────────────────────
 // Asked for by the owner: find NEW FEATURES. Every audit before this one hunted defects, so the
 // method changed and the discipline did not - read the record first, measure before pitching,
@@ -5931,6 +5990,12 @@ const TRINKET_ARM = flag('trinket', '');
 // rollRelic's own odds, the count deliberately unchanged. The lever lives in game.js so the arm
 // measures the GAME rather than a harness impersonation of it; this only turns it on.
 const ELITE_OFFER = Number(flag('eliteoffer', '0')) || 0;
+// R04: the control the recruit-term arm withholds. `on` is the shipped game; `off` puts every
+// recruit node back to a card and a price, which is what every figure printed above this line
+// was measured under. A withholding control rather than a lever, for the same reason O11 built
+// `--doctrine off`: the comparison wanted is "with the thing" against "without it", on one
+// build, with nothing else moved.
+const RECRUIT_TERM = flag('recruitterm', 'on');
 // A sim that never walks out measures a game with one ending. `--extract N` gives it the
 // player who leaves once the run is worth banking: from sector N on, it takes the camp's door
 // when the squad is worn down. `off` (the default) is the old behaviour, for comparison.
@@ -6134,7 +6199,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ eliteOffer, difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange, retreatPolicy }) => {
+const EXPEDITION = ({ recruitTermArm, eliteOffer, difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange, retreatPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -6267,6 +6332,7 @@ const EXPEDITION = ({ eliteOffer, difficulty, contracts, capNodes, withdrawPolic
   confirmNewGame(difficulty);
   // Set after confirmNewGame for the same reason odChoices is - a fresh run must not reset it.
   ELITE_OFFER_CARDS = eliteOffer;
+  RECRUIT_TERMS_ON = recruitTermArm !== 'off';
   // M-audit: AFTER confirmNewGame, which zeroes odChoices - the first cut set it before and the
   // arm silently did nothing, which is the same shape as every other harness bug this phase
   // found. Set here rather than at the fire site because odChoices is exactly what the engine's
@@ -7861,7 +7927,7 @@ const EXPEDITION = ({ eliteOffer, difficulty, contracts, capNodes, withdrawPolic
           ? line.reduce((a, c) => (c.dmgBase < a.dmgBase ? c : a))
           : null;
         stat.recruitOffers.push({ cost: pendingRecruit.cost, purse: scrap,
-          who: tpl.classType, rank: tpl.rank,
+          who: tpl.classType, rank: tpl.rank, term: recruitTerm(),
           // A hole is a slot the squad cannot fill: fewer bodies on the field than the line
           // seats, with nobody on the bench to bring up.
           //
@@ -7890,7 +7956,29 @@ const EXPEDITION = ({ eliteOffer, difficulty, contracts, capNodes, withdrawPolic
       // the arm can conclude.
       const rate = rateOf;
       let wants = true, why = 'price';
-      if ((recruitPolicy === 'value' || recruitPolicy === 'burn') && tpl) {
+      const term = recruitTerm();
+      // R04: A LINE OFFER IS NOT AN AFFORDABILITY QUESTION - the rank IS the price - so the purse
+      // gate below cannot decide it, and a policy that only reads the purse would take every one
+      // of them for free and report that free bodies are popular. Both policies ask the same
+      // merit question here, which is the question the card asks: is the line short, or does this
+      // hand out-rate the body that would step down for it.
+      //
+      // Compared on the ARRIVAL rather than the template, and deliberately differing from the
+      // `value` policy twenty lines down, which compares a raw template against an upgraded
+      // incumbent and says in its own comment that this understates the recruit. Here the
+      // understatement would be a thumb on the scale for the arm being measured, and
+      // recruitArrival is exactly what the card quotes - so the policy reads what the player
+      // reads. The gap between the two bases is named rather than quietly reconciled.
+      if (term === 'LINE' && tpl) {
+        const line = deployed();
+        const seats = hasContract('SHORT_HANDED') ? DEPLOYED - 1 : DEPLOYED;
+        const out = recruitDisplaced();
+        const arr = recruitArrival(tpl);
+        wants = line.length < seats || (!!out && (arr.dmgBase + arr.maxHp / 4) > handRate(out));
+        why = !wants ? 'declined-line' : (line.length < seats ? 'seat' : 'better-line');
+        stat.recruitWhy[why] = (stat.recruitWhy[why] || 0) + 1;
+      }
+      else if ((recruitPolicy === 'value' || recruitPolicy === 'burn') && tpl) {
         const line = deployed();
         const bench = playerRoster.filter(c => c.gridPos === 0 && c.hp > 0);
         const hole = Math.max(0, DEPLOYED - line.length - bench.length);
@@ -7908,7 +7996,9 @@ const EXPEDITION = ({ eliteOffer, difficulty, contracts, capNodes, withdrawPolic
           stat.recruitBurned = (stat.recruitBurned || 0) + 1;
         }
       }
-      if (tpl && wants && scrap >= pendingRecruit.cost + 80) {
+      // The reserve is a scrap rule and a LINE offer never touches the scrap, so it does not
+      // apply to one. Keeping it would have declined free bodies for want of triage money.
+      if (tpl && wants && (term === 'LINE' || scrap >= pendingRecruit.cost + 80)) {
         const owedBefore = pendingConsequences.length;
         signOnRecruit();
         if (pendingConsequences.length > owedBefore) {
@@ -7934,7 +8024,14 @@ const EXPEDITION = ({ eliteOffer, difficulty, contracts, capNodes, withdrawPolic
         // merit rather than on a label - a free slot if the line has lost somebody, otherwise
         // over the weakest hand on it, otherwise not at all.
         const me = playerRoster.find(c => c.id === tpl.id);
-        if (me) {
+        // R04: a LINE recruit was placed by signOnRecruit, on the engine's own rule and over the
+        // body the card named. Running this block on top would field them a second time and, on
+        // a full line, bench somebody twice for one signing.
+        if (me && term === 'LINE') {
+          if (me.gridPos > 0) stat.recruitFielded = (stat.recruitFielded || 0) + 1;
+          else stat.recruitBenched = (stat.recruitBenched || 0) + 1;
+        }
+        else if (me) {
           const line = playerRoster.filter(c => c.gridPos > 0);
           const held = new Set(line.map(c => c.gridPos));
           let free = 0;
@@ -8279,7 +8376,9 @@ const EXPEDITION = ({ eliteOffer, difficulty, contracts, capNodes, withdrawPolic
   stat.out = runStats.out || {};
   stat.outMoves = runStats.outMoves || {};   // O20: which move, when it reads as melee
   stat.outMelee = runStats.outMelee || {};   // O21: and which body, under which promise
-  stat.eliteOffers = runStats.eliteOffers || 0;   // O05: did the elite branch stage anything           // O15: and what the squad throws, by the reach of the move
+  stat.eliteOffers = runStats.eliteOffers || 0;   // O05: did the elite branch stage anything
+  stat.lineTerms = runStats.lineTerms || 0;      // R04: signings that were paid in a rank
+  stat.walkedOff = runStats.walkedOff || 0;      // R04: and rank-holders benched, who left           // O15: and what the squad throws, by the reach of the move
   // O16: read back what the ENGINE booked, not what the policy thinks it pressed - G13's rule.
   // The two are printed against each other so a policy that silently does nothing says so.
   stat.engineRetreats = runStats.retreats || 0;
@@ -8450,7 +8549,7 @@ const EXPEDITION = ({ eliteOffer, difficulty, contracts, capNodes, withdrawPolic
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { eliteOffer: ELITE_OFFER, difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE, retreatPolicy: RETREAT_POLICY });
+    const r = await page.evaluate(EXPEDITION, { recruitTermArm: RECRUIT_TERM, eliteOffer: ELITE_OFFER, difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE, retreatPolicy: RETREAT_POLICY });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -8681,6 +8780,29 @@ const EXPEDITION = ({ eliteOffer, difficulty, contracts, capNodes, withdrawPolic
   }
   line('  signed on the spot', `${totalSigned} of ${offers.length}`);
   line('  reached and still walked past', `${offers.length - totalSigned} of ${offers.length}`);
+  // R04: WHAT EACH OFFER ASKED FOR, and how the two questions were answered differently. Split
+  // rather than summed, because the whole point of the item is that they are not the same
+  // question - a PRICE offer is answered by the purse and a LINE offer by the line, and one
+  // sign rate over both would be the average of two things that share nothing.
+  {
+    const byTerm = t => offers.filter(o => o.term === t);
+    const priced = byTerm('PRICE'), ranked = byTerm('LINE');
+    const lineSigned = results.reduce((a, r) => a + (r.lineTerms || 0), 0);
+    line('  of them, asking for a rank', ranked.length
+      ? `${ranked.length} of ${offers.length} (${Math.round(ranked.length / offers.length * 100)}%), ${RECRUIT_TERM === 'off' ? 'arm off' : 'arm on'}`
+      : `none - ${RECRUIT_TERM === 'off' ? 'the arm is off' : 'the roll never landed on one'}`);
+    if (ranked.length) {
+      line('    signed for a rank', `${lineSigned} of ${ranked.length} (${Math.round(lineSigned / ranked.length * 100)}%)`);
+      const pSigned = totalSigned - lineSigned;
+      line('    signed for scrap', priced.length
+        ? `${pSigned} of ${priced.length} (${Math.round(pSigned / priced.length * 100)}%)`
+        : 'no priced offers seen');
+      // The cost the rank actually collected. A body that walks off later gave the rank back
+      // and took itself with it, which is the only way this term can lose you a hand.
+      const walked = results.reduce((a, r) => a + (r.walkedOff || 0), 0);
+      line('    rank-holders later benched, who left', `${walked} across ${n} runs`);
+    }
+  }
   // H10: the walk-past rate is three different things added together, and the item was filed on
   // the sum. An offer the squad could not pay for is not an offer it declined; an offer inside
   // this file's own 80-scrap reserve is a fact about the reserve. Split, so "the price is not

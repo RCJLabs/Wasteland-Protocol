@@ -4337,7 +4337,66 @@ const RECRUIT_COST = { base: 90, perDepth: 6 };
 function recruitCost() { return RECRUIT_COST.base + RECRUIT_COST.perDepth * depthIndex(); }
 // They have been out here on their own, and it shows.
 const RECRUIT_HEALTH = 0.6;
-let pendingRecruit = null;      // { id, cost, taken } for the node currently being stood in
+let pendingRecruit = null;      // { id, cost, term, taken } for the node currently being stood in
+
+// R04: WHAT THE OFFER ASKS FOR, AND IT IS NOT ALWAYS SCRAP. Every recruit node in the game has
+// asked the same question - a card and a price - and the R-audit measured what that question
+// actually lands on: 166 of 187 offers went to a line that was ALREADY FULL. So nine times in
+// ten "can you afford this" was really "will you replace somebody", asked in the wrong currency.
+// I03 and I05 measured that decision carefully; what neither could change is that the node only
+// knows one way to ask.
+//
+// A TERM is what the body wants instead. PRICE is the offer that has always been here and
+// nothing about it moves - the scrap, the bench, the player's choice of where to stand them.
+// LINE wants a RANK: no scrap at all, they walk straight into the deployed line over the
+// weakest hand standing in it, and they will not sit on a bench afterwards. Put them there and
+// they are gone for the run.
+//
+// The second term is deliberately not a discount on the first. It asks a question the purse
+// cannot answer - is this body better than my worst one, right now, at 60% of its bar and
+// carrying a quirk nobody has rolled yet - and it asks it at the moment the answer is hardest
+// to know.
+const RECRUIT_LINE_SHARE = 50;   // per cent of recruit nodes that ask for a rank instead
+let RECRUIT_TERMS_ON = true;     // the control the arm withholds; nothing else turns it off
+// A function of the NODE, like the cache's lock and for the same reason: the same node asks the
+// same thing every time it is looked at, across a reload included, so a term cannot be rerolled
+// by walking away and coming back.
+function termForNode(nodeId) {
+    if (!RECRUIT_TERMS_ON || !nodeId) return 'PRICE';
+    return (seedFromString('term:' + nodeId + ':' + currentSector) % 100) < RECRUIT_LINE_SHARE
+        ? 'LINE' : 'PRICE';
+}
+function recruitTerm() { return (pendingRecruit && pendingRecruit.term) || 'PRICE'; }
+// What the sign button charges. A rank is the price of a LINE offer and the purse is not asked.
+function recruitAsk(term) { return term === 'LINE' ? 0 : recruitCost(); }
+// The rating the card, the road and this file all compare two hands with: damage is what an
+// operator does every turn, health is how many turns they get. One function rather than three
+// copies, because the body the card NAMES has to be the body that actually steps down - a card
+// promising one thing and moving another is F03's defect wearing a recruit's coat.
+function handRate(c) { return c.dmgBase + c.maxHp / 4; }
+// Who steps down for a LINE offer. Null when the line has a seat going spare, which is the 11%
+// of offers that already had somewhere to put them.
+function recruitDisplaced() {
+    const line = playerRoster.filter(c => c.gridPos > 0 && c.hp > 0);
+    const seats = hasContract('SHORT_HANDED') ? DEPLOYED - 1 : DEPLOYED;
+    if (line.length < seats) return null;
+    return line.length ? line.reduce((a, c) => (handRate(c) < handRate(a) ? c : a)) : null;
+}
+// A LINE recruit will not sit on a bench, and assignSlot is the only door that can put them on
+// one: closeRanks only steps bodies UP, and SHORT_HANDED clears slot 3 before any recruit
+// exists. Checked AFTER the assignment rather than before, because assignSlot SWAPS - putting
+// somebody else into their rank hands them the other body's old slot, which can be the bench.
+function enforceLineTerms() {
+    const gone = playerRoster.filter(c => c.demandsLine && c.gridPos === 0 && c.hp > 0);
+    if (!gone.length) return 0;
+    gone.forEach(c => {
+        playerRoster = playerRoster.filter(x => x.id !== c.id);
+        log(`> ${c.name} came for a rank, not a bench. They take their kit and go.`, 'log-dmg');
+        if (runStats) runStats.walkedOff = (runStats.walkedOff || 0) + 1;
+    });
+    checkDoctrine(); saveGameState();
+    return gone.length;
+}
 
 // K01: WHAT WALKS IN, in one place, because the card and the signing were describing two
 // different bodies. The card quoted the template line - HP 72 · DMG 21 - while signOnRecruit
@@ -8095,7 +8154,12 @@ function installAugment(charId, type) {
 function assignSlot(charId, newSlot) {
     // Short Handed is a condition for the whole expedition, not just its first node.
     if (hasContract('SHORT_HANDED') && newSlot === 3) { activePosSelector = null; renderOutpost(); return; }
-    let char = playerRoster.find(c => c.id === charId); let oldSlot = char.gridPos; if (newSlot > 0) { let existingChar = playerRoster.find(c => c.gridPos === newSlot && c.id !== charId); if (existingChar) { existingChar.gridPos = oldSlot; syncRankPerks(existingChar); } } char.gridPos = newSlot; syncRankPerks(char); activePosSelector = null; checkDoctrine(); saveGameState(); renderOutpost(); }
+    let char = playerRoster.find(c => c.id === charId); let oldSlot = char.gridPos; if (newSlot > 0) { let existingChar = playerRoster.find(c => c.gridPos === newSlot && c.id !== charId); if (existingChar) { existingChar.gridPos = oldSlot; syncRankPerks(existingChar); } } char.gridPos = newSlot; syncRankPerks(char); activePosSelector = null; checkDoctrine();
+    // R04: after the swap, not before. Putting somebody else into a LINE recruit's rank hands
+    // that recruit the other body's old slot, which can be the bench - so the rule has to read
+    // the board this call actually left rather than the move that was asked for.
+    enforceLineTerms();
+    saveGameState(); renderOutpost(); }
 // ── Signature perks ─────────────────────────────────────────────────────────────────────
 // A level-up used to bank a point spent later on a flat stat. It is a moment now: three perks
 // offered on the spot, mixing the stat perks with class signatures that change what an
@@ -8953,9 +9017,11 @@ function initiateShop() {
 function initiateRecruit() {
     if (!pendingRecruit || pendingRecruit.nodeId !== currentNodeId) {
         const open = recruitables();
+        const term = termForNode(currentNodeId);
         pendingRecruit = open.length
-            ? { nodeId: currentNodeId, id: open[Math.floor(Math.random() * open.length)].id, cost: recruitCost(), taken: false }
-            : { nodeId: currentNodeId, id: null, cost: 0, taken: false };
+            ? { nodeId: currentNodeId, id: open[Math.floor(Math.random() * open.length)].id,
+                cost: recruitAsk(term), term, taken: false }
+            : { nodeId: currentNodeId, id: null, cost: 0, term, taken: false };
     }
     saveGameState();
     renderRecruit();
@@ -8985,9 +9051,9 @@ function recruitAnswer(tpl) {
     if (line.length < DEPLOYED) notes.push(`your line is ${DEPLOYED - line.length} short`);
     const reach = recruitReach(tpl);
     if (reach && !line.some(c => recruitReach(c) === reach)) notes.push(`nobody on the line fights at ${reach}`);
-    // The same rating the muster and the road use to compare two hands: damage is what an
-    // operator does every turn, health is how many turns they get.
-    const rate = c => c.dmgBase + c.maxHp / 4;
+    // The same rating the muster and the road use to compare two hands - handRate, named once so
+    // the body this line PROMISES is the body a LINE term actually steps down.
+    const rate = handRate;
     const arr = recruitArrival(tpl);
     const worst = line.length ? line.reduce((a, c) => (rate(c) < rate(a) ? c : a)) : null;
     if (worst && (arr.dmgBase + arr.maxHp / 4) > rate(worst)) notes.push(`out-hits ${worst.name} on your line`);
@@ -9013,6 +9079,18 @@ function resistLine(res) {
                        : `weak to ${k} (${v})`).join(' · ');
 }
 
+// R04: what this one wants, said on the card and in the same breath as what it costs. A LINE
+// term NAMES the body that steps down, because "over the weakest hand on your line" is a rule
+// and the player is entitled to know which body that is before pressing the button rather than
+// reading it in the log afterwards.
+function recruitTermHtml() {
+    if (recruitTerm() !== 'LINE') return '';
+    const out = recruitDisplaced();
+    return `<div class="recruit-term">THEY WANT A RANK, NOT SCRAP — `
+         + (out ? `${out.name} steps down to the bench` : 'your line has a seat going spare')
+         + `. They will not sit on a bench: put them there and they are gone for the run.</div>`;
+}
+
 function recruitCardHtml(tpl) {
     const a = recruitArrival(tpl);
     const why = recruitAnswer(tpl);
@@ -9031,6 +9109,7 @@ function recruitCardHtml(tpl) {
             } · a quirk is rolled on signing</div>
             ${res ? `<div class="recruit-res">${res}</div>` : ''}
             ${why ? `<div class="recruit-why">${why}</div>` : ''}
+            ${recruitTermHtml()}
             <ul class="recruit-verbs">${verbs}</ul>
             ${loadoutChipsHtml(tpl.classType, pendingRecruit && pendingRecruit.benchedMove, tpl.id, 'recruit')}
         </div>
@@ -9064,8 +9143,11 @@ function renderRecruit() {
     body.innerHTML = recruitCardHtml(tpl);
     const btn = document.getElementById('recruit-sign');
     btn.style.display = 'block';
+    // A LINE offer is never unaffordable: the rank is the price and a squad always has one.
     btn.disabled = scrap < pendingRecruit.cost;
-    btn.innerText = `SIGN THEM ON — ${pendingRecruit.cost} SCRAP`;
+    btn.innerText = recruitTerm() === 'LINE'
+        ? 'SIGN THEM ON — A RANK ON THE LINE'
+        : `SIGN THEM ON — ${pendingRecruit.cost} SCRAP`;
     document.getElementById('recruit-leave').innerText = 'LEAVE THEM TO IT';
 }
 
@@ -9073,6 +9155,8 @@ function signOnRecruit() {
     const tpl = pendingRecruit && recruitById(pendingRecruit.id);
     if (!tpl || pendingRecruit.taken || scrap < pendingRecruit.cost) return;
     if (playerRoster.some(c => c.id === tpl.id)) return;
+    // Read while the line is still the line the card was quoting.
+    const stepDown = pendingRecruit.term === 'LINE' ? recruitDisplaced() : null;
     scrap -= pendingRecruit.cost;
     const ch = migrateTraits([JSON.parse(JSON.stringify(tpl))])[0];
     delete ch.rank; delete ch.pitch;
@@ -9108,6 +9192,26 @@ function signOnRecruit() {
     // not. The stack is safe now because F06 rolls each offer when its screen is drawn.
     for (let i = 0; i < gained; i++) {
         if (unheldSigsFor(ch).length || capstoneOpen(ch)) pendingPerkOffers.push({ charId: ch.id, options: rollPerkOffer(ch) });
+    }
+    // R04: A LINE TERM IS PAID IN A RANK, so the rank is taken here and not left to the Outpost.
+    // Through assignSlot, which is the engine's own door - it keeps SHORT_HANDED's ban on slot 3
+    // and calls checkDoctrine, and a hand-rolled gridPos would keep neither. The displaced body
+    // is the one the card named, read BEFORE the push so the new arrival cannot be its own
+    // weakest hand.
+    if (pendingRecruit.term === 'LINE') {
+        const held = new Set(playerRoster.filter(c => c.gridPos > 0).map(c => c.gridPos));
+        let target = 0;
+        for (let sl = 1; sl <= DEPLOYED; sl++) if (!held.has(sl)) { target = sl; break; }
+        if (!target && stepDown) target = stepDown.gridPos;
+        if (target) assignSlot(ch.id, target);
+        // Only a body that actually got a rank is held to the rank's condition. Under
+        // SHORT_HANDED assignSlot refuses slot 3 outright, and a recruit who never stood on the
+        // line has not been promised one - marking them would walk them off on the next render.
+        if (ch.gridPos > 0) ch.demandsLine = true;
+        if (runStats) runStats.lineTerms = (runStats.lineTerms || 0) + 1;
+        log(ch.gridPos > 0
+            ? `> ${ch.name} takes the ${(RANK_LABELS[ch.gridPos] || '').toLowerCase()} rank. That was the deal.`
+            : `> ${ch.name} wanted a rank and there was none to give. They fall in anyway.`, 'log-status');
     }
     pendingRecruit.taken = true;
     if (runStats) runStats.recruited = (runStats.recruited || 0) + 1;
@@ -14067,7 +14171,7 @@ globalThis.WP = {
     REQUISITIONS, reqById, reqCost, reqOpen, buyRequisition, refundRequisitions, renderRequisitions, newPendingReq,
     REQ_REROLL_COST, REQ_REROLL_MAX, REQ_GRUDGE_BASE, REQ_RUNG_STEP, REQ_FALLBACK_COST, MARCH_FRESH, marchRead, marchTone, renderMarchRead,
     CACHE_LOCKS, CACHE_SCRAP, CACHE_CLEAN_MULT, CACHE_FORCE_BITE, CACHE_AMBUSH_CHANCE, cacheLockById, lockForNode, cacheOpener,
-    cachePayout, classLabel, initiateCache, renderCache, openCache, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, medBayNeedy, triageAllCost, patchUpAllCost, medBayAll, medBarHtml, rosterOrder, toggleOutpostBag, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    cachePayout, classLabel, initiateCache, renderCache, openCache, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, medBayNeedy, triageAllCost, patchUpAllCost, medBayAll, medBarHtml, rosterOrder, toggleOutpostBag, termForNode, recruitTerm, recruitAsk, handRate, recruitDisplaced, enforceLineTerms, recruitTermHtml, RECRUIT_LINE_SHARE, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
@@ -14185,6 +14289,7 @@ globalThis.WP = {
     get forecastFormation() { return forecastFormation; }, set forecastFormation(v) { forecastFormation = v; },
     get doctrineOffer() { return doctrineOffer; }, set doctrineOffer(v) { doctrineOffer = v; },
     get outpostBagOpen() { return outpostBagOpen; }, set outpostBagOpen(v) { outpostBagOpen = v; },
+    get RECRUIT_TERMS_ON() { return RECRUIT_TERMS_ON; }, set RECRUIT_TERMS_ON(v) { RECRUIT_TERMS_ON = v; },
     get ELITE_OFFER_CARDS() { return ELITE_OFFER_CARDS; }, set ELITE_OFFER_CARDS(v) { ELITE_OFFER_CARDS = v; },
     get activeDoctrine() { return activeDoctrine; }, set activeDoctrine(v) { activeDoctrine = v; },
     get doctrineBroken() { return doctrineBroken; }, set doctrineBroken(v) { doctrineBroken = v; },

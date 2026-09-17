@@ -251,6 +251,10 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
    scrolled away. */
 .upgrade-card.card-on-line { border-left: 3px solid #6B8E23; }
 .upgrade-card.card-benched { border-left: 3px solid #333; }
+/* R04: a term is not a stat line, so it does not read like one. Same weight as the warning
+   colours the curse and scar rows already use, because it is the same kind of sentence. */
+.recruit-term { border: 1px solid #8B6914; background: rgba(90,62,10,0.25); color: #e8b64c;
+  font-size: 0.6875rem; line-height: 1.5; padding: 6px 8px; margin-top: 6px; }
 .med-btn { border-color: #6B8E23; color: #6B8E23; }
 .med-btn:hover:not(:disabled) { background: #6B8E23; color: #000; }
 .revive-btn { border-color: #8B0000; color: #ff4444; }
