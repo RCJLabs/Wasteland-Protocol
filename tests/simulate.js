@@ -2457,12 +2457,11 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
-// ── R04: A RECRUIT WHO WANTS A RANK - BUILT, NOT YET PRICED ───────────────────────
-// THE TABLE IS NOT IN THIS ENTRY YET. The build is on disk and green; the three careers an arm
-// that price it are still running as this is written, and the entry is filed without them
-// rather than held back, because losing the build to a container restart would cost more than
-// a two-commit item does. Read every number below as a SMOKE READING - six expeditions - and
-// read nothing here as a price. The career table lands in the commit that follows this one.
+// ── R04: A RECRUIT WHO WANTS A RANK - AND MY PREDICTION WAS WRONG ─────────────────
+// Filed in two commits: the build, then this table. The prediction written into the first one
+// said "the win column is expected to be a null - it has been for O05b, F10b and M10". It is
+// not a null. It is not a finding either, and the gap between those two things is most of what
+// this entry is about.
 //
 // WHAT THE R-AUDIT FOUND. Every recruit node in the game offered a card and a price, and 166 of
 // 187 offers went to a line that was ALREADY FULL. Nine times in ten "can you afford this" was
@@ -2499,22 +2498,77 @@ const ROOT = path.join(__dirname, '..');
 //     recruit. Here that understatement would be a thumb on the scale for the arm being
 //     measured. The two bases differ on purpose and the difference is named at both sites.
 //
-// THE SMOKE, six expeditions, which proves the thing is ARMED and prices nothing:
+// THREE CAREERS OF 150 AN ARM. `--recruitterm off` withholds the whole thing, which is the O11
+// shape: one build, one difference, nothing else moved.
 //
-//   offers asking for a rank     9 of 20 (45%)
-//   signed for a rank            4 of 9 (44%)
-//   signed for scrap             7 of 11 (64%)
-//   rank-holders later benched, who left   1
+//                              on (the term)          off (control)
+//   ended the road             15 / 16 / 13          18 / 18 / 21       14.67 -> 19.00
+//   score, median           24.6/25.2/25.1k       24.6/25.3/23.8k
+//   nodes cleared, median      76 / 76 / 80          77 / 73 / 74
+//   deepest sector, median      3 / 3 / 3             3 / 3 / 3
+//   commander fell-rate       37% / 37% / 36%       36% / 37% / 34%
+//   bosses felled, mean      2.83 / 2.91 / 2.96    3.02 / 2.81 / 2.75
 //
-// WHAT THE CAREERS ARE FOR. `--recruitterm off` withholds the whole thing, which is the O11
-// shape: one build, one difference, nothing else moved. The win column is expected to be a null
-// - it has been for O05b, F10b and M10 - and the reading that matters is mechanical: how often a
-// rank is refused, what a refused rank costs against a refused price, and whether the walk-off
-// ever actually bites. Written down BEFORE the numbers arrive so the prediction can be wrong in
-// public.
+// THE WIN COLUMN LEANS DOWN 3/3 AND THE RANGES DO NOT OVERLAP - 13-16 against 18-21 - AND THAT
+// IS STILL NOT A FINDING. The gap is 4.33 wins. Each of these six reports prints its own
+// resolution and every one of them says the same thing: "two arms of three only settle a gap
+// wider than about 8-10 wins". 4.33 is inside that floor, comfortably.
+//
+// The non-overlapping ranges are exactly the trap. D17's separation rule - same direction 3/3
+// AND non-overlapping ranges - is the rule K06 found UNSOUND at three careers, and the printed
+// floor is the authority over the range test every time the two disagree. Writing this up as
+// "the term costs 4.3 wins" would be the fourth time in this record that a median was believed
+// past what its interval could carry, and the first three are all marked WITHDRAWN.
+//
+// SO THE HONEST VERDICT IS: NOT SETTLED, AND LEANING. Settling a 4.33 gap against a floor of 9
+// needs about (9/4.33)^2 x 3 = 13 careers an arm - 26 careers of 150, roughly four times what
+// this item has already spent. Not bought, and named so the next person does not re-derive it.
+//
+// AND THE OBVIOUS MECHANISM FOR A WIN COST IS REFUTED. A LINE recruit arrives at 60% of their
+// bar, and H04 established that arrival health is what decides a commander fight - so "the term
+// puts hurt bodies on the line at tier ten" is the story this table invites. The table refuses
+// it: commander fell-rate reads 37/37/36 against 36/37/34 and bosses felled 2.83-2.96 against
+// 2.75-3.02. Both flat. Whatever the lean is, it is not that, and the check cost one grep.
+//
+// WHAT DID SEPARATE, and it is a census over hundreds of signings rather than a career mean:
+//
+//   offers asking for a rank     259/521  321/539  286/516   (50%, 60%, 55%)
+//   signed for a rank            109/259  161/321  143/286   (42%, 50%, 50%)
+//   signed for scrap             143/262  136/218  129/230   (55%, 62%, 56%)
+//   rank-holders benched, who left  10       12       12     across 150 runs each
+//   median purse at an offer       312      312      295     against 286 / 232 / 235
+//
+// A RANK IS REFUSED MORE OFTEN THAN A PRICE, 42-50% against 55-62% taken. The question is
+// harder, which is the whole of what the item set out to do.
+//
+// AND THE FIRST VERSION OF THIS PARAGRAPH WAS A TAUTOLOGY. The headline row read "signed
+// recruits fielded 72-75% against 52-56%" and I nearly published it. A LINE recruit is fielded
+// BY DEFINITION - the rank is the term - so that lift is the feature restating itself, not a
+// measurement of it. Decomposed instead, which is the row worth having:
+//
+//   the PRICE half of the on arm, fielded   50% / 46% / 47%
+//   the off arm, fielded                    52% / 53% / 56%
+//
+// So the old half did not move, which is what "no dial moves on PRICE" has to mean - and if
+// anything it moved DOWN, because a rank already held by somebody who out-rated the incumbent
+// raises the bar for every signing after it. That is an interaction nobody designed and it is
+// the most interesting thing in the table.
+//
+// ONE CONSEQUENCE NOBODY ASKED FOR AND IT IS COHERENT: a walked-off recruit leaves playerRoster,
+// and recruitables() is "the pool minus who you already have" - so they can be met and signed
+// again further down the road. They did leave; they are out there. Named because it was found by
+// reading the offer counts (521/539/516 on against 437/471/495 off) and wondering why the arm
+// that signs MORE bodies sees MORE cards rather than fewer.
 //
 // NO DIAL MOVES on the old half: a PRICE offer charges what it charged, arrives where it
 // arrived, and holds nothing. Suite 176 pins that as carefully as it pins the new term.
+//
+// AND IT SHIPS ON, WITH THE LEAN ON THE RECORD RATHER THAN BURIED. Defaulting it off would be
+// treating an unsettled lean as a finding, which is the same error as publishing it - pointed
+// the other way. The mechanical case stands on censuses; the win reading does not stand at all.
+// If the owner would rather withhold it pending a settlement nobody has bought, it is one
+// number: RECRUIT_LINE_SHARE = 0 turns every node back into a card and a price, and
+// `--recruitterm off` is the same thing for the harness.
 
 // ── R-AUDIT: A BRAINSTORM RUN THE WAY THIS FILE RUNS AUDITS ───────────────────────
 // Asked for by the owner: find NEW FEATURES. Every audit before this one hunted defects, so the
