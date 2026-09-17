@@ -2457,6 +2457,138 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── R-AUDIT: A BRAINSTORM RUN THE WAY THIS FILE RUNS AUDITS ───────────────────────
+// Asked for by the owner: find NEW FEATURES. Every audit before this one hunted defects, so the
+// method changed and the discipline did not - read the record first, measure before pitching,
+// and report what the record refuted as carefully as what it did not. Five candidates went in
+// and five came out refuted before a line was written. That is the headline: this record is now
+// dense enough that most feature ideas are already answered in it, and the value of an audit is
+// increasingly in the ideas it KILLS.
+//
+// THE MEASUREMENT: one 60-expedition career at default policy, tree at 79ef401. Every figure
+// below is read off that report unless it names a source.
+//
+// ── WHAT THE RECORD KILLED, AND WHY EACH LOOKED GOOD ──────────────────────────────
+//
+//   "the forecast you cannot act on"   The map promises the next node's ground, sky and shape,
+//     and the squad looked frozen from the muster. It is not: the OUTPOST COMMAND button lives
+//     on the map screen, and assignSlot, the gear slots and the medbay are all live between
+//     nodes. checkDoctrine runs on the reassignment. The lever already exists.
+//
+//   "put jeopardy in the nine tiers"   Tier 10 takes 339 of 383 wipes (89%) and the nine tiers
+//     below it take 44. H04 already measured exactly this and INVERTED it: the walk decides the
+//     fight, through arrival health - 0% felled arriving under 80%, 33% felled arriving over it,
+//     and the gap holds inside every sector separately. Danger in the nine tiers is not missing
+//     content; it is the mechanism H04 found already working.
+//
+//   "extraction is dead content"   `walked out 0 of 60`. It is `--extract off`, this file's own
+//     default. D05's trap, and this is the third audit to catch it.
+//
+//   "the order only ever gets downgraded"   Re-signed 45 of 60 (75%), cut to SORTIE 34 and
+//     PATROL 11, never extended. resignOrder extends as readily as it cuts - the harness only
+//     reaches for it when `worn`. D05's trap twice in one audit, which is the rate at which it
+//     should be expected rather than a surprise.
+//
+//   "skulls pile up once the Citadel caps"   Citadel at the end of the sample: every spot at
+//     cap. But H03 measured this, derived the ledger properly (earned = rise + spent), found
+//     the requisition shelf takes 89% of income, and shipped a capability item onto it. The
+//     surplus does not exist and the sink is not underused - H03's own words are that it is
+//     selling the wrong thing, which is a different item and already filed.
+//
+// ── R01: THE COMMANDER LADDER IS EXHAUSTED IN THE FIRST THIRD OF A CAREER ─────────
+// The marquee opponent stops changing early and then does not change again.
+//
+//   commander fights reached      492
+//   met for the first time         12 fought, 67% won
+//   met again, carrying a grudge  480 fought, 30% won
+//     risen x1                     25       risen x2  29       risen x3  426  (87%)
+//   grudge on commanders met, by career third   2.27 / 3.00 / 3.00
+//
+// GRUDGE.cap is 3 and the comment on it is right - "a wall you cannot pass is not a nemesis".
+// LEARNED_AT is 2, so a commander brings exactly one new move and then nothing further. A04,
+// C09 and B02 built the arc; what nobody measured is that it COMPLETES by roughly expedition 20
+// of a 150-expedition career, and the remaining ~130 meet a capped opponent whose numbers and
+// deck are both finished.
+//
+// THE PITCH IS QUALITATIVE, NOT NUMERIC, because the numeric ladder is deliberately capped and
+// tier 10 already takes 89% of every wipe. At the cap a commander stops SCALING and starts being
+// DIFFERENT: arriving with a retinue drawn from a faction that is not its own, or already
+// knowing the doctrine the muster took, or trading its grudge phase for a different phase rather
+// than a bigger one. Every mechanism that needs exists - BOSS_PASSIVES, learnedMove,
+// tradeIntents, FORMATIONS, FACTION_ALLIES.
+// SIZE: medium, and it must be priced against the wall before it ships.
+//
+// ── R02: EVERY FIGHT IN THE GAME HAS ONE WIN CONDITION ────────────────────────────
+// checkWinState ends a fight on `!pA` or `!eA` and on nothing else. There is no reinforcement
+// path, no rout, and no code anywhere that takes a body off activeEntities without killing it.
+// The eight intents are ATTACK, AOE, HEAVY, STATUS, DEFEND, FLANK, CHARGE, SALVO - all of them
+// verbs for fighting, none for leaving, calling, or guarding a thing.
+//
+// Set against what the composition layer does: 22 formations (none unmet, KILL_BOX 199 down to
+// CONVOY 16), 6 grounds, 9 skies, 5 factions, 19 commanders, affixes on 70% of elite hostiles.
+// The game has enormous variety in what a fight IS and none at all in what a fight is FOR.
+//
+// AND THE VOCABULARY IS ALREADY BUILT. The bounty pool counts sixteen different things that
+// happen inside a fight - BLITZ turns, OVERKILL, FLAWLESS, EXECUTE, REACH, GROUND, COMBO, SIG,
+// HEAVY, CHASED. Those are win conditions wearing a reward's clothes: the engine can already
+// tell that a fight was won in four turns, or without a body going down, or by killing the
+// marked one. What it cannot do is END on one.
+// SIZE: large, and it deserves its own phase. Combat is the most-measured system in this
+// project and every figure above the line would need re-reading if the terminal condition moved.
+//
+// ── R03: NOTHING EVER RETREATS BUT YOU ────────────────────────────────────────────
+// The squad has four ways out of a fight - withdraw (N07), retreat (I01), fall back, extract
+// (A01). The road has none. Every hostile fights to the last body whatever its losses, whatever
+// its commander is doing, and whatever it came for. A faction that broke when its champion fell
+// would make the champion worth targeting, and the game currently has no way to express "kill
+// that one and the rest lose heart" - which is the oldest idea in squad tactics and the one
+// mechanic this combat model has never had.
+//   ^^ READ: STILL OPEN, and it is the whole of R03 rather than a closing aside - an audit's
+//   finding is open by construction until somebody builds or refutes it. Checked against the
+//   code rather than asserted: no path removes a body from activeEntities without killing it,
+//   and none of the eight intents is an exit.
+// Filed separately from R02 because it is much smaller: it needs a morale check and an exit, not
+// a new terminal condition. SIZE: small-medium.
+//
+// ── R04: THE RECRUIT NODE ASKS ONE QUESTION ───────────────────────────────────────
+//   offers seen                                     187
+//     offered while the squad had a hole to fill     21 (11%)
+//     offered to a line that was already full       166 (89%)
+//     signed on the spot 87, walked past 100
+//     of those signed, put on the line 51, benched   36
+//
+// So nine times in ten the node is asking "replace somebody", and I03/I05 already measured that
+// decision carefully (declining beats signing; the body is the drag, not the price). What has
+// never varied is the SHAPE of the offer: a card and a price, every time. A recruit who comes
+// with a condition instead of a price - joins only if you take their fight, will not stand
+// beside a class they have history with, leaves after three fights - asks a different question
+// with the same screen. SIZE: small-medium, and it is the cheapest item in this audit.
+//
+// ── R05: TWO DOCTRINES ARE NEVER LIVE, AND ONE OF THEM HAS NEVER BEEN WALKED ──────
+//   NO_HANDS      offered 27, live 0        LIGHT_ORDER   offered 34, live 0
+// NO_HANDS was walked properly by O22/O23 and priced at 4.34 wins for the card on top of 7.33
+// for the line. LIGHT_ORDER has never had the same treatment, and 0 of 34 under `--draft line`
+// is a policy figure before it is a game figure - which is D05's trap, and the reason this is
+// filed as a MEASUREMENT to take rather than a feature to build.
+//   ^^ READ: STILL OPEN by design. The claim is that the reading has not been taken, and filing
+//   it does not take it - O22's treatment of NO_HANDS is what closing this looks like, and it
+//   cost two items. Marked so the scanner counts it rather than so it looks settled.
+//
+// ── AND ONE THING THAT IS A DESIGN STANCE RATHER THAN A GAP ───────────────────────
+// NOTHING ABOUT AN OPERATOR SURVIVES AN EXPEDITION. buildNewRun rebuilds playerRoster from
+// ROSTER_TEMPLATE and clears bonds, cast standing, the gear stash and the purse; its own
+// comments say so on purpose ("Nobody carries over. Every expedition starts with the seven and
+// finds the rest again."). Everything that persists is class-level (mastery), building-level
+// (the Citadel), or commander-level (grudges). Levels, perks, scars, quirks and bonds are all
+// built and thrown away every run.
+//
+// That is the single largest lever on how a 150-expedition career feels, and it is a decision
+// rather than a defect - so it goes to the owner with the rest rather than becoming an item.
+// Naming it because an audit that lists five features and does not mention the biggest structural
+// choice in the game would be describing the furniture.
+//
+// NO DIAL MOVES AND NOTHING SHIPS. This entry is the deliverable.
+
 // ── Q02: THE BAG THAT SAT AT THE BOTTOM OF EVERY SCREEN ───────────────────────────
 // Asked for by the owner, and the same complaint as Q01 one row further down: TACTICAL INVENTORY
 // was a bordered panel pinned below the tab views - a title row and two rows of slot buttons -
@@ -3335,9 +3467,16 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   11 answered by a later item     0 still open     7 not an open claim after reading
+//   11 answered by a later item     2 still open     7 not an open claim after reading
 //
 // and 0 carrying two verdicts that disagree.
+//
+// AND THE ZERO LASTED TWO COMMITS, WHICH IS WHAT IT SHOULD DO. The R-audit put two back on the
+// board - R03's morale exit and R05's LIGHT_ORDER reading - because an audit's findings are open
+// claims by construction: that is what a finding IS. Reading the count as a score to protect
+// would make the next audit a thing to avoid, which is the exact failure the paragraph above
+// warns about in the other direction. What the ratchet asks is that every one has been READ,
+// and both of these were marked in the same breath as they were filed.
 //
 // NO DIAL MOVES. game.js is untouched.
 
