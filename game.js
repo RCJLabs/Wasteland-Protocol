@@ -90,6 +90,13 @@ let tuneUpBattles = 0;
 let activeBounties = []; 
 let momentum = 0;
 let activeRelics = []; let pendingRelicOffer = null;
+// Q02: whether the Outpost's bag is open. A SCREEN state and not a saved one - it has no bearing
+// on the run, and a field in the save is a field every reload has to migrate (E10). Default shut,
+// because the whole reason it became a drawer is that four slots sat at the bottom of the screen
+// whether or not anybody wanted them. It survives a re-render, which is the part that matters:
+// renderOutpost runs after every sell, and a drawer that slammed shut on each one would be worse
+// than no drawer.
+let outpostBagOpen = false;
 // O05: THE ELITE DROP AS A CHOICE, BEHIND A LEVER THAT IS OFF. O04's census put 56% of the relic
 // shelf on the elite node, arriving as a die roll with nothing asked. O05 built the choice, found
 // every card fell on the floor - the harness banks rather than collecting, so a staged offer was
@@ -4484,6 +4491,7 @@ const ACTIONS = {
     'craft':            el => craftItem(el.dataset.item),
     'augment':          el => installAugment(el.dataset.id, el.dataset.kind),
     'sell-item':        el => useOutpostItem(Number(el.dataset.index)),
+    'bag-toggle':       () => toggleOutpostBag(),
     'medbay':           el => medBay(el.dataset.id, el.dataset.mode),
     'medbay-all':       el => medBayAll(el.dataset.mode),
     'buy-upg':          el => buyUpgrade(el.dataset.id, el.dataset.kind, Number(el.dataset.cost)),
@@ -8026,9 +8034,21 @@ function renderOutpost() {
     });
 
     cybC.innerHTML = cybCards.join('');
-    document.getElementById('inv-count').innerText = `${inventory.length}/${metaUpgrades.invMax}`; const invC = document.getElementById('outpost-inventory'); const invCells = [];
+    document.getElementById('inv-count').innerText = `${inventory.length}/${metaUpgrades.invMax}${invFull ? ' \u2014 FULL' : ''}`; const invC = document.getElementById('outpost-inventory'); const invCells = [];
     for (let i = 0; i < metaUpgrades.invMax; i++) { let item = inventory[i]; if (item) { const meta = ITEM_DATA[item] || { label: item, desc: '' }; let label = `${meta.label}<span class="inv-what">${meta.short || ''}</span>`; invCells.push(`<button class="inv-slot" data-action="sell-item" data-index="${i}">${label} [SELL]</button>`); } else { invCells.push(`<button class="inv-slot" disabled>[ EMPTY SLOT ]</button>`); } }
+    // Q02: the cells are BUILT either way and only their container is hidden, so the bag's
+    // contents are one style property from the screen rather than one render away from existing.
+    // The count on the handle is what a shut drawer still has to say.
     invC.innerHTML = invCells.join('');
+    invC.style.display = outpostBagOpen ? 'flex' : 'none';
+    const bagBtn = document.getElementById('bag-toggle'), bagSect = document.getElementById('inventory-sect');
+    if (bagBtn) {
+        bagBtn.setAttribute('aria-expanded', outpostBagOpen ? 'true' : 'false');
+        bagBtn.classList.toggle('bag-full', invFull);
+        const caret = document.getElementById('bag-caret');
+        if (caret) caret.innerText = outpostBagOpen ? '\u25BE' : '\u25B8';
+    }
+    if (bagSect) bagSect.classList.toggle('bag-shut', !outpostBagOpen);
 }
 
 function breakdownScrap() { const c = breakdownCost(); if (scrap < c) return; scrap -= c; let m = ['parts', 'chems', 'tech'][Math.floor(Math.random() * 3)]; materials[m]++; saveGameState(); renderOutpost(); }
@@ -8508,6 +8528,7 @@ function breakdownCost() { return outpostPrice(BREAKDOWN_BASE); }
 function sellValue() { return outpostPrice(SELL_BASE); }
 
 function useOutpostItem(index) { inventory.splice(index, 1); scrap += sellValue(); saveGameState(); renderOutpost(); }
+function toggleOutpostBag() { outpostBagOpen = !outpostBagOpen; renderOutpost(); }
 // K01: the stat grant, separated from paying for it. The Outpost buys one; a signing now hands
 // several over at the squad's median, and neither wants a second copy of what +10 HP means.
 // The dead check moved ABOVE the charge on the way past: it used to take the scrap and then
@@ -14046,7 +14067,7 @@ globalThis.WP = {
     REQUISITIONS, reqById, reqCost, reqOpen, buyRequisition, refundRequisitions, renderRequisitions, newPendingReq,
     REQ_REROLL_COST, REQ_REROLL_MAX, REQ_GRUDGE_BASE, REQ_RUNG_STEP, REQ_FALLBACK_COST, MARCH_FRESH, marchRead, marchTone, renderMarchRead,
     CACHE_LOCKS, CACHE_SCRAP, CACHE_CLEAN_MULT, CACHE_FORCE_BITE, CACHE_AMBUSH_CHANCE, cacheLockById, lockForNode, cacheOpener,
-    cachePayout, classLabel, initiateCache, renderCache, openCache, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, medBayNeedy, triageAllCost, patchUpAllCost, medBayAll, medBarHtml, rosterOrder, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    cachePayout, classLabel, initiateCache, renderCache, openCache, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, medBayNeedy, triageAllCost, patchUpAllCost, medBayAll, medBarHtml, rosterOrder, toggleOutpostBag, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
@@ -14163,6 +14184,7 @@ globalThis.WP = {
     get forecastTerrain() { return forecastTerrain; }, set forecastTerrain(v) { forecastTerrain = v; },
     get forecastFormation() { return forecastFormation; }, set forecastFormation(v) { forecastFormation = v; },
     get doctrineOffer() { return doctrineOffer; }, set doctrineOffer(v) { doctrineOffer = v; },
+    get outpostBagOpen() { return outpostBagOpen; }, set outpostBagOpen(v) { outpostBagOpen = v; },
     get ELITE_OFFER_CARDS() { return ELITE_OFFER_CARDS; }, set ELITE_OFFER_CARDS(v) { ELITE_OFFER_CARDS = v; },
     get activeDoctrine() { return activeDoctrine; }, set activeDoctrine(v) { activeDoctrine = v; },
     get doctrineBroken() { return doctrineBroken; }, set doctrineBroken(v) { doctrineBroken = v; },

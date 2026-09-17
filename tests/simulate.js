@@ -2457,6 +2457,48 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── Q02: THE BAG THAT SAT AT THE BOTTOM OF EVERY SCREEN ───────────────────────────
+// Asked for by the owner, and the same complaint as Q01 one row further down: TACTICAL INVENTORY
+// was a bordered panel pinned below the tab views - a title row and two rows of slot buttons -
+// up on the roster tab, the workbench and the cybernetics bench alike, whether or not anybody
+// wanted to look in it. On a phone that is a fifth of the screen spent on four boxes that
+// usually say EMPTY SLOT.
+//
+// IT IS A DRAWER NOW, shut by default. Measured on the same screen at 430 wide: 44px shut
+// against 167px open, so the four slots cost what they are worth exactly when somebody wants
+// them. Suite 175 reads both heights rather than trusting the description.
+//
+// THE 44 IS A FLOOR AND NOT A CHOICE, and the first cut did not have it. The handle was a 15px
+// text row - it met every goal in this entry, read correctly, and could not be hit with a thumb.
+// Suite 46 has had a 44px floor under everything pressable on this screen since G08 and it went
+// red on the first full battery, which is the ratchet doing exactly its job on a change that
+// looked finished. Three times as tall as I first drew it and still a third of the panel.
+//
+// THE HANDLE KEEPS THE COUNT, and that is not decoration. craftItem refuses on a full bag, so
+// the count is what answers "why is every schematic greyed out"; hiding it along with the slots
+// would have traded one confusion for a worse one. Full turns the handle orange and prints FULL
+// on it, which is the one state where a hidden bag could otherwise cost the player the reason.
+//
+// THE SLOTS ARE BUILT EITHER WAY and only their container is hidden. The cheaper build renders
+// the cells only while the drawer is open, passes every row that opens it first, and silently
+// empties the bag for every reader that does not - including one suite in this tree that reads
+// the cells without touching the handle. Pinned at four of four while hidden.
+//
+// ONE SUITE DID HAVE TO MOVE, and it is the right kind of move. The delegated-controls walk
+// clicked [data-action="sell-item"] straight off the Outpost; a hidden control is not clickable,
+// so it now presses the handle first - which is what a player does, and adds a row for the new
+// control while it is there. A test that changes because the interaction changed is not the same
+// thing as a test bent to fit.
+//
+// AND THE STATE IS THE SCREEN'S, NOT THE SAVE'S. renderOutpost runs after every sell, so a
+// drawer that reset on each render would be worse than no drawer - but a field in the save is a
+// field every reload has to migrate (E10), for a preference with no bearing on the run. A module
+// variable defaulting shut is the whole of it, and the row that matters is that selling an item
+// leaves the drawer open.
+//
+// NO SIMULATION, NO DIAL. Same as Q01: this is a screen, the harness drives the model rather
+// than the Outpost, and suite 175 is the whole of the evidence.
+
 // ── Q01: THE MEDBAY YOU HAD TO SCROLL TO, AND THE LINE BURIED IN THE LIST ─────────
 // Asked for by the owner, and both halves are the same complaint: the Outpost's roster is seven
 // tall cards, the four bodies actually going out are scattered through it in roster order, and

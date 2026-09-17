@@ -124,6 +124,11 @@ module.exports = {
     ok('medbay heals the operator', await state(() => playerRoster[0].hp) > 1);
 
     const invBefore = await state(() => inventory.length);
+    // Q02: the bag is a drawer, so selling starts by opening it - which is what a player does
+    // and is therefore what this walk should do. The slots are built either way; they are just
+    // not on the screen until the handle is pressed, and Playwright will not click what is not.
+    await click('[data-action="bag-toggle"]');
+    ok('bag-toggle opens the tactical inventory', await state(() => outpostBagOpen) === true);
     await click('[data-action="sell-item"]');
     ok('sell-item removes an item', await state(() => inventory.length) === invBefore - 1);
     await click('[data-action="map"]');

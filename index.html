@@ -266,9 +266,16 @@
             <div id="cybernetics-roster" class="outpost-roster"></div>
         </div>
 
-        <div class="inventory-sect">
-            <div class="inventory-title"><span>TACTICAL INVENTORY</span> <span id="inv-count">0/4</span></div>
-            <div id="outpost-inventory" class="inventory-grid"></div>
+        <!-- Q02: the bag is a drawer now. Open it costs the same two rows it always did; shut it
+             costs one, and the count stays on the handle so the reason a schematic is greyed out
+             is still on the screen without the slots being. -->
+        <div class="inventory-sect bag-shut" id="inventory-sect">
+            <button id="bag-toggle" class="bag-toggle" data-action="bag-toggle"
+                    aria-expanded="false" aria-controls="outpost-inventory">
+                <span class="bag-caret" id="bag-caret">▸</span><span>TACTICAL INVENTORY</span>
+                <span id="inv-count">0/4</span>
+            </button>
+            <div id="outpost-inventory" class="inventory-grid" style="display:none;"></div>
         </div>
 
         <button class="return-btn" data-action="map">CONFIRM & RETURN TO MAP</button>
