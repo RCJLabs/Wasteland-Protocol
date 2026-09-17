@@ -1611,6 +1611,20 @@ let bossSalt = 'w0';
 // Swept against the threat mix per sector: at 5.0 the opening sector runs roughly 64% light,
 // 32% mid, 4% heavy, and by sector 4 the draw is indistinguishable from uniform. Lower values
 // turn the bias into a gate - at 2.0 sector 1 was 91% the same two commanders.
+// R03: WHAT IT TAKES TO BREAK A SIDE, and what breaking is worth to the player. A broken body
+// is not a killed one: it takes its own turn to leave and gives no kill credit, no momentum,
+// no bounty progress and nothing to the bestiary. So a break trades tempo for everything a body
+// is worth dead - and the turn it spends leaving is one last chance to take the kill instead,
+// which is the decision this is really for.
+//
+// Measured before it was built, because M12 and D06 both died on exactly this question: across
+// twelve expeditions the biggest body fell with somebody still standing in 78% of fights, so
+// the condition is reachable. What that census CANNOT say is what the payoff will be, because
+// it measures play under the old rule - the whole point of the reward is to move the anchor
+// earlier in the fight, and the distribution it is read off is the one the change is meant to
+// shift. Read it as reachability and nothing else.
+const MORALE = { chance: 0.5 };   // per body still standing, checked once, when the anchor falls
+let MORALE_ON = true;             // the control the arm withholds
 const BOSS_THREAT_JITTER = 5.0;
 function bossOrder(cycle) {
     // Seeded directly rather than through seededRng, which falls back to Math.random when no
@@ -9608,12 +9622,12 @@ function enemyDmgMult(enemy) {
 
 // CHARGE and SALVO are not rolled from any table - they are the two turns of a wind-up, and
 // they are here because the board has to be able to draw them. See chargeIntent.
-const INTENT_ICONS = { AOE: '🧨', HEAVY: '💥', STATUS: '☣️', DEFEND: '🛡️', ATTACK: '⚔️', FLANK: '🌀', CHARGE: '⚡', SALVO: '☄️' };
+const INTENT_ICONS = { AOE: '🧨', HEAVY: '💥', STATUS: '☣️', DEFEND: '🛡️', ATTACK: '⚔️', FLANK: '🌀', CHARGE: '⚡', SALVO: '☄️', BREAK: '🏳️' };
 // F14: what each of them means, in one line, on the screen they appear on. The icons carry the
 // whole forecast - which is the game's central read - and nothing anywhere said what they were.
 const INTENT_WORDS = { ATTACK: 'one target', AOE: 'the line', HEAVY: 'a big one',
                        STATUS: 'a status', DEFEND: 'bracing', FLANK: 'going round',
-                       CHARGE: 'winding up', SALVO: 'everyone' };
+                       CHARGE: 'winding up', SALVO: 'everyone', BREAK: 'pulling out' };
 // Drawn for the intents actually on the field, so it is a key to this fight rather than a table.
 function intentLegendHtml() {
     const live = [...new Set(activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.intent)
@@ -10336,7 +10350,8 @@ function validateFormations() {
 // DEPLOYED - AOE lands on the whole line, so what it is worth depends on how many are standing,
 // and three is the squad the game deploys.
 const DEPLOYED = 3;
-const INTENT_THREAT = { ATTACK: 1, FLANK: 1, HEAVY: 1.5, STATUS: 0.3, AOE: 0.7 * DEPLOYED, DEFEND: 0 };
+// R03: a body pulling out is not going to hit you, so it is worth nothing on the read.
+const INTENT_THREAT = { ATTACK: 1, FLANK: 1, HEAVY: 1.5, STATUS: 0.3, AOE: 0.7 * DEPLOYED, DEFEND: 0, BREAK: 0 };
 function intentThreat(list) {
     return (list || []).reduce((a, [type, w]) => a + w * (INTENT_THREAT[type] || 0), 0);
 }
@@ -12901,6 +12916,58 @@ function noteKill(victim, by = {}) {
         playSFX('heal');
     }
     noteBestiary(typeNameOf(victim), 'killed');
+    // R03: THE CENSUS THAT DECIDES WHETHER A MORALE BREAK IS REACHABLE CONTENT. The R-audit
+    // found that nothing on the road ever leaves a fight - every hostile fights to the last
+    // body - and proposed "kill that one and the rest lose heart". Before any of that is built,
+    // the question M12 and D06 both turned on: would the condition ever FIRE? A break has to
+    // happen while somebody is left to break, so what matters is where in the fight the side's
+    // BIGGEST body falls. If the anchor dies last, the mechanic is unreachable content and the
+    // item is refuted before it is written.
+    //
+    // Booked here rather than in the harness because the engine is the only thing that sees
+    // every death - F03's rule. The anchor is the highest maxHp hostile the fight opened with,
+    // read off the field rather than remembered, so a fight that never had one books nothing.
+    if (runStats && !victim.isPlayer) {
+        const side = activeEntities.filter(e => !e.isPlayer);
+        // Read off maxHp, which nothing on this side moves once the fight is running, so the
+        // biggest body is the same body whether it is asked at the first death or the last.
+        const anchor = side.reduce((a, e) => (!a || e.maxHp > a.maxHp ? e : a), null);
+        if (anchor && anchor.id === victim.id) {
+            const standing = side.filter(e => e.hp > 0).length;
+            runStats.anchorFell = runStats.anchorFell || { total: 0, standing: {}, last: 0, boss: 0 };
+            const c = runStats.anchorFell;
+            c.total++;
+            c.standing[standing] = (c.standing[standing] || 0) + 1;
+            if (standing === 0) c.last++;
+            if (currentNodeType === 'BOSS') c.boss++;
+        }
+        // R03: AND THIS IS WHERE THEY LOSE HEART. Nothing on the road has ever left a fight;
+        // every hostile stands to the last body whatever its losses. A side breaks when its
+        // biggest body goes down and somebody is still standing to see it - each survivor
+        // checks for itself, so a break thins a fight rather than ending it, and the ones that
+        // hold are the ones worth the next swing.
+        //
+        // NOT IN A COMMANDER FIGHT, and that is a rule rather than a tuning choice. Tier 10
+        // takes 89% of every wipe in the game and H13 cut the wall to where it is on purpose;
+        // a mechanic that eased the one node the record calls a gate would be moving that dial
+        // sideways while claiming to add tactics.
+        if (MORALE_ON && anchor && anchor.id === victim.id && currentNodeType !== 'BOSS') {
+            const left = side.filter(e => e.hp > 0 && e.classType !== 'BOSS');
+            const broke = left.filter(() => Math.random() < MORALE.chance);
+            broke.forEach(e => {
+                e.breaking = true;
+                e.intent = intentFor('BREAK', e);
+                spawnFCT(e.id, 'BREAKING', 'fct-status');
+            });
+            if (broke.length) {
+                runStats.broke = (runStats.broke || 0) + 1;
+                runStats.brokeBodies = (runStats.brokeBodies || 0) + broke.length;
+                log(broke.length === left.length
+                    ? `> ${victim.name} goes down and the rest of them lose their nerve.`
+                    : `> ${victim.name} goes down. ${broke.length} of them break; the rest hold.`, 'log-status');
+            }
+        }
+    }
     // Blood Debt: a risen Warlord feeds on its own dead, so clearing the pack off it costs.
     const owed = activeEntities.find(e => e.classType === 'BOSS' && e.hp > 0 && e.bloodDebt && e.id !== victim.id);
     if (owed) {
@@ -13430,6 +13497,26 @@ function executeEnemyAi(enemy) {
         spawnFCT(enemy.id, 'SIZING UP', 'fct-status');
         renderField();
         setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return;
+    }
+    // R03: A BROKEN BODY SPENDS ITS TURN LEAVING. It is taken off the field by dropping to zero
+    // rather than by being spliced out of activeEntities - nothing in this engine is ever
+    // removed mid-fight, 148 readers test `hp > 0`, and a body that vanished from the array
+    // would have to be right in every one of them. `fled` is what keeps it from being a KILL:
+    // noteKill is only ever called off the damage path, so a body that leaves this way gives no
+    // credit, no momentum, no bounty and nothing to the bestiary. Which is the cost.
+    //
+    // Checked AFTER the size-up, because a commander never breaks and a size-up turn is the one
+    // turn that belongs to the fight not starting yet.
+    if (enemy.breaking && enemy.hp > 0) {
+        enemy.fled = true; enemy.hp = 0;
+        if (runStats) runStats.fled = (runStats.fled || 0) + 1;
+        log(`> ${enemy.name} turns and runs. Nobody stops it.`, 'log-status');
+        spawnFCT(enemy.id, 'GONE', 'fct-status');
+        playSFX('click');
+        renderField();
+        checkWinState();
+        if (combatActive) setTimeout(nextTurn, 700 * globalSettings.combatSpeed);
+        return;
     }
     if (enemy.sigCd > 0) enemy.sigCd--;
 
@@ -14171,7 +14258,7 @@ globalThis.WP = {
     REQUISITIONS, reqById, reqCost, reqOpen, buyRequisition, refundRequisitions, renderRequisitions, newPendingReq,
     REQ_REROLL_COST, REQ_REROLL_MAX, REQ_GRUDGE_BASE, REQ_RUNG_STEP, REQ_FALLBACK_COST, MARCH_FRESH, marchRead, marchTone, renderMarchRead,
     CACHE_LOCKS, CACHE_SCRAP, CACHE_CLEAN_MULT, CACHE_FORCE_BITE, CACHE_AMBUSH_CHANCE, cacheLockById, lockForNode, cacheOpener,
-    cachePayout, classLabel, initiateCache, renderCache, openCache, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, medBayNeedy, triageAllCost, patchUpAllCost, medBayAll, medBarHtml, rosterOrder, toggleOutpostBag, termForNode, recruitTerm, recruitAsk, handRate, recruitDisplaced, enforceLineTerms, recruitTermHtml, RECRUIT_LINE_SHARE, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    cachePayout, classLabel, initiateCache, renderCache, openCache, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, medBayNeedy, triageAllCost, patchUpAllCost, medBayAll, medBarHtml, rosterOrder, toggleOutpostBag, termForNode, recruitTerm, recruitAsk, handRate, recruitDisplaced, enforceLineTerms, recruitTermHtml, MORALE, RECRUIT_LINE_SHARE, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
@@ -14290,6 +14377,7 @@ globalThis.WP = {
     get doctrineOffer() { return doctrineOffer; }, set doctrineOffer(v) { doctrineOffer = v; },
     get outpostBagOpen() { return outpostBagOpen; }, set outpostBagOpen(v) { outpostBagOpen = v; },
     get RECRUIT_TERMS_ON() { return RECRUIT_TERMS_ON; }, set RECRUIT_TERMS_ON(v) { RECRUIT_TERMS_ON = v; },
+    get MORALE_ON() { return MORALE_ON; }, set MORALE_ON(v) { MORALE_ON = v; },
     get ELITE_OFFER_CARDS() { return ELITE_OFFER_CARDS; }, set ELITE_OFFER_CARDS(v) { ELITE_OFFER_CARDS = v; },
     get activeDoctrine() { return activeDoctrine; }, set activeDoctrine(v) { activeDoctrine = v; },
     get doctrineBroken() { return doctrineBroken; }, set doctrineBroken(v) { doctrineBroken = v; },

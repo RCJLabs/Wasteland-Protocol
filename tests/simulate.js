@@ -2457,6 +2457,70 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── R03: A SIDE THAT LOSES HEART - BUILT AND REACHABLE, NOT YET PRICED ────────────
+// Filed like R04 was, in two commits, and for the same reason: the careers that price it are
+// running as this is written and the build should not sit on one machine's disk waiting for
+// them. The table lands in the commit that follows. Everything below is either a census that
+// reads at any sample size or a twelve-expedition smoke, and each says which it is.
+//
+// WHAT THE R-AUDIT FOUND. The squad has four ways out of a fight - withdraw (N07), retreat
+// (I01), fall back, extract (A01). The road has none. Every hostile in the game stood to the
+// last body whatever its losses, whatever its commander was doing, and whatever it came for.
+// "Kill that one and the rest lose heart" is the oldest idea in squad tactics and this combat
+// model had never had it.
+//
+// MEASURED BEFORE A LINE WAS WRITTEN, because M12 and D06 both died on exactly this question:
+// would the condition ever fire? A break needs somebody left to break, so everything turns on
+// where the side's BIGGEST body falls.
+//
+//   fights where the anchor fell at all      557
+//     and it fell LAST                       121 (22%) - nobody left to break
+//     with somebody still up                 436 (78%)
+//     of them, a commander fight              30 (5%)
+//     bodies still standing when it fell   0: 121  1: 169  2: 181  3: 42  4: 30  5: 14
+//
+// REACHABLE, AND THE CENSUS CANNOT SAY MORE THAN THAT. Eighty per cent of the firings have one
+// or two bodies left, which reads like a thin payoff - and reading it that way would be D05's
+// trap in a coat nobody has seen it in yet. That distribution is play under the OLD rule, where
+// the anchor dies late because it has the most health to chew through, not because anybody
+// chose it. The whole point of a break reward is to move the anchor EARLIER, so the shape this
+// is read off is the shape the change exists to shift. It answers "can it fire" and refuses to
+// answer "is it worth anything", and the second question needs the arm.
+//
+// THE RULE, stated once. A side breaks when its biggest body goes down and somebody is still
+// standing to see it. Each survivor checks for itself at MORALE.chance, so a break THINS a
+// fight rather than ending it, and the ones that hold are the ones worth the next swing.
+//
+// NOT IN A COMMANDER FIGHT, and that is a rule rather than a tuning choice. Tier 10 takes 89%
+// of every wipe and H13 cut the wall to where it is on purpose; a mechanic that eased the one
+// node this record calls a gate would be moving that dial sideways while calling itself tactics.
+//
+// A BROKEN BODY IS NOT A KILLED ONE, and that is where the cost lives. It leaves by dropping to
+// zero rather than by being spliced out of activeEntities - nothing in this engine is ever
+// removed mid-fight and 148 readers test `hp > 0`, so a body that vanished from the array would
+// have to be right in every one of them. `fled` is what keeps it from paying: noteKill is only
+// ever called off the damage path, so a body that goes this way gives no kill credit, no
+// momentum, no bounty progress and nothing to the bestiary. It spends a turn leaving, and that
+// turn is the squad's one chance to take the kill instead. THAT is the decision the item is for.
+//
+// THE SMOKE, twelve expeditions, which proves it armed and prices nothing:
+//
+//   sides that lost their nerve   304 of 520 fights it could fire in (58%)
+//   bodies that broke             413
+//     of those, got away          352 (85%)
+//     caught before they went      61 (15%)
+//
+// AND 15% IS A POLICY FIGURE BEFORE IT IS A GAME FIGURE. This file has no rule about chasing a
+// runner - it targets what it always targeted - so the 15% is what happens to fall in the way
+// rather than what a player who wanted the kill would take. Named because the row it sits in is
+// the one that reads most like a finding, and it is the one least entitled to.
+//
+// WHAT THE CAREERS ARE FOR. `--morale off` withholds it whole. The honest worry, written down
+// before the numbers: fight payout and XP are both per-NODE rather than per-kill, so a fight
+// that ends early costs the player nothing in scrap or experience - the only automatic costs
+// are momentum and bounty progress. If the arms separate upward this is a difficulty cut
+// wearing a tactics hat, and it should be read as one.
+
 // ── R04: A RECRUIT WHO WANTS A RANK - AND MY PREDICTION WAS WRONG ─────────────────
 // Filed in two commits: the build, then this table. The prediction written into the first one
 // said "the win column is expected to be a null - it has been for O05b, F10b and M10". It is
@@ -6050,6 +6114,10 @@ const ELITE_OFFER = Number(flag('eliteoffer', '0')) || 0;
 // `--doctrine off`: the comparison wanted is "with the thing" against "without it", on one
 // build, with nothing else moved.
 const RECRUIT_TERM = flag('recruitterm', 'on');
+// R03: the control the morale arm withholds. `on` is the shipped game; `off` puts every hostile
+// back to fighting to the last body, which is what every figure above this line was measured
+// under. Same shape as --doctrine off and --recruitterm off: one build, one difference.
+const MORALE_ARM = flag('morale', 'on');
 // A sim that never walks out measures a game with one ending. `--extract N` gives it the
 // player who leaves once the run is worth banking: from sector N on, it takes the camp's door
 // when the squad is worn down. `off` (the default) is the old behaviour, for comparison.
@@ -6253,7 +6321,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ recruitTermArm, eliteOffer, difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange, retreatPolicy }) => {
+const EXPEDITION = ({ moraleArm, recruitTermArm, eliteOffer, difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange, retreatPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -6387,6 +6455,7 @@ const EXPEDITION = ({ recruitTermArm, eliteOffer, difficulty, contracts, capNode
   // Set after confirmNewGame for the same reason odChoices is - a fresh run must not reset it.
   ELITE_OFFER_CARDS = eliteOffer;
   RECRUIT_TERMS_ON = recruitTermArm !== 'off';
+  MORALE_ON = moraleArm !== 'off';
   // M-audit: AFTER confirmNewGame, which zeroes odChoices - the first cut set it before and the
   // arm silently did nothing, which is the same shape as every other harness bug this phase
   // found. Set here rather than at the fire site because odChoices is exactly what the engine's
@@ -8431,6 +8500,10 @@ const EXPEDITION = ({ recruitTermArm, eliteOffer, difficulty, contracts, capNode
   stat.outMoves = runStats.outMoves || {};   // O20: which move, when it reads as melee
   stat.outMelee = runStats.outMelee || {};   // O21: and which body, under which promise
   stat.eliteOffers = runStats.eliteOffers || 0;   // O05: did the elite branch stage anything
+  stat.anchorFell = runStats.anchorFell || null;  // R03: where in a fight its biggest body dies
+  stat.broke = runStats.broke || 0;              // R03: fights where a side lost its nerve
+  stat.brokeBodies = runStats.brokeBodies || 0;  // R03: bodies that broke
+  stat.fled = runStats.fled || 0;                // R03: and bodies that got away with it
   stat.lineTerms = runStats.lineTerms || 0;      // R04: signings that were paid in a rank
   stat.walkedOff = runStats.walkedOff || 0;      // R04: and rank-holders benched, who left           // O15: and what the squad throws, by the reach of the move
   // O16: read back what the ENGINE booked, not what the policy thinks it pressed - G13's rule.
@@ -8603,7 +8676,7 @@ const EXPEDITION = ({ recruitTermArm, eliteOffer, difficulty, contracts, capNode
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { recruitTermArm: RECRUIT_TERM, eliteOffer: ELITE_OFFER, difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE, retreatPolicy: RETREAT_POLICY });
+    const r = await page.evaluate(EXPEDITION, { moraleArm: MORALE_ARM, recruitTermArm: RECRUIT_TERM, eliteOffer: ELITE_OFFER, difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE, retreatPolicy: RETREAT_POLICY });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -8812,6 +8885,48 @@ const EXPEDITION = ({ recruitTermArm, eliteOffer, difficulty, contracts, capNode
   const byScar = {};
   allScars.forEach(id => { byScar[id] = (byScar[id] || 0) + 1; });
   SCAR_IDS.forEach(id => line(`  ${id.toLowerCase().replace(/_/g, ' ')}`, byScar[id] || 'never dealt'));
+
+  // R03: IS A MORALE BREAK REACHABLE CONTENT AT ALL. The R-audit found that nothing on the road
+  // ever leaves a fight and proposed "kill that one and the rest lose heart". A break needs
+  // somebody left to break, so everything turns on where the side's BIGGEST body falls. If the
+  // anchor dies last, there is nobody to lose heart and the mechanic is content nobody can
+  // reach - which is how M12 and D06 both ended, and the reason this census is taken before a
+  // line of the feature is written.
+  {
+    const cs = results.map(r => r.anchorFell).filter(Boolean);
+    const tot = cs.reduce((a, c) => a + c.total, 0);
+    const last = cs.reduce((a, c) => a + c.last, 0);
+    const boss = cs.reduce((a, c) => a + c.boss, 0);
+    const standing = {};
+    cs.forEach(c => Object.entries(c.standing).forEach(([k, v]) => { standing[k] = (standing[k] || 0) + v; }));
+    if (tot) {
+      console.log('\n── WHEN THE BIGGEST BODY FALLS ' + '─'.repeat(29));
+      line('fights where it fell at all', tot);
+      line('  and it fell LAST', `${last} of ${tot} (${Math.round(last / tot * 100)}%) - nobody left to break`);
+      line('  with somebody still up', `${tot - last} of ${tot} (${Math.round((tot - last) / tot * 100)}%)`);
+      // A commander fight is a gate the record says must not be eased, so it is separated here
+      // rather than folded in - a reachability figure that counted them would be measuring a
+      // population the feature would never be allowed to touch.
+      line('  of them, a commander fight', `${boss} of ${tot} (${Math.round(boss / tot * 100)}%)`);
+      line('  bodies still standing when it fell',
+        Object.keys(standing).sort((a, b) => a - b).map(k => `${k}: ${standing[k]}`).join(', '));
+      // R03: and what the break actually did with that reachability. The three numbers are
+      // deliberately separate: a side can break without a body getting away, because a broken
+      // body spends a turn leaving and the squad gets that turn to take the kill instead.
+      // Collapsing them into one rate would hide the decision the whole item is for.
+      const broke = results.reduce((a, r) => a + (r.broke || 0), 0);
+      const bodies = results.reduce((a, r) => a + (r.brokeBodies || 0), 0);
+      const fled = results.reduce((a, r) => a + (r.fled || 0), 0);
+      line('sides that lost their nerve', MORALE_ARM === 'off'
+        ? 'none - the arm is off'
+        : `${broke} of ${tot - boss} fights it could fire in (${Math.round(broke / Math.max(1, tot - boss) * 100)}%)`);
+      if (broke) {
+        line('  bodies that broke', bodies);
+        line('  of those, got away', `${fled} of ${bodies} (${Math.round(fled / bodies * 100)}%)`);
+        line('  caught before they went', `${bodies - fled} of ${bodies} (${Math.round((bodies - fled) / bodies * 100)}%)`);
+      }
+    }
+  }
 
   console.log('\n── RECRUITS ' + '─'.repeat(48));
   // D10: this section's own headline used to read "runs that walked past one" over a count of
