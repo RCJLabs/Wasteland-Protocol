@@ -4485,6 +4485,7 @@ const ACTIONS = {
     'augment':          el => installAugment(el.dataset.id, el.dataset.kind),
     'sell-item':        el => useOutpostItem(Number(el.dataset.index)),
     'medbay':           el => medBay(el.dataset.id, el.dataset.mode),
+    'medbay-all':       el => medBayAll(el.dataset.mode),
     'buy-upg':          el => buyUpgrade(el.dataset.id, el.dataset.kind, Number(el.dataset.cost)),
     'assign-slot':      el => assignSlot(el.dataset.id, Number(el.dataset.slot)),
     'gear-menu':        el => { activeGearSelector = { charId: el.dataset.id, slot: el.dataset.slot }; renderOutpost(); },
@@ -7968,13 +7969,22 @@ function operatorCardHtml(char) {
         // on. Read off the LIVE line rather than the class template, so a Gas Mask and a perk
         // show up in it the moment they are taken.
         const resLine = resistLine(char.resistances);
-        return `<div class="upgrade-card" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay}${masteryDisplay}${traitsDisplay}${scarDisplay}${bondDisplay}${loadoutRow} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> ${resLine ? `<div class="upgrade-res">${resLine}</div>` : ''} <div class="upgrade-btn-group">${btnGroupHtml}</div> <div class="upgrade-btn-group gear-row">${gearHtml}</div> </div>`;
+        // ON THE LINE reads on the card as well as in the order, because an order is only legible
+        // while you can see both ends of it - scrolled halfway down, a card has to say which
+        // half of the list it is in by itself.
+        return `<div class="upgrade-card${char.gridPos > 0 ? ' card-on-line' : ' card-benched'}" style="${isDead ? 'border-color: #8B0000; opacity: 0.8;' : ''}"> <div class="upgrade-header" style="flex-direction:column; align-items:flex-start;"> <div style="display:flex; justify-content:space-between; width:100%;"><span>${char.name} (${char.classType})</span><span>${traitDisplay}</span></div> ${quirkDisplay}${masteryDisplay}${traitsDisplay}${scarDisplay}${bondDisplay}${loadoutRow} </div> <div class="upgrade-stats"><span>HP: ${char.hp}/${char.maxHp}</span><span>DMG: ${char.dmgBase}</span><span>UPG: <span class="cost-txt">${cost}</span></span></div> ${resLine ? `<div class="upgrade-res">${resLine}</div>` : ''} <div class="upgrade-btn-group">${btnGroupHtml}</div> <div class="upgrade-btn-group gear-row">${gearHtml}</div> </div>`;
 }
 
 function renderOutpost() {
     switchScreen('screen-outpost'); showOutpostNotice(''); document.getElementById('outpost-scrap').innerText = formatStat(scrap);
     const c = document.getElementById('outpost-roster');
-    c.innerHTML = playerRoster.map(char => operatorCardHtml(char)).join('');
+    // The line at the top, in slot order, so the four bodies a decision is actually about are
+    // the four you land on. The bench keeps its own order below them.
+    c.innerHTML = rosterOrder().map(char => operatorCardHtml(char)).join('');
+    const medBar = document.getElementById('outpost-medbar');
+    // Its own row rather than a card in the list, because it is a screen-level action and not an
+    // operator - and because every suite that counts this roster counts operators.
+    if (medBar) medBar.innerHTML = medBarHtml();
     document.getElementById('mat-parts').innerText = formatStat(materials.parts);
     document.getElementById('mat-chems').innerText = formatStat(materials.chems);
     document.getElementById('mat-tech').innerText = formatStat(materials.tech);
@@ -7994,7 +8004,9 @@ function renderOutpost() {
     document.getElementById('crafting-grid').innerHTML = wbHtml;
 
     const cybC = document.getElementById('cybernetics-roster'); const cybCards = [];
-    playerRoster.forEach(char => {
+    // Same order as the roster tab. Two lists of the same seven people in two different orders
+    // is worse than either order on its own.
+    rosterOrder().forEach(char => {
         // What they are carrying and how much room is left, because a list that only ever grew
         // could not say either. A full operator says FULL rather than printing four names.
         const worn = augmentsOn(char);
@@ -8007,7 +8019,7 @@ function renderOutpost() {
                  + ` data-id="${char.id}" data-kind="${a.id}">${a.name} (${a.short})`
                  + ` [${a.cost} ${MATERIAL_ICON[a.mat]}]</button>`;
         }).join(' ');
-        cybCards.push(`<div class="upgrade-card"> <div class="upgrade-header"><span>${char.name}</span>`
+        cybCards.push(`<div class="upgrade-card${char.gridPos > 0 ? ' card-on-line' : ' card-benched'}"> <div class="upgrade-header"><span>${char.name}</span>`
           + `<span class="aug-slots${left === 0 ? ' aug-full' : ''}">AUGS ${slotTag}: ${augList}</span></div>`
           + ` <div class="upgrade-stats"><span>MAX HP: ${char.maxHp}</span><span>BASE DMG: ${char.dmgBase}</span><span>SPEED: ${char.speed}</span></div>`
           + ` <div class="upgrade-btn-group"> ${btns} </div> </div>`);
@@ -8473,6 +8485,24 @@ function patchUpClicks(c) {
     return Math.ceil((c.maxHp - c.hp) / medBayStep(c));
 }
 function patchUpCost(c) { return patchUpClicks(c) * medBayCost(); }
+// THE SAME TREATMENT FOR EVERYBODY AT ONCE, because seven cards is a scroll and the medbay is
+// the one thing a player does to all of them in the same breath. The dead are not on this list
+// - nothing at the Outpost brings them back - and neither is anybody already at full, so the
+// count in the bar is the count of people a click would actually change.
+function medBayNeedy() { return playerRoster.filter(c => c.hp > 0 && c.hp < c.maxHp); }
+function triageAllCost() { return medBayNeedy().length * medBayCost(); }
+function patchUpAllCost() { return medBayNeedy().reduce((a, c) => a + patchUpCost(c), 0); }
+// The line first, in slot order, then the bench in the order the roster already holds it. This
+// is a RENDER order and nothing else: it returns a new array and never touches playerRoster,
+// because gridPos is what a position means and plenty of code still walks the roster in its own
+// order - the muster, the save, the draft. Sorting the real array to tidy a screen would move
+// all of that with it.
+function rosterOrder(list) {
+    const src = list || playerRoster;
+    return src.map((c, i) => ({ c, i, k: c.gridPos > 0 ? c.gridPos : 99 }))
+              .sort((x, y) => x.k - y.k || x.i - y.i)
+              .map(x => x.c);
+}
 function upgradeCost(c) { return outpostPrice(UPGRADE_BASE + ((c && c.upgradeCount) || 0) * UPGRADE_STEP); }
 function breakdownCost() { return outpostPrice(BREAKDOWN_BASE); }
 function sellValue() { return outpostPrice(SELL_BASE); }
@@ -8511,6 +8541,43 @@ function medBay(charId, action) {
         if (cost > 0 && scrap >= cost) { scrap -= cost; c.hp = c.maxHp; playSFX('heal'); }
     }
     saveGameState(); renderOutpost();
+}
+// The whole roster through the same door, at exactly what the single buttons would have charged.
+// It buys the player their thumb back and not a discount, which is the rule PATCH UP already
+// follows one body at a time.
+//
+// QUOTED OR NOTHING, and this is the half worth being careful about. The obvious version loops
+// the roster calling medBay() and stops when the scrap runs out, which leaves three healed, four
+// not, and a price that was never the price on the button. So the bill is totalled first and the
+// button is dead below it. A player who cannot afford everyone can still TRIAGE ALL, which is a
+// cheaper bill for a smaller promise, or pay for the two who matter on their own cards.
+function medBayAll(action) {
+    const hurt = medBayNeedy();
+    const cost = action === 'PATCH' ? patchUpAllCost() : triageAllCost();
+    if (!hurt.length || cost <= 0 || scrap < cost) { saveGameState(); renderOutpost(); return; }
+    scrap -= cost;
+    hurt.forEach(c => { c.hp = action === 'PATCH' ? c.maxHp : Math.min(c.maxHp, c.hp + medBayStep(c)); });
+    playSFX('heal');
+    saveGameState(); renderOutpost();
+}
+// What the bar says when there is nothing to do is as much of the point as the buttons: the
+// reason to look at the top of this screen is to find out whether the squad needs anything, and
+// a row that only ever appears when it does makes you scroll to find out that it doesn't.
+function medBarHtml() {
+    const hurt = medBayNeedy();
+    if (!hurt.length) return `<div class="medbar medbar-clear"><span class="medbar-head">MEDBAY \u2014 the whole roster is at full health.</span></div>`;
+    const onLine = hurt.filter(c => c.gridPos > 0).length;
+    const tri = triageAllCost(), pat = patchUpAllCost();
+    let btns = `<button class="upg-btn med-btn" ${scrap < tri ? 'disabled' : ''} data-action="medbay-all" data-mode="HEAL"`
+             + ` title="One TRIAGE each, for all ${hurt.length}.">TRIAGE ALL (${tri})</button>`;
+    // Hidden when it would quote the same price for the same thing, which is the rule the two
+    // buttons on a single card already follow.
+    if (pat > tri)
+        btns += ` <button class="upg-btn med-btn" ${scrap < pat ? 'disabled' : ''} data-action="medbay-all" data-mode="PATCH"`
+             + ` title="All ${hurt.length} back to full, at what their own buttons would have cost.">PATCH UP ALL (${pat})</button>`;
+    return `<div class="medbar"><span class="medbar-head">MEDBAY \u2014 ${hurt.length} hurt`
+         + `<span class="medbar-line">\u00b7 ${onLine ? `${onLine} on the line` : 'none on the line'}</span></span>`
+         + `<span class="medbar-btns">${btns}</span></div>`;
 }
 
 // Fourteen events repeat far less than four did, but a uniform roll still hands the same one
@@ -13979,7 +14046,7 @@ globalThis.WP = {
     REQUISITIONS, reqById, reqCost, reqOpen, buyRequisition, refundRequisitions, renderRequisitions, newPendingReq,
     REQ_REROLL_COST, REQ_REROLL_MAX, REQ_GRUDGE_BASE, REQ_RUNG_STEP, REQ_FALLBACK_COST, MARCH_FRESH, marchRead, marchTone, renderMarchRead,
     CACHE_LOCKS, CACHE_SCRAP, CACHE_CLEAN_MULT, CACHE_FORCE_BITE, CACHE_AMBUSH_CHANCE, cacheLockById, lockForNode, cacheOpener,
-    cachePayout, classLabel, initiateCache, renderCache, openCache, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    cachePayout, classLabel, initiateCache, renderCache, openCache, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, medBayNeedy, triageAllCost, patchUpAllCost, medBayAll, medBarHtml, rosterOrder, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants

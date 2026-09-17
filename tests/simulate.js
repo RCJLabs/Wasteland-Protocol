@@ -2457,6 +2457,50 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── Q01: THE MEDBAY YOU HAD TO SCROLL TO, AND THE LINE BURIED IN THE LIST ─────────
+// Asked for by the owner, and both halves are the same complaint: the Outpost's roster is seven
+// tall cards, the four bodies actually going out are scattered through it in roster order, and
+// healing the squad after a bad expedition meant finding each one and pressing TRIAGE six times
+// apiece. F10 already cut that to one press PER BODY - PATCH UP, billed at exactly what the
+// presses would have cost. What it did not cut was the FINDING.
+//
+// TWO CHANGES, NEITHER OF THEM A DIAL. Every number this file measures is untouched: same
+// MEDBAY_STEP, same MEDBAY_SHARE, same price per click, same treatment. What moved is where the
+// buttons are and what order the cards come in.
+//
+//   the line first     rosterOrder() puts gridPos 1, 2, 3 at the top and the bench below,
+//                      on the roster tab and the cybernetics tab alike.
+//   one press          a bar above the list: TRIAGE ALL, and PATCH UP ALL when the two would
+//                      not quote the same price. Both bill the sum of the single buttons.
+//
+// THE ORDER IS A RENDER ORDER AND NOTHING ELSE, which is the part that needed care rather than
+// typing. rosterOrder() returns a NEW array. Sorting playerRoster in place is one character
+// shorter and would have moved the save, the muster, the draft and every gridPos-swapping call
+// site with it - assignSlot swaps two bodies' positions by reaching for whoever holds a slot,
+// and a roster that reorders under it is a different function. Suite 174 pins the copy by
+// checking the id order before and after a render, which is the only way to see it: a sort in
+// place passes every row that looks at the screen.
+//
+// AND THE ALL BUTTON QUOTES OR REFUSES. The obvious build loops the roster calling medBay()
+// until the scrap runs out, which leaves three healed, four not, and a price that was never on
+// the button. The bill is totalled first and the button is dead below it - the same rule the
+// single PATCH UP has followed since F10. Held at the boundary in both directions: one scrap
+// short buys nothing and heals nobody even when the function is called past the disabled
+// button; at the exact quoted price the whole roster comes up full and the scrap reads zero.
+//
+// WHAT THE BAR SAYS WHEN THERE IS NOTHING TO DO is as much of the point as the buttons. A row
+// that only appears when somebody is hurt makes you scroll the list to find out that nobody is,
+// which is the thing being fixed. It says the roster is at full health and offers nothing.
+//
+// THE DEAD ARE NOT ON THE BILL. Nothing at the Outpost brings anybody back - that door was shut
+// deliberately, and it is what makes a death a loss rather than an invoice - so a body at zero
+// is not counted, not charged for and not raised. Pinned, because a squad-wide function that
+// quietly resurrected on a rounding error would be the one bug here that changes the game.
+//
+// NO SIMULATION. This is a screen, and the harness drives the model rather than the Outpost;
+// nothing in this file reads differently and no arm was run. Suite 174 is the whole of the
+// evidence and it is the right kind for what changed.
+
 // ── O05b / F10b: THE LAST TWO OPEN CLAIMS, BOTH WALKED AND BOTH NULL ──────────────
 // Two claims had sat open since their own items. Both asked for a door to be built before the
 // question could be asked at all, and both are built now.

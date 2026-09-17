@@ -237,6 +237,20 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .pos-btn-2 { border-color: #B8860B; color: #ffaa00; background: #2a2a0a; } 
 .pos-btn-3 { border-color: #6B8E23; color: #aaffaa; background: #0a2a0a; } 
 .pos-btn-0 { border-color: #444; color: #888; background: #111; } 
+/* The squad-wide medbay row. It sits above the list rather than in it, so it is the first thing
+   on the screen and it does not move when the roster is reordered. */
+.medbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+  gap: 8px; border: 1px solid #3c4a20; background: rgba(40,56,16,0.25); padding: 8px 10px; }
+.medbar-head { color: #6B8E23; font-size: 0.6875rem; font-weight: bold; letter-spacing: 0.5px;
+  text-transform: uppercase; }
+.medbar-line { color: #8a8a6a; margin-left: 8px; font-weight: normal; }
+.medbar-btns { display: flex; flex-wrap: wrap; gap: 6px; }
+.medbar-clear { border-color: #2a2a2a; background: rgba(20,20,20,0.35); }
+.medbar-clear .medbar-head { color: #6a6a5a; }
+/* Which half of the list a card is in, said on the card, for when the top of the list has
+   scrolled away. */
+.upgrade-card.card-on-line { border-left: 3px solid #6B8E23; }
+.upgrade-card.card-benched { border-left: 3px solid #333; }
 .med-btn { border-color: #6B8E23; color: #6B8E23; }
 .med-btn:hover:not(:disabled) { background: #6B8E23; color: #000; }
 .revive-btn { border-color: #8B0000; color: #ff4444; }
