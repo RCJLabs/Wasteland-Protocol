@@ -2457,6 +2457,69 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── R02: WHAT SHAPE A FIGHT IS - THE CENSUS THAT DECIDES WHAT THE FEATURE CAN BE ──
+// checkWinState ends a fight on `!pA` or `!eA` and on nothing else. No rout, no reinforcement,
+// no clock, no objective, and no way to FAIL a fight while still standing. THIS IS NOT THE
+// FEATURE - it is the feasibility measurement, taken before anything was designed, in the order
+// H02 used when the Reckoning was refuted twice by its own measurement before a line shipped.
+//
+// THREE CAREERS OF 150, 26,186 FIGHTS: 20,831 won, 2,504 lost, 2,851 ended by neither.
+//
+//                                    c1        c2        c3      mean
+//   squad turns to WIN, median         9         9         9       9.0
+//     p90                             27        26        27      26.7
+//     worst                          233       209       239     227.0
+//   squad turns to LOSE, median       19        19        19      19.0
+//     p90                             60        56        56      57.3
+//   won inside 6 turns               23%       22%       20%     21.7%
+//   damage taken by squad turn 12    55%       58%       56%     56.3%
+//   fights still running at turn 12  41%       41%       41%     41.0%
+//
+// EVERY ROW IS A COUNT, NOT A SAMPLE, which is why three careers agree to a point or two. None
+// of the sample-size machinery at the head of this file applies; these are censuses of 26,000
+// fights and they mean what they say.
+//
+// FINDING 1 - DAMAGE IS LINEAR IN TURNS, NOT FRONT-LOADED. 22% of everything the squad takes has
+// landed by squad turn 3, 37% by 6, 48% by 9, 56% by 12. So a fight that ended at turn 6 would
+// hand the player back about 63% of the damage it was going to do. THIS KILLS THE CHEAP VERSION
+// OF THE FEATURE: "hold N turns and they break off" is not content, it is a large difficulty cut
+// wearing content's clothes, and it would have to be priced as one. The convenient answer would
+// have been front-loaded damage and it is not what the instrument says.
+//
+// FINDING 2 - LOSING TAKES TWICE AS LONG AS WINNING. Median 19 squad turns to lose, 9 to win,
+// with a p90 of 57. A fight the squad is losing is a long grind, and the worst fight in each
+// career ran 209 to 239 squad turns - seventy rounds at three deployed. The game has no way to
+// end that except by killing everything, because there is nothing else an ending can be.
+//
+// FINDING 3 - AND THE LONG FIGHTS ARE WHERE THE SQUAD GETS HURT. 44% of all damage the squad
+// takes lands after squad turn 12, and only 41% of fights are still running then. That is the
+// pairing that makes a clock a LARGE lever in both directions at once: end long fights early and
+// the player keeps a great deal of health they would have lost; end them badly and it is the
+// harshest thing in the game. Either way it is not a small feature and it cannot be shipped
+// without an arm.
+//
+// FINDING 4 - THE FIELD BARELY EMPTIES. Mean hostiles still standing reads 3.2 at squad turn 1,
+// 3.0 at 3, 2.6 at 6, 2.3 at 9, 2.2 at 12 - conditioned on the fight still running, so it is
+// survivorship and reads as "a long fight is one where the field is still full". A rout that
+// cleared the field would be walking away from two live bodies, not mopping up one.
+//
+// WHAT THE CENSUS POINTS AT, stated as a direction rather than a decision: the only shape that
+// ADDS rather than removes is a fight the squad can FAIL WHILE STANDING. `!pA` is currently the
+// only loss condition in the game, findings 2 and 3 say the grind is real and expensive, and a
+// deadline is the one thing that bites there without handing damage back. That is a proposal,
+// not a result, and it gets its own build and its own arm.
+//
+// ONE ROW HERE IS HARNESS POLICY AND NOT THE GAME, flagged rather than quoted: "fights that
+// ended by neither side falling" reads 10-12%, and this file runs with a retreat policy that
+// runs from fights it is losing - the banner says so on every run. That number is the POLICY's
+// withdrawal rate. It is real evidence that a non-body-count exit gets used when offered, and it
+// is not a property of the combat model. D05's trap is exactly this shape and it has been caught
+// three times in this record already.
+//
+// AND THE SAME CAVEAT TOUCHES FINDING 2 at one remove: a policy that runs from fights it is
+// losing means the fights that actually reach a loss are the ones it failed to escape. The
+// 19-turn median is a median over those, not over all fights going badly.
+//
 // ── R01: THE TABLE - THE CONTENT LANDS, THE DIFFICULTY IS A NULL, AND I NAMED THE WRONG RISK ──
 // Filed in two commits, the build and then this table, the way R04 and R03 were. The build
 // commit wrote its prediction down in public before a career ran. Judged below, in both
@@ -2885,6 +2948,13 @@ const ROOT = path.join(__dirname, '..');
 // path, no rout, and no code anywhere that takes a body off activeEntities without killing it.
 // The eight intents are ATTACK, AOE, HEAVY, STATUS, DEFEND, FLANK, CHARGE, SALVO - all of them
 // verbs for fighting, none for leaving, calling, or guarding a thing.
+//   ^^ CORRECTED by R02's own suite, one item after this was written. There are NINE now and the
+//   ninth is BREAK, which R03 added: a hostile pulling out, which is exactly a verb for leaving.
+//   The sentence was true the day it was typed and stopped being true three commits later.
+//   THE CORRECTION STRENGTHENS THE FINDING RATHER THAN DENTING IT. R03 shipped a way for a BODY
+//   to leave a fight - built it, measured it, priced it - and the terminal condition still did
+//   not move a line. What was missing here was never an exit for a hostile. It is that a fight
+//   cannot END on anything except one side's last body going down.
 //
 // Set against what the composition layer does: 22 formations (none unmet, KILL_BOX 199 down to
 // CONVOY 16), 6 grounds, 9 skies, 5 factions, 19 commanders, affixes on 70% of elite hostiles.
@@ -2897,6 +2967,15 @@ const ROOT = path.join(__dirname, '..');
 // marked one. What it cannot do is END on one.
 // SIZE: large, and it deserves its own phase. Combat is the most-measured system in this
 // project and every figure above the line would need re-reading if the terminal condition moved.
+//   The terminal condition is NOT BUILT HERE: R02 shipped the feasibility census and nothing
+//   that changes how a fight ends.
+//   ^^ READ: STILL OPEN, and narrowed by measurement rather than by argument. The census - the
+//   R02 table at the head of this file - rules out the cheap version: damage is linear in turns,
+//   so any objective that ends a fight early hands the player back damage in proportion and is a
+//   difficulty cut rather than content. What it points at instead is a fight the squad can FAIL
+//   WHILE STANDING, since `!pA` is the only loss condition the game has, and losing fights run a
+//   median of 19 squad turns against 9 for a win. A direction the census supports, not a result
+//   it establishes, and it gets its own build and its own arm.
 //
 // ── R03: NOTHING EVER RETREATS BUT YOU ────────────────────────────────────────────
 // The squad has four ways out of a fight - withdraw (N07), retreat (I01), fall back, extract
@@ -3837,9 +3916,19 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   12 answered by a later item     3 still open     7 not an open claim after reading
+//   12 answered by a later item     4 still open     7 not an open claim after reading
 //
 // and 0 carrying two verdicts that disagree.
+//
+// AND R02 FOUND THE SCANNER READING ONE OF THEM OFF THE WRONG ENTRY. The window was a flat
+// twelve lines from the claim, and tests/stale.js had computed each item's `end` since the day
+// it was written and never used it - so a claim in the last twelve lines of an entry read the
+// NEXT entry's markers as its own. An R02 claim marked STILL OPEN sat twelve lines above R03's
+// `^^ ANSWERED`, both blocks landed in one window, and last-declared-verdict-wins handed the
+// R02 claim R03's answer. It reported as answered and the counts stayed plausible. The conflict
+// rule cannot catch it either: open-then-answered is the healthy direction, so a borrowed answer
+// is shaped exactly like a settled one and only the item boundary tells them apart. Bounded now,
+// and pinned in suite 173 by a window built to straddle two entries.
 //
 // R01 MOVED THIS ROW AND THE SUITE CAUGHT IT, which is the second time the mechanism has paid
 // for itself inside the entry that describes it. R01's table filed a finding it could not chase

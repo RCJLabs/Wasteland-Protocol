@@ -132,7 +132,20 @@ lines.forEach((l, i) => {
   // marker at the far edge could be read for its verdict by a claim counted as unread. No claim
   // in the record sits in that gap today and the counts are identical either way; it is closed
   // because a rule with two answers to "how far down does a marker count?" has no rule.
-  const { marked, kind, conflict } = read(lines.slice(i, i + 12));
+  //
+  // AND THE WINDOW STOPS AT THE ITEM IT IS IN, which this file computed and then did not use.
+  // `it.end` has been sitting a dozen lines up since the scanner was written, and the window was
+  // a flat twelve lines regardless - so a claim in the last twelve lines of an entry read the
+  // NEXT entry's markers as its own. R02 hit it: a claim marked STILL OPEN at the foot of the
+  // R02 entry sat twelve lines above R03's `^^ ANSWERED`, the two blocks landed in one window,
+  // and last-declared-verdict-wins handed the R02 claim R03's answer. It reported as answered,
+  // the counts stayed plausible, and nothing in the output said a word - which is the third time
+  // this file has gone wrong silently inside the file that exists to catch exactly this.
+  //
+  // It is not caught by the conflict rule either, and that is worth saying rather than fixing
+  // twice: open-then-answered is the HEALTHY direction, so a borrowed answer looks exactly like
+  // a claim that was properly settled. Only the boundary can tell them apart.
+  const { marked, kind, conflict } = read(lines.slice(i, Math.min(i + 12, items[k].end)));
   found.push({ line: i + 1, text: l.replace(/^\/\/\s*/, '').trim(), item: items[k].title, marked, kind, conflict });
 });
 

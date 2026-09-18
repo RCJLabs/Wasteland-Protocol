@@ -347,6 +347,14 @@ function noteCover(cover, t, dmg) {
 //
 // Indexed by SQUAD turns (fightLog.turns), not actor turns, because that is the clock the
 // player experiences and the one BLITZ_TURNS is already written in.
+//
+// WHAT IT MEASURED, over 26,186 fights in three careers: a win takes a median of 9 squad turns
+// and a LOSS takes 19, with a p90 of 57 and a worst of 227. Damage is linear rather than
+// front-loaded - 22% of everything the squad takes has landed by turn 3, 37% by 6, 56% by 12 -
+// so a fight ending at turn 6 would hand back about 63% of its damage, which is what rules out
+// "hold N turns and they break off" as free content. 44% of all damage lands after turn 12, in
+// the 41% of fights still running then, so the long fights are where the squad gets hurt. The
+// full table is in tests/simulate.js under R02.
 function fightShape() {
     if (!runStats) return null;
     const fs = runStats.fightShape = runStats.fightShape ||

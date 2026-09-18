@@ -71,7 +71,13 @@ module.exports = {
       // possibly being half what the record believes, filed rather than chased because R01 could
       // not attribute it. A claim that large going unread is exactly the failure this suite
       // exists to make impossible, so the count is pinned rather than left to drift.
-      && r.open === 3 && r.total === 22);
+      //
+      // R02 then moved it 3 -> 4 of 22 -> 23, and moved it TWICE: once by filing its own open
+      // claim, and once by fixing the scanner that had been reading a verdict off the wrong
+      // entry. Before that fix this same row read 3 of 23, because an R02 claim marked STILL
+      // OPEN was being handed R03's ANSWERED through a window that ran past the entry boundary.
+      // The count was wrong and looked right, which is the whole reason it is pinned here.
+      && r.open === 4 && r.total === 23);
     // AND NO CLAIM CARRIES TWO VERDICTS THAT DISAGREE. K11's did for two commits: K11b wrote its
     // answer ABOVE the marker already there and left the old one standing, so the last word a
     // reader got was the stale one. The scan passed it, because it tested the window for an
@@ -129,6 +135,40 @@ module.exports = {
       return bad.kind === 'open' && bad.conflict === true
           && good.kind === 'answered' && good.conflict === false;
     })());
+    // ── AND THE WINDOW STOPS AT THE ENTRY IT IS IN ──────────────────────────────
+    // R02 found the scanner reading a claim's verdict off the NEXT entry. The window was a flat
+    // twelve lines from the claim and stale.js had computed each item's `end` since the day it
+    // was written without ever using it, so a claim in the last twelve lines of an entry saw the
+    // following entry's markers as its own. An R02 claim marked STILL OPEN sat twelve lines above
+    // R03's `^^ ANSWERED`, both blocks landed in one window, and last-declared-verdict-wins
+    // handed the R02 claim R03's answer.
+    //
+    // READ() CANNOT CATCH THIS AND THAT IS THE POINT: fed both blocks it is behaving correctly -
+    // open then answered is the healthy direction, so the conflict rule passes it too. A borrowed
+    // answer is shaped exactly like a settled one and ONLY the boundary tells them apart. So this
+    // is pinned on the scan, against a record whose entries the window would otherwise straddle.
+    ok('a verdict is read off the claim\'s own entry, not the next one', (() => {
+      // Two entries, the second carrying an ANSWERED that does not belong to the first's claim.
+      const straddle = [
+        '// ── FAKE01: A CLAIM NEAR THE FOOT OF ITS ENTRY ─────────────',
+        '// something here is NOT MEASURED HERE and wants a marker',
+        '//   ^^ READ: STILL OPEN, nothing since has walked it.',
+        '// ── FAKE02: THE NEXT ENTRY ENTIRELY ────────────────────────',
+        '// a different claim that has never had an answer',
+        '//   ^^ ANSWERED by something that has nothing to do with FAKE01.',
+      ];
+      // Unbounded, the first claim's window swallows FAKE02's marker and reads "answered".
+      const unbounded = read(straddle.slice(1));
+      // Bounded at the entry, it reads what its own marker says.
+      const bounded = read(straddle.slice(1, 3));
+      return unbounded.kind === 'answered' && unbounded.conflict === false
+          && bounded.kind === 'open';
+    })());
+    // And the live scan agrees: every open claim in the record is open because its OWN entry says
+    // so. A regression to the flat window moves this count, which is why it is pinned above.
+    ok(`every verdict in the record comes off its own entry (${r.answered} answered, ${r.open} open)`,
+      r.answered + r.open + r.notaclaim === r.total && r.live === 0);
+
     ok('a marker quoting what it used to say is not still saying it', (() => {
       // How every correction in this record is written. Without the strip, the quotation reads
       // as a live verdict and the claim goes back to open - which is the trap this file has
