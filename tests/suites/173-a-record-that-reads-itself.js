@@ -64,7 +64,7 @@ module.exports = {
       // gap and the worse one. The scanner cannot check a marker's CONTENT, and it cannot check
       // that a marker covers only what it claims to. A count that falls without an item
       // answering anything is the signature of both.
-      && r.open === 3 && r.total === 21);
+      && r.open === 2 && r.total === 21);
     // AND NO CLAIM CARRIES TWO VERDICTS THAT DISAGREE. K11's did for two commits: K11b wrote its
     // answer ABOVE the marker already there and left the old one standing, so the last word a
     // reader got was the stale one. The scan passed it, because it tested the window for an

@@ -2769,10 +2769,18 @@ const ROOT = path.join(__dirname, '..');
 // would make the champion worth targeting, and the game currently has no way to express "kill
 // that one and the rest lose heart" - which is the oldest idea in squad tactics and the one
 // mechanic this combat model has never had.
-//   ^^ READ: STILL OPEN, and it is the whole of R03 rather than a closing aside - an audit's
-//   finding is open by construction until somebody builds or refutes it. Checked against the
-//   code rather than asserted: no path removes a body from activeEntities without killing it,
-//   and none of the eight intents is an exit.
+//   ^^ ANSWERED by R03, which is the item this claim IS - and it went stale the moment that
+//   item shipped, three commits after this paragraph was written. The oldest failure mode in
+//   this record, caught by the instrument built for it, in the one entry whose whole subject is
+//   that failure mode. A side breaks now when its biggest body falls; the mechanic exists, it
+//   fires in 52-55% of the fights it can fire in, and it costs half an operator a run.
+//
+//   THE SIZING WAS RIGHT AND THE JUSTIFICATION WAS WRONG. "Small-medium: a morale check and an
+//   exit" held - the exit was six lines, because nothing in this engine is ever removed from
+//   activeEntities and dropping to zero with a `fled` flag does the whole job. What did NOT
+//   hold is "would make the champion worth targeting": the census found the anchor already
+//   dies late for mechanical reasons, and whether a break reward moves it earlier is a
+//   question three careers of a fixed policy cannot answer.
 // Filed separately from R02 because it is much smaller: it needs a morale check and an exit, not
 // a new terminal condition. SIZE: small-medium.
 //
@@ -3693,7 +3701,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   11 answered by a later item     3 still open     7 not an open claim after reading
+//   12 answered by a later item     2 still open     7 not an open claim after reading
 //
 // and 0 carrying two verdicts that disagree.
 //
