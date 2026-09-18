@@ -122,9 +122,20 @@ const read = window => {
 };
 
 const found = [];
+// AND A CLAIM IS WHAT A LINE MAKES, NOT WHAT IT QUOTES - the same rule the verdict reader has
+// held since it was written, applied at last to the half that FINDS claims. R05's write-up opens
+// by quoting the claim it is answering ("has never had the same treatment") and the scan counted
+// the quotation as a fresh claim of its own, so an item that settled something was recorded as
+// opening it. Every correction in this record is written by quoting what it used to say, so this
+// was going to happen to any of them that quoted an OPEN phrase; R05 is simply the first.
+//
+// The verdict reader strips quoted spans before reading a verdict and says why in its own
+// comment. Doing it in one place and not the other is how the two halves of one instrument come
+// to disagree about what a line says.
+const claimText = l => l.replace(/"[^"]*"/g, ' ');
 lines.forEach((l, i) => {
   if (!l.startsWith('//')) return;
-  if (!OPEN.test(l)) return;
+  if (!OPEN.test(claimText(l))) return;
   const k = itemAt(i);
   if (k < 0) return;
   // The marker sits within a few lines of the claim it settles. ONE window for both questions -

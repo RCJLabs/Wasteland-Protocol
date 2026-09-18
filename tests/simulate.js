@@ -2457,6 +2457,64 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── R05: LIGHT ORDER WALKED THE WAY O22 WALKED NO HANDS - AND THE WIN COLUMN CANNOT SAY ──
+// R05 filed that LIGHT_ORDER "has never had the same treatment" as NO_HANDS: O22 split that
+// card's cost into the LINE (drafting melee-free, -7.33) and the CARD (taking the thing you
+// drafted for, -4.34) using `--doctrine off`, which rolls and reads the same offers and then
+// banks nothing. That is the one comparison in which the card is the only thing that moved.
+// Run here in O22's exact shape, three arms interleaved, three careers of 150 each,
+// `--arrange front` throughout because O13 established that any other arrangement measures the
+// harness's draft rather than the doctrine.
+//
+//                        baseline          line, card held   line + card
+//   ended the road       23 / 11 / 16      15 / 24 / 21      16 / 13 / 16
+//   reached sector 7     36 / 21 / 33      34 / 34 / 33      25 / 25 / 25
+//   nodes cleared, med   79 / 71 / 80      80 / 71 / 72      71 / 70 / 72
+//   score, median        24.8 / 24.3 / 27.3k  21.8 / 20.5 / 19.9k  23.5 / 19.8 / 22.3k
+//   lost for good, run   3.80 / 3.72 / 3.95   3.46 / 3.14 / 2.67   2.58 / 2.42 / 2.80
+//
+//   wins mean   baseline 16.67   held 20.00   took 15.00
+//     the LINE    16.67 -> 20.00   +3.33  ranges OVERLAP, under the floor
+//     the CARD    20.00 -> 15.00   -5.00  ranges OVERLAP, under the floor
+//     both        16.67 -> 15.00   -1.67  ranges OVERLAP, under the floor
+//
+// THE READING HAS BEEN TAKEN AND THE ANSWER IS THAT THIS INSTRUMENT CANNOT PRICE IT. Every
+// pairwise gap on the win column overlaps and sits under K06's 8-10 floor. The -5.00 for the
+// card is NOT a price and is not published as one; O22 got separation and this does not.
+//
+// AND THE CONTRAST IS THE FINDING. NO_HANDS was priceable at three careers because it was
+// enormous - -11.67 wins end to end, every column separating. LIGHT_ORDER end to end is -1.67.
+// The card is not hard to measure because the instrument got worse; it is hard to measure
+// because there is so little there.
+//
+// WHICH IS WHAT THE MECHANISM PREDICTED, written down before the run. O22 explained NO_HANDS'
+// card cost by closeRanks: a doctrine is a promise the game will not break on the player's
+// behalf, so a forbidden class is never stepped into a gap, and under NO_HANDS most of the
+// bench is forbidden - every loss permanent. LIGHT_ORDER forbids TWO of seven starters, the
+// Bruiser at 80 and the Shotgunner at 65; the Medic, Scavenger, Pyromaniac, Sniper and Hound
+// all sit at or under the 55 cap. A far smaller forbidden set should bite far less, and -1.67
+// against -11.67 is consistent with that. DIRECTIONALLY SUPPORTED, NOT ESTABLISHED: this pair
+// cannot separate the card from the line, so it cannot attribute the difference to closeRanks
+// rather than to the two cards simply being different sizes.
+//
+// THREE ROWS DO SEPARATE, and they agree on what a light line is:
+//   lost for good a run   3.82 -> 3.09 -> 2.60   monotone down, baseline separated from both
+//   score, median         25.5k -> 20.7k -> 21.8k  baseline separated from both
+//   reached sector 7      30.0 -> 33.7 -> 25.0   held separated from took
+// A squad under the cap loses fewer people and scores less; taking the card on top costs the
+// deep reach. That is a lower-variance, lower-ceiling squad, which is a coherent picture of a
+// light line even though the win column will not resolve it.
+//
+// AND IT REPRODUCES O15 ON A BUILD MANY ITEMS NEWER, which is worth more than it cost: O15 read
+// the cap-55 arm at 15/17/10, mean 14.00, `--arrange front`. This run reads 16/13/16, mean
+// 15.00. Two independent measurements of the same arm a long way apart agreeing inside a win is
+// a check on the instrument that no single run can give.
+//
+// WHAT WOULD SETTLE IT is more careers an arm than this file has ever run for one question -
+// K11 needed twelve to price the trinket slot. That is now the THIRD debt of exactly this shape
+// in this record, beside R01's +5.33 and R02b's -3.00, and none of the three justifies twelve
+// careers alone. If any of them is ever worth settling, they are worth settling together.
+//
 // ── R02b: RE-TUNED, AND THE TRADE IS A TRADE NOW - 0.4 OPERATORS A RUN FOR A NULL ──
 // The first tuning cost 10.67 wins and the entry below says why: the clock's cost is in the
 // ECONOMY, not the fight. So it was re-cut off the same histogram that sized it - 25 turns
@@ -2710,6 +2768,21 @@ const ROOT = path.join(__dirname, '..');
 // SETTLED, and the three identical 19s in the control are a good reminder of why a tight-looking
 // range at n=3 is not evidence of anything. Score says the same: the arms rank on > off in all
 // three, and every printed bootstrap interval overlaps.
+//
+// AND THE +5.33 IS LEFT OPEN RATHER THAN TUNED, which R05 found this record was not actually
+// tracking: the scanner keys on phrases, "THIS IS NOT SETTLED" is not one of them, and so the
+// one number this entry deliberately declined to resolve was invisible to the instrument built
+// to count exactly that. It was represented only second-hand, through R02b's marker naming it.
+// Marked at its own site now. The gap in the win column is not measured here and three careers
+// an arm cannot measure it.
+//   ^^ READ: STILL OPEN. Same shape as R02b's -3.00: a lean under K06's floor, left alone rather
+//   than tuned against a number this file cannot resolve. Both want more careers an arm than
+//   this project has ever run for one question, and neither justifies that alone.
+//
+//   (The marker above first read "before R05 ANSWERED it" of LIGHT ORDER, and the scanner took
+//   that word as this claim's own verdict - verdictOf tests for it first, and a marker that
+//   mentions another item's outcome is indistinguishable from one declaring its own. Reworded.
+//   The instrument was right and the prose was wrong, which is the usual direction.)
 //
 // SO THE PREDICTION WAS HALF RIGHT, AND THE HALF IT GOT WRONG IS THE USEFUL HALF. "The win
 // column will be a null" - correct at this file's resolution. "The readable change should be in
@@ -3178,9 +3251,12 @@ const ROOT = path.join(__dirname, '..');
 // for the line. LIGHT_ORDER has never had the same treatment, and 0 of 34 under `--draft line`
 // is a policy figure before it is a game figure - which is D05's trap, and the reason this is
 // filed as a MEASUREMENT to take rather than a feature to build.
-//   ^^ READ: STILL OPEN by design. The claim is that the reading has not been taken, and filing
-//   it does not take it - O22's treatment of NO_HANDS is what closing this looks like, and it
-//   cost two items. Marked so the scanner counts it rather than so it looks settled.
+//   ^^ ANSWERED by R05, which took the reading in O22's exact shape - three arms, three careers
+//   each, `--arrange front`, `--doctrine off` splitting the line from the card. The answer is
+//   that THIS INSTRUMENT CANNOT PRICE IT: every pairwise gap on the win column overlaps and sits
+//   under K06's floor, where NO_HANDS separated on every column. That is not a failed
+//   measurement, it is the measurement - NO_HANDS was priceable because it was enormous
+//   (-11.67 end to end) and LIGHT_ORDER is -1.67. See the R05 table at the head of this file.
 //
 // ── AND ONE THING THAT IS A DESIGN STANCE RATHER THAN A GAP ───────────────────────
 // NOTHING ABOUT AN OPERATOR SURVIVES AN EXPEDITION. buildNewRun rebuilds playerRoster from
@@ -4075,7 +4151,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   12 answered by a later item     3 still open     7 not an open claim after reading
+//   12 answered by a later item     3 still open     6 not an open claim after reading
 //
 // and 0 carrying two verdicts that disagree.
 //

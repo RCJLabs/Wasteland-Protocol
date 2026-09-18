@@ -84,7 +84,20 @@ module.exports = {
       // entry. Before that fix this same row read 3 of 23, because an R02 claim marked STILL
       // OPEN was being handed R03's ANSWERED through a window that ran past the entry boundary.
       // The count was wrong and looked right, which is the whole reason it is pinned here.
-      && r.open === 3 && r.total === 22);
+      //
+      // R05 moved the TOTAL rather than the open count, by fixing the half of the scanner that
+      // FINDS claims: it keyed on the raw line, so a write-up quoting the claim it was answering
+      // was recorded as opening a fresh one. Three lines were being double-counted that way -
+      // R05's own opening sentence and two rows of O17's catalogue of already-answered claims,
+      // which appear once at their own sites and again in the list. 23 -> 20. The verdict reader
+      // has stripped quotes since it was written and said why; doing it in one half and not the
+      // other is how two halves of one instrument come to disagree about what a line says.
+      //
+      // And R01's +5.33 became TRACKED for the first time. It was worded "THIS IS NOT SETTLED",
+      // which is not one of the phrases this scanner keys on, so the one number R01 deliberately
+      // declined to resolve was invisible to the instrument built to count exactly that - carried
+      // only second-hand by R02b's marker naming it. 20 -> 21 with a marker at its own site.
+      && r.open === 3 && r.total === 21);
     // AND NO CLAIM CARRIES TWO VERDICTS THAT DISAGREE. K11's did for two commits: K11b wrote its
     // answer ABOVE the marker already there and left the old one standing, so the last word a
     // reader got was the stale one. The scan passed it, because it tested the window for an
@@ -175,6 +188,23 @@ module.exports = {
     // so. A regression to the flat window moves this count, which is why it is pinned above.
     ok(`every verdict in the record comes off its own entry (${r.answered} answered, ${r.open} open)`,
       r.answered + r.open + r.notaclaim === r.total && r.live === 0);
+
+    // ── AND A LINE QUOTING A CLAIM IS NOT MAKING ONE ────────────────────────────
+    // The mirror of the rule below, on the half that FINDS claims rather than the half that reads
+    // verdicts. R05's write-up opens by quoting the claim it answers and was counted as opening a
+    // fresh one; O17's catalogue of already-settled claims was counted twice, once at each claim's
+    // own site and once in the list. Pinned on the scan because the finder is not exported.
+    ok('a write-up that quotes an open claim does not file a new one', (() => {
+      const fs = require('fs'), path = require('path');
+      const tool = fs.readFileSync(path.join(__dirname, '..', 'stale.js'), 'utf8');
+      // The strip is applied to the line BEFORE the OPEN test, not after.
+      return /const claimText = l => l\.replace\(\/"\[\^"\]\*"\/g, ' '\);/.test(tool)
+          && /if \(!OPEN\.test\(claimText\(l\)\)\) return;/.test(tool);
+    })());
+    // And the record proves it in the live scan: R05's entry quotes "has never had the same
+    // treatment" and O17's table quotes two more, and none of the three is counted as a claim.
+    ok(`the three quoted phrases in the record file no claims (${r.total} total)`,
+      r.total === 21);
 
     ok('a marker quoting what it used to say is not still saying it', (() => {
       // How every correction in this record is written. Without the strip, the quotation reads
