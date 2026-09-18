@@ -2457,6 +2457,78 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── S03: THE ROW EVERY BALANCE PHASE QUOTES IS THE SECOND-BEST ROW ON ITS OWN LINE ────
+// Six items in a row ended unresolved on the win column - R01's +5.33, R02b's -3.00, R03's
+// momentum arm, R04's 4.33 against a floor of 9, R05 unpriceable, K11b a null at twelve an arm.
+// The bottleneck was never any of those questions. K06 characterised the win count and nothing
+// else, so `nodes cleared` and `deepest sector` sat beside it on every report, unreadable,
+// because nobody had measured their spread. This item measures all of them, on the rule this
+// header already states: measure the instrument, and the prohibition turns into a threshold.
+//
+// TWELVE 150-EXPEDITION CAREERS ON IDENTICAL CODE, then six more on the wall arm #230 built
+// (hp 1.08/1.10 -> 1.06/1.075), which is the smallest step #230 could separate and therefore the
+// honest place to ask which row sees it first:
+//
+//   row                     base mean      sd     cv    arm mean     delta      sd of the gap
+//   wins                        20.58    4.68  22.7%      28.33     +7.75           +2.89
+//   wiped                      110.08    5.20   4.7%      95.33     -14.75          -7.41
+//   recalled                    19.33    3.80  19.7%      26.33     +7.00           +3.77
+//   score, median              24,492    1994   8.1%     26,128   +1,636            +0.82
+//   deepest sector, mean         3.96    0.20   5.0%       4.08      +0.12          +0.63
+//   reached final sector        32.83    5.89  17.9%      38.83     +6.00           +1.02
+//   bounties completed           8.72    0.39   4.4%       8.83      +0.11          +0.27
+//   operators lost a run        17.86    0.67   3.7%      17.50      -0.36          -0.54
+//   nodes cleared, median       75.67    2.71   3.6%      75.00      -0.67          -0.25
+//   fights, total                8518     263   3.1%       8543     +25.08          +0.10
+//
+// I WROTE THE PREDICTION DOWN FIRST AND IT WAS WRONG. I expected a null - that wins would stay
+// the best row, because #230's own table shows this step moving wins +42% relative against score
+// +7.4% and tier-10 share +0.2%, and I reasoned a quieter row would be quieter because it was
+// less responsive. That reasoning is right about the quiet rows and it missed the loud one.
+//
+// THE WIPE COUNT SEES THE SAME CHANGE AT 2.6x THE SEPARATION. Per-career counts, sorted:
+//     wins    base [10,15,19,19,19,21,22,23,23,23,26,27]   arm [22,23,27,28,34,36]   OVERLAP
+//     wiped   base [103,104,104,106,107,110,111,113,114,115,116,118]  arm [89,95,97,97,97,97]
+//                                                                                    DISJOINT
+// In the file's own 3-sd convention that is about 2 careers an arm against about 7 - a balance
+// question this file has been calling unresolvable at three careers is resolvable at three, on
+// the row printed one line above the one everybody reads.
+//
+// THE MECHANISM IS IN THE ARITHMETIC AND IT IS WHY THIS IS NOT LUCK. The fifteen wipes the easing
+// removed came back as +7.75 wins and +7.00 recalls, almost exactly half each. The win count sees
+// 53% of the movement; the wipe count sees all of it, off a base of 110 rather than 20.
+//
+// WHAT THIS DOES NOT LICENSE. It is ONE lever, and the mechanism says exactly where it stops: a
+// lever that moves how often runs DIE shows up here, and a lever that only moves how a surviving
+// run ENDS - pushing recalled to won - is invisible on this row and visible only on the win
+// count. The two fail in opposite directions, they cost nothing to print together, and an arm
+// should read both. Do not read this as "the wipe count is the better row"; read it as "the win
+// count was never the only row, and it is the weaker of the two for difficulty".
+//
+// AND THE QUIET ROWS ARE QUIET BECAUSE THEY ARE DEAF, which is the trap this item was built to
+// avoid and which it caught with numbers. `nodes cleared, median` is the tightest row on the
+// report at 3.6% - and it moves -0.67 on a change that removes fifteen wipes, which is 297
+// careers an arm and the wrong sign. `fights, total` needs 999. A low spread is not an
+// instrument; a low spread against a real effect is.
+//
+// A NULL THAT CAME WITH IT, AND MY OWN SUSPICION REFUTED. The printed `what that count can
+// resolve` is modelled, sqrt(n.p.(1-p)), and was validated once by K06 at a 32% win rate. The
+// build wins 13.7% now, so I checked whether the model still holds there. It does:
+//
+//   pooled win rate 13.72% over 1800 expeditions   modelled sd 4.21   observed 4.68
+//   chi-square 13.57 on 11 df, variance ratio 1.23x, +0.65 sd -> consistent with the model
+//
+// Tested by dispersion across 1800 trials rather than by comparing two sd estimates, because an
+// sd from twelve careers carries +-1.1 of its own and would have settled nothing either way - at
+// eight careers the same measurement read 5.01 and at twelve it read 4.68, which is that
+// wandering in the flesh. K06 saw 6.4 against a modelled 5.7 and this sees 4.68 against 4.21:
+// both about 11% above the model in sd, neither significant alone, and pooled still not. THE
+// PRINTED FIGURE IS SOUND AND IF ANYTHING SLIGHTLY OPTIMISTIC. Nothing changed on that line.
+//
+// ALSO AN INDEPENDENT REPLICATION OF #230, which was not the point and is worth having: that
+// item measured this step at 22.0 -> 31.3 wins on three careers a point. This reads 20.58 ->
+// 28.33 on twelve against six. Same direction, same rough size, a different sample.
+//
 // ── S-AUDIT: TWO FACTS THAT CROSSED A BOUNDARY WRONG - ONE A RELOAD, ONE A FIGHT ──────
 // A fresh sweep of the tree after the R-series. Eight candidates were killed before they were
 // worth writing down, most of them because THIS FILE ALREADY SAYS SO: `walked out 0 of 150` is
@@ -9337,6 +9409,16 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
     return `${fmt(pct(a, 0.5))}   [90% ${fmt(lo)} to ${fmt(hi)}]`;
   };
   const line = (label, v) => console.log(`  ${String(label).padEnd(26)} ${v}`);
+  // S03: ONE CONVENTION FOR EVERY ROW THAT JUDGES AN ARM, so two floors printed side by side
+  // cannot be computed two different ways. The sd of a count of successes out of `of`, the sd of
+  // the mean of three such careers, and the 3-sd bar two arms of three have to clear. K06 wrote
+  // this for the win count; S03 measured that the wipe count on the line above resolves the same
+  // difficulty question at 2.6x the separation, so both rows read it from here.
+  const resolves = (count, of, unit) => {
+      const p = count / of, sd = Math.sqrt(of * p * (1 - p)), arm = sd / Math.sqrt(3);
+      return `±${sd.toFixed(1)} ${unit} on one career; an arm of three means ±${arm.toFixed(1)}, `
+           + `so two arms of three only settle a gap wider than about ${Math.round(3 * arm * Math.SQRT2)} ${unit}`;
+  };
 
   const signed = {};
   let withRecruits = 0;
@@ -9772,6 +9854,26 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
   const ends = {};
   results.forEach(r => { ends[r.endedBy] = (ends[r.endedBy] || 0) + 1; });
   line('ended by', Object.entries(ends).map(([k, v]) => `${k} ${v}`).join(', '));
+  // S03: THE ROW TO COMPARE TWO ARMS ON, AND IT IS NOT THE ONE UNDERNEATH. Every balance phase in
+  // this file has reached for `runs that ended the road` below, and the wipe count on this line
+  // resolves the same question about three times cheaper. Measured on the wall arm #230 built,
+  // hp 1.08/1.10 -> 1.06/1.075, twelve baseline careers against six:
+  //
+  //     wins      20.58 -> 28.33   d  +7.75   +2.89 sd   base [10..27] vs arm [22..36], overlapping
+  //     wiped    110.08 -> 95.33   d -14.75   -7.41 sd   base [103..118] vs arm [89..97], disjoint
+  //     recalled  19.33 -> 26.33   d  +7.00   +3.77 sd
+  //
+  // The mechanism is in the arithmetic: the fifteen wipes the easing removed split almost evenly
+  // into wins and recalls, so THE WIN COUNT SEES ABOUT HALF THE MOVEMENT AND THIS ROW SEES ALL OF
+  // IT, at a similar spread and off a base of 110 rather than 20.
+  //
+  // WHEN THAT HOLDS AND WHEN IT DOES NOT. It holds for any lever that moves how often runs die,
+  // which is what a difficulty dial is. It does NOT hold for a lever that only changes how a
+  // surviving run ends - push runs from recalled to won and this row is blind while the win count
+  // is the only one that can see it. Read both; they are cheap to print together and they fail in
+  // opposite directions. Measured on ONE lever, which is what licenses the mechanism above and
+  // not a general law.
+  line('  what the wipe count can resolve', resolves(ends.wiped || 0, n, 'wipes'));
 
   // The number the ending exists to be judged on. A win has to be a good run and not a typical
   // one - if every run wins the gate is too shallow, and if none does the content does not
@@ -9790,11 +9892,7 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
   // careers run on one identical configuration then confirmed at 6.4 observed. Printed here so
   // the next phase meets the noise floor at the same moment it meets the number, instead of a
   // year later with a shipped conclusion resting on it.
-  const winRate = wins.length / n, winSd = Math.sqrt(n * winRate * (1 - winRate));
-  const armSd = winSd / Math.sqrt(3), settles = 3 * armSd * Math.SQRT2;
-  line('  what that count can resolve',
-    `±${winSd.toFixed(1)} wins on one career; an arm of three means ±${armSd.toFixed(1)}, `
-    + `so two arms of three only settle a gap wider than about ${Math.round(settles)} wins`);
+  line('  what that count can resolve', resolves(wins.length, n, 'wins'));
   if (wins.length) {
     line('  warlords felled on the way, mean', (wins.reduce((a, r) => a + r.roadWarlords, 0) / wins.length).toFixed(1));
     line('  raised by the ossuary, mean', (wins.reduce((a, r) => a + r.raised, 0) / wins.length).toFixed(1));
