@@ -1700,11 +1700,16 @@ const GRUDGE_CAP = { phaseAt: 0.45, keepsArmour: false, refundEnrage: true };
 // is a curiosity, and because 20 sits well past the median win of 9 - a squad playing normally
 // finishes long before the clock, and only a fight that is already going badly ever sees it.
 //
-// AND IT CUTS BOTH WAYS, WHICH IS THE WHOLE REASON IT IS AN ARM. The census's own headline is
-// that ending a fight early hands damage back in proportion. A deadline ends fights early. So
-// this adds a loss condition AND removes damage in the same stroke, and which one dominates is
-// not something the mechanism can tell you - only the pair can. The prediction is written down
-// in the commit before the careers run.
+// AND IT CUT BOTH WAYS, WHICH IS WHY IT WAS AN ARM. The prediction written down before the
+// careers was that the win column would go UP - a fight that ends stops costing. It went DOWN
+// 10.67 at the first tuning, because the cost is in the ECONOMY and not the fight: a timed-out
+// fight pays nothing, and 2.4 of those a run left the squad reaching commanders half a level
+// lower with a relic and a half less. Re-cut off the same histogram to 25/20%, it measures
+// -3.00 wins (overlapping, under K06's floor) for +0.41 operators kept a run (3/3, separated).
+//
+// WHAT IT DOES, in one line: it converts deaths into setbacks. The squad goes to the floor
+// slightly more often and comes back off it more often. Full tables under R02 and R02b in
+// tests/simulate.js.
 //
 // THE EXIT IS THE ONE THE GAME ALREADY HAS. Timing out runs withdraw()'s path: the squad breaks
 // contact, whoever is standing takes the parting cost, the biggest hostiles give chase, and

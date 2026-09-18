@@ -2457,6 +2457,49 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── R02b: RE-TUNED, AND THE TRADE IS A TRADE NOW - 0.4 OPERATORS A RUN FOR A NULL ──
+// The first tuning cost 10.67 wins and the entry below says why: the clock's cost is in the
+// ECONOMY, not the fight. So it was re-cut off the same histogram that sized it - 25 turns
+// instead of 20 (25 catches 14% of fights where 20 catches 19%) on 20% of fights instead of
+// 35% - with the shape untouched and only the exposure changed.
+//
+// IT LANDED WHERE THE HISTOGRAM SAID IT WOULD, which is the first thing worth saying about it:
+// predicted roughly 1.0 timeouts a run, measured 0.9. The sizing row was honest.
+//
+//                          retuned 25/20%        first 20/35%         control (off)
+//   ended the road         18 / 17 / 26          12 / 12 / 14         22 / 23 / 25
+//   wipes per run          6.75 / 6.67 / 6.33    6.82 / 6.80 / 6.94   6.28 / 5.87 / 6.22
+//   lost for good, a run   3.97 / 3.89 / 3.47    2.90 / 2.93 / 3.03   4.12 / 4.21 / 4.23
+//   wipes at tier ten      811 / 788 / 730       631 / 673 / 650      835 / 802 / 853
+//   nodes cleared, median  75 / 77 / 74          69 / 70 / 71         78 / 75 / 80
+//   relics held, mean      10.3 / 11.2 / 10.5    9.0 / 9.6 / 10.0     10.5 / 11.0 / 11.2
+//   score, median          24.3k / 28.5k / 25.7k 20.6k / 21.1k / 22.8k 23.8k / 27.6k / 28.3k
+//
+//   against the control    wins        bodies kept a run
+//     first 20/35%         -10.67  SEPARATED, clears the floor     +1.23  SEPARATED
+//     retuned 25/20%        -3.00  OVERLAPPING, under the floor    +0.41  SEPARATED
+//
+// THE WIN COLUMN IS A NULL AT THIS FILE'S RESOLUTION and the body column is not. -3.00 is under
+// K06's 8-10 floor with overlapping ranges, so it is not established; +0.41 operators a run is
+// 3/3 with no overlap. The economy damage that drove the first tuning is gone with it - nodes
+// cleared 75.3 against 77.7, relics 10.7 against 10.9, score flat - which is the mechanism
+// agreeing that the fix addressed the cause rather than masking it.
+//
+// AND IT IS NOT TUNED FURTHER, deliberately. -3.00 leans negative and might be real; three
+// careers cannot say. Chasing a number this file cannot resolve is how a measurement turns into
+// a story, and R01's +5.33 was left alone one item ago for exactly this reason.
+// ^^ READ: STILL OPEN, and it is the same debt R01 filed with the opposite sign - a lean under
+// the floor, left unresolved rather than tuned away. Both want the same thing to settle them:
+// more careers an arm than this file has ever run for one question. K11 needed twelve to price
+// the trinket slot, and neither of these is worth twelve on its own. Worth settling together if
+// anything ever justifies a run that long.
+//
+// WHAT THE MECHANIC DOES, in one line: it converts deaths into setbacks. Wipes per run go UP by
+// 0.46 (barely separated, 6.33 against 6.28) while operators lost for good go DOWN by 0.41. The
+// squad goes to the floor more often and comes back off it more often. THAT PAIRING IS THE
+// READING AND IT IS NOT ISOLATED - the two numbers are close in size and opposite in sign, which
+// is suggestive of the same bodies, and nothing here withheld the rescue channel to prove it.
+//
 // ── R02: THE CLOCK COSTS WINS, NOT BODIES - AND MY PREDICTION HAD THE SIGN BACKWARDS ──
 // The build commit wrote its prediction down before the careers ran: "I expect the win column to
 // go UP rather than down - the clock's most common effect is ending a fight the squad was
@@ -3079,8 +3122,12 @@ const ROOT = path.join(__dirname, '..');
 // marked one. What it cannot do is END on one.
 // SIZE: large, and it deserves its own phase. Combat is the most-measured system in this
 // project and every figure above the line would need re-reading if the terminal condition moved.
-//   The terminal condition is NOT BUILT HERE: R02 shipped the feasibility census and nothing
-//   that changes how a fight ends.
+//   The terminal condition was NOT BUILT by R02's census commit, which shipped the feasibility
+//   measurement and nothing that changes how a fight ends.
+//   ^^ ANSWERED by R02's build and R02b's re-tune. A fight can be failed while standing now: a
+//   clock on 20% of road fights, never a commander, ending through withdraw's own exit so the
+//   squad walks away whole and paid nothing. Priced at 0.41 operators kept a run against a win
+//   column this file cannot resolve.
 //   ^^ READ: STILL OPEN, and narrowed by measurement rather than by argument. The census - the
 //   R02 table at the head of this file - rules out the cheap version: damage is linear in turns,
 //   so any objective that ends a fight early hands the player back damage in proportion and is a
