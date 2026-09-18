@@ -2592,21 +2592,34 @@ const ROOT = path.join(__dirname, '..');
 // on the strength of the table above.
 //
 // A SEPARATE FINDING THIS PAIR FELL OVER, filed rather than chased because it is not R01's: THE
-// WIN RATE HAS DRIFTED A LONG WAY UNDER ITS TARGET AND NOTHING NOTICED. The control arm - which
-// is the shipped game with only this one shape withheld - wins 19 of 150 three times, 12.7%. The
-// most recent entry in this file to quote the figure is K02, which recorded the after-arm at
-// 32/34/35, mean 34%, against the 30% target I06 cut the wall to. R03's control, measured days
-// ago, reads 20 of 150. So the game is running at roughly a third of the win rate the record
-// believes it is tuned to, and no single item since K02 claims a cost anywhere near that size.
-// NOT ATTRIBUTED HERE: this pair cannot say which items spent it, or whether the 34% and the
-// 12.7% are even the same row measured the same way, and guessing would be worse than filing.
-// It wants its own item, walking the arms back through the record until the drop has an owner.
-// ^^ READ: STILL OPEN. Filed by R01 and nothing since has walked it. This is the one claim in
-// this record where the thing left unmeasured is the file's own headline number, so it is worth
-// saying what "open" costs here: every balance reading taken between K02 and now was taken
-// against a win rate the record believed was 34% and may have been half that, which changes how
-// large a measured effect has to be before it means anything. The item is a bisection - re-run
-// the control at a handful of commits between K02 and R01 and find where the floor drops.
+// WIN RATE IS A LONG WAY UNDER ITS TARGET. The control arm - the shipped game with only this one
+// shape withheld - wins 19 of 150 three times, 12.7%, against the 30% target I06 cut the wall to.
+// R03's control, measured days ago, reads 20 of 150.
+//
+// AS FIRST FILED THIS CARRIED A SECOND CLAIM - "and nothing noticed", with "no single item since
+// K02 claims a cost anywhere near that size" - AND THAT HALF IS WITHDRAWN. Corrected at the
+// marker below rather than deleted, because the mistake is the useful part: I filed a finding
+// about this record without reading eleven entries of it.
+// ^^ ANSWERED BY #230, AND THE CLAIM ABOVE WAS WRONG WHERE IT MATTERED MOST. "No single item
+// since K02 claims a cost anywhere near that size" is false, and so was the headline's "nothing
+// noticed". M03 claims exactly that size and states the resulting level in as many words: "In
+// the terms I06 tuned to: the win rate goes from about 30% to about 16%." It sits eleven entries
+// further down this same file.
+//
+// WHAT #230 FOUND INSTEAD, which is a different and better finding: the drop is attributed and
+// documented. M03 typed bleed as a correctness fix and measured it landing as a one-sided nerf -
+// hostiles carry far more armour than operators and mitigate subtracts armour from every tick,
+// so the change cut the squad's own bleed output about five times harder than its intake. 44.3
+// runs won of 150 before, 24.7 on the bleed term alone. Every item since has then correctly
+// DECLINED to compensate, each saying so at its own site: "a compensating buff would be
+// re-tuning against a row that did not move."
+//
+// SO THE LIVE QUESTION WAS NEVER WHERE IT WENT. It is that the wall has sat at roughly half its
+// stated target since M03, and the re-cut was never done as its own item because re-tuning is
+// correctly refused inside every other item and belongs to none of them. That is an owner
+// decision rather than a defect, so #230 puts the dial in front of it instead of turning it:
+// SECTOR_HP_SCALE and SECTOR_DMG_SCALE are an arm now (--wallhp / --walldmg), defaulted to the
+// shipped values, so the curve is answerable in one run rather than one commit per point.
 //
 // WHAT THE R-AUDIT FOUND. GRUDGE.cap is 3 on purpose - "a wall you cannot pass is not a nemesis"
 // - and LEARNED_AT hands a commander exactly one new move. Measured across a career that means
@@ -3916,7 +3929,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   12 answered by a later item     4 still open     7 not an open claim after reading
+//   12 answered by a later item     3 still open     7 not an open claim after reading
 //
 // and 0 carrying two verdicts that disagree.
 //
@@ -6409,6 +6422,12 @@ const MORALE_ARM = flag('morale', 'on');
 // R01: the control the capped-commander arm withholds. `on` is the shipped game; `off` puts a
 // Thrice-Risen back to waiting for a quarter and bringing the plate, which is what every figure
 // above this line was measured under.
+// #230: THE WALL ITSELF, AS AN ARM. Empty means "leave the shipped value alone", so the default
+// run is byte-identical to before this existed. I06 cut this dial by editing game.js, running
+// careers, and editing it back - the only tuning question in the project without a flag, and the
+// one with a stated target behind it.
+const WALL_HP = flag('wallhp', '');
+const WALL_DMG = flag('walldmg', '');
 const CAP_SHAPE = flag('capshape', 'on');
 // A sim that never walks out measures a game with one ending. `--extract N` gives it the
 // player who leaves once the run is worth banking: from sector N on, it takes the camp's door
@@ -6613,7 +6632,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ capShapeArm, moraleArm, recruitTermArm, eliteOffer, difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange, retreatPolicy }) => {
+const EXPEDITION = ({ wallHp, wallDmg, capShapeArm, moraleArm, recruitTermArm, eliteOffer, difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange, retreatPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -6749,6 +6768,10 @@ const EXPEDITION = ({ capShapeArm, moraleArm, recruitTermArm, eliteOffer, diffic
   RECRUIT_TERMS_ON = recruitTermArm !== 'off';
   MORALE_ON = moraleArm !== 'off';
   CAP_SHAPE_ON = capShapeArm !== 'off';
+  // #230: set AFTER confirmNewGame, like every other arm, because confirmNewGame is what rebuilds
+  // the run. Empty leaves the shipped constant untouched rather than writing it back over itself.
+  if (wallHp) SECTOR_HP_SCALE = Number(wallHp);
+  if (wallDmg) SECTOR_DMG_SCALE = Number(wallDmg);
   // M-audit: AFTER confirmNewGame, which zeroes odChoices - the first cut set it before and the
   // arm silently did nothing, which is the same shape as every other harness bug this phase
   // found. Set here rather than at the fire site because odChoices is exactly what the engine's
@@ -8976,7 +8999,7 @@ const EXPEDITION = ({ capShapeArm, moraleArm, recruitTermArm, eliteOffer, diffic
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { capShapeArm: CAP_SHAPE, moraleArm: MORALE_ARM, recruitTermArm: RECRUIT_TERM, eliteOffer: ELITE_OFFER, difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE, retreatPolicy: RETREAT_POLICY });
+    const r = await page.evaluate(EXPEDITION, { wallHp: WALL_HP, wallDmg: WALL_DMG, capShapeArm: CAP_SHAPE, moraleArm: MORALE_ARM, recruitTermArm: RECRUIT_TERM, eliteOffer: ELITE_OFFER, difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE, retreatPolicy: RETREAT_POLICY });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }

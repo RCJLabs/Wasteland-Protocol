@@ -72,12 +72,19 @@ module.exports = {
       // not attribute it. A claim that large going unread is exactly the failure this suite
       // exists to make impossible, so the count is pinned rather than left to drift.
       //
-      // R02 then moved it 3 -> 4 of 22 -> 23, and moved it TWICE: once by filing its own open
+      // #230 then moved it back to 3 of 22 by WITHDRAWING half of R01's filing: "nothing
+      // noticed" was false, M03 had measured and stated the same drop eleven entries down, and
+      // the claim that went with it ("this pair cannot say which items spent it") is answered
+      // rather than still standing. A count that falls because a claim was ANSWERED is healthy;
+      // this one fell because a claim should never have been filed, which looks identical here
+      // and is why the entry says which it was.
+      //
+      // R02 moved it 3 -> 4 of 22 -> 23, and moved it TWICE: once by filing its own open
       // claim, and once by fixing the scanner that had been reading a verdict off the wrong
       // entry. Before that fix this same row read 3 of 23, because an R02 claim marked STILL
       // OPEN was being handed R03's ANSWERED through a window that ran past the entry boundary.
       // The count was wrong and looked right, which is the whole reason it is pinned here.
-      && r.open === 4 && r.total === 23);
+      && r.open === 3 && r.total === 22);
     // AND NO CLAIM CARRIES TWO VERDICTS THAT DISAGREE. K11's did for two commits: K11b wrote its
     // answer ABOVE the marker already there and left the old one standing, so the last word a
     // reader got was the stale one. The scan passed it, because it tested the window for an
