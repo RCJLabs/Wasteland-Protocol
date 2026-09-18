@@ -2457,6 +2457,66 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── #230: THE WALL, MEASURED AND LEFT WHERE IT IS - THE CURVE IS THE DELIVERABLE ──
+// R01 filed "the win rate has drifted under its target and NOTHING NOTICED". The second half is
+// withdrawn and corrected at its site: M03 noticed, measured it, and stated the resulting level
+// in as many words - "the win rate goes from about 30% to about 16%" - eleven entries down this
+// same file. What is true is that the wall has sat near half I06's stated target ever since, and
+// that the re-cut was never done as its own item, because compensating for one change by buffing
+// something unrelated is correctly refused INSIDE every other item and so belongs to none of them.
+//
+// SO THIS ITEM MAKES THE DIAL TURNABLE AND MEASURES IT, AND TURNS NOTHING. SECTOR_HP_SCALE and
+// SECTOR_DMG_SCALE are an arm now (--wallhp / --walldmg) defaulting to empty, which means "leave
+// the shipped constant alone". Damage is moved in I06's own ratio - its increment is 1.25x the
+// health increment - rather than chosen freely, so this is one dial with a shape and not two.
+//
+// FOUR POINTS, THREE CAREERS OF 150 EACH:
+//
+//   wall hp / dmg          wins /150        mean   win%   wipes   t10 share   score
+//   1.08 / 1.10  SHIPPED   21 / 24 / 21     22.0   14.7%   6.38     88.5%     25.7k
+//   1.06 / 1.075           25 / 36 / 33     31.3   20.9%   6.09     88.7%     27.6k
+//   1.04 / 1.05            42 / 29 / 42     37.7   25.1%   5.81     89.5%     33.4k
+//   1.02 / 1.025           50 / 50 / 61     53.7   35.8%   5.09     90.3%     39.0k
+//
+// Monotone on every row, and each step from the baseline clears K06's 8-10 win floor: +9.3,
+// +15.7, +31.7. Adjacent eased points do NOT all separate from each other - 1.06 to 1.04 is
+// +6.3 with overlapping ranges - so the curve's fine shape between them is not established,
+// only its direction and its ends.
+//
+// THE WALL'S SHAPE NEVER MOVES, which is the row that makes this a tuning dial rather than a
+// redesign. Tier ten's share of wipes reads 88.5 / 88.7 / 89.5 / 90.3% across the whole sweep.
+// Easing the curve lowers the wall without relocating where runs die; tier ten stays the gate.
+// That is the lever I06 picked and it still behaves the way I06 said it did.
+//
+// WHERE THE TARGET LIVES: interpolating the last two points, I06's 30% lands at about
+// hp 1.03 / dmg 1.0375. THAT IS NOT A RECOMMENDATION TO SET IT THERE. The target is the owner's
+// to set, as this file has said since H13, and the 30% figure is itself nine items old - it was
+// chosen for a game that has since had bleed typed, quirks rebuilt, the mark re-homed and three
+// new mechanics added. Restoring it by default would be treating a number as a fact.
+//
+// AND A CALIBRATION FIGURE THAT CAME FREE, worth more than it cost. The shipped row was measured
+// TWICE: once as R01's control, once fresh on this build with only bookkeeping between them.
+//
+//   R01's control    19 / 19 / 19    mean 19.0
+//   fresh baseline   21 / 24 / 21    mean 22.0    +3.0 wins on identical behaviour
+//
+// Three careers of the same build differ by three wins. That is this instrument's own noise at
+// n=3, measured directly rather than argued, and it is independent support for K06's floor: a
+// gap of three is nothing, and the 8-10 bar is not conservative.
+//
+// IT ALSO CLOSED A SUSPICION HONESTLY. R01's control read 19/19/19 - three identical counts
+// across independent careers, about a one-in-a-thousand coincidence at that spread - and I flagged
+// it rather than dismissing it, because a repeated value is what quantization looks like. The
+// fresh run reads 21/24/21. It was a fluke. The check cost one arm and the alternative was
+// carrying an unexamined doubt about every win count in this file.
+//
+// TWO SUSPECTS RULED OUT BEFORE ANY OF THIS WAS RUN. The harness defaults have moved a long way
+// since K02 - `--augments` went `on` -> `road`, `--augmax` appeared at 1 where the game's slot cap
+// is 3 - which is exactly D05's shape, a policy change reporting itself back as a game change. It
+// is not that: both were measured neutral against the greedy baseline before being changed, with
+// the arms printed. And the row is the same row, `runs that ended the road, N of 150`, identical
+// in K02's simulate.js and today's.
+//
 // ── R02: WHAT SHAPE A FIGHT IS - THE CENSUS THAT DECIDES WHAT THE FEATURE CAN BE ──
 // checkWinState ends a fight on `!pA` or `!eA` and on nothing else. No rout, no reinforcement,
 // no clock, no objective, and no way to FAIL a fight while still standing. THIS IS NOT THE

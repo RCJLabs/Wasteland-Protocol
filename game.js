@@ -3186,6 +3186,17 @@ function passiveDesc(bp) { return bp ? (bp.descOf ? bp.descOf() : bp.desc) : '';
 // these lines, running careers, and editing them again. `let` rather than `const`, with the
 // SHIPPED VALUES as the defaults, so nothing about the game moves and the curve becomes
 // answerable in one run instead of one commit per point.
+//
+// THE CURVE, MEASURED BY #230 AND LEFT WHERE IT IS - three careers of 150 a point, on the arm
+// below. Tier ten's share of wipes holds at 88-90% across the whole sweep, so this moves the
+// wall's HEIGHT and not its shape; runs still end where they ended.
+//
+//   1.08 / 1.10  SHIPPED   14.7% of runs won      1.04 / 1.05    25.1%
+//   1.06 / 1.075           20.9%                  1.02 / 1.025   35.8%
+//
+// I06's 30% target interpolates to about hp 1.03 / dmg 1.0375. NOTHING IS SET THERE: the target
+// is the owner's to set, and that 30% was chosen nine items ago for a game that has since had
+// bleed typed, quirks rebuilt, the mark re-homed and three mechanics added.
 let SECTOR_HP_SCALE = 1.08;      // was 1.06 (H13), 1.25 before that
 let SECTOR_DMG_SCALE = 1.10;     // was 1.08 (H13), 1.28 and 1.32 before that
 const XP_CURVE = 1.35;         // was 1.5 - levels kept stalling, starving the perk economy
