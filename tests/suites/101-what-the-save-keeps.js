@@ -64,7 +64,7 @@ module.exports = {
         nodeType: 'RAIDERS', isElite: true, weather: 'ASHFALL', terrain: 'TUNNELS',
         formation: null, bgFile: 'bg_highway.webp', bondSaves: ['p1|p2'],
         fightLog: { turns: 7, hurt: true, spent: true, chased: true },
-        vacated: [2], focus: 1, press: true
+        vacated: [2], focus: 1, press: true, pressed: 25
       };
       const broken = [];
       COMBAT_STATE.forEach(f => {

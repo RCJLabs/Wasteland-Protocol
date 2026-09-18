@@ -5332,7 +5332,6 @@ function addMomentum(amt) {
 let fightLog = null;
 // R02: the clock this fight carries, 0 for none. Fight-scoped like fightLog, set at the bell.
 let pressedAt = 0;
-let chasedIn = false;      // set while the chase is being placed, read when the log is opened
 let comboKill = false;     // true only while a combo's own blow is landing
 let comboHit = null;       // M11: the COMBOS row riding that blow, for the census at the landing point
 let odKills = null;        // counts kills inside one overdrive, null when none is resolving
@@ -7481,7 +7480,21 @@ const COMBAT_STATE = [
     { key: 'focus',     get: () => momentumFocus,       set: v => { momentumFocus = v; },
       load: v => Number.isFinite(v) ? Math.max(0, Math.min(1, Math.floor(v))) : 0 },
     { key: 'press',     get: () => pressExtra,          set: v => { pressExtra = v; },
-      load: v => !!v }
+      load: v => !!v },
+    // S01: the deadline travels with the fight it is counting. fightLog sits two entries up, so
+    // a reload used to bring the turn count back and leave the clock at zero - the squad kept
+    // every turn it had spent and lost the limit those turns were counting against. Measured on
+    // a staged save at turn 18 of a 25-turn fight: before the reload {clock:25, turns:18, left:7},
+    // after it {clock:0, turns:18, left:0}. Saving on the last turn before the road moves on and
+    // reloading was a free extension, and pressedOut can never fire again in that fight.
+    //
+    // pressedFor is a pure function of the node and the sector, so re-deriving it in resumeCombat
+    // would land on the same number; it is stored instead because that is what the other ten
+    // fields do, and because a fight that outlives a sector change should keep the clock it was
+    // given rather than the one its new sector would roll. A save written before this field
+    // existed has no key, loads 0, and resumes without a clock exactly as it does today.
+    { key: 'pressed',   get: () => pressedAt,           set: v => { pressedAt = v; },
+      load: v => Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 0 }
 ];
 
 function buildCombatSnapshot() {
@@ -11327,7 +11340,7 @@ function initiateCombat(nodeType, isEliteNode) {
         log(`> ${p.name} is somewhere else. Shell shock costs them the opening.`, 'log-dmg');
     });
     momentumFocus = 0; pressExtra = false; pendingOverdrive = null;
-    fightLog = newFightLog(); fightLog.chased = chasedIn; chasedIn = false;
+    fightLog = newFightLog();
     // R02: the clock, read off the node so a fight shows the same face every time it is looked
     // at. currentNodeId is null for a fight staged directly (dev tools, suites), which carries
     // no clock - the same way a directly-staged fight has no forecast sky to keep.
@@ -11362,7 +11375,17 @@ function initiateCombat(nodeType, isEliteNode) {
         activeEntities.push(...caught);
         log(`> They caught up. ${caught.length} from the last fight ${caught.length === 1 ? 'is' : 'are'} here.`, 'log-dmg');
         pursuit = null;
-        chasedIn = true;
+        // S02: STAMPED ON THE FIGHT THE CHASERS ARE STANDING IN, which is this one. The flag used
+        // to be relayed through a module-level `chasedIn` read at the top of this same function -
+        // twenty-five lines above this write - so every fight carried the previous fight's answer.
+        // Measured by construction across three fights: the one with two chasers on the field
+        // logged chased:false, and the next one, with none, logged chased:true. TURN AND BREAK N
+        // CHASES therefore credited a fight nobody chased into, and never credited the chase that
+        // ended a run - an extraction or a wipe left the relay with nowhere to hand it on to.
+        //
+        // Writing it into fightLog also puts it inside COMBAT_STATE for free, which the relay
+        // never was: a reload mid-chase used to drop the flag on the floor.
+        fightLog.chased = true;
     }
     // The front's fingerprints on the fight itself: a warband's elites hit harder, and a
     // faction front's warlord does not arrive alone.
@@ -14608,7 +14631,6 @@ globalThis.WP = {
     get activeBounties() { return activeBounties; }, set activeBounties(v) { activeBounties = v; },
     get standingBounty() { return standingBounty; }, set standingBounty(v) { standingBounty = v; },
     get fightLog() { return fightLog; }, set fightLog(v) { fightLog = v; },
-    get chasedIn() { return chasedIn; }, set chasedIn(v) { chasedIn = v; },
     get momentum() { return momentum; }, set momentum(v) { momentum = v; },
     get momentumFocus() { return momentumFocus; }, set momentumFocus(v) { momentumFocus = v; },
     get pressExtra() { return pressExtra; }, set pressExtra(v) { pressExtra = v; },

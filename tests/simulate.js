@@ -2457,6 +2457,47 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── S-AUDIT: TWO FACTS THAT CROSSED A BOUNDARY WRONG - ONE A RELOAD, ONE A FIGHT ──────
+// A fresh sweep of the tree after the R-series. Eight candidates were killed before they were
+// worth writing down, most of them because THIS FILE ALREADY SAYS SO: `walked out 0 of 150` is
+// the simulator's own `--extract off` (recorded at "extraction is dead content"), ONE MORE
+// FALLBACK at 0 of 150 runs is H03's, with `--reqpolicy fallback` existing to buy it, and the
+// hurt-arrival cliff already carries its own x1.78 reading. Two survived, and both are the same
+// shape: a fact written on one side of a boundary and read on the other.
+//
+// S01, THE DEADLINE A RELOAD FORGOT. R02 shipped the pressed-fight clock two commits earlier and
+// put nothing in COMBAT_STATE. fightLog is in that table, so a reload brought the TURN COUNT back
+// and left the deadline at its module default. Staged at turn 18 of a 25-turn fight and resumed
+// through the real path:
+//     before {clock:25, turns:18, left:7}   after {clock:0, turns:18, left:0, live:true}
+// The squad kept every turn it had spent and lost the limit those turns were counting against,
+// and pressedOut could never fire again in that fight - saving on the last turn was a free
+// extension. One COMBAT_STATE entry, and suite 182 fails twelve ways without it.
+//
+// S02, THE CHASE CREDITED TO THE WRONG FIGHT. `fightLog.chased` was relayed through a module-level
+// flag that initiateCombat WROTE near its bottom and READ near its top - twenty-five lines apart
+// in the same function, which is one fight apart in time. Measured by construction across three
+// fights: the one with two chasers standing on the field logged chased:false, and the next one,
+// with none, logged chased:true. TURN AND BREAK N CHASES was therefore paid by the ordinary fight
+// AFTER a chase, and a chase that ended a run was never paid at all.
+//
+// WHAT THAT WAS WORTH, matched 150-expedition careers on either side of the one-line move:
+//     contracts settled, CHASED     49  ->  19
+// I wrote the prediction down first and got the sign right and the size badly wrong: I expected a
+// 15-25% fall on the grounds that a chase fight is somewhat harder than the fight after it. It
+// fell 61%. A chase fight carries the survivors of a fight the squad ran from ON TOP of a fresh
+// node, so it is not somewhat harder, it is much harder - THIRTY OF THE FORTY-NINE OLD CREDITS
+// WERE PAID BY A FIGHT NOBODY WAS CHASED INTO. The bounty now does what its own text says and is
+// about 2.6x rarer for it. Whether its target range of 1-2 should move is a dial, and it is the
+// owner's; nothing here touches it.
+//
+// NOT TO BE QUOTED FROM THIS PAIR: wins 20 -> 24, median score 25,435 -> 22,079, nodes cleared
+// 77 -> 75. These are ONE career each. This file's own line says a single career resolves +-4.2
+// wins, and the header says median score at 150 has printed anywhere from 11,455 to 25,435 on
+// stable code. A bounty worth 95 scrap landing thirty fewer times across 150 runs is 19 scrap a
+// run; it cannot move a score column by 13%. That is career divergence, and the only row here
+// that carries signal is the count of the thing that changed.
+//
 // ── R05: LIGHT ORDER WALKED THE WAY O22 WALKED NO HANDS - AND THE WIN COLUMN CANNOT SAY ──
 // R05 filed that LIGHT_ORDER "has never had the same treatment" as NO_HANDS: O22 split that
 // card's cost into the LINE (drafting melee-free, -7.33) and the CARD (taking the thing you
