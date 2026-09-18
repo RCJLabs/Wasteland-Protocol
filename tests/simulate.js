@@ -2457,6 +2457,81 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── S04: THE THREE OPEN CLAIMS, RE-READ - ONE SETTLES, ONE INVERTS, AND S03 LOSES ALL THREE ──
+// S03 measured that a difficulty lever resolves about three times cheaper on the wipe count than
+// on the win count, and the record carried three claims that had died on the win column. This is
+// the first use of that finding, and the first thing to say is that IT DID NOT HELP HERE.
+//
+// TWELVE BASELINE CAREERS (already run for S03, same commit, game.js untouched since) against SIX
+// per arm, each arm withholding one feature whole. Every arm verified BY CONSTRUCTION first: the
+// report prints "none - the arm is off" on that feature's own census row, so a dead arm cannot be
+// read as a null. The first cut of that check looked for a number, found the prose, and declared
+// all three arms dead - which is the check working on itself.
+//
+//   arm            row                  base(12)   off(6)    delta       t     df        p
+//   --capshape     wins                    20.58    16.50    -4.08   -2.19   14.3   0.0456  PRE
+//                  wiped                  110.08   113.83    +3.75   +1.72   13.2   0.1084
+//   --pressed      wins                    20.58    24.50    +3.92   +1.77   11.0   0.1038  PRE
+//                  wiped                  110.08   100.50    -9.58   -3.14    8.3   0.0131
+//                  operators on the floor  17.86    20.10    +2.24   +5.45    7.9   0.0006  PRE
+//   --morale       wins                    20.58    15.50    -5.08   -2.37   11.5   0.0364  PRE
+//                  wiped                  110.08   109.00    -1.08   -0.32    7.5   0.7603
+//
+// WELCH, NOT A NAIVE z, AND THE DIFFERENCE IS NOT COSMETIC. Twelve against three (the first pass)
+// put almost all the variance in the small arm and collapsed the degrees of freedom to about two:
+// the operators row read +5.73 as a naive z and +3.52 as a Welch t at p=0.057. Any asymmetric arm
+// in this file should be read the same way or it will overstate itself by half again.
+//
+// AND FOUR PRE-SPECIFIED TESTS MEANS A BONFERRONI THRESHOLD OF 0.0125, not 0.05. The four are
+// pre-specified because each claim named its own row before this item ran; the other rows are
+// exploratory and are printed above without stars for exactly that reason. This is the header's
+// own whole-report problem made concrete: p < 0.05 on one of twelve rows is what noise looks like.
+//
+// R02b's BODY CLAIM IS SETTLED, and it is the only thing here that clears correction. Removing the
+// clock puts 2.24 MORE operators on the floor a run, p = 0.0006. R02b priced the clock at "+0.41
+// operators KEPT a run, SEPARATED" and this is the same direction at a far stronger bar. The two
+// numbers are not the same quantity - bodies kept against bodies put on the floor - so 2.24 is
+// corroboration, not a restatement. The mechanism is plain: a clock ENDS fights, and the fights it
+// ends are the ones grinding the squad down.
+//
+// R02b's WIN CLAIM REPLICATES AND STILL DOES NOT SETTLE. R02b read -3.00 and this reads -3.92 (the
+// clock costs that many wins), same direction, same size, p = 0.1038. Left open, and now with two
+// independent samples agreeing on a lean this file still cannot call.
+//
+// R01 REPLICATES AND DOES NOT SETTLE EITHER. R01 read +5.33 wins for the capped commander shape;
+// this reads +4.08, p = 0.0456 - under 0.05, over the correction. Direction and size confirmed
+// twice, verdict unchanged.
+//
+// R03'S POINT ESTIMATE IS INVERTED, AND ITS VERDICT IS VINDICATED. R03 measured `ended the road`
+// at 19/16/15 with the break against 21/14/25 without it - 16.67 against 20.00, morale apparently
+// COSTING 3.33 wins - and refused to conclude, calling it a clean null on overlapping ranges. That
+// refusal was right. With four times the baseline the lean runs the other way: morale is worth
+// +5.08 wins, p = 0.0364. Note what R03's own arms look like against a twelve-career baseline that
+// spans 10 to 27: its "off" arm of 14 to 25 sits entirely inside that spread, and its 3.33 gap was
+// three careers a side reading noise. NOTHING R03 PUBLISHED WAS WRONG, because it published a null
+// rather than a direction. Two cautions on the new number: it does not clear the correction either,
+// and R03's arms were measured on an older build, so only the twelve-against-six pair here is a
+// clean within-commit comparison.
+//
+// AND THE PART THAT COSTS S03 SOMETHING. The wipe row won on NONE of the three:
+//
+//   capshape   wins p 0.046   vs   wiped p 0.108      the win row wins
+//   morale     wins p 0.036   vs   wiped p 0.760      the win row wins, and the wipe row is BLIND
+//   pressed    wins p 0.104   vs   wiped p 0.013   vs   operators p 0.0006   a THIRD row wins
+//
+// S03 measured its 2.6x on the wall - a difficulty dial - and wrote down the limit that would
+// break it: "a lever that only moves how a surviving run ENDS is invisible on this row and visible
+// only on the win count". Morale is that lever, measured: p 0.76 on wipes against p 0.036 on wins.
+// The limit clause was not hedging, it was the finding's actual boundary, and it is now measured
+// rather than reasoned. S03's headline stands for difficulty dials and for nothing else yet.
+//
+// THE ROW THAT ACTUALLY SETTLED SOMETHING IS NEITHER OF THEM. `operators put on the floor, per
+// run` carried the only result clearing correction, at p = 0.0006 where wins read 0.10 on the same
+// arm. It is NOT given a printed floor beside the other two, deliberately: it is the mean of a
+// continuous per-run quantity, not a count of successes out of n, so `resolves` - which is the sd
+// of a proportion - would be the wrong formula wearing the right label. Printing a floor computed
+// the wrong way is worse than printing none, which is F03's whole rule.
+//
 // ── S03: THE ROW EVERY BALANCE PHASE QUOTES IS THE SECOND-BEST ROW ON ITS OWN LINE ────
 // Six items in a row ended unresolved on the win column - R01's +5.33, R02b's -3.00, R03's
 // momentum arm, R04's 4.33 against a floor of 9, R05 unpriceable, K11b a null at twelve an arm.
