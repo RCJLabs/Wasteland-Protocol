@@ -327,6 +327,19 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .tr-tunnel { background: #2a1f14; color: #c9a227; }
 .tr-flats  { background: #1d2430; color: #8fb6d6; }
 .tr-ruins  { background: #23241f; color: #a8b09a; }
+/* R02: the clock. Loudest of the three banners, because the sky and the ground are things the
+   fight IS and this is a thing the fight is running out of - and it is the only one of the three
+   that can end the fight on its own. Urgent inside the last three turns, which is about one
+   round at three deployed: the point where a squad still has one decision left to make. */
+#clock-banner { text-align: center; font-size: 0.6875rem; font-weight: bold; padding: 4px;
+  letter-spacing: 1px; display: none; text-shadow: 1px 1px 2px #000;
+  border-top: 1px solid rgba(0,0,0,0.5); }
+.clock-on  { background: #2b2410; color: #d8c168; }
+.clock-out { background: #3a1410; color: #ff9a7a; animation: clock-pulse 1s ease-in-out infinite; }
+@keyframes clock-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+/* F14/G10's line: motion is decoration and a player who has asked for less of it gets none. */
+@media (prefers-reduced-motion: reduce) { .clock-out { animation: none; } }
+
 /* On the map it is a single lettered chip beside the weather dot, so the two never merge into
    one indistinguishable mark. */
 .node-ground { position: absolute; right: 3px; bottom: 3px; width: 13px; height: 13px; line-height: 13px;

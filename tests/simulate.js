@@ -6488,6 +6488,7 @@ const MORALE_ARM = flag('morale', 'on');
 // one with a stated target behind it.
 const WALL_HP = flag('wallhp', '');
 const WALL_DMG = flag('walldmg', '');
+const PRESSED_ARM = flag('pressed', 'on');
 const CAP_SHAPE = flag('capshape', 'on');
 // A sim that never walks out measures a game with one ending. `--extract N` gives it the
 // player who leaves once the run is worth banking: from sector N on, it takes the camp's door
@@ -6692,7 +6693,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ wallHp, wallDmg, capShapeArm, moraleArm, recruitTermArm, eliteOffer, difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange, retreatPolicy }) => {
+const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recruitTermArm, eliteOffer, difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange, retreatPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -6828,6 +6829,7 @@ const EXPEDITION = ({ wallHp, wallDmg, capShapeArm, moraleArm, recruitTermArm, e
   RECRUIT_TERMS_ON = recruitTermArm !== 'off';
   MORALE_ON = moraleArm !== 'off';
   CAP_SHAPE_ON = capShapeArm !== 'off';
+  PRESSED_ON = pressedArm !== 'off';
   // #230: set AFTER confirmNewGame, like every other arm, because confirmNewGame is what rebuilds
   // the run. Empty leaves the shipped constant untouched rather than writing it back over itself.
   if (wallHp) SECTOR_HP_SCALE = Number(wallHp);
@@ -8096,7 +8098,13 @@ const EXPEDITION = ({ wallHp, wallDmg, capShapeArm, moraleArm, recruitTermArm, e
       // R02: noteSquadTurn does the increment AND books what was standing when the turn opened.
       // Called rather than re-implemented, so this loop and the engine's cannot drift - the
       // census's first cut hooked processTurn alone and this loop walked straight past it.
-      if (actor.isPlayer && fightLog && !engineDidOpen) noteSquadTurn();
+      if (actor.isPlayer && fightLog && !engineDidOpen) {
+        noteSquadTurn();
+        // R02: the clock, checked through the engine's own door. This loop re-implements the
+        // turn walk (I02), so a check written only into processTurn would never fire here - the
+        // exact way R02's census first read one sample per fight instead of one per turn.
+        if (pressedOut()) break;
+      }
       if (actor.isPlayer) { if (!takeTurn()) { activeIndex = (activeIndex + 1) % turnQueue.length; continue; } }
       // F03: this used to be `actor.intent = rollIntent(actor); executeEnemyAi(actor)`, which
       // threw away the intent the player's whole turn had just been spent reading. The engine
@@ -8880,6 +8888,8 @@ const EXPEDITION = ({ wallHp, wallDmg, capShapeArm, moraleArm, recruitTermArm, e
   stat.outMelee = runStats.outMelee || {};   // O21: and which body, under which promise
   stat.eliteOffers = runStats.eliteOffers || 0;   // O05: did the elite branch stage anything
   stat.fightShape = runStats.fightShape || null;    // R02: how long a fight runs and where it hurts
+  stat.pressedMet = runStats.pressedMet || 0;       // R02: fights that carried a clock
+  stat.pressedOut = runStats.pressedOut || 0;       // R02: and fights the clock actually ended
   stat.grudgePhase = runStats.grudgePhase || null;  // R01: is the grudge phase a slice anyone plays
   stat.capShaped = runStats.capShaped || 0;        // R01: and how often the capped shape fired
   stat.capRefund = runStats.capRefund || 0;        // R01: and what it handed back to get there
@@ -9059,7 +9069,7 @@ const EXPEDITION = ({ wallHp, wallDmg, capShapeArm, moraleArm, recruitTermArm, e
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { wallHp: WALL_HP, wallDmg: WALL_DMG, capShapeArm: CAP_SHAPE, moraleArm: MORALE_ARM, recruitTermArm: RECRUIT_TERM, eliteOffer: ELITE_OFFER, difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE, retreatPolicy: RETREAT_POLICY });
+    const r = await page.evaluate(EXPEDITION, { pressedArm: PRESSED_ARM, wallHp: WALL_HP, wallDmg: WALL_DMG, capShapeArm: CAP_SHAPE, moraleArm: MORALE_ARM, recruitTermArm: RECRUIT_TERM, eliteOffer: ELITE_OFFER, difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE, retreatPolicy: RETREAT_POLICY });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -9867,6 +9877,34 @@ const EXPEDITION = ({ wallHp, wallDmg, capShapeArm, moraleArm, recruitTermArm, e
           `${Math.round(won / total * 100)}% - what BLITZ already pays for`);
       }
       line('  won inside 3 turns', `${share(len, 3)}%`);
+
+      // R02 SIZING: WHAT A DEADLINE WOULD CATCH. The census's own finding is that damage is
+      // linear in turns, so an objective that ends a fight early is a difficulty cut unless it
+      // costs something. The shape it points at instead is a fight the squad can FAIL while
+      // standing - a clock that runs out. Before building one, this says how much of the game
+      // each candidate clock would touch, off the histogram rather than off a guess.
+      //
+      // Read over EVERY fight that started, not just the won ones, because a clock does not care
+      // which way the fight was going - a fight the squad was losing at turn 20 is exactly the
+      // one a deadline is for. Wins, losses and walk-outs all counted in the denominator.
+      const allLen = {};
+      [len, lost].forEach(h => Object.entries(h).forEach(([k, v]) => { allLen[k] = (allLen[k] || 0) + v; }));
+      const startedAll = nAt[1] || Object.values(allLen).reduce((a, b) => a + b, 0);
+      // A fight is CAUGHT by a deadline at N if it was still running when turn N opened, which
+      // nAt already counts directly - no need to infer it from the length histogram.
+      // Every fight that OPENED, which is the denominator for anything about clocks or shares -
+      // checkWinState never runs for a fight the squad walks out of, so won+lost undercounts.
+      // Hoisted here because two rows below need it; it used to be declared inside the last one.
+      const started = nAt[1] || (total + totalLost);
+      // R02: AND WHAT THE CLOCK ACTUALLY DID, beside the sizing it was chosen from. `met` is how
+      // many fights carried one at all and `out` is how many it ended - the gap between them is
+      // the fights that beat the clock, which is the whole of what the mechanic asks for.
+      const met = results.reduce((a, r) => a + (r.pressedMet || 0), 0);
+      const out = results.reduce((a, r) => a + (r.pressedOut || 0), 0);
+      line('  fights on a clock', PRESSED_ARM === 'off' ? 'none - the arm is off'
+        : `${met} of ${started} (${Math.round(met / started * 100)}%), and it ran out on ${out} (${met ? Math.round(out / met * 100) : 0}%)`);
+      line('  a deadline would catch',
+        [12, 16, 20, 25, 30].map(n => `t${n}: ${Math.round((nAt[n] || 0) / startedAll * 100)}%`).join(', '));
       if (totalLost) {
         line('fights the squad lost', totalLost);
         line('  squad turns before it fell',
@@ -9893,9 +9931,8 @@ const EXPEDITION = ({ wallHp, wallDmg, capShapeArm, moraleArm, recruitTermArm, e
         // census printed 116% one item ago, and caught by the same thing, a share exceeding a
         // hundred. The cause is the finding: checkWinState books len/lenLost, and checkWinState
         // never runs for a fight the player WITHDRAWS, RETREATS or FALLS BACK out of. Those
-        // fights start, take turns, and never reach a terminal condition at all. nAt[1] counts
-        // every fight that opened, which is the population this row is about.
-        const started = nAt[1] || (total + totalLost);
+        // fights start, take turns, and never reach a terminal condition at all. `started`
+        // counts every fight that opened, which is the population this row is about.
         line('fights still running at turn',
           marks.map(n => `t${n}: ${Math.round(nAt[n] / started * 100)}%`).join(', '));
         // AND WHAT THAT GAP IS, printed rather than left as an artefact. A fight the squad left

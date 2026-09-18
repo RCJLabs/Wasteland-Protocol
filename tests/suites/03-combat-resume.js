@@ -261,8 +261,12 @@ module.exports = {
     // (I02) reaches the same booking the engine does - and left the GUARD exactly where it was.
     // This pin follows the guard rather than the statement it used to guard, because the guard is
     // what the assertion is about: a version that counts every reload as a turn is still caught.
+    // R02 grew the body again - the clock is checked on the same beat, so the turn that runs out
+    // is not also taken - and the pin went red for the shape of the statement rather than for
+    // anything it guards. Rewritten to test THE GUARD and that noteSquadTurn is what sits behind
+    // it, which is what this assertion has always been about; the body is free to grow.
     ok('and the count is still guarded at all',
-      /if \(aE\.isPlayer && fightLog && !resumed\) noteSquadTurn\(\);/.test(src));
+      /if \(aE\.isPlayer && fightLog && !resumed\)[^\n]*\{?[\s\S]{0,200}?noteSquadTurn\(\);/.test(src));
     ok('and the one door it calls is where the increment now lives',
       /function noteSquadTurn\(\) \{[\s\S]*?fightLog\.turns\+\+;/.test(src));
   }

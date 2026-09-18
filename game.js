@@ -372,6 +372,23 @@ function fightShape() {
 // GUARDS stay where they are, because they differ for good reasons that are not this function's
 // business: processTurn skips a resumed turn (I02), the simulator skips the turn the engine
 // already opened.
+// R02: THE CLOCK RUNNING OUT, which is the whole item. Checked where the squad turn is counted
+// because that is the one place the clock can advance, and it runs BEFORE the turn opens - a
+// squad that is out of time does not get to take the turn it ran out on.
+//
+// It ends the fight through withdraw()'s path rather than a second exit of its own: break
+// contact, the parting cost on whoever is standing, the biggest hostiles give chase, and
+// collectLoot(0, true) pays nothing. Nobody dies of the clock. THAT IS WHAT MAKES IT A FAILURE
+// RATHER THAN A PUNISHMENT, and it is the first way in this game to lose a fight while the whole
+// squad is still on its feet.
+function pressedOut() {
+    if (!PRESSED_ON || !pressedAt || !fightLog || !combatActive) return false;
+    if (fightLog.turns < pressedAt) return false;
+    if (runStats) runStats.pressedOut = (runStats.pressedOut || 0) + 1;
+    log(`> Time. The road moves on without you.`, 'log-dmg');
+    forceBreakContact();
+    return true;
+}
 function noteSquadTurn() {
     if (!fightLog) return;
     fightLog.turns++;
@@ -1663,6 +1680,48 @@ const GRUDGE = {
 // the health bar and buys 20 points of it, so a small lean toward the player is the trade's
 // expected shape. See the R01 table in tests/simulate.js for the full pair.
 const GRUDGE_CAP = { phaseAt: 0.45, keepsArmour: false, refundEnrage: true };
+
+// ── R02: A FIGHT THE SQUAD CAN FAIL WHILE STILL STANDING ────────────────────────────────
+// checkWinState ends a fight on `!pA` or `!eA` and on nothing else. Both branches are the same
+// predicate with the sides swapped, so the game has one win condition, one loss condition, and
+// they are each other. R03 gave a BODY a way out of a fight and the terminal condition did not
+// move; what was missing was never an exit for a hostile.
+//
+// SIZED OFF THE CENSUS RATHER THAN GUESSED. R02's first commit measured the shape of a fight
+// over 26,186 of them: a win takes a median of 9 squad turns, a LOSS takes 19, p90 57, worst
+// 227. Damage is linear rather than front-loaded - 22% of what the squad takes has landed by
+// turn 3, 37% by 6, 56% by 12 - and 44% lands after turn 12, in the 41% of fights still running
+// then. The long fights are where the squad gets hurt, and the game has no way to end one
+// except by killing everything.
+//
+// A CLOCK IS THE SHAPE THE DATA SUPPORTS, and the histogram says exactly what each one costs:
+// a deadline at squad turn 12 would catch 39% of fights, at 16 27%, at 20 19%, at 25 14%, at
+// 30 10%. PRESSED_AT is 20 because one fight in five is a mechanic somebody meets and one in ten
+// is a curiosity, and because 20 sits well past the median win of 9 - a squad playing normally
+// finishes long before the clock, and only a fight that is already going badly ever sees it.
+//
+// AND IT CUTS BOTH WAYS, WHICH IS THE WHOLE REASON IT IS AN ARM. The census's own headline is
+// that ending a fight early hands damage back in proportion. A deadline ends fights early. So
+// this adds a loss condition AND removes damage in the same stroke, and which one dominates is
+// not something the mechanism can tell you - only the pair can. The prediction is written down
+// in the commit before the careers run.
+//
+// THE EXIT IS THE ONE THE GAME ALREADY HAS. Timing out runs withdraw()'s path: the squad breaks
+// contact, whoever is standing takes the parting cost, the biggest hostiles give chase, and
+// collectLoot(0, true) pays nothing. Nobody dies of the clock. That is what "fail while
+// standing" has to mean for it to be a failure rather than a punishment.
+const PRESSED = { at: 20, share: 35 };   // squad turns, and the share of road fights that carry one
+let PRESSED_ON = true;
+// Seeded off the node the way R04's terms are, so a fight shows the same face every time it is
+// looked at - and never on a commander, which is the one node a squad cannot walk away from.
+function pressedFor(nodeId, nodeType) {
+    if (!PRESSED_ON || !nodeId || nodeType === 'BOSS') return 0;
+    return (seedFromString('pressed:' + nodeId + ':' + currentSector) % 100) < PRESSED.share
+        ? PRESSED.at : 0;
+}
+function pressedLeft() {
+    return pressedAt > 0 && fightLog ? Math.max(0, pressedAt - fightLog.turns) : 0;
+}
 let CAP_SHAPE_ON = true;          // the control the arm withholds
 function capShaped(e) {
     return CAP_SHAPE_ON && !!e && e.classType === 'BOSS' && (e.grudge || 0) >= GRUDGE.cap;
@@ -5261,6 +5320,8 @@ function addMomentum(amt) {
 // What the fight currently being fought has cost and how long it has run. The board reads it
 // at the win; nothing else does.
 let fightLog = null;
+// R02: the clock this fight carries, 0 for none. Fight-scoped like fightLog, set at the bell.
+let pressedAt = 0;
 let chasedIn = false;      // set while the chase is being placed, read when the log is opened
 let comboKill = false;     // true only while a combo's own blow is landing
 let comboHit = null;       // M11: the COMBOS row riding that blow, for the census at the landing point
@@ -11141,6 +11202,23 @@ const WEATHER_BANNERS = Object.fromEntries(
     Object.entries(WEATHER).filter(([, w]) => w.banner).map(([id, w]) => [id, [w.cls, w.banner]]));
 // bannerText only replaces the wording. The weather itself is unchanged, so the +20% damage
 // a boss arena applies is identical whichever commander is waiting - only the sign differs.
+// R02: THE CLOCK, AND IT HAS TO BE DRAWN EVERY TURN. The first cut put this beside the weather
+// and ground banners in applyCombatScenery - which runs ONCE, at the bell. That is right for a
+// sky and a floor, which do not change while the fight runs, and wrong for the only banner in
+// the game that counts. It painted "20 TURNS" and then sat there saying it, which is worse than
+// showing nothing: a clock that does not move reads as a clock that is not running.
+//
+// It counts DOWN rather than up - "6 turns left" is the number a decision is made against, where
+// "turn 14 of 20" has to be subtracted first - and goes urgent inside the last three, which is
+// about one round at three deployed and so about one decision left.
+function renderClock() {
+    const k = document.getElementById('clock-banner');
+    if (!k) return;
+    const left = pressedLeft();
+    k.className = pressedAt && left <= 3 ? 'clock-out' : 'clock-on';
+    k.innerText = pressedAt ? `⏱ ${left} TURN${left === 1 ? '' : 'S'} BEFORE THE ROAD MOVES ON` : '';
+    k.style.display = pressedAt ? 'block' : 'none';
+}
 function applyCombatScenery(bgFile, bannerText) {
     startAmbience(bgFile);
     combatBgFile = bgFile;
@@ -11240,6 +11318,14 @@ function initiateCombat(nodeType, isEliteNode) {
     });
     momentumFocus = 0; pressExtra = false; pendingOverdrive = null;
     fightLog = newFightLog(); fightLog.chased = chasedIn; chasedIn = false;
+    // R02: the clock, read off the node so a fight shows the same face every time it is looked
+    // at. currentNodeId is null for a fight staged directly (dev tools, suites), which carries
+    // no clock - the same way a directly-staged fight has no forecast sky to keep.
+    pressedAt = pressedFor(currentNodeId, nodeType);
+    if (pressedAt) {
+        if (runStats) runStats.pressedMet = (runStats.pressedMet || 0) + 1;
+        log(`> This one is on a clock. ${pressedAt} turns before the road moves on without you.`, 'log-status');
+    }
     playerRoster.forEach(ent => { ent.secondWindUsed = false; ent.deadRendered = ent.hp <= 0; });
     inspecting = null;
     bondSavesUsed = new Set();
@@ -11447,6 +11533,7 @@ function resistBadges(ent) {
 
 function renderField() {
     renderQueue();
+    renderClock();   // R02: drawn every turn, because it is the one banner that counts down
     window.__threatCache = (combatActive && !pendingAction) ? threatBoard() : {}; const pTeam = document.getElementById('player-team'); const eTeam = document.getElementById('enemy-team');
     const carried = [];
     if (!paintOff) [pTeam, eTeam].forEach(t => t.querySelectorAll('.entity').forEach(el => {
@@ -11781,7 +11868,11 @@ function processTurn() {
     // Before anything can fall this turn, and before the save below writes the field down.
     clearStaleClocks();
     pendingAction = null; let aE = turnQueue[activeIndex]; if (aE.hp <= 0) { nextTurn(); return; }
-    if (aE.isPlayer && fightLog && !resumed) noteSquadTurn();
+    if (aE.isPlayer && fightLog && !resumed) {
+        noteSquadTurn();
+        // R02: and if that turn was one too many, the fight ends here rather than being taken.
+        if (pressedOut()) return;
+    }
     saveGameState();
     renderField(); applyTurnStartEffects(aE); if (!combatActive) return; if (!aE.hp > 0) return checkWinState(); 
     if (aE.stunnedTurns > 0) { if (!aE.isPlayer) { log(`> ${aE.name} stunned.`, "log-status"); spawnFCT(aE.id, "STUNNED", "fct-status"); aE.stunnedTurns--; setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return; } else return; }
@@ -12188,10 +12279,10 @@ function canWithdraw() {
         activeEntities.some(e => e.isPlayer && e.hp > 0) && !pendingAction;
 }
 function disarmWithdraw() { armedExit = null; }
-function withdraw() {
-    if (!canWithdraw()) return;
-    if (armedExit !== 'WITHDRAW') { armedExit = 'WITHDRAW'; renderCommandDeck(); return; }
-    armedExit = null;
+// R02: the body of a withdrawal, lifted out so the CLOCK and the BUTTON leave a fight the same
+// way. Nothing here changed - only its address - because a second exit written beside this one
+// would be a second set of rules about pursuit, momentum and who gets picked up off the floor.
+function forceBreakContact() {
     const cost = withdrawCost();
     // Whoever is still standing follows. They keep the wounds the squad already put on them.
     const chasers = activeEntities.filter(e => !e.isPlayer && e.hp > 0)
@@ -12210,6 +12301,12 @@ function withdraw() {
     recoverDowned('as the squad breaks contact');
     combatActive = false; stopAmbience();
     collectLoot(0, true);
+}
+function withdraw() {
+    if (!canWithdraw()) return;
+    if (armedExit !== 'WITHDRAW') { armedExit = 'WITHDRAW'; renderCommandDeck(); return; }
+    armedExit = null;
+    forceBreakContact();
 }
 
 // ── Retreating ──────────────────────────────────────────────────────────────────────────
@@ -14447,7 +14544,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
-    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, fightShape, noteSquadTurn, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, statusDesc, noteReach, noteFront, noteHaul, noteCover, noteLanding, noteMark, noteCombo, noteBleed, bleedFor, bleedSet, clearBleed, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, MARK_BONUS, CALLED_SHOT_MULT, hasTrait, traitOnField,
+    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, fightShape, noteSquadTurn, PRESSED, pressedFor, pressedLeft, pressedOut, forceBreakContact, renderClock, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, statusDesc, noteReach, noteFront, noteHaul, noteCover, noteLanding, noteMark, noteCombo, noteBleed, bleedFor, bleedSet, clearBleed, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, MARK_BONUS, CALLED_SHOT_MULT, hasTrait, traitOnField,
     PERK_DMG_FLAT, PERK_DMG_MULT, PERK_SPD, PERK_MAXHP, PERK_HP_FLAT,
     perkStacks, perkDmgFlat, perkDmgMult, syncRankPerks, syncAllRankPerks, bankPerkStack, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,
@@ -14576,6 +14673,8 @@ globalThis.WP = {
     get outpostBagOpen() { return outpostBagOpen; }, set outpostBagOpen(v) { outpostBagOpen = v; },
     get RECRUIT_TERMS_ON() { return RECRUIT_TERMS_ON; }, set RECRUIT_TERMS_ON(v) { RECRUIT_TERMS_ON = v; },
     get MORALE_ON() { return MORALE_ON; }, set MORALE_ON(v) { MORALE_ON = v; },
+    get PRESSED_ON() { return PRESSED_ON; }, set PRESSED_ON(v) { PRESSED_ON = v; },
+    get pressedAt() { return pressedAt; }, set pressedAt(v) { pressedAt = v; },
     get SECTOR_HP_SCALE() { return SECTOR_HP_SCALE; }, set SECTOR_HP_SCALE(v) { SECTOR_HP_SCALE = v; },
     get SECTOR_DMG_SCALE() { return SECTOR_DMG_SCALE; }, set SECTOR_DMG_SCALE(v) { SECTOR_DMG_SCALE = v; },
     get CAP_SHAPE_ON() { return CAP_SHAPE_ON; }, set CAP_SHAPE_ON(v) { CAP_SHAPE_ON = v; },
