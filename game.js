@@ -338,9 +338,51 @@ function noteCover(cover, t, dmg) {
 // Held together now. Every path that actually takes health off a body comes through here, and
 // anything a future item wants to book off a landed blow goes in this function rather than into
 // mitigate - which computes, and must not count.
+// R02: THE SHAPE OF A FIGHT, which nothing in this project has ever measured. The report has
+// had "actor turns per fight" since E01 and that is a single median over every fight in a
+// career - it cannot say how long a fight RUNS, where in it the squad gets hurt, or how much is
+// still standing at any point. Those three are what decide whether an alternate terminal
+// condition is content or a difficulty cut wearing content's clothes, so they are measured
+// before anything is designed, the way H02's --reckoning was measured before the Reckoning.
+//
+// Indexed by SQUAD turns (fightLog.turns), not actor turns, because that is the clock the
+// player experiences and the one BLITZ_TURNS is already written in.
+function fightShape() {
+    if (!runStats) return null;
+    const fs = runStats.fightShape = runStats.fightShape ||
+        { len: {}, lenLost: {}, dmgAt: {}, upAt: {}, nAt: {} };
+    return fs;
+}
+// R02: A SQUAD TURN OPENING, in ONE place that both the engine and the simulator go through.
+// The first cut of this census hooked processTurn's own branch and read nAt = {1: 63} off four
+// careers - one sample per FIGHT instead of one per turn - because the simulator re-implements
+// the turn walk (I02 documents exactly that, and why) and processTurn runs only once per fight,
+// at initiateCombat's tail. An instrument wired to a path the instrument does not take is D05's
+// trap in a new coat, and it reported a number that looked plausible rather than nothing at all.
+//
+// So the increment and the census sit together behind one function and both loops call it. The
+// GUARDS stay where they are, because they differ for good reasons that are not this function's
+// business: processTurn skips a resumed turn (I02), the simulator skips the turn the engine
+// already opened.
+function noteSquadTurn() {
+    if (!fightLog) return;
+    fightLog.turns++;
+    const fs = fightShape();
+    if (!fs) return;
+    const k = fightLog.turns;
+    fs.upAt[k] = (fs.upAt[k] || 0) + activeEntities.filter(e => !e.isPlayer && e.hp > 0).length;
+    fs.nAt[k] = (fs.nAt[k] || 0) + 1;
+}
 function noteLanding(cut, t, dmg) {
     if (!cut) return;
     noteCover(cut.cover, t, dmg);
+    // R02: where in the fight the squad took it. Booked at this one door because every landed
+    // blow comes through here - the same reason THICK_HIDE is booked here rather than where it
+    // is applied.
+    if (t && t.isPlayer && dmg > 0) {
+        const fs = fightShape();
+        if (fs) { const k = (fightLog && fightLog.turns) || 0; fs.dmgAt[k] = (fs.dmgAt[k] || 0) + dmg; }
+    }
     // Booked HERE rather than where it is applied, which is the whole of the fix.
     if (cut.thick) noteQuirk('THICK_HIDE', true);
     if (!runStats) return;
@@ -11713,7 +11755,7 @@ function processTurn() {
     // Before anything can fall this turn, and before the save below writes the field down.
     clearStaleClocks();
     pendingAction = null; let aE = turnQueue[activeIndex]; if (aE.hp <= 0) { nextTurn(); return; }
-    if (aE.isPlayer && fightLog && !resumed) fightLog.turns++;
+    if (aE.isPlayer && fightLog && !resumed) noteSquadTurn();
     saveGameState();
     renderField(); applyTurnStartEffects(aE); if (!combatActive) return; if (!aE.hp > 0) return checkWinState(); 
     if (aE.stunnedTurns > 0) { if (!aE.isPlayer) { log(`> ${aE.name} stunned.`, "log-status"); spawnFCT(aE.id, "STUNNED", "fct-status"); aE.stunnedTurns--; setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return; } else return; }
@@ -14173,6 +14215,32 @@ function awardXp(char, amount) {
 function checkWinState() {
     renderField();
     const pA = activeEntities.some(e => e.isPlayer && e.hp > 0); const eA = activeEntities.some(e => !e.isPlayer && e.hp > 0);
+    // R02: HOW LONG THE FIGHT RAN, booked at the one place a fight can end. checkWinState ends a
+    // fight on `!pA` or `!eA` and on nothing else - there is no rout, no reinforcement, no
+    // objective and no clock - which is the finding this census exists to price. Both endings
+    // are counted, and kept apart: a fight the squad lost is still a fight, and folding the two
+    // would hide the thing most worth seeing, which is whether losses run long or run short.
+    if (!pA || !eA) {
+        const fs = fightShape();
+        if (fs) {
+            const k = (fightLog && fightLog.turns) || 0;
+            const bin = pA ? fs.len : fs.lenLost;
+            bin[k] = (bin[k] || 0) + 1;
+            // F03, and R01 learned it the hard way one item ago: the report runs in Node and
+            // every constant it wants to quote lives in this page. The first cut of this handed
+            // the report BLITZ_TURNS to compare against - and suite 132's dead-field scan caught
+            // it, correctly, as the only field in this engine written and never read here. Every
+            // other census field self-reads through `(x || 0) + 1`; a bare copy of a constant
+            // does not, which is exactly what makes it dead weight.
+            //
+            // So the engine books its own VERDICT instead of the number behind it, which is what
+            // F03 asks for anyway: the same condition noteFightWon tests for the BLITZ bounty,
+            // evaluated once, here. The report prints a count it was given rather than a
+            // threshold it re-applies, so the two cannot disagree about what "quick" means.
+            fs.blitz = fs.blitz || { turns: BLITZ_TURNS, won: 0 };
+            if (pA && k > 0 && k < BLITZ_TURNS) fs.blitz.won = (fs.blitz.won || 0) + 1;
+        }
+    }
     if (!pA) { document.getElementById('command-deck').innerHTML = `<button data-action="squad-down">SQUAD DOWN</button>`; combatActive = false; stopAmbience(); } 
     else if (!eA) { 
         if (currentNodeType === 'BOSS') {
@@ -14353,7 +14421,7 @@ globalThis.WP = {
     haulForward, HAUL_TO, FIEND_CHARGE_COST, CHARGE_TURNS, CHARGE_MULT,
     FIELD_FIT_MIN, FIELD_FIT_STEPS, FIELD_PAD, fieldSpan, fitField, recentreField, READOUT_GAP, SLOT_TEXT, slotInk, fitSlotText,
     clearStaleClocks, loadoutChipsHtml, benchedFor, COLLECTOR_BITE, settleCollector, RIOT_PLATE_SHARE, sizePlate, yoursDown, uncountedYours, REVENANT_FILE, summonedRoster, foldBestiaryNames,
-    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, statusDesc, noteReach, noteFront, noteHaul, noteCover, noteLanding, noteMark, noteCombo, noteBleed, bleedFor, bleedSet, clearBleed, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, MARK_BONUS, CALLED_SHOT_MULT, hasTrait, traitOnField,
+    INTENT_WORDS, intentLegendHtml, focusScreen, noteSettled, rotateSettled, fightShape, noteSquadTurn, initEngine, renderTitleScreen, renderCitadel, renderMap, renderOutpost, openSettings, closeSettings, currentScreen, closeCodex, SETTINGS_GEAR_OFF, selectSlot, confirmNewGame, continueGame, saveGameState, loadGameState, saveMeta, loadMeta, buyMetaUpgrade, advanceSector, renderCodex, vaultDescText, executeSelfAction, resolveConsumableItem, spendTactic, stimTarget, overdriveFor, withdraw, withdrawCost, canWithdraw, disarmWithdraw, WITHDRAW, retreat, retreatCost, retreatOdds, canRetreat, fallBackToNode, RETREAT, depthIndex, buildNewRun, renderMuster, musterRank, musterReroll, musterDeploy, generateSectorMap, validateSectorMap, rollNodeFaction, DOCTRINES, DOCTRINE_DRAW, doctrineById, rollDoctrines, doctrineHolds, checkDoctrine, doctrineMult, doctrineName, hasDoctrine, takeDoctrine, noteFavourites, deployedLine, carriesMelee, baseHpOf, applyDoctrineEdge, FORMATIONS, ALL_FORMATIONS, FORMATION_CHANCE, formationById, formationsFor, rollFormation, validateFormations, unitByName, ENEMY_RIDERS, riderOf, intentFor, gateIntent, chargeReady, chargeIntent, validateIntents, INTENT_THREAT, INTENT_FALLBACK, INTENT_BAND, intentThreat, fallbackFor, DEPLOYED, availableNodeIds, reachableNodeIds, enterNode, nodeById, hasContract, canCarry, COMBAT_STATE, craftItem, installAugment, assignSlot, ITEM_DATA, MATERIAL_ICON, itemCost, canAfford, openInventoryMenu, contractMult, contractNames, openContracts, toggleContract, renderContracts, beginExpedition, initiateEvent, pickEvent, initiateCamp, resolveEvent, finishEvent, finishCamp, eventByTitle, renderEvent, renderEventChoices, renderCampScreen, CAMP_OUTCOMES, campOutcomeHtml, RESUME_POINTS, resumePoint, metaBlob, bookConsequence, consequencesDue, consequenceIn, nodesCleared, resolveConsequence, afterNode, CONSEQUENCE_FUSE, deployed, initiateCombat, resumeCombat, buildCombatSnapshot, generateEnemies, renderField, fitEnemyRow, checkWinState, processTurn, executeEnemyAi, applyDamageHit, applyTurnStartEffects, handleSquadWipe, endRun, renderRunOver, collectLoot, bankNode, fightPayout, crossSector, nodeSalvage, switchScreen, CAST, STANDING_BANDS, FOLLOWUPS, castOf, castStanding, hasMetCast, meetCast, noteCast, standingBand, castName, facesMet, owesVela, eventDesc, choicesFor, renderCastTag, eventWeight, FACE_RETURN_WEIGHT, DEBT_TERM, STANDING_POOL, rollStanding, MAGPIE_SPITE, VETERAN_RANK, OLD_GUARD_VETS, noteFightWon, newFightLog, BLITZ_TURNS, OVERKILL_AT, TERRAIN, TERRAIN_IDS, GROUND_CHANCE, GROUND_SIGNATURE, ground, terrainName, groundReach, backlineWeight, enemyStrike, isAoe, MOVE_AOE, emptyPoolScrap, hasRelic, unownedRelics, rollRelic, rollRelicOffer, renderRelicOffer, takeRelic, declineRelic, leaveOffer, CURSE_CHANCE, ELITE_GEAR_CHANCE, CACHE, resistLine, squadDesperate, cacheOffer, resolveCamp, overdriveAt, heirloomFrom, heirloomRelic, stashHeirloom, generateBounties, rollBounty, checkBountyProgress, assignPerk, comboFor, comboHint, COMBOS, DAMAGING_MOVES, hasQuirk, noteCond, noteQuirk, noteSig, noteSigGate, statusDesc, noteReach, noteFront, noteHaul, noteCover, noteLanding, noteMark, noteCombo, noteBleed, bleedFor, bleedSet, clearBleed, enemyFront, noteQuirkDrawn, quirkDmgMult, PACK_MULT, LONER_MULT, DUELIST_MULT, MARK_BONUS, CALLED_SHOT_MULT, hasTrait, traitOnField,
     PERK_DMG_FLAT, PERK_DMG_MULT, PERK_SPD, PERK_MAXHP, PERK_HP_FLAT,
     perkStacks, perkDmgFlat, perkDmgMult, syncRankPerks, syncAllRankPerks, bankPerkStack, ALLY_MOVES, dealsDamage, typeGlyph, moveLine, classCodexLines, DMG_TYPES, unheldSigsFor, forksFor, openForksFor, validatePerkForks, buyableFor, sigBuyCost, SIG_BUY_BASE, rollPerkOffer, renderPerkOffer, takePerkOffer, bankPerkOffer, tacticCost, gearById, hasMod, hasTrinket, moveReachFor, cdFor, rollGear, unheldGear, rollGearShelf, SHELF_GEAR, equipGear, unequipGear, shopPrice, rollShopStock, initiateShop, renderShop, buyShopItem, shopRerollQuirk, finishShop, bondKey, bondName, bondCount, bondLevel, bondDmgMult, bondSavior, bondOverdriveDiscount, recordBonds, bondLineFor, BOND_NAMES, BOND_LEVELS, FRONTS, frontById, currentFront, rollFront, frontFactionBias, mulberry32, seedFromString, seededRng, dailySeed, seedBests, seedBestRows, noteSeedBest, SEED_BEST_KEY, SEED_BESTS_KEPT, RELIC_SETS, relicSetActive, setIsCursed, setState, relicName, announceSets, SETS_NEAR_SHOWN,
     CAPSTONES, CAPSTONE_LEVEL, CAPSTONE_BUY_BASE, capstoneFor, capstoneOpen, capstoneCost, hasCap, validateCapstones,

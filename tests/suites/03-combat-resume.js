@@ -257,7 +257,13 @@ module.exports = {
     // And the version that charges EVERY reload a turn - I02's shape, the expensive one - is
     // caught, by suite 101's row through a real save and reload. That is the protection that
     // matters and it is a behavioural one.
+    // R02 moved the INCREMENT behind noteSquadTurn - one door, so the simulator's own turn walk
+    // (I02) reaches the same booking the engine does - and left the GUARD exactly where it was.
+    // This pin follows the guard rather than the statement it used to guard, because the guard is
+    // what the assertion is about: a version that counts every reload as a turn is still caught.
     ok('and the count is still guarded at all',
-      /if \(aE\.isPlayer && fightLog && !resumed\) fightLog\.turns\+\+;/.test(src));
+      /if \(aE\.isPlayer && fightLog && !resumed\) noteSquadTurn\(\);/.test(src));
+    ok('and the one door it calls is where the increment now lives',
+      /function noteSquadTurn\(\) \{[\s\S]*?fightLog\.turns\+\+;/.test(src));
   }
 };

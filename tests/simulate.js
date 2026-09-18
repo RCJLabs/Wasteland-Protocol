@@ -7921,7 +7921,10 @@ const EXPEDITION = ({ capShapeArm, moraleArm, recruitTermArm, eliteOffer, diffic
       activeEntities.forEach(e => { if (isDown(e) && !e.__counted) { e.__counted = true; stat.downs++; } });
       // processTurn does this in the real loop - including for the actor initiateCombat opened,
       // which is why that one is not counted twice. See the note at the top of fight().
-      if (actor.isPlayer && fightLog && !engineDidOpen) fightLog.turns++;
+      // R02: noteSquadTurn does the increment AND books what was standing when the turn opened.
+      // Called rather than re-implemented, so this loop and the engine's cannot drift - the
+      // census's first cut hooked processTurn alone and this loop walked straight past it.
+      if (actor.isPlayer && fightLog && !engineDidOpen) noteSquadTurn();
       if (actor.isPlayer) { if (!takeTurn()) { activeIndex = (activeIndex + 1) % turnQueue.length; continue; } }
       // F03: this used to be `actor.intent = rollIntent(actor); executeEnemyAi(actor)`, which
       // threw away the intent the player's whole turn had just been spent reading. The engine
@@ -8704,6 +8707,7 @@ const EXPEDITION = ({ capShapeArm, moraleArm, recruitTermArm, eliteOffer, diffic
   stat.outMoves = runStats.outMoves || {};   // O20: which move, when it reads as melee
   stat.outMelee = runStats.outMelee || {};   // O21: and which body, under which promise
   stat.eliteOffers = runStats.eliteOffers || 0;   // O05: did the elite branch stage anything
+  stat.fightShape = runStats.fightShape || null;    // R02: how long a fight runs and where it hurts
   stat.grudgePhase = runStats.grudgePhase || null;  // R01: is the grudge phase a slice anyone plays
   stat.capShaped = runStats.capShaped || 0;        // R01: and how often the capped shape fired
   stat.capRefund = runStats.capRefund || 0;        // R01: and what it handed back to get there
@@ -9643,6 +9647,94 @@ const EXPEDITION = ({ capShapeArm, moraleArm, recruitTermArm, eliteOffer, diffic
   console.log('\n── FIGHTS ' + '─'.repeat(48));
   const roundsPerFight = results.map(r => r.fights ? r.rounds / r.fights : 0).sort((a, b) => a - b);
   line('actor turns per fight', pct(roundsPerFight, 0.5).toFixed(1) + ' (median)');
+
+  // R02: WHAT SHAPE A FIGHT IS, which nothing here has ever printed. checkWinState ends a fight
+  // on `!pA` or `!eA` and on nothing else: there is no rout, no clock, no objective and no way
+  // to fail one while still standing. Whether an alternate terminal condition would be CONTENT
+  // or a DIFFICULTY CUT turns entirely on three numbers nobody has read - how long a fight runs
+  // in squad turns, where in that span the squad actually gets hurt, and how much is still on
+  // its feet at each mark. Measurement only; nothing in the game offers an objective yet, which
+  // is deliberately the same order H02 did it in.
+  {
+    const fold = key => {
+      const out = {};
+      results.forEach(r => { const fs = r.fightShape; if (fs) Object.entries(fs[key] || {})
+        .forEach(([k, v]) => { out[k] = (out[k] || 0) + v; }); });
+      return out;
+    };
+    const len = fold('len'), lost = fold('lenLost'), dmgAt = fold('dmgAt');
+    const upAt = fold('upAt'), nAt = fold('nAt');
+    const total = Object.values(len).reduce((a, b) => a + b, 0);
+    const totalLost = Object.values(lost).reduce((a, b) => a + b, 0);
+    if (total) {
+      // A histogram read as quantiles, because the question is "how many fights are SHORT", not
+      // "what is the average" - an objective that fires at turn 6 lives or dies on the left tail.
+      const quant = (h, q) => {
+        const n = Object.values(h).reduce((a, b) => a + b, 0);
+        let seen = 0;
+        for (const k of Object.keys(h).map(Number).sort((a, b) => a - b)) {
+          seen += h[k]; if (seen >= n * q) return k;
+        }
+        return null;
+      };
+      const share = (h, upTo) => {
+        const n = Object.values(h).reduce((a, b) => a + b, 0);
+        const c = Object.entries(h).filter(([k]) => +k <= upTo).reduce((a, [, v]) => a + v, 0);
+        return n ? Math.round(c / n * 100) : 0;
+      };
+      console.log('\n── WHAT SHAPE A FIGHT IS ' + '─'.repeat(34));
+      line('fights the squad won', total);
+      line('  squad turns to finish',
+        `p10 ${quant(len, 0.10)}, median ${quant(len, 0.5)}, p90 ${quant(len, 0.90)}, worst ${Math.max(...Object.keys(len).map(Number))}`);
+      // The engine's own VERDICT on its own threshold, counted there and read back here, so
+      // this row and the BLITZ bounty cannot come to different conclusions about one fight.
+      const bz = results.map(r => r.fightShape && r.fightShape.blitz).filter(Boolean);
+      if (bz.length) {
+        const won = bz.reduce((a, b) => a + (b.won || 0), 0);
+        line(`  won inside ${bz[0].turns} turns`,
+          `${Math.round(won / total * 100)}% - what BLITZ already pays for`);
+      }
+      line('  won inside 3 turns', `${share(len, 3)}%`);
+      if (totalLost) {
+        line('fights the squad lost', totalLost);
+        line('  squad turns before it fell',
+          `p10 ${quant(lost, 0.10)}, median ${quant(lost, 0.5)}, p90 ${quant(lost, 0.90)}`);
+      }
+      // THE ROW THE DESIGN TURNS ON. If the squad's damage is taken early, a fight that ended at
+      // turn N saves the player almost nothing and an objective is content; if it is taken late,
+      // ending early IS the difficulty cut and any objective has to be priced as one.
+      const dmgTotal = Object.values(dmgAt).reduce((a, b) => a + b, 0);
+      const dmgUpTo = n => Object.entries(dmgAt).filter(([k]) => +k <= n)
+        .reduce((a, [, v]) => a + v, 0);
+      if (dmgTotal) {
+        line('damage the squad took, by when it landed',
+          [3, 6, 9, 12].map(n => `by turn ${n}: ${Math.round(dmgUpTo(n) / dmgTotal * 100)}%`).join(', '));
+      }
+      // AND WHAT YOU WOULD BE WALKING AWAY FROM. Mean hostiles still up at the top of each turn,
+      // over the fights that reached it - the direct size of "the rest of them break off".
+      const marks = [1, 3, 6, 9, 12].filter(n => nAt[n]);
+      if (marks.length) {
+        line('still standing at the top of turn',
+          marks.map(n => `t${n}: ${(upAt[n] / nAt[n]).toFixed(1)}`).join(', '));
+        // THE DENOMINATOR IS FIGHTS THAT STARTED, NOT FIGHTS THAT ENDED IN A BODY COUNT, and
+        // the first cut of this row used the second and printed 116% - the same way R01's phase
+        // census printed 116% one item ago, and caught by the same thing, a share exceeding a
+        // hundred. The cause is the finding: checkWinState books len/lenLost, and checkWinState
+        // never runs for a fight the player WITHDRAWS, RETREATS or FALLS BACK out of. Those
+        // fights start, take turns, and never reach a terminal condition at all. nAt[1] counts
+        // every fight that opened, which is the population this row is about.
+        const started = nAt[1] || (total + totalLost);
+        line('fights still running at turn',
+          marks.map(n => `t${n}: ${Math.round(nAt[n] / started * 100)}%`).join(', '));
+        // AND WHAT THAT GAP IS, printed rather than left as an artefact. A fight the squad left
+        // is the one exit this game already has that is not a body count - the player's own -
+        // and it is the honest starting point for asking what a second one would be worth.
+        const left = started - total - totalLost;
+        line('fights that ended by neither side falling',
+          `${left} of ${started} (${Math.round(left / started * 100)}%) - the squad walked out`);
+      }
+    }
+  }
   line('fights per run, median', pct(nums('fights'), 0.5));
   line('bosses felled, mean', mean(nums('bosses')).toFixed(2));
   line('elites broken, mean', mean(nums('elites')).toFixed(2));
