@@ -2457,6 +2457,56 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── R01: WHAT A COMMANDER SPENDS ONCE IT HAS STOPPED GROWING - BUILT, NOT YET PRICED ──
+// Filed in two commits, the build and then the table, the way R04 and R03 were. THIS IS THE
+// BUILD COMMIT, and what follows is written down BEFORE the careers are run, so the prediction
+// is on the record where it can be wrong in public. R04's was, flatly.
+//
+// WHAT THE R-AUDIT FOUND. GRUDGE.cap is 3 on purpose - "a wall you cannot pass is not a nemesis"
+// - and LEARNED_AT hands a commander exactly one new move. Measured across a career that means
+// 426 of 492 commander fights are against a Thrice-Risen, with the grudge drift reading
+// 2.27 / 3.00 / 3.00 across career thirds. From roughly expedition 20 of 150, the opponent the
+// game is built around stops changing in any way at all, for the remaining 130.
+//
+// MEASURED BEFORE ANYTHING WAS BUILT, because the proposed shape is worth nothing if the grudge
+// phase is a death rattle: it opens in 45% of commander fights REACHED, runs a median of 6
+// commander turns, and only 18% of openings last two turns or fewer. A slice somebody plays.
+// That census had to be repaired on its way in - the first cut divided by commanders FELLED and
+// printed 116%, because a phase can open in a fight the squad then loses. The row caught its own
+// defect by going over a hundred, which is the one thing a share is good for.
+//
+// THE CONSTRAINT, which is most of the item: tier 10 already takes 89% of every wipe and H13 cut
+// that wall to where it is deliberately. A capped commander that simply hit harder would be
+// moving the difficulty dial sideways while calling itself content. So at the cap it stops
+// GROWING and starts SPENDING - the grudge phase arrives at 45% health instead of 25%, and in
+// exchange the commander hands back the damage multiplier its enrage put on the swing.
+//
+// THE FIRST CUT OF THIS WAS A BUFF WEARING A TRADE'S CLOTHES, and it is worth writing down
+// because nothing in the measurement would have caught it cleanly. It opened the phase early and
+// withheld `armorBonus`, described in its own comment as "the plate", as though that were
+// something every commander carried. It is not: `armorBonus` appears on exactly ONE of the eight
+// grudge blocks - the Marshal's, at 14. Seven commanders in eight were being handed a fifth of a
+// health bar's worth of extra charging, laying, venting and blood debt for free. Found by
+// reading the TABLE rather than the function, before a single career ran on it. The price is now
+// the enrage multiplier, which sits on 7 of 8 and is a real one everywhere it appears
+// (1.15 to 1.5), and suite 178 pins the shelf itself so the same mistake cannot be made twice.
+//
+// Smoke at 14 expeditions, both halves firing: 29 capped openings of 45, 780 damage handed back,
+// 26.9 a time, and the health it opened at reads "25%: 16, 45%: 29" - booked by the ENGINE and
+// read back, per F03, rather than the report keeping its own copy of the threshold.
+//
+// THE PREDICTION, before the careers. The win column will be a null - K06's floor says two arms
+// of three careers only settle a gap wider than about 8-10 wins, and this is a trade, not a
+// dial. The readable change should be in the phase census (openings up, the tail longer) and in
+// turns-per-commander-fight, which is where K11c's lesson says to look: a claim about a
+// per-fight mechanism gets measured at the fight, not at the career.
+//
+// THE RISK TO CHECK, stated plainly so the table cannot quietly skip it: the trade may not be
+// even. Opening at 45% buys the commander roughly a fifth of its health bar spent on the more
+// dangerous behaviour, and the refund takes back only what phase two added to the swing. If
+// commander-fight wipes rise, the price is too small and the honest move is to raise it rather
+// than to keep the shape and call the wall unchanged.
+//
 // ── R03: A SIDE THAT LOSES HEART - AND IT COSTS BODIES, NOT WINS ──────────────────
 // Filed in two commits, the build then this table. The build commit wrote down its own worry:
 // "fight payout and XP are both per-NODE rather than per-kill, so a fight that ends early costs
@@ -6175,6 +6225,10 @@ const RECRUIT_TERM = flag('recruitterm', 'on');
 // back to fighting to the last body, which is what every figure above this line was measured
 // under. Same shape as --doctrine off and --recruitterm off: one build, one difference.
 const MORALE_ARM = flag('morale', 'on');
+// R01: the control the capped-commander arm withholds. `on` is the shipped game; `off` puts a
+// Thrice-Risen back to waiting for a quarter and bringing the plate, which is what every figure
+// above this line was measured under.
+const CAP_SHAPE = flag('capshape', 'on');
 // A sim that never walks out measures a game with one ending. `--extract N` gives it the
 // player who leaves once the run is worth banking: from sector N on, it takes the camp's door
 // when the squad is worn down. `off` (the default) is the old behaviour, for comparison.
@@ -6378,7 +6432,7 @@ const INVEST = flag('invest', 'line');
 //
 // Runs one expedition inside the page. Plays to a real conclusion: the squad wipes out of
 // regroups, or the safety cap is hit.
-const EXPEDITION = ({ moraleArm, recruitTermArm, eliteOffer, difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange, retreatPolicy }) => {
+const EXPEDITION = ({ capShapeArm, moraleArm, recruitTermArm, eliteOffer, difficulty, contracts, capNodes, withdrawPolicy, EXTRACT_AT, draftPolicy, benchPolicy, tacticPolicy, AUGMENTS_ON, augPolicy, augCat, augMax, shelfSee, shopPick, trinketArm, skyArm, relicPolicy, metaPolicy, facePolicy, endingPolicy, orderPolicy, rungPolicy, stagePolicy, stageProfile, reckoning, reqPolicy, rescuePolicy, resignPolicy, recruitPolicy, investPolicy, scarPolicy, perkPolicy, markPolicy, odPolicy, doctrinePolicy, arrange, retreatPolicy }) => {
   // I08: who this file is willing to spend on. `line` is what it has always done - upgrades,
   // gear and augments all gated on gridPos > 0. `roster` is the gate the game has, which is
   // only that the body is alive. Named once so all three sites read the same rule.
@@ -6513,6 +6567,7 @@ const EXPEDITION = ({ moraleArm, recruitTermArm, eliteOffer, difficulty, contrac
   ELITE_OFFER_CARDS = eliteOffer;
   RECRUIT_TERMS_ON = recruitTermArm !== 'off';
   MORALE_ON = moraleArm !== 'off';
+  CAP_SHAPE_ON = capShapeArm !== 'off';
   // M-audit: AFTER confirmNewGame, which zeroes odChoices - the first cut set it before and the
   // arm silently did nothing, which is the same shape as every other harness bug this phase
   // found. Set here rather than at the fire site because odChoices is exactly what the engine's
@@ -8557,6 +8612,9 @@ const EXPEDITION = ({ moraleArm, recruitTermArm, eliteOffer, difficulty, contrac
   stat.outMoves = runStats.outMoves || {};   // O20: which move, when it reads as melee
   stat.outMelee = runStats.outMelee || {};   // O21: and which body, under which promise
   stat.eliteOffers = runStats.eliteOffers || 0;   // O05: did the elite branch stage anything
+  stat.grudgePhase = runStats.grudgePhase || null;  // R01: is the grudge phase a slice anyone plays
+  stat.capShaped = runStats.capShaped || 0;        // R01: and how often the capped shape fired
+  stat.capRefund = runStats.capRefund || 0;        // R01: and what it handed back to get there
   stat.anchorFell = runStats.anchorFell || null;  // R03: where in a fight its biggest body dies
   stat.broke = runStats.broke || 0;              // R03: fights where a side lost its nerve
   stat.brokeBodies = runStats.brokeBodies || 0;  // R03: bodies that broke
@@ -8733,7 +8791,7 @@ const EXPEDITION = ({ moraleArm, recruitTermArm, eliteOffer, difficulty, contrac
 
   const results = [];
   for (let i = 0; i < RUNS; i++) {
-    const r = await page.evaluate(EXPEDITION, { moraleArm: MORALE_ARM, recruitTermArm: RECRUIT_TERM, eliteOffer: ELITE_OFFER, difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE, retreatPolicy: RETREAT_POLICY });
+    const r = await page.evaluate(EXPEDITION, { capShapeArm: CAP_SHAPE, moraleArm: MORALE_ARM, recruitTermArm: RECRUIT_TERM, eliteOffer: ELITE_OFFER, difficulty: DIFFICULTY, contracts: CONTRACTS, capNodes: 400, withdrawPolicy: WITHDRAW_POLICY, EXTRACT_AT, draftPolicy: DRAFT, benchPolicy: BENCH, tacticPolicy: TACTICS, AUGMENTS_ON, augPolicy: AUGMENT_POLICY, augCat: AUGMENT_CAT, augMax: AUGMENT_MAX, shelfSee: SHELF_SEE, shopPick: SHOP_PICK, trinketArm: TRINKET_ARM, skyArm: SKY_ARM, relicPolicy: RELICS, metaPolicy: META, facePolicy: FACES, endingPolicy: ENDING, orderPolicy: ORDER, rungPolicy: RUNG, stagePolicy: STAGE, stageProfile: STAGE_PROFILE, reckoning: RECKONING, reqPolicy: REQPOLICY, rescuePolicy: RESCUE, resignPolicy: RESIGN, recruitPolicy: RECRUIT, investPolicy: INVEST, scarPolicy: SCAR_POLICY, perkPolicy: PERK_POLICY, markPolicy: MARK_POLICY, odPolicy: OVERDRIVE_POLICY, doctrinePolicy: DOCTRINE_POLICY, arrange: ARRANGE, retreatPolicy: RETREAT_POLICY });
     results.push(r);
     if ((i + 1) % 10 === 0) process.stdout.write(`  ${i + 1}/${RUNS}\n`);
   }
@@ -8942,6 +9000,65 @@ const EXPEDITION = ({ moraleArm, recruitTermArm, eliteOffer, difficulty, contrac
   const byScar = {};
   allScars.forEach(id => { byScar[id] = (byScar[id] || 0) + 1; });
   SCAR_IDS.forEach(id => line(`  ${id.toLowerCase().replace(/_/g, ' ')}`, byScar[id] || 'never dealt'));
+
+  // R01: IS THE GRUDGE PHASE A SLICE ANYBODY PLAYS. The ladder tops out at grudge 3 and the
+  // audit's safest proposal was to trade the capped phase for a different one rather than a
+  // bigger one. Worth building only if the phase opens often and lasts long enough to be a
+  // fight rather than a death rattle - the same question R03 asked of its anchor, and the same
+  // reason to ask it before writing anything.
+  {
+    const gs = results.map(r => r.grudgePhase).filter(Boolean);
+    const opened = gs.reduce((a, c) => a + c.opened, 0);
+    // THE DENOMINATOR IS FIGHTS REACHED, NOT COMMANDERS FELLED, and the first cut of this row
+    // used the second and printed 116%. A phase can open in a fight the squad then loses, so
+    // felling was never the population - the row caught its own defect by going over a hundred,
+    // which is the one thing a share is good for.
+    const bosses = results.reduce((a, r) => a + (r.bossMet || []).length, 0);
+    const tails = gs.flatMap(c => c.turnsAfter);
+    const byG = {};
+    gs.forEach(c => Object.entries(c.byGrudge).forEach(([k, v]) => { byG[k] = (byG[k] || 0) + v; }));
+    if (opened || bosses) {
+      console.log('\n── THE GEAR A COMMANDER ONLY SHOWS TWICE ' + '─'.repeat(19));
+      line('commander fights reached', bosses);
+      line('  of them, the grudge phase opened', bosses
+        ? `${opened} (${Math.round(opened / bosses * 100)}%)` : opened);
+      line('  at what grudge', Object.keys(byG).sort().map(k => `\u25B2${k}: ${byG[k]}`).join(', ') || 'none');
+      if (tails.length) {
+        const sorted = [...tails].sort((a, b) => a - b);
+        line('  commander turns after it opened',
+          `median ${sorted[Math.floor(sorted.length / 2)]}, mean ${(tails.reduce((a, b) => a + b, 0) / tails.length).toFixed(1)}, worst ${sorted[sorted.length - 1]}`);
+        const short = tails.filter(t => t <= 2).length;
+        line('  of those, two turns or fewer',
+          `${short} of ${tails.length} (${Math.round(short / tails.length * 100)}%) - a death rattle rather than a phase`);
+      }
+      // R01: and how many of those openings were the capped shape - the gear arriving at 45%
+      // having handed its enrage multiplier back, rather than at 25% still carrying it. Separate
+      // from the count above because the whole claim is that the SAME phase is reached more
+      // often and earlier, not that a new one was added; one number covering both could not.
+      const shaped = results.reduce((a, r) => a + (r.capShaped || 0), 0);
+      const refund = results.reduce((a, r) => a + (r.capRefund || 0), 0);
+      const at = {};
+      gs.forEach(c => Object.entries(c.at || {}).forEach(([k, v]) => { at[k] = (at[k] || 0) + v; }));
+      line('  of them, the capped shape', CAP_SHAPE === 'off'
+        ? 'none - the arm is off'
+        : `${shaped} of ${opened} (${opened ? Math.round(shaped / opened * 100) : 0}%)`);
+      // THE PRICE HALF OF THE TRADE, which the first cut of this item did not have. It opened
+      // the phase early and took away `armorBonus` - and `armorBonus` is on exactly one of the
+      // eight grudge blocks, so seven commanders in eight were being handed the early phase for
+      // nothing. This row is what stops that happening silently a second time: if the swing
+      // given back ever reads zero while the shape is firing, the trade is one-sided again.
+      if (CAP_SHAPE !== 'off') {
+        line('  and the swing it handed back',
+          shaped ? `${refund} damage over ${shaped} openings, ${(refund / shaped).toFixed(1)} a time`
+                 : 'nothing - the shape never fired');
+      }
+      // The thresholds the ENGINE used, read back rather than restated - F03's rule. A report
+      // quoting its own copy of a constant is one edit away from printing a number the game
+      // does not use, and this row would go silent rather than lie if the two ever parted.
+      line('  and the health it opened at',
+        Object.keys(at).sort((a, b) => a - b).map(k => `${k}%: ${at[k]}`).join(', ') || 'not booked');
+    }
+  }
 
   // R03: IS A MORALE BREAK REACHABLE CONTENT AT ALL. The R-audit found that nothing on the road
   // ever leaves a fight and proposed "kill that one and the rest lose heart". A break needs

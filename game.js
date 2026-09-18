@@ -1569,6 +1569,43 @@ const GRUDGE = {
     cap: 3,          // beyond this it stops growing; a wall you cannot pass is not a nemesis
     phaseAt: 0.25    // the grudge phase opens under a quarter health, below the ordinary enrage
 };
+// R01: WHAT A COMMANDER DOES ONCE IT HAS STOPPED GROWING. The R-audit measured the ladder and
+// found it finished early: 426 of 492 commander fights are against a Thrice-Risen, and the drift
+// row reads 2.27 / 3.00 / 3.00 across career thirds. GRUDGE.cap is 3 on purpose - "a wall you
+// cannot pass is not a nemesis" - and LEARNED_AT gives exactly one new move, so from about
+// expedition 20 of 150 the most memorable opponent in the game stops changing in any way at all.
+//
+// THE FIX IS NOT MORE NUMBERS, and that is the whole constraint. Tier 10 already takes 89% of
+// every wipe and H13 cut the wall to where it is deliberately; a capped commander that hit
+// harder would be moving that dial sideways while calling itself content. So at the cap it stops
+// GROWING and starts SPENDING: the gear it only shows to somebody who has beaten it arrives at
+// 45% health instead of 25%, and it pays the swing it was padding the fight with to get there.
+//
+// THE FIRST CUT OF THIS WAS A BUFF WEARING A TRADE'S CLOTHES. It opened the phase early and took
+// away `armorBonus`, described here as "the plate", as though every commander carried one. They
+// do not: `armorBonus` appears in exactly ONE grudge block on the shelf - the Marshal's, at 14 -
+// so seven of eight commanders were getting twenty points of health-bar worth of extra charging,
+// laying, venting and blood debt and giving up nothing at all. Caught by reading the table
+// instead of the function, before a single career was run on it.
+//
+// WHAT IT PAYS INSTEAD, and this one is on every commander that has an enrage: the damage scale
+// phase two put on its swing. Seven of eight enrages carry `dmgScale` (1.15 to 1.5); the
+// Vatborn's buys doses rather than a multiplier, and pays those instead. A capped commander that
+// opens the grudge phase hands that multiplier back - it stops swinging bigger and starts doing
+// the thing. That is the sentence the whole item is for, made literal: at the cap, growing is
+// over, spending starts. The plate still goes on the Marshal, because the Marshal is the one
+// commander for whom plate IS the padding.
+//
+// Measured before it was built, the way R03 was: the phase opens in 45% of commander fights
+// reached and runs a median of 6 commander turns once it does, so it is a slice somebody plays
+// rather than a death rattle. Whether the trade prices out is the measurement, not this comment.
+const GRUDGE_CAP = { phaseAt: 0.45, keepsArmour: false, refundEnrage: true };
+let CAP_SHAPE_ON = true;          // the control the arm withholds
+function capShaped(e) {
+    return CAP_SHAPE_ON && !!e && e.classType === 'BOSS' && (e.grudge || 0) >= GRUDGE.cap;
+}
+// One reader for the threshold so the phase check and anything that explains it cannot drift.
+function grudgePhaseAt(e) { return capShaped(e) ? GRUDGE_CAP.phaseAt : GRUDGE.phaseAt; }
 const RISEN_MARK = ['', 'Risen', 'Twice-Risen', 'Thrice-Risen'];
 let grudges = {};    // bossId -> times you have put it down, meta-persisted
 
@@ -12915,6 +12952,14 @@ function noteKill(victim, by = {}) {
                          : `> ${victim.name} breaks open over an empty road.`, 'log-status');
         playSFX('heal');
     }
+    // R01: and how long the phase lasted, read at the moment the commander falls. Booked here
+    // rather than at the phase itself because "how much fight is left below a quarter" is a
+    // question only the end of the fight can answer.
+    if (runStats && victim.classType === 'BOSS' && victim.__phaseOpenedAtTurn !== undefined) {
+        runStats.grudgePhase = runStats.grudgePhase || { opened: 0, byGrudge: {}, turnsAfter: [] };
+        runStats.grudgePhase.turnsAfter.push(
+            Math.max(0, ((fightLog && fightLog.turns) || 0) - victim.__phaseOpenedAtTurn));
+    }
     noteBestiary(typeNameOf(victim), 'killed');
     // R03: THE CENSUS THAT DECIDES WHETHER A MORALE BREAK IS REACHABLE CONTENT. The R-audit
     // found that nothing on the road ever leaves a fight - every hostile fights to the last
@@ -13300,13 +13345,56 @@ function pickTarget(enemy, candidates, intent) {
 // here and the move itself is whatever that warlord learned.
 function openGrudgePhase(enemy) {
     const gm = enemy.grudgeMove; if (!gm || enemy.phase >= 3) return;
+    // R01: HOW MUCH OF A COMMANDER FIGHT HAPPENS BELOW THE GRUDGE PHASE. The R-audit found the
+    // ladder tops out at grudge 3 - 426 of 492 commander fights are against a capped one - and
+    // proposed that at the cap a commander should stop scaling and start being DIFFERENT. Of the
+    // three shapes it suggested, the safest was "trade its grudge phase for a different phase
+    // rather than a bigger one". That is only worth building if the phase is a slice of the
+    // fight somebody actually plays, so it is counted before anything is written: how often it
+    // opens at all, at what grudge, and how many of the commander's turns come after it.
+    if (runStats) {
+        runStats.grudgePhase = runStats.grudgePhase || { opened: 0, byGrudge: {}, turnsAfter: [] };
+        runStats.grudgePhase.opened++;
+        const g = enemy.grudge || 0;
+        runStats.grudgePhase.byGrudge[g] = (runStats.grudgePhase.byGrudge[g] || 0) + 1;
+        // F03: the threshold the ENGINE used, booked rather than restated in the report. A
+        // report that prints its own copy of a constant is one edit away from quoting a number
+        // the game does not use.
+        runStats.grudgePhase.at = runStats.grudgePhase.at || {};
+        const key = Math.round(grudgePhaseAt(enemy) * 100);
+        runStats.grudgePhase.at[key] = (runStats.grudgePhase.at[key] || 0) + 1;
+        enemy.__phaseOpenedAtTurn = (fightLog && fightLog.turns) || 0;
+    }
     enemy.phase = 3;
     playSFX('enrage', 1.6); triggerShake(); triggerGlitch();
     log(`> ${gm.cry}`, 'log-dmg');
     if (gm.tell) log(`> ${gm.tell}`, 'log-status');
     spawnFCT(enemy.id, gm.name || 'GRUDGE', 'fct-weak');
 
-    if (gm.armorBonus) { enemy.armor += gm.armorBonus; enemy.baseArmor = (enemy.baseArmor || 0) + gm.armorBonus; }
+    // R01: a capped commander spends the phase rather than padding it. Two things are numbers
+    // rather than behaviours here and both come off: the Marshal's plate, which is the only
+    // `armorBonus` on the whole grudge shelf, and the damage multiplier phase two put on the
+    // swing, which nearly every commander has. Everything below this line - the charge, the lay,
+    // the vent, the blood debt, the second ward - fires exactly as it always did.
+    if (gm.armorBonus && !capShaped(enemy)) { enemy.armor += gm.armorBonus; enemy.baseArmor = (enemy.baseArmor || 0) + gm.armorBonus; }
+    if (capShaped(enemy)) {
+        // Divided rather than restored from a saved figure, so anything else that multiplied the
+        // swing in between - a Vatborn's doses, most of all - keeps its share instead of being
+        // quietly rolled back with it.
+        let gave = 0;
+        if (GRUDGE_CAP.refundEnrage && enemy.__enrageDmgScale > 1) {
+            const was = enemy.dmgBase;
+            enemy.dmgBase = Math.max(1, Math.round(enemy.dmgBase / enemy.__enrageDmgScale));
+            gave = was - enemy.dmgBase;
+        }
+        if (runStats) {
+            runStats.capShaped = (runStats.capShaped || 0) + 1;
+            runStats.capRefund = (runStats.capRefund || 0) + gave;
+        }
+        log(gave > 0
+            ? `> It did not wait this time. It stops swinging bigger and starts spending.`
+            : `> It did not wait this time. It has nothing left to learn from you.`, 'log-dmg');
+    }
     // The Warlord charges you for every one of its pack you put down.
     if (gm.bloodDebt) enemy.bloodDebt = gm.bloodDebt;
     // The Colossus stops spacing its salvoes and starts winding them up.
@@ -13405,7 +13493,10 @@ function openEnragePhase(enemy) {
     log(`> ${e.cry || 'THE COMMANDER ENRAGES!'}`, "log-dmg");
     spawnFCT(enemy.id, "ENRAGED!", "fct-status"); triggerShake();
 
-    if (e.dmgScale) enemy.dmgBase = Math.floor(enemy.dmgBase * e.dmgScale);
+    // R01: booked, not just applied. A capped commander hands this multiplier back when its
+    // grudge phase opens, and dividing by a number the engine recorded is the only way to give
+    // back exactly what was taken - a second copy of the constant here would be F03's defect.
+    if (e.dmgScale) { enemy.__enrageDmgScale = e.dmgScale; enemy.dmgBase = Math.floor(enemy.dmgBase * e.dmgScale); }
     if (e.speedBonus) enemy.speed += e.speedBonus;
     // The ossuary opens. Whatever gets up feeds the tally again when it goes back down.
     // renderField, not fitEnemyRow: the row-fitting takes the team element and the scales
@@ -13601,7 +13692,7 @@ function executeEnemyAi(enemy) {
     // A commander that has lost to you before has one more gear, and it only ever shows it
     // to somebody who has already beaten it. Runs after the ordinary enrage, not instead.
     if (enemy.classType === 'BOSS' && enemy.phase === 2 && enemy.grudgeMove &&
-        enemy.hp <= enemy.maxHp * GRUDGE.phaseAt) {
+        enemy.hp <= enemy.maxHp * grudgePhaseAt(enemy)) {
         openGrudgePhase(enemy);
         enemy.intent = rollIntent(enemy); renderField();
         setTimeout(nextTurn, 1000 * globalSettings.combatSpeed); return;
@@ -14258,7 +14349,7 @@ globalThis.WP = {
     REQUISITIONS, reqById, reqCost, reqOpen, buyRequisition, refundRequisitions, renderRequisitions, newPendingReq,
     REQ_REROLL_COST, REQ_REROLL_MAX, REQ_GRUDGE_BASE, REQ_RUNG_STEP, REQ_FALLBACK_COST, MARCH_FRESH, marchRead, marchTone, renderMarchRead,
     CACHE_LOCKS, CACHE_SCRAP, CACHE_CLEAN_MULT, CACHE_FORCE_BITE, CACHE_AMBUSH_CHANCE, cacheLockById, lockForNode, cacheOpener,
-    cachePayout, classLabel, initiateCache, renderCache, openCache, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, medBayNeedy, triageAllCost, patchUpAllCost, medBayAll, medBarHtml, rosterOrder, toggleOutpostBag, termForNode, recruitTerm, recruitAsk, handRate, recruitDisplaced, enforceLineTerms, recruitTermHtml, MORALE, RECRUIT_LINE_SHARE, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
+    cachePayout, classLabel, initiateCache, renderCache, openCache, reachMult, reachNote, isOutOfDepth, isMelee, isRanged, pickTarget, renderCommandDeck, queueAction, cancelAction, resolveAction, renderDev, devJump, devFightBoss, devGive, devResolve, bossForSector, rollIntent, regroupSquad, regroupsLeft, totalRegroups, renderSquadBroken, migrateAssetPaths, migrateRelics, traitSummary, migrateTraits, buyUpgrade, outpostPrice, medBayCost, medBayStep, patchUpClicks, patchUpCost, medBayNeedy, triageAllCost, patchUpAllCost, medBayAll, medBarHtml, rosterOrder, toggleOutpostBag, termForNode, recruitTerm, recruitAsk, handRate, recruitDisplaced, enforceLineTerms, recruitTermHtml, MORALE, GRUDGE_CAP, capShaped, grudgePhaseAt, RECRUIT_LINE_SHARE, upgradeCost, breakdownCost, sellValue, MEDBAY_STEP, MEDBAY_SHARE, UPGRADE_BASE, UPGRADE_STEP, BREAKDOWN_BASE, SELL_BASE, computeScore, newRunStats, noteDepth, sectorRewardMult, formatStat, awardXp, log, playSFX, playImpact, voiceFor, startAmbience, stopAmbience, ambienceFor, initAudio, addMomentum, setOutpostTab,
     IMPACT_TIERS, SOAK_AT, WEAK_AT, MARK_DELAY, DEATH_DELAY, impactVoice, impactMark, HEAT_FLOOR, PULSE_SLOW, PULSE_FAST,
     ambienceHeat, ambienceState, playMote, scheduleMote, voiceLift, VOICE_FLOOR,
     // engine constants
@@ -14378,6 +14469,7 @@ globalThis.WP = {
     get outpostBagOpen() { return outpostBagOpen; }, set outpostBagOpen(v) { outpostBagOpen = v; },
     get RECRUIT_TERMS_ON() { return RECRUIT_TERMS_ON; }, set RECRUIT_TERMS_ON(v) { RECRUIT_TERMS_ON = v; },
     get MORALE_ON() { return MORALE_ON; }, set MORALE_ON(v) { MORALE_ON = v; },
+    get CAP_SHAPE_ON() { return CAP_SHAPE_ON; }, set CAP_SHAPE_ON(v) { CAP_SHAPE_ON = v; },
     get ELITE_OFFER_CARDS() { return ELITE_OFFER_CARDS; }, set ELITE_OFFER_CARDS(v) { ELITE_OFFER_CARDS = v; },
     get activeDoctrine() { return activeDoctrine; }, set activeDoctrine(v) { activeDoctrine = v; },
     get doctrineBroken() { return doctrineBroken; }, set doctrineBroken(v) { doctrineBroken = v; },
