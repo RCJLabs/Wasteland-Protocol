@@ -2457,10 +2457,93 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
-// ── R01: WHAT A COMMANDER SPENDS ONCE IT HAS STOPPED GROWING - BUILT, NOT YET PRICED ──
-// Filed in two commits, the build and then the table, the way R04 and R03 were. THIS IS THE
-// BUILD COMMIT, and what follows is written down BEFORE the careers are run, so the prediction
-// is on the record where it can be wrong in public. R04's was, flatly.
+// ── R01: THE TABLE - THE CONTENT LANDS, THE DIFFICULTY IS A NULL, AND I NAMED THE WRONG RISK ──
+// Filed in two commits, the build and then this table, the way R04 and R03 were. The build
+// commit wrote its prediction down in public before a career ran. Judged below, in both
+// directions: the win column came out where I said it would, and the RISK I named was the wrong
+// one - I worried the trade would make commander fights harder, and it leans the other way.
+//
+// THREE CAREERS OF 150 AN ARM, --capshape off withholding the shape whole:
+//
+//                              on (capped shape)      off (control)        mean
+//   ended the road            25 / 25 / 23          19 / 19 / 19         24.33 vs 19.00
+//   wipes per run           6.47 / 6.21 / 6.25     6.43 / 6.63 / 6.47     6.31 vs 6.51  overlap
+//   wipes at tier 10         881 / 830 / 818       854 / 900 / 870        843 vs 875    overlap
+//   tier 10 share of wipes  90.7 / 89.2 / 87.2%   88.6 / 90.5 / 89.6%    89.0 vs 89.5% FLAT
+//   score, median          27.6k / 27.5k / 29.2k  25.7k / 26.1k / 24.2k   intervals overlap
+//   commander fights        1362 / 1318 / 1307    1307 / 1362 / 1303     1329 vs 1324  matched
+//   phase opened            55.8 / 56.4 / 51.6%   42.8 / 43.8 / 41.4%    54.6 vs 42.7% SEPARATED
+//   phase tail, mean turns  11.2 / 11.3 / 11.4     6.9 / 6.2 / 6.8       11.30 vs 6.63 SEPARATED
+//   two turns or fewer         7 / 10 / 12%         16 / 16 / 15%                      SEPARATED
+//
+// THE CONTENT CLAIM LANDS, AND IT IS THE ONE ROW THAT MATTERS. Commander turns spent inside the
+// grudge phase go 3,741 -> 8,197 a career, 2.19x. The phase opens in 54.6% of commander fights
+// against 42.7%, and once open it runs 11.3 commander turns against 6.6. Every census row is
+// 3/3 in the same direction with no overlap, and unlike a win count these are proportions and
+// medians over ~1,300 commander fights a career, which is the sample K11c's lesson says to
+// measure a per-fight mechanism on. That is the item delivering exactly what it was for: more of
+// the most memorable fight in the game spent against behaviour instead of against a stat line.
+//
+// AND MOST OF THAT IS ARITHMETIC, NOT DISCOVERY, which is worth saying plainly because a table
+// that presented it as a surprise would be flattering itself. The phase covers 45% of the health
+// bar instead of 25%, so it should last 45/25 = 1.80x longer; it lasts 1.70x longer. The gap is
+// the right sign for the right reason - the commander is swinging without its enrage multiplier,
+// so it kills fewer of the squad on the way down and the squad's damage holds up better. A
+// threshold moved 20 points of health bar produced the movement a threshold moved 20 points of
+// health bar should produce. What is NOT arithmetic is the next paragraph.
+//
+// THE DIFFICULTY COLUMN IS A NULL AT THIS FILE'S OWN RESOLUTION. Wipes per run overlap (6.31 vs
+// 6.51), tier-10 wipes overlap (843 vs 875), and the tier-10 SHARE of wipes is flat at 89.0%
+// against 89.5% - so the wall is not only the same height, it is the same shape, which is the
+// constraint the build commit set itself and the one that mattered.
+//
+// THE WIN COLUMN IS WHERE THE DISCIPLINE HAS TO BITE. 24.33 against 19.00 is +5.33, it is 3/3 in
+// the same direction, and the ranges do not overlap (23-25 against 19-19). That is D17's
+// separation rule passing - AND D17'S RULE WAS FOUND UNSOUND AT THREE CAREERS BY K06, whose
+// measured floor says two arms of three only settle a gap wider than about 8-10 wins. 5.33 is
+// under the floor. The floor beats the range test whenever they disagree, so THIS IS NOT
+// SETTLED, and the three identical 19s in the control are a good reminder of why a tight-looking
+// range at n=3 is not evidence of anything. Score says the same: the arms rank on > off in all
+// three, and every printed bootstrap interval overlaps.
+//
+// SO THE PREDICTION WAS HALF RIGHT, AND THE HALF IT GOT WRONG IS THE USEFUL HALF. "The win
+// column will be a null" - correct at this file's resolution. "The readable change should be in
+// the phase census and in turns per commander fight" - correct, and by a wide margin. But the
+// RISK the build commit wrote down was "if commander-fight wipes rise, the price is too small".
+// Commander-fight wipes did not rise. Every difficulty row that moved at all moved toward the
+// PLAYER. I stated the danger with the sign inverted.
+//
+// THE MECHANISM FOR THAT IS PLAIN ONCE LOOKED AT, and it says the refund may be the larger half
+// of the trade rather than the smaller one. In the control the commander carries its enrage
+// damage multiplier from 50% health all the way to 0. Under the shape it carries that multiplier
+// from 50% to 45% and then gives it up for the whole remaining 45% of the bar. So the price is
+// paid over nearly half the fight, while what it buys is 20 points of health bar moved from
+// "enraged" to "enraged and doing the interesting thing". Seen that way a small lean toward the
+// player is the expected shape of the trade, not an anomaly.
+//
+// WHAT IS NOT DONE, stated rather than buried: the +5.33 is unresolved and it is left unresolved
+// rather than tuned away, because tuning a dial against a difference this file cannot resolve is
+// how a measurement turns into a story. Two honest options if the owner wants it neutral, both
+// cheap: refund half the enrage multiplier instead of all of it, or move GRUDGE_CAP.phaseAt from
+// 0.45 to about 0.35. Either would need its own paired arm to price, and neither should be done
+// on the strength of the table above.
+//
+// A SEPARATE FINDING THIS PAIR FELL OVER, filed rather than chased because it is not R01's: THE
+// WIN RATE HAS DRIFTED A LONG WAY UNDER ITS TARGET AND NOTHING NOTICED. The control arm - which
+// is the shipped game with only this one shape withheld - wins 19 of 150 three times, 12.7%. The
+// most recent entry in this file to quote the figure is K02, which recorded the after-arm at
+// 32/34/35, mean 34%, against the 30% target I06 cut the wall to. R03's control, measured days
+// ago, reads 20 of 150. So the game is running at roughly a third of the win rate the record
+// believes it is tuned to, and no single item since K02 claims a cost anywhere near that size.
+// NOT ATTRIBUTED HERE: this pair cannot say which items spent it, or whether the 34% and the
+// 12.7% are even the same row measured the same way, and guessing would be worse than filing.
+// It wants its own item, walking the arms back through the record until the drop has an owner.
+// ^^ READ: STILL OPEN. Filed by R01 and nothing since has walked it. This is the one claim in
+// this record where the thing left unmeasured is the file's own headline number, so it is worth
+// saying what "open" costs here: every balance reading taken between K02 and now was taken
+// against a win rate the record believed was 34% and may have been half that, which changes how
+// large a measured effect has to be before it means anything. The item is a bisection - re-run
+// the control at a handful of commits between K02 and R01 and find where the floor drops.
 //
 // WHAT THE R-AUDIT FOUND. GRUDGE.cap is 3 on purpose - "a wall you cannot pass is not a nemesis"
 // - and LEARNED_AT hands a commander exactly one new move. Measured across a career that means
@@ -2495,17 +2578,20 @@ const ROOT = path.join(__dirname, '..');
 // 26.9 a time, and the health it opened at reads "25%: 16, 45%: 29" - booked by the ENGINE and
 // read back, per F03, rather than the report keeping its own copy of the threshold.
 //
-// THE PREDICTION, before the careers. The win column will be a null - K06's floor says two arms
-// of three careers only settle a gap wider than about 8-10 wins, and this is a trade, not a
-// dial. The readable change should be in the phase census (openings up, the tail longer) and in
-// turns-per-commander-fight, which is where K11c's lesson says to look: a claim about a
-// per-fight mechanism gets measured at the fight, not at the career.
+// THE PREDICTION AS IT WAS WRITTEN, kept in its original words because the table above judges
+// it and a prediction edited after the fact judges nothing. "The win column will be a null -
+// K06's floor says two arms of three careers only settle a gap wider than about 8-10 wins, and
+// this is a trade, not a dial. The readable change should be in the phase census (openings up,
+// the tail longer) and in turns-per-commander-fight, which is where K11c's lesson says to look."
+// Both halves held.
 //
-// THE RISK TO CHECK, stated plainly so the table cannot quietly skip it: the trade may not be
-// even. Opening at 45% buys the commander roughly a fifth of its health bar spent on the more
+// AND THE RISK AS IT WAS WRITTEN, which is the half that did not: "the trade may not be even.
+// Opening at 45% buys the commander roughly a fifth of its health bar spent on the more
 // dangerous behaviour, and the refund takes back only what phase two added to the swing. If
-// commander-fight wipes rise, the price is too small and the honest move is to raise it rather
-// than to keep the shape and call the wall unchanged.
+// commander-fight wipes rise, the price is too small." Commander-fight wipes did not rise - 843
+// against 875, overlapping - and every difficulty row that moved at all moved toward the player.
+// The danger was real and I wrote it down with the sign inverted. ^^ ANSWERED by the table at
+// the head of this entry: null on difficulty, leaning player-side, unresolved at 5.33 wins.
 //
 // ── R03: A SIDE THAT LOSES HEART - AND IT COSTS BODIES, NOT WINS ──────────────────
 // Filed in two commits, the build then this table. The build commit wrote down its own worry:
@@ -3751,9 +3837,15 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   12 answered by a later item     2 still open     7 not an open claim after reading
+//   12 answered by a later item     3 still open     7 not an open claim after reading
 //
 // and 0 carrying two verdicts that disagree.
+//
+// R01 MOVED THIS ROW AND THE SUITE CAUGHT IT, which is the second time the mechanism has paid
+// for itself inside the entry that describes it. R01's table filed a finding it could not chase
+// - the control arm winning 19 of 150 where the last entry to quote the figure recorded 34%
+// against a 30% target - and marked it STILL OPEN. The battery then went red on THIS paragraph,
+// because the prose above still said 2, exactly the drift the paragraph is about.
 //
 // AND THE ZERO LASTED TWO COMMITS, WHICH IS WHAT IT SHOULD DO. The R-audit put two back on the
 // board - R03's morale exit and R05's LIGHT_ORDER reading - because an audit's findings are open

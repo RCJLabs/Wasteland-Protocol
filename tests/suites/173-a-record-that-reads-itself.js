@@ -64,7 +64,14 @@ module.exports = {
       // gap and the worse one. The scanner cannot check a marker's CONTENT, and it cannot check
       // that a marker covers only what it claims to. A count that falls without an item
       // answering anything is the signature of both.
-      && r.open === 2 && r.total === 21);
+      //
+      // R01 moved it 2 -> 3 of 21 -> 22, and the claim it added is the one this pin is most
+      // useful for: R01 measured the CONTROL arm winning 19 of 150 where the last entry to quote
+      // the figure recorded 34% against a 30% target. That is the file's own headline number
+      // possibly being half what the record believes, filed rather than chased because R01 could
+      // not attribute it. A claim that large going unread is exactly the failure this suite
+      // exists to make impossible, so the count is pinned rather than left to drift.
+      && r.open === 3 && r.total === 22);
     // AND NO CLAIM CARRIES TWO VERDICTS THAT DISAGREE. K11's did for two commits: K11b wrote its
     // answer ABOVE the marker already there and left the old one standing, so the last word a
     // reader got was the stale one. The scan passed it, because it tested the window for an

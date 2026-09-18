@@ -1598,7 +1598,20 @@ const GRUDGE = {
 //
 // Measured before it was built, the way R03 was: the phase opens in 45% of commander fights
 // reached and runs a median of 6 commander turns once it does, so it is a slice somebody plays
-// rather than a death rattle. Whether the trade prices out is the measurement, not this comment.
+// rather than a death rattle.
+//
+// AND MEASURED AFTER, three careers of 150 an arm. The content lands: commander turns spent
+// inside the grudge phase go 3,741 -> 8,197 a career (2.19x), the phase opens in 54.6% of
+// commander fights against 42.7%, and it runs 11.3 commander turns against 6.6 - every census
+// row 3/3 with no overlap. Most of that is arithmetic rather than discovery, and the record says
+// so: the phase covers 45% of the bar instead of 25%, so it should run 1.80x longer and it runs
+// 1.70x longer. The difficulty column is a null - wipes per run 6.31 vs 6.51 overlapping, and
+// tier 10's SHARE of wipes flat at 89.0% against 89.5%, so the wall is the same height AND the
+// same shape. The win column leans player-side by 5.33, which is under K06's 8-10 floor and is
+// therefore left unresolved rather than tuned away. The risk this comment's first draft named -
+// that commander fights would get harder - was the wrong sign; the refund is paid over 45% of
+// the health bar and buys 20 points of it, so a small lean toward the player is the trade's
+// expected shape. See the R01 table in tests/simulate.js for the full pair.
 const GRUDGE_CAP = { phaseAt: 0.45, keepsArmour: false, refundEnrage: true };
 let CAP_SHAPE_ON = true;          // the control the arm withholds
 function capShaped(e) {
