@@ -7,9 +7,14 @@
 //
 // SIZED OFF R02's CENSUS RATHER THAN GUESSED. 26,186 fights say a win takes a median of 9 squad
 // turns and a LOSS takes 19, p90 57, worst 227; and the histogram says a deadline at squad turn
-// 12 would catch 39% of fights, at 16 27%, at 20 19%, at 25 14%, at 30 10%. PRESSED.at is 20 -
+// 12 would catch 39% of fights, at 16 27%, at 20 19%, at 25 14%, at 30 10%. PRESSED.at is 25 -
 // well past the median win, so a squad playing normally never sees the clock and only a fight
 // already going badly does.
+//
+// AND RE-TUNED ONCE, BY MEASUREMENT RATHER THAN BY FEEL. The first pair ran at 20 turns on 35%
+// of fights: the clock timed out 2.4 times a run and cost 10.67 wins of a base of 23. That is
+// not a trade, it is a different game. The numbers here are the second cut off the same
+// histogram; the shape did not change, only how often a squad meets it.
 //
 // AND IT CUTS BOTH WAYS, which is why it ships behind an arm and not on a conviction. The same
 // census says damage is LINEAR in turns, so ending a fight early hands damage back in

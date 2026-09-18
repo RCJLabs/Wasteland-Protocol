@@ -2457,6 +2457,45 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── R02: THE CLOCK COSTS WINS, NOT BODIES - AND MY PREDICTION HAD THE SIGN BACKWARDS ──
+// The build commit wrote its prediction down before the careers ran: "I expect the win column to
+// go UP rather than down - the clock's most common effect is ending a fight the squad was
+// losing, and a fight that ends is a fight that stops costing." It went DOWN by 10.67.
+//
+// FIRST PAIR, 20 TURNS ON 35% OF FIGHTS, three careers of 150 an arm:
+//
+//                          on (clock)              off (control)        delta
+//   ended the road         12 / 12 / 14            22 / 23 / 25        -10.67  SEPARATED
+//   wipes per run          6.82 / 6.80 / 6.94      6.28 / 5.87 / 6.22   +0.73  SEPARATED
+//   lost for good, a run   2.90 / 2.93 / 3.03      4.12 / 4.21 / 4.23   -1.23  SEPARATED
+//   wipes at tier ten      631 / 673 / 650         835 / 802 / 853       -179  SEPARATED
+//   score, median          20.6k / 21.1k / 22.8k   23.8k / 27.6k / 28.3k -5066  SEPARATED
+//   deepest sector, median 3 / 3 / 3               3 / 3 / 4             -0.33  overlap
+//
+// The clock met 2,571 fights a career and ran out on 367 of them - 14% of the fights that
+// carried one, about 2.4 a run.
+//
+// WHY THE PREDICTION WAS BACKWARDS, AND IT IS THE USEFUL HALF: I reasoned about the FIGHT and
+// the effect is entirely in the ECONOMY. A timed-out fight pays nothing, and 2.4 of those a run
+// compounds. The progression rows say it plainly - nodes cleared 69 against 78, mean level on
+// arrival at a commander 7.6/7.8 against 8.1/8.3, relics held 9.0 against 10.5. The squad
+// reaches the same commanders half a level lower with a relic and a half less.
+//
+// AND THE ROW THAT PROVES IT IS NOT HARDER FIGHTS: tier ten's wipes FELL by 179 while wipes per
+// run ROSE. Runs are not losing worse commander fights, they are dying before they get there.
+// That is the signature of a poorer squad rather than a steeper wall, and it is the row I would
+// have missed if I had only watched the win count.
+//
+// WHAT THE ITEM ACTUALLY DELIVERS IS REAL AND IT IS THE OTHER DIRECTION: 1.23 fewer operators
+// lost for good a run, separated 3/3. The squad wins less and keeps more of its people. That is
+// precisely the inverse of R03, which cost bodies and left the win column alone, and the two
+// together say the same thing from opposite ends - this game trades people against progress
+// through channels neither mechanic touches directly.
+//
+// SO THE SHAPE HOLDS AND THE PRICE DOES NOT. 10.67 wins on a base of 23 is a 46% cut; against
+// #230's wall curve that is most of two notches of the difficulty dial, spent by accident. A
+// mechanic that costs that much is not a trade, it is a different game.
+//
 // ── #230: THE WALL, MEASURED AND LEFT WHERE IT IS - THE CURVE IS THE DELIVERABLE ──
 // R01 filed "the win rate has drifted under its target and NOTHING NOTICED". The second half is
 // withdrawn and corrected at its site: M03 noticed, measured it, and stated the resulting level

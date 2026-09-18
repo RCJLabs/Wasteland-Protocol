@@ -1710,7 +1710,12 @@ const GRUDGE_CAP = { phaseAt: 0.45, keepsArmour: false, refundEnrage: true };
 // contact, whoever is standing takes the parting cost, the biggest hostiles give chase, and
 // collectLoot(0, true) pays nothing. Nobody dies of the clock. That is what "fail while
 // standing" has to mean for it to be a failure rather than a punishment.
-const PRESSED = { at: 20, share: 35 };   // squad turns, and the share of road fights that carry one
+// RE-TUNED AFTER THE FIRST PAIR, off the same histogram it was sized from. At 20 turns on 35%
+// of fights the clock timed out 2.4 times a run and cost 10.67 wins of a base of 23 - about a
+// 46% cut, which is not a trade, it is a different game. 25 turns catches 14% of fights where 20
+// catches 19%, and 20% of fights carry one instead of 35%, so the expected timeouts a run fall
+// to roughly 1.0. The SHAPE is unchanged; only how often a squad meets it.
+const PRESSED = { at: 25, share: 20 };   // squad turns, and the share of road fights that carry one
 let PRESSED_ON = true;
 // Seeded off the node the way R04's terms are, so a fight shows the same face every time it is
 // looked at - and never on a commander, which is the one node a squad cannot walk away from.
