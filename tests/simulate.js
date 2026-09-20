@@ -2457,6 +2457,46 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── T01: SOMEBODY LOOKED AT THE GAME, WHICH HAD NOT HAPPENED BEFORE ───────────────────
+// Six items of measurement and hygiene, 4970 assertions and hundreds of simulated careers, and
+// nobody had SEEN a screen. R02's clock banner shipped six items ago and had never been looked
+// at. So the game was served, driven and photographed at 1280x800 and 390x844.
+//
+// WHAT IS FINE, and worth writing down because a feature nobody has seen is a feature nobody can
+// vouch for: the clock banner renders, reads `2 TURNS BEFORE THE ROAD MOVES ON`, takes its
+// clock-out class under three turns, and sits at y=53 directly under the weather banner at y=31.
+// No page errors at either width. The badges, the staggered ranks and the map all draw.
+//
+// WHAT IS NOT: THE BATTLEFIELD PUTS TEXT ON TEXT, and nothing in the tree could see it. 155
+// measures whether a card is CLIPPED and C11 whether the field scrolls SIDEWAYS; both pass, and
+// neither asks whether two labels occupy the same pixels. Measured at 1280 on a hurt, badged
+// squad against a crowded row:
+//
+//   FRONT        over MID              38 x  8 px
+//   MID          over BACK             38 x  5
+//   MID          over a threat number  38 x  4
+//   RANGING SHOT over FRENZY           38 x 12
+//
+// Ranks leaning on each other is arguably the staggered line doing its job. A rank label over a
+// damage forecast, and one enemy's signature over another's, are not: both are something the
+// player came to read with something else on top of it. Suite 185 ratchets it; the layout fix
+// wants somebody who can iterate against the rendered page and is not this item.
+//
+// TWO FALSE FINDINGS DIED ON THE WAY, BOTH MINE, BOTH THE SAME SHAPE. I had "the clock banner
+// never renders" written down before checking - pressedFor keys on currentSector and my probe
+// picked a clocked node at sector 1 and then moved to sector 3, so the fight genuinely had no
+// clock. And "a route prompt fires during combat, covering the log" is my staging too: the
+// prompt is queued by the map render inside confirmNewGame, and I teleported into a fight
+// without ever showing the map. STAGED INSPECTION MANUFACTURES ARTEFACTS at about the rate
+// staged measurement does, which is D05's lesson arriving in a new medium.
+//
+// AND THE RATCHET ITSELF NEARLY SHIPPED MISCALIBRATED. Which labels collide depends on the
+// drafted roster and the rolled enemy row: six runs read 2,3,1,1,1,1 wide and 1,1,1,1,3,1 on the
+// phone, against a first-cut bound of 4 that a differently-staged fight had already touched. A
+// bound inside its own noise is K03's subject and a poor thing to ship in the suite that exists
+// to catch sloppiness. It sits at 6 now, two clear of everything measured, and its job is a
+// regression IN KIND rather than a one-count drift it could not see anyway.
+//
 // ── S07: THE SLEEP DEBT WAS UNBOUNDED, AND I AM THE ONE WHO PROVED IT ─────────────────
 // Picked because this session produced the evidence: S03 had a battery die 26 assertions into a
 // suite and never reproduce, and fixed sleeps are the mechanism H12 has been closing since G12.
