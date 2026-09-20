@@ -7762,6 +7762,14 @@ function devResolve(win) {
     if (!combatActive) return;
     activeEntities.filter(e => win ? !e.isPlayer : e.isPlayer).forEach(e => { e.hp = 0; });
     checkWinState();
+    // T03: and back to the field it was resolved on. checkWinState ends a won fight by putting a
+    // LOOT button on the command deck; it does not switch screens, because every other caller is
+    // already STANDING on the combat screen. This one is not - the panel is reached through the
+    // settings menu and renderDev switches away from the fight - so winning from here left the
+    // fight over, the payout uncollected and the node unbanked, behind a screen that still read
+    // "Win it" and gave no sign anything had happened. Guarded on still being here, because a
+    // squad wipe resolves onto its own screen and must keep it.
+    if (currentScreen() === 'screen-dev') switchScreen('screen-combat');
 }
 
 // ── The Citadel, drawn ──────────────────────────────────────────────────────────────────

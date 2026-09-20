@@ -2505,10 +2505,32 @@ const ROOT = path.join(__dirname, '..');
 // not use. Both caught before pitching, neither by luck - by asking the page what it was
 // actually painting rather than trusting a rectangle.
 //
-// WHAT THE WALK IS NOT. It reached fourteen of twenty screens by clicking and stopped where the
-// road stopped: the relic offer, perk offer, cache, run-over and victory screens were not
-// reached in the hops that were walked, and are unphotographed. That is a gap in the LOOKING,
-// not a claim about those screens.
+// THE SIX SCREENS THE ROAD DID NOT REACH were then walked separately, through the DEV TOOLS
+// panel that ships in the settings menu - so still pressed rather than teleported into. The
+// perk offer, the promotion taken, the boss node at the final tier, the last fight itself and
+// the run-over screen all came up clean. Only the cache had no control anywhere that opens one,
+// and that shot is labelled STAGED. And pressing the panel found the second defect:
+//
+// WINNING A FIGHT FROM THE DEV PANEL LEFT YOU ON THE DEV PANEL. renderDev switches away from
+// the fight; checkWinState ends a won fight by writing a LOOT button into the command deck and
+// switches nothing, because every other caller is already standing on the combat screen. So
+// "Win it" ended the fight, and the payout and the node bank sat behind a screen still reading
+// "Win it" with no sign anything had happened - and BACK TO THE MAP walked away from both.
+// devResolve now returns to the field, guarded on still being on the panel so a squad wipe that
+// has already landed on its own screen keeps it. Suite 17 gains three rows; two fail without it.
+//
+// AND THE VICTORY SCREEN WAS NOT A THIRD DEFECT, which I checked before saying so. The walk's
+// boss win came out on the map rather than on the victory screen, which reads like the ending
+// never fires. Measured instead of filed: the final boss killed by the squad's own blow through
+// resolveAction, and the same boss killed by the panel, both set runStats.won and both land on
+// the relic offer that precedes the ending. The walk lost its own thread; the game did not.
+//
+// TWO MORE THAT DIED THE SAME WAY. A 900x15 collision on the boss screen between the turn queue
+// and THE ROAD ENDS HERE banner: re-measured on a freshly staged boss fight at 1280, 390 and
+// 320, there is no box overlap at all on that layer - the walk photographed a banner mid-
+// animation. And "Q: MED > SCA > BRU > THE" reads like a truncation and is renderQueue's own
+// three-letter code, by design since N02. Five candidates, two defects: the ratio this file
+// has been printing since the S-audit.
 //
 // AND ONE THING FOR THE OWNER, filed as taste rather than as a defect: .map-graph is
 // `max-width: 340px`, so the route map is the same 340px ribbon on a 1280px desktop as on a

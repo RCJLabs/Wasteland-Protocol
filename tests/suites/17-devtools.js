@@ -104,6 +104,52 @@ module.exports = {
     ok('and lost instantly', resolve.lost);
     ok('resolving outside a fight is harmless', resolve.noFight);
 
+    // T03: AND IT PUTS YOU BACK WHERE THE BUTTON IS. The three rows above resolve from the
+    // combat screen, which is where every other caller stands - so they never noticed that the
+    // panel itself does not. renderDev switches AWAY from the fight, and checkWinState ends a
+    // fight by writing a button into the command deck without switching anything, so winning
+    // from the panel left the fight over, the payout uncollected and the node unbanked behind a
+    // screen that still read "Win it". Found by walking the game and pressing it.
+    const fromPanel = await page.evaluate(() => {
+      const one = win => {
+        currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+        initiateCombat('RAIDERS', false);
+        renderDev();                                   // the player opens the panel mid-fight
+        const before = currentScreen();
+        devResolve(win);
+        const r = { before, after: currentScreen(),
+                    deck: document.getElementById('command-deck').innerText.slice(0, 30) };
+        combatActive = false;
+        return r;
+      };
+      return { won: one(true), lost: one(false) };
+    });
+    ok(`winning from the panel goes back to the field the LOOT button is on `
+       + `(${fromPanel.won.before} -> ${fromPanel.won.after}, deck "${fromPanel.won.deck}")`,
+      fromPanel.won.before === 'screen-dev' && fromPanel.won.after === 'screen-combat'
+      && /LOOT/.test(fromPanel.won.deck));
+    ok(`and losing from it goes back to the one SQUAD DOWN is on `
+       + `(${fromPanel.lost.before} -> ${fromPanel.lost.after}, deck "${fromPanel.lost.deck}")`,
+      fromPanel.lost.after === 'screen-combat' && /SQUAD DOWN/.test(fromPanel.lost.deck));
+
+    // And it must not drag the player off a screen the resolution itself chose. A squad wipe
+    // that has already landed somewhere keeps it - the guard is "still on the panel", not
+    // "always go to combat", and a build that drops the guard fails here rather than in play.
+    const keepsIts = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
+      initiateCombat('RAIDERS', false);
+      renderDev();
+      // The wipe path's own screen, reached the way the game reaches it.
+      renderSquadBroken();
+      const landed = currentScreen();
+      devResolve(false);
+      const r = { landed, after: currentScreen() };
+      combatActive = false;
+      return r;
+    });
+    ok(`a resolution that moved the player itself keeps its screen `
+       + `(${keepsIts.landed} -> ${keepsIts.after})`, keepsIts.after === keepsIts.landed);
+
     // ---- ground placement: units stand on art, not on the dark band ----
     const lifts = await page.evaluate(() => {
       const out = {};
