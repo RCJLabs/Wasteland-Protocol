@@ -1798,6 +1798,18 @@ let bossSalt = 'w0';
 // shift. Read it as reachability and nothing else.
 const MORALE = { chance: 0.5 };   // per body still standing, checked once, when the anchor falls
 let MORALE_ON = true;             // the control the arm withholds
+// T05: what a body going down is worth to the squad's momentum. It was a bare 15 in two places -
+// noteKill's grant for a hostile and the player-side half beside it - and the arm below needed a
+// third. Named once instead, so the arm pays THE SAME 15 a kill pays by construction; three
+// copies of a number is how the one that matters drifts.
+const KILL_MOMENTUM = 15;
+// T05: the momentum arm, and it is NOT the same switch as MORALE_ON. `off` withholds the break
+// whole; this withholds only the momentum a broken body would have paid if it had been killed
+// instead. R03 measured the break costing half an operator a run and explained it by arithmetic
+// through momentum - 4,254 fled bodies a career at 15 apiece - and said plainly that nothing had
+// withheld the momentum term on its own. This is that term, on its own. Default false, so the
+// shipped game is exactly what it was.
+let MORALE_PAYS = false;
 const BOSS_THREAT_JITTER = 5.0;
 function bossOrder(cycle) {
     // Seeded directly rather than through seededRng, which falls back to Math.random when no
@@ -13297,7 +13309,7 @@ function noteKill(victim, by = {}) {
     // Blood Debt above and deliberately not the same thing - that one heals, this one is a
     // debt the fight collects on later.
     noteTally(victim);
-    addMomentum(15);
+    addMomentum(KILL_MOMENTUM);
     checkBountyProgress('KILL'); if (runStats) runStats.kills++;
     // How it died, not just that it did: a combo finish and a heavy brought down are both
     // things the board can ask for. Passed in rather than read off the module flags, so a
@@ -13551,7 +13563,7 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
         // F05: everything a body is worth, in one place, wherever it fell. A downed operator
         // is not a kill and never was - noteKill refuses one - so the momentum for a fallen
         // operator's own side is the only half left here.
-        if (target.isPlayer) addMomentum(15);
+        if (target.isPlayer) addMomentum(KILL_MOMENTUM);
         else noteKill(target, { combo: comboKill, overdrive: true, cause: 'COMBAT' });
     } else if (target.isPlayer) { addMomentum(5); }
 
@@ -13873,6 +13885,10 @@ function executeEnemyAi(enemy) {
     if (enemy.breaking && enemy.hp > 0) {
         enemy.fled = true; enemy.hp = 0;
         if (runStats) runStats.fled = (runStats.fled || 0) + 1;
+        // T05: and under the arm, it pays anyway. The only difference between this and a kill,
+        // for the squad's purse, is the momentum - no bounty, no bestiary, no kill credit move,
+        // because those are noteKill's and a runner is still not a kill. One term, isolated.
+        if (MORALE_PAYS) addMomentum(KILL_MOMENTUM);
         log(`> ${enemy.name} turns and runs. Nobody stops it.`, 'log-status');
         spawnFCT(enemy.id, 'GONE', 'fct-status');
         playSFX('click');
@@ -14766,6 +14782,8 @@ globalThis.WP = {
     get outpostBagOpen() { return outpostBagOpen; }, set outpostBagOpen(v) { outpostBagOpen = v; },
     get RECRUIT_TERMS_ON() { return RECRUIT_TERMS_ON; }, set RECRUIT_TERMS_ON(v) { RECRUIT_TERMS_ON = v; },
     get MORALE_ON() { return MORALE_ON; }, set MORALE_ON(v) { MORALE_ON = v; },
+    KILL_MOMENTUM,
+    get MORALE_PAYS() { return MORALE_PAYS; }, set MORALE_PAYS(v) { MORALE_PAYS = v; },
     get PRESSED_ON() { return PRESSED_ON; }, set PRESSED_ON(v) { PRESSED_ON = v; },
     get pressedAt() { return pressedAt; }, set pressedAt(v) { pressedAt = v; },
     get SECTOR_HP_SCALE() { return SECTOR_HP_SCALE; }, set SECTOR_HP_SCALE(v) { SECTOR_HP_SCALE = v; },

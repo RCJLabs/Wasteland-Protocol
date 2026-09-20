@@ -102,6 +102,34 @@ module.exports = {
     ok('and pays nothing on the way out - no kill, no momentum, no bestiary',
       left.kills === 0 && left.momentum === 0 && left.tallied === 0);
 
+    // ── T05: the arm that isolates the momentum term ────────────────────────────────────
+    // R03 explained its half-operator-a-run cost by arithmetic through momentum and said plainly
+    // that nothing had withheld that term ON ITS OWN. MORALE_PAYS is that term on its own: the
+    // break still happens and the body still gives no kill, no bounty and no bestiary, but the
+    // squad collects what killing it would have paid. Default false, so the row above is what
+    // the shipped game does and this one is what the arm does.
+    const paid = await page.evaluate(new Function(`MORALE_PAYS = true;` + build('RAIDERS', 0.1) + `
+      const one = activeEntities.find(e => e.breaking);
+      const before = { kills: runStats.kills || 0, momentum,
+                       seen: (bestiary[typeNameOf(one)] && bestiary[typeNameOf(one)].killed) || 0 };
+      executeEnemyAi(one);
+      const out = { gone: one.hp === 0 && one.fled === true,
+                    kills: (runStats.kills || 0) - before.kills,
+                    momentum: momentum - before.momentum,
+                    tallied: ((bestiary[typeNameOf(one)] && bestiary[typeNameOf(one)].killed) || 0) - before.seen,
+                    worth: KILL_MOMENTUM };
+      MORALE_PAYS = false;
+      return out;
+    `));
+    ok(`under the arm a runner pays its momentum (${paid.momentum} of ${paid.worth})`,
+      paid.gone && paid.momentum === paid.worth && paid.worth > 0);
+    ok('and still nothing else - no kill credit, no bestiary line',
+      paid.kills === 0 && paid.tallied === 0);
+    // The arm has to be OFF unless somebody turns it on, or every figure measured before it
+    // silently changes meaning. Read after the block above put it back.
+    ok('and the shipped game does not have it on',
+      await page.evaluate(() => MORALE_PAYS === false));
+
     // THE DECISION. It spends a turn going, so the squad can take the kill instead - and that
     // one IS worth everything, which is the trade the whole item exists to offer.
     const caught = await page.evaluate(new Function(build('RAIDERS', 0.1) + `

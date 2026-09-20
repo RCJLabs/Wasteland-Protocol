@@ -7200,6 +7200,10 @@ const RECRUIT_TERM = flag('recruitterm', 'on');
 // R03: the control the morale arm withholds. `on` is the shipped game; `off` puts every hostile
 // back to fighting to the last body, which is what every figure above this line was measured
 // under. Same shape as --doctrine off and --recruitterm off: one build, one difference.
+// T05 adds a THIRD value: `pay`. The break still happens, and a body that leaves still gives no
+// kill credit, no bounty and nothing to the bestiary - but the squad collects the momentum it
+// would have collected for killing it. R03 explained its half-operator cost by arithmetic
+// through momentum and said nothing had withheld that term alone; this is that term alone.
 const MORALE_ARM = flag('morale', 'on');
 // R01: the control the capped-commander arm withholds. `on` is the shipped game; `off` puts a
 // Thrice-Risen back to waiting for a quarter and bringing the plate, which is what every figure
@@ -7550,6 +7554,7 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
   ELITE_OFFER_CARDS = eliteOffer;
   RECRUIT_TERMS_ON = recruitTermArm !== 'off';
   MORALE_ON = moraleArm !== 'off';
+  MORALE_PAYS = moraleArm === 'pay';
   CAP_SHAPE_ON = capShapeArm !== 'off';
   PRESSED_ON = pressedArm !== 'off';
   // #230: set AFTER confirmNewGame, like every other arm, because confirmNewGame is what rebuilds
