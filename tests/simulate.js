@@ -2457,6 +2457,68 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── T05: PAY A FLED BODY ITS 15 - THE CHAIN IS A COINCIDENCE OF SCALE ────────────────
+// R03 shipped a morale break, measured it costing about half an operator a run, and explained
+// the cost by arithmetic through momentum: 4,254 fled bodies a career at 15 apiece is ~63,800
+// forgone, ~2,127 STIMs not bought, fewer rescues, recovery 84% -> 80%. Predicted STIM fall
+// ~4,327 against an observed 4,425 - within 2%. It then said plainly that nothing had withheld
+// the momentum term ON ITS OWN, wrote the arm down, and priced it at one arm of three careers.
+// That marker has read STILL OPEN ever since. This is that arm.
+//
+// THE ARM. `--morale pay` keeps the break and hands the squad exactly the momentum killing the
+// body would have paid - the same KILL_MOMENTUM a kill pays, by construction - and nothing else:
+// no kill credit, no bounty, no bestiary, because those are noteKill's. One term, isolated.
+// Three careers of 150 a side, same commit, against `--morale on`.
+//
+//   row                          on                      pay                   mean        sep
+//   ended the road               32 / 25 / 16            22 / 23 / 22          24.3 -> 22.3  overlap
+//   actor turns per fight        32.1 / 31.3 / 34.1      30.6 / 30.4 / 32.5    32.5 -> 31.2  overlap
+//   lost for good, per run       3.89 / 4.41 / 3.79      3.94 / 3.86 / 3.82    4.03 -> 3.87  overlap
+//   wipes per run                6.29 / 6.69 / 6.24      6.61 / 6.65 / 6.81    6.41 -> 6.69  overlap
+//   put on the floor, per run    17.4 / 18.6 / 16.1      17.5 / 18.6 / 17.5    17.4 -> 17.9  overlap
+//   dragged clear, per run       13.4 / 14.7 / 12.7      13.9 / 14.8 / 14.6    13.6 -> 14.4  overlap
+//   recovery %                   77.0 / 79.0 / 78.9      79.4 / 79.6 / 83.4    78.3 -> 80.8  DISJOINT
+//   rescues by STIM              3766 / 4061 / 3504      3615 / 3781 / 3819    3777 -> 3738  overlap
+//   turns STIM was AFFORDABLE    73% / 73% / 73%         72% / 72% / 71%       73 -> 71.7    DISJOINT
+//
+// I WROTE THE PREDICTION IN THE COMMIT BEFORE THE RUN AND THE HEADLINE HALF IS WRONG BY TWO
+// ORDERS OF MAGNITUDE. Predicted: STIM purchases up ~2,100 a career. Measured: -39, a flat null
+// on overlapping ranges. Predicted: operators lost for good pulled from 4.42 toward 3.81.
+// Measured: 4.03 -> 3.87, overlapping. The one thing I got right was recovery leaning up.
+//
+// THE ROW THAT KILLS THE CHAIN IS THE AFFORDABILITY ONE, and it moves the WRONG WAY. If momentum
+// were the constraint on rescues, handing over 63,800 more points a career would make the 30-cost
+// STIM tactic affordable on more of the turns that could reach a body. It was affordable on 73%
+// of them before and 72% after, disjoint in the wrong direction. Momentum was never what was
+// stopping the squad picking people up.
+//
+// AND THE REASON IS TWO LINES OF THE ENGINE THE CHAIN NEVER ASKED ABOUT. addMomentum clamps at
+// 100, and bankNode - the one choke point every node banks through - sets momentum to 0 at the
+// end of every one. So 4,254 x 15 is not a career purse. It is 15 points at a time into a wallet
+// that holds 100 and is emptied after every fight, roughly 6,800 times a career. The 2% agreement
+// was two numbers of the right magnitude meeting, not a mechanism: multiply a per-event value by
+// an event count and you get something the size of the observed change whether or not the
+// currency can be held.
+//
+// WHAT SURVIVES, AND WHAT IT IS WORTH. Recovery is disjoint 3/3, 78.3% against 80.8%. R03's own
+// convention would call that separated, and this file has learned better twice: Welch on it is
+// t = 1.71 on df = 2.9, which does not clear, and the pay arm's spread is doing the work (83.4
+// against 79.4 and 79.6). Disjoint at three a side is what K06's floor exists to refuse. So the
+// honest reading is a lean, not a finding, and it is a lean on the row the chain does NOT run
+// through - recovery moved while the STIM purchases that were supposed to cause it did not.
+//
+// SO R03'S COST STANDS AND ITS EXPLANATION DOES NOT. The half-operator a run was measured against
+// `--morale off` and nothing here touches that. What is withdrawn is the channel: the momentum
+// half is not the mechanism, the arithmetic that named it was a coincidence of scale, and this
+// item's own prediction repeated the same mistake in the same direction. Three open claims
+// become two.
+//
+// AND A FLAW IN MY OWN DESIGN, said rather than buried. My fourth predicted row - "turns per
+// fight stays short at 31.9 rather than restoring 33.9" - was written as the discriminating one
+// and could never have discriminated: BOTH arms here have the break on, so there was no reason
+// for fight length to move either way and 33.9 is a number from a control this experiment does
+// not contain. A discriminating row has to be one the two arms could actually differ on.
+//
 // ── T04: THE LIST NOBODY HAD READ, AND SEVEN CANDIDATES THE FILE KILLED ITSELF ────────
 // G11 built the coverage line four hundred items ago and named two examples off it. Nobody has
 // ever read the list. It stood at 143 of 931 exports named by no suite - 129 at the H-audit,
@@ -3548,9 +3610,14 @@ const ROOT = path.join(__dirname, '..');
 // one: nothing here withheld the momentum term on its own, so the momentum half is not measured.
 // That arm exists if somebody wants it - pay a fled body its 15 and re-run - and it is the
 // honest way to close this rather than a second pass at the same six careers.
-//   ^^ READ: STILL OPEN, and priced at one more arm of three. Marked rather than left unread
-//   because an item that files its own follow-up and does not count it is how the record used
-//   to go stale; the scanner counts this one now.
+//   ^^ ANSWERED by T05, and answered NO. The arm was built and run - three careers a side, same
+//   commit, `--morale pay` handing a fled body exactly the 15 a kill pays and nothing else. The
+//   momentum term on its own buys no STIMs: rescues by STIM read 3777 against 3738, a null
+//   against the +2,100 the chain predicts, and the turns STIM was AFFORDABLE on went 73% to 72%
+//   rather than up. The 2% agreement above is a coincidence of scale. Momentum is capped at 100
+//   and bankNode zeroes it at the end of every node, so 4,254 x 15 was never a career purse - it
+//   is 15 points into a wallet that holds 100 and is emptied after every fight. The COST this
+//   entry measured is real; the CHANNEL named for it is not.
 //
 // AND THE 15% CAUGHT IS STILL A POLICY FIGURE. 4,313 of 5,104 broken bodies got away in the
 // first career and the ratio held at 85% in all three, because this file has no rule about
@@ -4711,7 +4778,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   13 answered by a later item     3 still open     6 not an open claim after reading
+//   14 answered by a later item     2 still open     6 not an open claim after reading
 //
 // and 0 carrying two verdicts that disagree.
 //

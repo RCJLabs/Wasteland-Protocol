@@ -97,7 +97,13 @@ module.exports = {
       // which is not one of the phrases this scanner keys on, so the one number R01 deliberately
       // declined to resolve was invisible to the instrument built to count exactly that - carried
       // only second-hand by R02b's marker naming it. 20 -> 21 with a marker at its own site.
-      && r.open === 3 && r.total === 22);
+      //
+      // T05 moved it 3 -> 2 the healthy way: by ANSWERING one. R03's momentum chain had been
+      // open since it shipped, priced in its own words at "one more arm of three" - and T05 ran
+      // that arm and answered it NO. The count falling because somebody spent the careers is the
+      // shape this row wants to see; the other three moves above were a withdrawal, a scanner
+      // bug and a wording gap.
+      && r.open === 2 && r.total === 22);
     // AND NO CLAIM CARRIES TWO VERDICTS THAT DISAGREE. K11's did for two commits: K11b wrote its
     // answer ABOVE the marker already there and left the old one standing, so the last word a
     // reader got was the stale one. The scan passed it, because it tested the window for an
