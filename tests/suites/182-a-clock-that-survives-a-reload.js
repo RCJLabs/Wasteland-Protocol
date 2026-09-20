@@ -12,9 +12,22 @@
 // The fix is one COMBAT_STATE entry. This suite holds the pair that made it an exploit - the
 // clock coming back AND the turn count coming back with it - plus the two edges the entry's
 // load() claims: a save written before the field existed, and a fight that never had a clock.
+// S07: WAITED FOR, NOT SLEPT THROUGH. The first cut of this suite put a flat 700ms after each
+// Continue click - three of them - and H12 has been closing exactly that shape since the harness
+// learned to wait on conditions. continueGame is synchronous, so the state is already right when
+// the click resolves; the 700ms was padding against an enemy turn that may still be animating.
+//
+// THE CONDITION IS DELIBERATELY NOT WHAT THE SUITE THEN ASSERTS. Waiting on the clock banner, or
+// on pressedAt, would make the assertion after it vacuous - the wait would be doing the testing.
+// It waits on the fight being back up with bodies on the field, which is causally PRIOR to every
+// row this suite reads and says nothing about whether the deadline survived.
+const backUp = (settled, page) => settled(page,
+    () => combatActive === true && activeEntities.length > 0,
+    'the fight to come back up');
+
 module.exports = {
   name: 'A clock that survives a reload',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, settled }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
 
@@ -52,7 +65,7 @@ module.exports = {
     await page.reload();
     await engineUp(page);
     await page.click('.title-btn.btn-continue');
-    await page.waitForTimeout(700);
+    await backUp(settled, page);
 
     const after = await page.evaluate(() => ({
       live: combatActive, clock: pressedAt, turns: fightLog ? fightLog.turns : -1,
@@ -101,7 +114,7 @@ module.exports = {
     await page.reload();
     await engineUp(page);
     await page.click('.title-btn.btn-continue');
-    await page.waitForTimeout(700);
+    await backUp(settled, page);
     const old = await page.evaluate(() => ({
       live: combatActive, clock: pressedAt, left: pressedLeft(),
       shown: document.getElementById('clock-banner').style.display, out: pressedOut()
@@ -129,7 +142,7 @@ module.exports = {
     await page.reload();
     await engineUp(page);
     await page.click('.title-btn.btn-continue');
-    await page.waitForTimeout(700);
+    await backUp(settled, page);
     const none = await page.evaluate(() => ({
       live: combatActive, clock: pressedAt, turns: fightLog ? fightLog.turns : -1,
       shown: document.getElementById('clock-banner').style.display

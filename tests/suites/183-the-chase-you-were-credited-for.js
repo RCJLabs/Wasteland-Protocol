@@ -17,7 +17,7 @@
 // reload mid-chase used to drop it, and no longer does.
 module.exports = {
   name: 'The chase you were credited for',
-  run: async ({ page, ok, base, engineUp }) => {
+  run: async ({ page, ok, base, engineUp, settled }) => {
     await page.goto(`${base}/index.html`);
     await engineUp(page);
 
@@ -84,7 +84,9 @@ module.exports = {
     await page.reload();
     await engineUp(page);
     await page.click('.title-btn.btn-continue');
-    await page.waitForTimeout(700);
+    // S07: the fight being back up, which is prior to the flag this then reads - see suite 182.
+    await settled(page, () => combatActive === true && activeEntities.length > 0,
+      'the chase to come back up');
     const back = await page.evaluate(() => ({
       live: combatActive, chased: fightLog ? fightLog.chased : null,
       on: activeEntities.filter(e => /^chase_/.test(e.id)).length

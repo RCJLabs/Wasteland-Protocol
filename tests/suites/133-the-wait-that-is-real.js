@@ -104,9 +104,30 @@ module.exports = {
     ok(`a synchronous predicate that never comes true still times out (${onNever.slice(0, 52)}…)`,
       /never came true/.test(onNever));
 
+    // ── S07: COUNTED WAS NOT ENOUGH. THE NUMBER HAS TO BE BOUNDED ───────────────────────
+    // This row reported the remaining sleeps and asserted only that there WERE some - that the
+    // counter works. It could not notice the debt growing, and this is not a theory: suites 182
+    // and 183 were written three items ago with four fresh 700ms sleeps in them, the count went
+    // 44 -> 48, and nothing in 4969 assertions said a word. I added them, and the row that exists
+    // to watch this number watched me do it.
+    //
+    // A ratchet instead. The count may fall and may not rise, which is L06's shape for the same
+    // problem. Lowering CEILING when sleeps are removed is the whole maintenance burden, and the
+    // failure line says so, because a red here is a chore rather than a defect.
+    //
+    // NOT A BAN, deliberately. H12 left these on purpose: after a click there is a real condition
+    // to wait on but it is a DIFFERENT one each time, and G06 showed that pulling one carelessly
+    // changes what the assertion was measuring. The four S07 removed each needed their own
+    // condition, and it had to be one the suite did not then assert - waiting on the clock banner
+    // would have made the row that checks the clock banner vacuous.
+    const CEILING = 44;
     const left = remaining.reduce((a, c) => a + c, 0);
     ok(`the fixed sleeps that remain are counted, not forgotten (${remaining.length} left, ${(left / 1000).toFixed(1)}s a battery)`,
       remaining.length > 0 && left > 0);
+    ok(`and the count is bounded, not just reported (${remaining.length} of ${CEILING}` +
+       `${remaining.length > CEILING ? ' — a new fixed sleep was added; give it a real condition, '
+        + 'or lower CEILING here if you removed one' : ''})`,
+      remaining.length <= CEILING);
     ok(`and the boot sleeps are gone from the total (${(left / 1000).toFixed(1)}s, was 133.5s)`, left < 60000);
     ok('a source with no sleeps at all reports none', fixedSleeps(wait('page')).length === 0);
     // Same stripping as the gate, for the same reason: a sleep somebody already commented out

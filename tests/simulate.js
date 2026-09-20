@@ -2457,6 +2457,50 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── S07: THE SLEEP DEBT WAS UNBOUNDED, AND I AM THE ONE WHO PROVED IT ─────────────────
+// Picked because this session produced the evidence: S03 had a battery die 26 assertions into a
+// suite and never reproduce, and fixed sleeps are the mechanism H12 has been closing since G12.
+//
+// THE COUNT WENT 44 -> 48 THREE ITEMS AGO AND NOTHING SAID A WORD. Suites 182 and 183, written
+// for the S-audit, carried four fresh 700ms sleeps after a Continue click. Suite 133 reports the
+// remaining sleeps on every battery and asserted only `remaining.length > 0` - that the COUNTER
+// works, never that the number does not grow. So the row built to watch this debt watched me add
+// to it, across 4969 green assertions.
+//
+// Four paid, and the hole closed: 133 now ratchets at 44, the count may fall and may not rise,
+// which is L06's shape for the same problem. Negative-tested by adding a sleep back: `45 of 44 -
+// a new fixed sleep was added; give it a real condition, or lower CEILING here if you removed
+// one`. The failure line names the chore because a red there is a chore, not a defect.
+//
+// THE OTHER 44 ARE NOT GROUND DOWN, deliberately. H12 left them on purpose and boot.js says why:
+// after a click there is a real condition but it is a DIFFERENT one each time, and G06 showed
+// that pulling one carelessly changes what the assertion was measuring. Most of what is left is
+// a DRAIN - `combatActive = false` then 900ms - which is waiting for the engine's in-flight
+// setTimeout chain to empty, and there is no condition for "nothing further will happen".
+//
+// AND THE CONDITION FOR THE FOUR HAD TO NOT BE WHAT THE SUITE ASSERTS. Waiting on the clock
+// banner would have made the row that checks the clock banner vacuous. They wait on the fight
+// being back up with bodies on the field, which is causally prior to every row those suites read.
+//
+// THE NOISE SWEEP, TWELVE BATTERIES: no reds, 4945 assertions compared, 359 printing a number
+// that moves, and exactly ONE row under 3 sd of its own bound.
+//
+//   2.8 sd below its <= 24   [155-what-you-shrug-off.js:138]   measured 11.5 +/- 4.52, seen 4 to 14
+//
+// I HAD THIS ROW DOWN AS STANDING DEBT AND IT IS NOT DEBT. The comment eight lines above it
+// already carries the answer, written at M04: the distribution is BIMODAL - 14 whenever the field
+// renders at full scale, about 4 when fitField shrinks the cards for a crowded enemy row - so a
+// two-sided sd across both modes against a one-sided bound reads room running out at the top
+// where none is. This sweep reproduces that exactly at an independent twelve batteries: seen 4 to
+// 14, nothing above the upper mode, against a bound of 24. The row is correctly left alone and
+// the sweep cannot represent why. Three rows sit at 3.8 to 4.0 sd and none is worth moving.
+//
+// ONE LINE IN THAT REPORT IS MINE, NOT A FINDING. "Suites that assert a different number of times
+// between batteries: The wait that is real - 24 / 25" is suite 133, which I edited while the
+// sweep was in flight: early batteries read the file with 24 assertions and later ones with 25.
+// A real 24/25 split would be a branch that only sometimes runs, which is worth chasing. This one
+// is a process artefact and is recorded as one so nobody chases it.
+//
 // ── S06: THE ELEVEN POINTS WERE R02'S CLOCK - AND MY FRAMING WAS WRONG BEFORE THE DATA WAS ──
 // S05 filed an open claim: tier ten's share of wipes reads 77% where #230 read 88.5 to 90.3% at
 // the same wall setting. Answered without running anything, off the arms S04 already had:
