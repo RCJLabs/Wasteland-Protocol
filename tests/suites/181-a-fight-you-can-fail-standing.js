@@ -107,9 +107,12 @@ module.exports = {
     // ── One exit, not two ────────────────────────────────────────────────────────────────
     // The clock and the button leave a fight the same way. A second exit written beside the
     // first would be a second set of rules about pursuit, momentum and who gets picked up.
+    // T06 widened both of these from `forceBreakContact()` to the call with anything in the
+    // brackets: the exit now takes a CENSUS argument saying which of the two opened it, and a
+    // regex that demanded empty brackets was pinning the punctuation rather than the rule.
     const shared = await page.evaluate(() => ({
-      clockCalls: /forceBreakContact\(\)/.test(pressedOut.toString()),
-      buttonCalls: /forceBreakContact\(\)/.test(withdraw.toString()),
+      clockCalls: /forceBreakContact\(/.test(pressedOut.toString()),
+      buttonCalls: /forceBreakContact\(/.test(withdraw.toString()),
       bodyHasPursuit: /pursuit = /.test(forceBreakContact.toString()),
       bodyPaysNothing: /collectLoot\(0, true\)/.test(forceBreakContact.toString()),
       buttonKeepsArming: /armedExit/.test(withdraw.toString()),
@@ -121,6 +124,40 @@ module.exports = {
       shared.bodyHasPursuit && shared.bodyPaysNothing);
     ok('the button still asks twice, and the clock never does',
       shared.buttonKeepsArming && shared.clockDoesNotArm);
+
+    // ── T06: and the exit it shares carries nothing off the floor ───────────────────────
+    // R02b read the clock as converting deaths into setbacks - wipes a run up 0.46, operators
+    // lost for good down 0.41 - and called the pairing "suggestive of the same bodies" while
+    // saying nothing had isolated it. The door it would have to come through is this one:
+    // forceBreakContact ends with recoverDowned, so anybody on the floor when the clock runs out
+    // walks away. Measured over 150 expeditions it carries 0.01 operators a run against the 0.41
+    // the pairing needs - because a withdraw is CHOSEN when the squad is losing and the clock
+    // fires on a turn count, so it catches the floor empty. What is pinned here is that the door
+    // is real and that the census can tell the two apart; the size is in the record.
+    const doors = await page.evaluate(() => {
+      currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 2; currentTier = 4;
+      const read = why => {
+        initiateCombat('RAIDERS', false);
+        runStats.offFloor = {};
+        // One body on the floor with its bleed-out clock still running, which is what
+        // recoverDowned picks up and what a clock ending would therefore save.
+        const victim = activeEntities.find(e => e.isPlayer && e.hp > 0);
+        victim.hp = 0; victim.downTurns = 2;
+        forceBreakContact(why);
+        const bag = runStats.offFloor;
+        const out = { doors: Object.keys(bag), bodies: (bag[why === 'CLOCK' ? 'CLOCK' : 'WITHDRAW'] || {}).bodies || 0,
+                      up: victim.hp > 0 };
+        combatActive = false;
+        return out;
+      };
+      return { clock: read('CLOCK'), button: read('WITHDRAW') };
+    });
+    ok(`a clock ending files its pick-ups under the clock (${doors.clock.doors.join(', ')})`,
+      doors.clock.doors.length === 1 && doors.clock.doors[0] === 'CLOCK' && doors.clock.bodies === 1);
+    ok(`a withdraw files its own under the button (${doors.button.doors.join(', ')})`,
+      doors.button.doors.length === 1 && doors.button.doors[0] === 'WITHDRAW' && doors.button.bodies === 1);
+    ok('and either way the body on the floor actually gets up',
+      doors.clock.up && doors.button.up);
 
     // ── The turn that runs out is not also taken ─────────────────────────────────────────
     const order = await page.evaluate(() => ({

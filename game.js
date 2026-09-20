@@ -386,7 +386,7 @@ function pressedOut() {
     if (fightLog.turns < pressedAt) return false;
     if (runStats) runStats.pressedOut = (runStats.pressedOut || 0) + 1;
     log(`> Time. The road moves on without you.`, 'log-dmg');
-    forceBreakContact();
+    forceBreakContact('CLOCK');
     return true;
 }
 function noteSquadTurn() {
@@ -5728,6 +5728,8 @@ function loseOperator(ent, cause) {
         runStats.fallen.push({ name: ent.name, classType: ent.classType, level: ent.level || 1,
                                sector: currentSector, tier: currentTier,
                                cause: by && by.cause ? by.cause : cause,
+                               // T06: was the fight they fell in carrying one of R02's clocks.
+                               clocked: !!(combatActive && pressedAt > 0),
                                killer: by && by.name ? by.name : null,
                                elite: by && by.elite ? by.elite : null,
                                boss: !!(by && by.boss) });
@@ -5738,8 +5740,17 @@ function loseOperator(ent, cause) {
 }
 
 // The fight is over, however it ended. Whoever was still on the clock is dragged clear.
-function recoverDowned(how) {
+function recoverDowned(how, door) {
     const saved = bleedingOut();
+    // T06: which door the squad came off the floor through. A census only - `door` changes
+    // nothing about what happens here. R02b read the clock as converting deaths into setbacks
+    // and nothing had ever counted WHERE a body is actually picked up.
+    if (runStats && saved.length) {
+        const bag = runStats.offFloor = runStats.offFloor || {};
+        const k = door || 'other';
+        bag[k] = bag[k] || { exits: 0, bodies: 0 };
+        bag[k].exits++; bag[k].bodies += saved.length;
+    }
     saved.forEach(e => { e.hp = Math.max(1, Math.floor(e.maxHp * DRAGGED_CLEAR)); e.downTurns = 0; });
     if (saved.length) log(`> ${saved.map(e => e.name).join(' and ')} dragged clear${how ? ' ' + how : ''}.`, 'log-heal');
     const ids = saved.map(e => e.id);
@@ -5969,7 +5980,7 @@ function handleSquadWipe() {
     // Being dragged off the field is still being off the field: the clock stops for whoever is
     // still on it. Throwing a fight to save somebody bleeding out is therefore a real move, and
     // it costs half the scrap, a fallback and the sector - which is a price, not an exploit.
-    recoverDowned('as the squad is dragged off');
+    recoverDowned('as the squad is dragged off', 'WIPE');
     // Nobody left to regroup is the one ending a fallback cannot buy back.
     if (!playerRoster.length) { endRun(); return; }
     if (regroupsLeft() > 0) renderSquadBroken();
@@ -12388,7 +12399,11 @@ function disarmWithdraw() { armedExit = null; }
 // R02: the body of a withdrawal, lifted out so the CLOCK and the BUTTON leave a fight the same
 // way. Nothing here changed - only its address - because a second exit written beside this one
 // would be a second set of rules about pursuit, momentum and who gets picked up off the floor.
-function forceBreakContact() {
+// T06: `why` is a CENSUS argument and nothing else - the exit behaves identically either way.
+// R02b read the clock as converting deaths into setbacks and said the pairing was not isolated;
+// the bodies this exit picks up off the floor are the channel that would do the converting, and
+// until now nothing could tell the ones a clock saved from the ones a player chose to save.
+function forceBreakContact(why) {
     const cost = withdrawCost();
     // Whoever is still standing follows. They keep the wounds the squad already put on them.
     const chasers = activeEntities.filter(e => !e.isPlayer && e.hp > 0)
@@ -12404,7 +12419,13 @@ function forceBreakContact() {
     if (pursuit) log(`> ${pursuit.units.length} of them come after you.`, 'log-dmg');
     playSFX('click'); triggerShake();
     // Running is still the squad leaving together. Whoever was on the floor goes with them.
-    recoverDowned('as the squad breaks contact');
+    const kept = recoverDowned('as the squad breaks contact', why === 'CLOCK' ? 'CLOCK' : 'WITHDRAW');
+    if (runStats) {
+        const bag = runStats.brokeKept = runStats.brokeKept || { CLOCK: { exits: 0, bodies: 0 },
+                                                                 WITHDRAW: { exits: 0, bodies: 0 } };
+        const row = bag[why === 'CLOCK' ? 'CLOCK' : 'WITHDRAW'];
+        row.exits++; row.bodies += kept.length;
+    }
     combatActive = false; stopAmbience();
     collectLoot(0, true);
 }
@@ -12489,7 +12510,7 @@ function retreat() {
 // squad is put in front of the same node rather than back at the fork before it.
 // A break that works is the squad walking away, so it gets whoever was down out too.
 function fallBackToNode() {
-    recoverDowned('as the squad falls back');
+    recoverDowned('as the squad falls back', 'FALLBACK');
     closeRanks();
     clearedNodeIds = clearedNodeIds.filter(id => id !== currentNodeId);
     retreatNode = currentNodeId;
@@ -14562,7 +14583,7 @@ function checkWinState() {
         });
         if (tuneUpBattles > 0) tuneUpBattles--;
         // Holding the field is what buys the time to get to whoever is still on the floor.
-        recoverDowned('once the field is held');
+        recoverDowned('once the field is held', 'WON');
         // FIELD SURGERY: no medic in the line, so the line patches itself between fights. It
         // runs after the recovery above, which is what puts a downed operator back on their feet
         // in the first place - a squad with no medic still gets them up, just not mid-fight.

@@ -2457,6 +2457,66 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── T06: THE CLOCK'S DOOR IS THE WRONG DOOR, AND THE OTHER ONE CANNOT BE READ ────────
+// R02b measured the clock converting deaths into setbacks - wipes a run up 0.46, operators lost
+// for good down 0.41 - and wrote down what it had not done: "THAT PAIRING IS THE READING AND IT
+// IS NOT ISOLATED ... nothing here withheld the rescue channel to prove it." That was the last
+// un-isolated chain in this record, and T05 had just shown one such chain to be arithmetic
+// coincidence. Asked as a CENSUS rather than as an arm, because the claim is about WHERE the
+// saved bodies are and a census answers that for the price of one run.
+//
+// THE DOOR. forceBreakContact ends with recoverDowned, so anybody on the floor when the clock
+// runs out walks away with the squad. That is the only way a clock can keep a body. It is now
+// booked by which of the two exits opened it, and every other door a body comes off the floor
+// through is booked beside it. 150 expeditions:
+//
+//   door                                       bodies   exits   an exit   a run   share
+//   the harness's own fight-end stand-in         1649     729      2.26    10.99    82%
+//   a withdraw the player chose                   334     267      1.25     2.23    17%
+//   the engine's own win block                     16      16      1.00     0.11     1%
+//   the harness's stand-in, won fights             11      11      1.00     0.07     1%
+//   A CLOCK ENDING THE FIGHT                        0     175         -     0.00     0%
+//
+// ACROSS FOUR RUNS THE CLOCK HAS PICKED UP TWO BODIES IN 365 ENDINGS: 0 of 24, 0 of 26, 2 of
+// 140, 0 of 175. R02b's pairing needs 0.41 operators a run through this door. It delivers about
+// 0.006. Seventy times short, and stable.
+//
+// AND THE REASON IS STRUCTURAL RATHER THAN A TUNING ACCIDENT. A withdraw is CHOSEN, and the
+// policy chooses it when the squad is losing - which is exactly when somebody is on the floor.
+// It collects 0.53 bodies an exit. A clock fires on a turn count and asks nothing about how the
+// fight is going, so it catches the average moment, and on the average moment the floor is
+// empty. Same code path, same recoverDowned, opposite selection. The exit R02 deliberately
+// SHARED with withdraw - "one exit, not two", which suite 181 pins - is the reason the channel
+// looked available, and sharing the code never shared the situation.
+//
+// THE OTHER DOOR CANNOT BE READ AT THIS SAMPLE SIZE, and saying so is the whole discipline. A
+// clock could keep a body without picking one up, by ending the fight before anybody falls. The
+// row for that is deaths on the ROAD that happened in a clocked fight, against the clock being
+// dealt to about 19% of road fights - and `pressedFor` deals it off a hash of node and sector
+// with no read of difficulty or faction, so there is no selection to correct for. Three
+// identical 150-expedition careers read:
+//
+//   13 of 106  (12.3%)      7 of 129  (5.4%)      3 of 114  (2.6%)
+//
+// Thirteen, seven and three. A factor of five apart on the same build with the same policy,
+// which is K06's floor arriving on a count nobody had looked at before. Every one of them is
+// below the 19% exposure and I am not entitled to that direction: the spread is the finding.
+// Reading the lowest of three and calling it a mechanism is precisely what this file has caught
+// itself doing four times.
+//
+// SO R02b'S COST STANDS AND ITS READING IS HALF WITHDRAWN. S04 settled the body claim at
+// p = 0.0006 and nothing here touches it - the clock really does keep 0.41 operators a run. What
+// is refuted is the door: it is not the rescue channel, because that channel carries nothing.
+// One candidate eliminated, the other unresolved, and the +0.41 still unexplained - which is a
+// better position than "suggestive of the same bodies" and an honest one.
+//
+// AND AN INSTRUMENT FINDING NOBODY HAD SEEN, which is what a census is for: 82% of every
+// recovery in a simulated career is THE HARNESS STANDING IN FOR THE ENGINE. The sim's fight loop
+// never reaches checkWinState's victory block, so it calls recoverDowned itself - documented at
+// its own site since it was written, and invisible in any report until this table. The engine's
+// own win door reads 1% here for the same reason. Nothing is wrong with it; it is labelled now,
+// because an unlabelled majority reads as a fifth door the game has.
+//
 // ── T05: PAY A FLED BODY ITS 15 - THE CHAIN IS A COINCIDENCE OF SCALE ────────────────
 // R03 shipped a morale break, measured it costing about half an operator a run, and explained
 // the cost by arithmetic through momentum: 4,254 fled bodies a career at 15 apiece is ~63,800
@@ -3174,6 +3234,12 @@ const ROOT = path.join(__dirname, '..');
 // squad goes to the floor more often and comes back off it more often. THAT PAIRING IS THE
 // READING AND IT IS NOT ISOLATED - the two numbers are close in size and opposite in sign, which
 // is suggestive of the same bodies, and nothing here withheld the rescue channel to prove it.
+//   ^^ READ: HALF ANSWERED by T06, and the half it answers is NO. The rescue channel is now
+//   censused: a clock ending a fight has picked up 2 bodies in 365 endings across four runs,
+//   about 0.006 a run against the 0.41 this pairing needs. It shares withdraw's exit and not
+//   withdraw's selection - a withdraw is chosen when somebody is down, a clock fires on a turn
+//   count and catches the floor empty. The other half, deaths avoided by ending a fight before
+//   anybody falls, reads 12.3% / 5.4% / 2.6% on three identical careers and cannot be resolved.
 //
 // ── R02: THE CLOCK COSTS WINS, NOT BODIES - AND MY PREDICTION HAD THE SIGN BACKWARDS ──
 // The build commit wrote its prediction down before the careers ran: "I expect the win column to
@@ -8915,7 +8981,20 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
       activeIndex = (activeIndex + 1) % turnQueue.length;
     }
     // Whoever the fight ended without is on the record.
-    (runStats.fallen || []).slice(stat.lost.length).forEach(f => stat.lost.push(f.name));
+    // T06: the same slice, split by whether the fight they fell in was on one of R02's clocks.
+    // R02b read the clock as converting deaths into setbacks; if that is where the saved bodies
+    // are, the clock's ~20% of fights should carry materially less than 20% of the deaths.
+    // AND THE DENOMINATOR HAS TO EXCLUDE COMMANDERS OR IT SAYS NOTHING. R02's clock is never
+    // dealt to a commander fight, and tier ten takes 89% of every wipe - so "clocked fights carry
+    // 3% of deaths against 20% of fights" is mostly the clock being absent from the fights that
+    // kill people. Split four ways and read the ROAD half; the boss half is the confound, printed
+    // so it can be seen rather than assumed away.
+    (runStats.fallen || []).slice(stat.lost.length).forEach(f => {
+      const k = (f.boss ? 'boss' : 'road') + (f.clocked ? 'Clocked' : 'Plain');
+      stat.deadBy = stat.deadBy || { roadClocked: 0, roadPlain: 0, bossClocked: 0, bossPlain: 0 };
+      stat.deadBy[k]++;
+      stat.lost.push(f.name);
+    });
     activeEntities.forEach(e => { delete e.__counted; });
     stat.rounds += rounds;
     // O16: a fall-back is not a withdrawal. The node is un-cleared and retreatNode sends the
@@ -8945,7 +9024,12 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
     // measurement D09 turns on: a body dragged clear on 3 of 3 fell into a fight that was
     // already over, and the clock it started never began to bite.
     bleedingOut().forEach(e => stat.clockLeft.push(e.downTurns || 0));
-    const up = recoverDowned(won ? 'once the field is held' : 'as the squad is dragged off');
+    // T06: labelled SIM_END rather than left unlabelled, because this stand-in is 82% of every
+    // recovery in a simulated career and an unlabelled majority reads as a fifth door the game
+    // has. It is this loop standing in for the engine's own ending, which the comment above
+    // explains; the engine's WON door reads 1% here for the same reason.
+    const up = recoverDowned(won ? 'once the field is held' : 'as the squad is dragged off',
+                             won ? 'SIM_END_WON' : 'SIM_END_WIPE');
     stat.recovered += up.length;
     tallyScars();
     combatActive = false;
@@ -9712,6 +9796,8 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
   }
   stat.qkDrawn = runStats.qkDrawn || {};   // and what the pool actually handed out
   stat.ut = runStats.ut || {};   // L03: the damage the type ledger cannot see
+  stat.brokeKept = runStats.brokeKept || null;   // T06: bodies a break picked up, by its cause
+  stat.offFloor = runStats.offFloor || null;    // T06: every door a body comes off the floor through
   // K05: what came out of the materials bag and by which door, plus what was still sitting in
   // it when the run ended. The leftover is read off `materials` rather than derived, because
   // income arrives at twenty different sites and a second copy of that sum would be wrong the
@@ -10061,6 +10147,54 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
   line('  spent at least one of their own turns down',
     `${((clocks.filter(c => c < bleed).length / cTot) * 100).toFixed(0)}%`);
   line('lost for good', `${lost} (${(lost / n).toFixed(2)} per run)`);
+  // ── T06: R02b's "same bodies", asked of the bodies ──────────────────────────────────
+  // R02b measured the clock costing 0.46 more wipes a run and saving 0.41 operators, and called
+  // the pairing "suggestive of the same bodies" while saying nothing had isolated it. These rows
+  // are that isolation, and they are a census rather than an arm: WHERE the saved bodies are,
+  // not what the outcome was.
+  const dead = results.reduce((a, r) => {
+    const b = r.deadBy; if (!b) return a;
+    Object.keys(a).forEach(k => { a[k] += b[k] || 0; }); return a;
+  }, { roadClocked: 0, roadPlain: 0, bossClocked: 0, bossPlain: 0 });
+  const road = dead.roadClocked + dead.roadPlain;
+  if (road) line('  of the ones that fell on the ROAD, in a clocked fight',
+    `${dead.roadClocked} of ${road} (${(100 * dead.roadClocked / road).toFixed(1)}%)`
+    + ` — against the clock being dealt to about 20% of road fights`);
+  if (dead.bossClocked + dead.bossPlain)
+    line('  and at a commander, where no clock is ever dealt',
+      `${dead.bossPlain + dead.bossClocked}`
+      + (dead.bossClocked ? ` (${dead.bossClocked} of them CLOCKED, which should be zero)` : ''));
+  const keep = results.reduce((a, r) => {
+    const b = r.brokeKept; if (!b) return a;
+    a.CLOCK.exits += b.CLOCK.exits; a.CLOCK.bodies += b.CLOCK.bodies;
+    a.WITHDRAW.exits += b.WITHDRAW.exits; a.WITHDRAW.bodies += b.WITHDRAW.bodies;
+    return a;
+  }, { CLOCK: { exits: 0, bodies: 0 }, WITHDRAW: { exits: 0, bodies: 0 } });
+  if (keep.CLOCK.exits || keep.WITHDRAW.exits) {
+    const row = (lbl, k) => line(lbl, `${k.bodies} off the floor in ${k.exits} exits `
+      + `(${k.exits ? (k.bodies / k.exits).toFixed(2) : '0'} an exit, ${(k.bodies / n).toFixed(2)} a run)`);
+    row('  picked up by a clock ending the fight', keep.CLOCK);
+    row('  picked up by a withdraw the player chose', keep.WITHDRAW);
+  }
+  // AND EVERY OTHER DOOR, because the two above are a seventh of the answer. A body comes off
+  // the floor when the fight is won, when the squad is dragged off it, when it falls back, or
+  // when it breaks contact - and R02b's pairing has to be paid through one of them.
+  const doors = results.reduce((a, r) => {
+    Object.entries(r.offFloor || {}).forEach(([k, v]) => {
+      a[k] = a[k] || { exits: 0, bodies: 0 };
+      a[k].exits += v.exits; a[k].bodies += v.bodies;
+    });
+    return a;
+  }, {});
+  const offFloorAll = Object.values(doors).reduce((a, v) => a + v.bodies, 0);
+  if (offFloorAll) {
+    line('  every door a body comes off the floor through',
+      `${offFloorAll} bodies, ${(offFloorAll / n).toFixed(2)} a run`);
+    Object.entries(doors).sort((a, b) => b[1].bodies - a[1].bodies).forEach(([k, v]) =>
+      line(`    ${k.toLowerCase()}`, `${v.bodies} in ${v.exits} exits `
+        + `(${(v.bodies / v.exits).toFixed(2)} an exit, ${(v.bodies / n).toFixed(2)} a run, `
+        + `${(100 * v.bodies / offFloorAll).toFixed(0)}% of them)`));
+  }
   line('  median / worst run', `${lostPer[Math.floor(n / 2)]} / ${lostPer[n - 1]}`);
   line('runs that lost nobody', `${results.filter(r => !r.lost.length).length} of ${n}`);
   line('runs that ran out of squad', results.filter(r => r.endedBy === 'wiped-out').length);
