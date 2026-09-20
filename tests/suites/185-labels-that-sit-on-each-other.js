@@ -1,37 +1,24 @@
-// T01: the battlefield has text sitting on text, and nothing could see it.
+// T01 found the battlefield putting text on text; T02 fixed it and this holds the line.
 //
-// Found by driving the real game and photographing it - the first time in this project's history
-// that anyone looked at a screen rather than asserting about one. 155 measures whether a card is
-// CLIPPED and C11 whether the field scrolls SIDEWAYS; both pass. Neither asks whether two labels
-// occupy the same pixels, so four collisions have been shipping under green batteries.
+// WHAT IT WAS. Sprites overlap on purpose - .entity carries a negative margin of --overlap a
+// side - so a 110px card at 1280 wide stands 72px from its neighbour. Every readout given the
+// card's full width therefore reached 38px into the next one:
 //
-// Measured at 1280x800 with a hurt, badged squad and a crowded enemy row:
+//   FRONT over MID 38x8   MID over BACK 38x5   MID over a forecast 38x4   RANGING SHOT over FRENZY 38x12
 //
-//   FRONT        over MID            38 x  8 px
-//   MID          over BACK           38 x  5
-//   MID          over a threat number 38 x  4
-//   RANGING SHOT over FRENZY         38 x 12
+// .status-badge had solved this for itself with `max-width: calc(100% - 2 * var(--overlap))`
+// and the five other readouts on the same slot never got the rule. They have it now.
 //
-// The rank labels leaning on each other is arguably the staggered line doing its job. The other
-// two are not: a rank label over a damage forecast, and one enemy's signature over another's, are
-// both a number or a word the player came to read with something else on top of it.
+// AND BORDER-BOX WAS THE HALF THAT MATTERED. The first cut of the rule took the overlap from
+// 38px to 4-6px and stopped - this sheet sets box-sizing per element and never globally, so the
+// tags defaulted to content-box and their 3px of padding a side plus a 1px border sat OUTSIDE
+// max-width. Eight pixels of box the constraint could not see. With border-box the count is
+// zero at both widths.
 //
-// RATCHETED, NOT FIXED. The fix is a layout job on the staggered ranks and the signature row, and
-// it wants somebody able to iterate against the rendered page rather than a blind CSS edit. This
-// holds the line meanwhile: the count may fall and may not rise, which is L06's shape and S07's.
-//
-// AND THE BOUND IS DELIBERATELY LOOSE, because the count is NOISY and a tight one would be an
-// assertion calibrated inside its own noise - K03's whole subject, and a poor thing to ship in
-// the suite that exists to catch sloppiness. Which labels collide depends on the drafted roster
-// and the rolled enemy row, so six runs of this staging read:
-//
-//   1280 wide   2, 3, 1, 1, 1, 1        390 wide   1, 1, 1, 1, 3, 1
-//
-// with a differently-staged fight (further into its clock, other signatures up) reaching 4. The
-// first cut of this file pinned 4 and would have gone red on somebody eventually. Six is two
-// clear of everything measured. ITS JOB IS A REGRESSION IN KIND - a new class of collision, a
-// screen that starts stacking labels - and not a one-count drift, which it cannot see anyway.
-const CEILING = { wide: 6, phone: 6 };
+// HELD AT ONE, not at zero. Which labels are on screen depends on the drafted roster and the
+// rolled enemy row, and a bound with no slack is the K03 defect this file exists to catch. Eight
+// measurements after the fix read zero; one is a single unit of slack over everything seen.
+const CEILING = { wide: 1, phone: 1 };
 module.exports = {
   name: 'Labels that sit on each other',
   run: async ({ page, ok, base, engineUp, resized }) => {

@@ -2457,6 +2457,44 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── T02: THE LABELS FIT NOW, AND THE SECOND HALF OF THE FIX WAS THE HALF THAT MATTERED ──
+// T01 closed by saying the layout fix wanted somebody able to iterate against the rendered page
+// rather than make a blind CSS edit. T01 is what built that, so the excuse expired with it.
+//
+// THE CAUSE IS ARITHMETIC. Sprites overlap on purpose - .entity carries a negative margin of
+// --overlap a side - so a 110px card at 1280 wide stands 72px from its neighbour. A label given
+// the card's full width reaches 38px into the next one, which is exactly the overlap T01
+// measured on every pair. And .status-badge ALREADY CARRIED THE FIX: `max-width: calc(100% - 2 *
+// var(--overlap))`. One of the six readouts on that slot had the rule and five did not.
+//
+// THE FIRST CUT WAS NOT ENOUGH AND THE NUMBERS SAID SO. Giving the other five the same max-width
+// took the overlap from 38px to 4-6px and stopped there:
+//
+//   before   FRONT over MID 38x8, MID over BACK 38x5, RANGING SHOT over FRENZY 38x12
+//   after 1  a forecast over MID 4x10, FRENZY over OVERWATCH 6x9, OVERWATCH over PACK HUNT 6x10
+//   after 2  none, at either width, four runs each
+//
+// The residual was the box model. This sheet sets box-sizing per element and never globally, so
+// the tags default to content-box and their 3px of padding a side plus a 1px border sit OUTSIDE
+// max-width - eight pixels the constraint could not see. border-box closed it.
+//
+// I WOULD HAVE SHIPPED THE FIRST CUT IF I HAD READ THE COUNTER INSTEAD OF RUNNING IT. My own
+// probe returned zero collisions on the staging I happened to have; the suite, on its own roster
+// draw, kept finding one or two. The roster is the variable, and one sample of it is not a
+// measurement - which is the same lesson the win column taught this file eleven items ago in a
+// medium nobody had thought to apply it to.
+//
+// WHAT WAS CHECKED BESIDE THE COUNTER, because a narrowed box that pushes ink outside itself
+// satisfies a counter and fools a player: 155 (clipping) and the 11- band both stay green, and
+// the field was photographed again at both widths. BACK / MID / FRONT now sit over their own
+// operators, the damage forecasts under their own chips, and RANGING SHOT clear of CALL IT IN.
+// HP TEXT WAS DELIBERATELY LEFT OUT of the rule for that reason: digits that must hold one line
+// would have overflowed a narrower box and gone on overlapping invisibly.
+//
+// Suite 185's ratchet comes down from 6 to 1 - eight post-fix measurements read zero, and one is
+// a single unit of slack rather than a bound with none, which is K03's rule about the file that
+// exists to enforce K03's rule.
+//
 // ── T01: SOMEBODY LOOKED AT THE GAME, WHICH HAD NOT HAPPENED BEFORE ───────────────────
 // Six items of measurement and hygiene, 4970 assertions and hundreds of simulated careers, and
 // nobody had SEEN a screen. R02's clock banner shipped six items ago and had never been looked

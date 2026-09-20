@@ -572,6 +572,23 @@ button.combo-ready { border-color: #ff44ff; color: #ff9cff; box-shadow: 0 0 10px
    unit currently covering the line behind it are both called out before the turn is spent. */
 .rank-chip { font-size: 0.5rem; letter-spacing: 1px; font-weight: bold; line-height: 11px;
   text-align: center; color: #0b0b0b; border-radius: 2px; margin-bottom: 2px; opacity: 0.9; }
+/* T02: THE SLOT IS NARROWER THAN THE CARD, AND EVERY READOUT ON IT HAS TO KNOW THAT.
+   Sprites overlap on purpose - .entity carries a negative margin of --overlap a side - so a
+   110px card at 1280 wide stands 72px from its neighbour. A label given the card's full width
+   therefore reaches 38px into the next one, and the rank chips were doing exactly that: FRONT
+   over MID, MID over BACK, MID over a damage forecast, measured off the rendered page.
+   .status-badge already solved this for itself and the five other readouts on the same slot
+   never got the rule. They do now, the same way, from one declaration.
+   HP TEXT IS NOT IN THIS LIST. It is digits that must stay on one line, narrowing its box would
+   push the ink outside it, and a box that stops overlapping while the ink still does would fool
+   the counter in suite 185 rather than fix the screen.
+   BORDER-BOX IS LOAD-BEARING, not tidiness. This sheet sets box-sizing per element and never
+   globally, so these tags default to content-box and their 3px of padding a side plus a 1px
+   border sit OUTSIDE max-width. The first cut of this rule left them there and took the overlap
+   from 38px down to 4-6px rather than to nothing - the 8px of box the constraint could not see. */
+.rank-chip, .threat-tag, .soak-tag, .down-tag, .sig-tag {
+  box-sizing: border-box;
+  max-width: calc(100% - 2 * var(--overlap)); margin-left: auto; margin-right: auto; }
 .rank-1 { background: #c98b3a; }
 .rank-2 { background: #8a9a5b; }
 .rank-3 { background: #6a8fb5; }
