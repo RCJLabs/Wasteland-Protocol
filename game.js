@@ -5330,9 +5330,31 @@ function spawnFCT(id, text, cls) {
     if (!h.width && !h.height) return;
     const el = document.createElement('div'); el.className = `fct ${cls}`; el.innerText = text;
     // Where it would have sat inside the entity: half its width across, a fifth of the way down.
-    el.style.left = `${Math.round(h.left - f.left + h.width / 2)}px`;
+    const want = Math.round(h.left - f.left + h.width / 2);
+    el.style.left = `${want}px`;
     el.style.top = `${Math.round(h.top - f.top + h.height * 0.2)}px`;
-    layer.appendChild(el); setTimeout(() => el.remove(), 1000);
+    layer.appendChild(el);
+    // T03: and then pulled back onto the screen. .fct is nowrap and the layer clips, so a
+    // readout centred on a body near the edge was cut off mid-word - "OVER THE TOP" is 169px at
+    // 390 wide and lost 150 of them, and 56 of the 58 strings this function can print lost some
+    // of themselves somewhere on the line. 18% of placements on a phone against 0.2% at 1280,
+    // which is why it lasted: on a desktop it is three strings, and nobody had looked at a phone.
+    //
+    // The bound is the part of the layer the PLAYER can see, not the layer: fxLayer lives inside
+    // .battlefield and recentreField can translate that past the viewport, so clamping to the
+    // layer alone would hold a readout inside a box that is itself off screen. And the width is
+    // only knowable once the element is in the document, because .fct sizes to its own text.
+    //
+    // Rounded INWARD: rounding to the nearest pixel AFTER clamping puts it back out by one,
+    // which no player would ever see and which is exactly the residue that makes a bound in a
+    // suite read as flaky. A readout wider than the glass cannot be held inside it at all, so
+    // that one is centred - losing both ends evenly rather than all of one.
+    const half = el.getBoundingClientRect().width / 2;
+    const lo = Math.max(0, -f.left) + half;
+    const hi = Math.min(f.width, window.innerWidth - f.left) - half;
+    el.style.left = `${lo > hi ? Math.round((lo + hi) / 2)
+        : Math.min(Math.max(want, Math.ceil(lo)), Math.floor(hi))}px`;
+    setTimeout(() => el.remove(), 1000);
 }
 
 function addMomentum(amt) {

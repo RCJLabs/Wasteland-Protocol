@@ -2457,6 +2457,66 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── T03: EVERY FLOATING READOUT IN THE GAME WAS DRAWN BESIDE THE BODY IT REPORTED ─────
+// T01 looked at five screens. This walked all twenty, by CLICKING rather than teleporting -
+// title, citadel, chronicle, settings, manual, difficulty, contracts, muster, map, outpost and
+// its three tabs and its bag, then the road itself: fights played turn by turn off the command
+// deck, events, camps, the Armory, a recruit. Photographed at 1280x800 and 390x844, with a
+// text-on-text counter, a clipping check, a tap-target check and page-error capture on each.
+//
+// NINETEEN OF TWENTY SCREENS CAME BACK CLEAN. That is the first half of the answer and it is a
+// real one: N13, F13, F14, G05, G08, C11, Q01, Q02 and T02 have left the static layout in good
+// order at both widths. The find was on the twentieth, in a screenshot: a floating readout cut
+// off mid-word at the right edge of a phone, reading "!BREAKIN".
+//
+// TWO DEFECTS, ONE CAUSE, AND THE CAUSE IS THREE WORDS OF CSS. .fct carried
+// `transform: translateX(-50%)` to centre itself on the body it belongs to, and
+// `animation: floatUp`, whose keyframes set `transform` themselves. An animation's transform
+// REPLACES the element's from frame zero, so the centring was dead the instant the readout
+// appeared - every floating number in this game was drawn with its LEFT EDGE on the body's
+// centre, half a string to the right of whoever it was reporting on. Measured across the 58
+// distinct strings spawnFCT can print, on five field draws each:
+//
+//                  readout sat      landed on the WRONG body     ran off the screen
+//    1280 wide       44px right       44.0%  ->  0.0%             0.2%  ->  0.0%
+//     390 phone      35px right       77.0%  ->  2.7%            17.8%  ->  0.0%
+//     320 phone         -                -                       18.4% ->  0.0%
+//
+// So on a phone three readouts in four were painted over somebody else's card and one in six ran
+// off the glass. On a desktop it was four in ten and almost none off - the same overlap, three
+// times the room - which is why it survived five hundred suites and fourteen phases: the harness
+// runs at 400 wide but nothing in it ever asked where a damage number LANDED.
+//
+// THE FIX IS BOTH HALVES, and the second half is not optional. floatUp now carries
+// translateX(-50%) through both keyframes, which restores the centring; spawnFCT then clamps the
+// result to the part of the fx-layer the player can actually see, because "OVER THE TOP" is
+// 169px at 390 and a 37px body near the edge cannot hold it even centred. The clamp is against
+// the visible layer rather than the layer, because fxLayer lives inside .battlefield and
+// recentreField translates that past the viewport - clamping to the layer would hold a readout
+// inside a box that is itself off screen. The residual 2.7% is the clamp working as intended: a
+// readout pulled back on screen can sit over a neighbour, and legible beats perfectly placed.
+//
+// WHAT NEARLY WENT OUT WRONG, twice. The first counter called the Citadel and the manual broken
+// because a scrolling list passes UNDER an opaque footer button and pure geometry cannot tell
+// that from text on text - nine false collisions on the settings panel alone, which is suite
+// 185's counter being sound only because everything on .battlefield is transparent. And the
+// first cut of suite 186 printed "at 1280 wide" while measuring at the runner's own 400, which
+// is F03's rule arriving in a new place: a report is one edit from quoting a number the run did
+// not use. Both caught before pitching, neither by luck - by asking the page what it was
+// actually painting rather than trusting a rectangle.
+//
+// WHAT THE WALK IS NOT. It reached fourteen of twenty screens by clicking and stopped where the
+// road stopped: the relic offer, perk offer, cache, run-over and victory screens were not
+// reached in the hops that were walked, and are unphotographed. That is a gap in the LOOKING,
+// not a claim about those screens.
+//
+// AND ONE THING FOR THE OWNER, filed as taste rather than as a defect: .map-graph is
+// `max-width: 340px`, so the route map is the same 340px ribbon on a 1280px desktop as on a
+// 390px phone, with the three columns at 18/50/82% of it. On a phone that is exactly right. On a
+// desktop the road uses a quarter of the width it is given. Nothing is clipped, nothing collides
+// and nothing is unreadable - it is a question about how the map should use a big screen, which
+// is the owner's call and not a number I can settle.
+//
 // ── T02: THE LABELS FIT NOW, AND THE SECOND HALF OF THE FIX WAS THE HALF THAT MATTERED ──
 // T01 closed by saying the layout fix wanted somebody able to iterate against the rendered page
 // rather than make a blind CSS edit. T01 is what built that, so the excuse expired with it.
