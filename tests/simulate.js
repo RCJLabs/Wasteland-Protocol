@@ -2457,6 +2457,55 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── S06: THE ELEVEN POINTS WERE R02'S CLOCK - AND MY FRAMING WAS WRONG BEFORE THE DATA WAS ──
+// S05 filed an open claim: tier ten's share of wipes reads 77% where #230 read 88.5 to 90.3% at
+// the same wall setting. Answered without running anything, off the arms S04 already had:
+//
+//   arm                        n   t10 share
+//   old shipped 1.08/1.10     12       77.0%
+//   new shipped 1.06/1.075     6       78.0%
+//   --capshape off             6       77.2%    a null, as R01 was everywhere else
+//   --morale   off             6       71.5%    morale ADDS 5.5 points
+//   --pressed  off             6       90.1%    <- #230's number, exactly
+//
+// CHRONOLOGY CONFIRMS IT. R03's morale shipped 17 Sep, #230's curve was measured on the 18th, and
+// R02's clock was built after it the same day. So #230's configuration - morale on, clock not yet
+// built - IS the --pressed off arm, and it reads 90.1% against #230's 88.5 to 90.3%.
+//
+// I WAS ABOUT TO WRITE "AND NOTHING NOTICED". IT WOULD HAVE BEEN FALSE FOR THE SECOND TIME IN
+// THIS FILE - #230 made exactly that claim about the wall and had to withdraw it when M03 turned
+// out to have measured it eleven entries down. R02 DID notice: its own table carries `wipes at
+// tier ten 631 / 673 / 650` against a control of `835 / 802 / 853`, and it uses that fall as the
+// row that PROVES the clock is not making fights harder. The movement was measured, by the item
+// that caused it, in this file.
+//
+// SO THE REAL DEFECT IS NARROWER AND IT IS A CONTRADICTION, not a blind spot. Two entries written
+// the same day sit in this file disagreeing: #230 says "tier ten's share of wipes reads 88.5 /
+// 88.7 / 89.5 / 90.3% across the whole sweep - tier ten stays the gate", and R02, shipped hours
+// later, records tier ten's wipes falling by 179. #230's figure was true when measured and was
+// stale by the end of the day, and nothing reconciled them. S05 nearly re-published it.
+//
+// WHAT R02'S OWN NUMBERS IMPLIED AND NOBODY STATED, which is the one reading this item adds.
+// R02 read the tier-ten fall as evidence of setbacks replacing deaths. Split the same census the
+// other way - tier ten against everything under it - and the road is where the movement went:
+//
+//                       clock ON (n=12)   clock OFF (n=6)    t
+//   road wipes t2-t9             224.0              94.3   -20.75    the clock is 2.4x the road
+//   tier ten wipes               752.2             860.3    +6.79
+//
+// The clock MORE THAN DOUBLES the road's death toll, and tier ten's falls because fewer squads
+// live to reach it - 75.7 nodes cleared against 80.0, 24.5k score against 28.0k. "Tier ten is the
+// gate" is a structural claim F01, H13 and I06 all rest on, and it is 77% now rather than 90%.
+// Still the gate; less exclusively so.
+//
+// NOTHING IS RETUNED. PRESSED.share (20%) and PRESSED.at (25 turns) are both turnable and this is
+// the third price on the same card - 0.41 bodies kept, a win column this file cannot resolve, and
+// now a road that kills 2.4x more. Whether that trade is the wanted one is a design call and it
+// is the owner's, like the wall's target was.
+//
+// S05's OWN CLAIM ABOUT THE WALL SURVIVES THIS INTACT: easing hp 1.08 -> 1.06 moved the share
+// 77.0 to 78.0 (t +1.02). The wall dial does not relocate where runs die. The clock does.
+//
 // ── S05: THE WALL TURNED, AT THE OWNER'S TARGET - 13.7% TO 18.4% ──────────────────────
 // #230 made the dial turnable, measured its curve and TURNED NOTHING, because the target behind
 // it is the owner's to set and this file has said so since H13. The owner set it: about 19%. One
@@ -2502,12 +2551,8 @@ const ROOT = path.join(__dirname, '..');
 // note over the constants quoted #230's figure as current, and the only reason it is not shipped
 // that way is that the row was measured rather than copied. That is E09's defect with a fresher
 // date on it, and it is filed here rather than chased, because chasing it is its own item.
-//   ^^ READ: STILL OPEN, and deliberately not this item's. An eleven-point move in WHERE runs
-//   die is a real question; turning a dial the owner named is a different one, and folding the
-//   two together is how a tuning commit ends up carrying an unmeasured claim. Whoever takes it
-//   should first check that the row still MEANS what it meant in #230 - my share is t10 over the
-//   sum of the printed `wipes by tier` row, and #230 never wrote its denominator down - before
-//   concluding the game drifted rather than the reading.
+//   ^^ ANSWERED by S06, on data already in hand: the eleven points are R02's clock, and the
+//   reading is sound. Nothing drifted quietly - R02 measured the same movement itself.
 //
 // ── S04: THE THREE OPEN CLAIMS, RE-READ - ONE SETTLES, ONE INVERTS, AND S03 LOSES ALL THREE ──
 // S03 measured that a difficulty lever resolves about three times cheaper on the wipe count than
@@ -2867,6 +2912,11 @@ const ROOT = path.join(__dirname, '..');
 // redesign. Tier ten's share of wipes reads 88.5 / 88.7 / 89.5 / 90.3% across the whole sweep.
 // Easing the curve lowers the wall without relocating where runs die; tier ten stays the gate.
 // That is the lever I06 picked and it still behaves the way I06 said it did.
+//   ^^ THOSE FOUR PERCENTAGES WENT STALE THE SAME DAY THEY WERE MEASURED. R02's clock shipped
+//   hours after this arm ran and moved the share to 77%, which S06 traced back to this row. The
+//   CONCLUSION survives and the numbers do not: S05 re-measured the wall dial at 77.0 -> 78.0
+//   (t +1.02), so easing the curve still does not relocate where runs die. Read the sentence,
+//   not the four figures.
 //
 // WHERE THE TARGET LIVES: interpolating the last two points, I06's 30% lands at about
 // hp 1.03 / dmg 1.0375. THAT IS NOT A RECOMMENDATION TO SET IT THERE. The target is the owner's
@@ -4391,7 +4441,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   12 answered by a later item     4 still open     6 not an open claim after reading
+//   13 answered by a later item     3 still open     6 not an open claim after reading
 //
 // and 0 carrying two verdicts that disagree.
 //
