@@ -316,7 +316,7 @@ module.exports = {
 
     // ── M01: the five situational ones ──────────────────────────────────────────────
     // The point of these is not that they are bad. It is that they are bad IN PLACES, so that
-    // paying SCAR_TREAT_COST to be rid of one is a read of the road ahead rather than a question
+    // paying SCAR_TREAT_SKULLS to be rid of one is a read of the road ahead rather than a question
     // about your purse. So each pair of rows below is "it bites here" and "it costs nothing
     // there" - the second row is the one that would go quiet if a scar were flattened into
     // another -3 DMG.

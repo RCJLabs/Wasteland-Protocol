@@ -2457,6 +2457,72 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── T04: THE LIST NOBODY HAD READ, AND SEVEN CANDIDATES THE FILE KILLED ITSELF ────────
+// G11 built the coverage line four hundred items ago and named two examples off it. Nobody has
+// ever read the list. It stood at 143 of 931 exports named by no suite - 129 at the H-audit,
+// 148 of 822 when G11 measured it, so roughly flat in count while the surface grew, which is
+// already gentler than G11's own fear that it "grows faster than suites close it".
+//
+// SORTED BY WHAT THE ENGINE ITSELF DOES WITH THEM, five names are used nowhere in game.js
+// outside their own definition: exported, untested, and uncalled. That is the L02/N05 shape -
+// a helper with no reader is either dead weight or a missing call - so all five were walked.
+//
+// THE HEADLINE WAS A DEFECT I WROTE THE FIX FOR AND THEN HAD TO WITHDRAW. syncAllRankPerks is
+// the bulk "re-read the whole line" helper, and two things move an operator between ranks
+// mid-fight without calling it: REPOSITION, the player's own swap, and DRAG_DOWN, the hostile
+// signature that hauls the furthest body forward. HARDENED pays HP only in the front rank and
+// SWIFT pays speed only out of it, so a swap looked like a free keep of both. It measures:
+//
+//   REPOSITION, front <-> mid    17-21 maxHp carried out of the front, 4 speed carried into it
+//
+// Fixed at both sites, re-measured at 0 and 0, and then suite 160 went red on a row I had not
+// read: "and neither health bar moves when it does". Its comment is unambiguous - the rank
+// cards read the DEPLOYED rank, a health bar that jumps when two operators trade places is the
+// thing that made the first cut of M04 reach for a per-hit cut instead, and "mutation testing
+// caught that - ADDING A SYNC CALL INSIDE THE REPOSITION BRANCH survived the earlier row", so
+// the row exists to catch precisely the edit I had just made. The card text already says
+// "while DEPLOYED in the front rank". Reverted whole; the design is right and it is written
+// down at the site.
+//
+// AND THE SECOND ONE WAS DELIBERATE TOO. noteUntyped books L03's untyped bag and has no caller,
+// which reads like a census recording nothing - except the report that prints it already says
+// so out loud: "M03 typed the last unledgered path, so this bag is expected to be EMPTY", and
+// the row prints `none - every path to a bar goes through it` rather than a blank. Kept as the
+// instrument standing ready, correctly.
+//
+// THREE WERE REAL AND ARE GONE, and two of the three were carrying a justification that is not
+// true:
+//
+//   castName          formatted "Name, the Epithet" and was never called. The two screens that
+//                     name a face build the string inline and DIFFERENTLY on purpose - prose in
+//                     the codex, a chip on the event tag - so a shared formatter would have to
+//                     pick one register and be wrong on the other. K04's rule reversed: here a
+//                     third spelling was the hazard, not the cure.
+//   SCAR_TREAT_COST   a 120-scrap price, kept with the note "saves, older records and the
+//                     migration path still name it". Nothing named it: not a save, not a
+//                     migration, not a suite - one comment in 66, now corrected to the skulls
+//                     M03 moved treatment onto.
+//   FIELD_PAD         11px, described as "the budget recentreField spends". recentreField never
+//                     read it; the 11 that is real is .battlefield's own `padding: 0 11px`, in a
+//                     language that cannot see this one.
+//
+// 143 -> 140 of 931 -> 928. What is left in the never-called bucket is the two that are
+// deliberate, which is the right end state for that bucket: examined, not unexamined.
+//
+// AND THE RATCHET I CAME TO ADD IS REFUSED, by the file that owns the number. S07 bounded the
+// sleep count on the rule that a counted debt which is not bounded grows unnoticed, and the
+// obvious next move was to do the same here. 132's own header already argues the opposite and
+// records the scar: "A readout, not a gate. Failing the battery whenever a new export arrives
+// would turn the number into an obstacle to route around" - and an earlier gate on two symbols
+// staying UNCOVERED failed three batteries when a suite covered them. The sleep count and the
+// export count are not the same kind of debt: a sleep is always a cost, an export is what
+// shipping a feature looks like. Left as a readout.
+//
+// SEVEN CANDIDATES, THREE DEFECTS, and six of the seven were killed by notes already sitting at
+// the site - the mutation-tested assertion, the report's own "expected to be EMPTY", the two
+// screens that format a name differently on purpose. That is what the prose in this repo is
+// FOR, and it is the second item running where reading it before pitching changed the answer.
+//
 // ── T03: EVERY FLOATING READOUT IN THE GAME WAS DRAWN BESIDE THE BODY IT REPORTED ─────
 // T01 looked at five screens. This walked all twenty, by CLICKING rather than teleporting -
 // title, citadel, chronicle, settings, manual, difficulty, contracts, muster, map, outpost and
