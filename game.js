@@ -3263,11 +3263,28 @@ function passiveDesc(bp) { return bp ? (bp.descOf ? bp.descOf() : bp.desc) : '';
 //   1.08 / 1.10  SHIPPED   14.7% of runs won      1.04 / 1.05    25.1%
 //   1.06 / 1.075           20.9%                  1.02 / 1.025   35.8%
 //
-// I06's 30% target interpolates to about hp 1.03 / dmg 1.0375. NOTHING IS SET THERE: the target
-// is the owner's to set, and that 30% was chosen nine items ago for a game that has since had
-// bleed typed, quirks rebuilt, the mark re-homed and three mechanics added.
-let SECTOR_HP_SCALE = 1.08;      // was 1.06 (H13), 1.25 before that
-let SECTOR_DMG_SCALE = 1.10;     // was 1.08 (H13), 1.28 and 1.32 before that
+// I06's 30% target interpolates to about hp 1.03 / dmg 1.0375. NOTHING IS SET THERE, and it is
+// not what this is: that 30% was chosen nine items ago for a game that has since had bleed
+// typed, quirks rebuilt, the mark re-homed and three mechanics added.
+//
+// S05: THE OWNER SET THE TARGET AT ABOUT 19% AND THIS IS IT. One step down #230's curve, which
+// is the only step on it measured at more than three careers a point: twelve careers at the old
+// 1.08/1.10 read 20.58 wins of 150 (13.7%), and six at this setting read 28.33 (18.9%). Damage
+// moves in I06's own ratio - its increment is 1.25x the health increment, 0.06 against 0.075 -
+// so this stays one dial with a shape rather than two numbers chosen apart.
+//
+// WHAT IT DOES NOT MOVE: tier ten's share of wipes, 77.0% before and 78.0% after (t +1.02).
+// Easing the curve lowers the wall without relocating where runs die, which is what makes this
+// a tuning dial rather than a redesign, and it is the property I06 picked the lever for.
+//
+// THAT SHARE IS MEASURED HERE RATHER THAN QUOTED, and measuring it is how a stale number got
+// caught. #230 read the same row at 88.5 to 90.3% across its whole sweep and this build reads
+// 77% at the setting #230 measured - so the share has DRIFTED about eleven points since, on
+// neither of the two settings this item touched. Nothing here caused it and nothing here fixes
+// it; it is recorded because the first draft of this comment quoted #230's figure as if it were
+// current, which is E09's defect with a fresher date on it.
+let SECTOR_HP_SCALE = 1.06;      // was 1.08 (I06), 1.06 (H13), 1.25 before that
+let SECTOR_DMG_SCALE = 1.075;    // was 1.10 (I06), 1.08 (H13), 1.28 and 1.32 before that
 const XP_CURVE = 1.35;         // was 1.5 - levels kept stalling, starving the perk economy
 
 // ── Faces ───────────────────────────────────────────────────────────────────────────────
@@ -8752,8 +8769,8 @@ function traitSummary(char) {
     return (shut.length ? `${held} · closed: ${shut.join(', ')}` : held) + capLine;
 }
 // ── The till ────────────────────────────────────────────────────────────────────────
-// Income compounds x1.4 a sector through sectorRewardMult while the wall compounds x1.08 in
-// health and x1.10 in damage - but so does every price below, which is the part this note used
+// Income compounds x1.4 a sector through sectorRewardMult while the wall compounds x1.06 in
+// health and x1.075 in damage - but so does every price below, which is the part this note used
 // to get wrong. It said the purse outgrows the fight "which is what lets player power compound".
 // H14 measured that and it is not so: sectorRewardMult is on BOTH sides of the ledger, so an
 // upgrade costs the same in cleared nodes at sector 7 as at sector 1, and stat upgrades bought
@@ -9948,8 +9965,9 @@ function rollIntent(enemy) {
 // separates completely and costs about eight points; raising above it does not separate at all,
 // on the win rate or on the recruit rate. Rewards still climb so the run ends on a build wall
 // rather than an arithmetic one - that half of the old note was right - and the wall they climb
-// against is eased and measured: SECTOR_HP_SCALE is 1.08 and SECTOR_DMG_SCALE is 1.10, set in
-// H13 and re-cut in I06 once the harness that tuned them was fixed. Anything priced off a sector-one constant still stops being a decision about halfway
+// against is eased and measured: SECTOR_HP_SCALE is 1.06 and SECTOR_DMG_SCALE is 1.075, set in
+// H13, re-cut in I06 once the harness that tuned them was fixed, and turned to the owner's
+// stated target in S05. Anything priced off a sector-one constant still stops being a decision about halfway
 // down the road, which is what outpostPrice is for and what the flat set above still is not.
 function sectorRewardMult() { return Math.pow(1.4, currentSector - 1); }
 

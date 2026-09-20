@@ -97,7 +97,7 @@ module.exports = {
       // which is not one of the phrases this scanner keys on, so the one number R01 deliberately
       // declined to resolve was invisible to the instrument built to count exactly that - carried
       // only second-hand by R02b's marker naming it. 20 -> 21 with a marker at its own site.
-      && r.open === 3 && r.total === 21);
+      && r.open === 4 && r.total === 22);
     // AND NO CLAIM CARRIES TWO VERDICTS THAT DISAGREE. K11's did for two commits: K11b wrote its
     // answer ABOVE the marker already there and left the old one standing, so the last word a
     // reader got was the stale one. The scan passed it, because it tested the window for an
@@ -204,7 +204,7 @@ module.exports = {
     // And the record proves it in the live scan: R05's entry quotes "has never had the same
     // treatment" and O17's table quotes two more, and none of the three is counted as a claim.
     ok(`the three quoted phrases in the record file no claims (${r.total} total)`,
-      r.total === 21);
+      r.total === 22);
 
     ok('a marker quoting what it used to say is not still saying it', (() => {
       // How every correction in this record is written. Without the strip, the quotation reads

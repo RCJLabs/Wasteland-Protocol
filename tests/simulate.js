@@ -2457,6 +2457,58 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── S05: THE WALL TURNED, AT THE OWNER'S TARGET - 13.7% TO 18.4% ──────────────────────
+// #230 made the dial turnable, measured its curve and TURNED NOTHING, because the target behind
+// it is the owner's to set and this file has said so since H13. The owner set it: about 19%. One
+// step down #230's curve, hp 1.08 -> 1.06 and dmg 1.10 -> 1.075, damage moving in I06's own 1.25x
+// ratio on the increment so this stays one dial with a shape rather than two numbers chosen apart.
+//
+// WHAT LANDED, six careers on the shipped constant against the twelve-career baseline:
+//
+//   row                      old(12)    new(6)     delta        t        p
+//   wins                       20.58     27.67     +7.08    +2.20    0.063   = 18.4% of 150
+//   reached final sector       32.83     43.00    +10.17    +3.59    0.004
+//   score, median             24,492    27,621    +3,129    +2.69    0.027
+//   wiped                     110.08    102.50     -7.58    -1.78    0.122
+//   nodes cleared, median      75.67     77.00     +1.33    +0.84    0.427
+//   operators lost a run       17.86     17.55     -0.31    -0.61    0.559
+//
+//   win counts [20, 22, 25, 29, 30, 40]
+//
+// THE TARGET WAS ~19% AND THE DIAL READS 18.4%. That is the deliverable and the p on the win row
+// is not the question: whether the two settings differ was already established by #230's monotone
+// curve and S03's six-career arm. What this measures is WHERE the dial now sits.
+//
+// AND THE SHIPPED CONSTANT WAS CHECKED AGAINST THE ARM, which is the part worth having. S03, S04
+// and #230 all reached this setting through --wallhp/--walldmg; shipping it reaches the same
+// scaling through the module constant instead. If those two paths disagreed, three items would be
+// resting on a lever that does not do what the game does. They agree on the row that matters:
+//
+//   wins  arm 28.33  vs  shipped 27.67   p 0.862
+//
+// Five of seven rows agree. `recalled` reads 26.33 against 19.83 at p 0.009 uncorrected, which
+// over seven rows is inside what noise produces - and the SHIPPED path sits with the twelve-career
+// baseline (19.83 against 19.33) while the ARM is the outlier, so if anything it is those six arm
+// careers that drew high rather than the constant path misbehaving. Flagged, not acted on.
+//
+// WHAT DID NOT MOVE, and it is the property I06 picked this lever for: tier ten's share of wipes,
+// 77.0% before and 78.0% after, t +1.02. Easing the curve lowers the wall without relocating where
+// runs die.
+//
+// AND MEASURING THAT SHARE CAUGHT A STALE NUMBER IN MY OWN DRAFT. #230 read the same row at 88.5
+// to 90.3% across its whole sweep; this build reads 77% at the very setting #230 measured. THE
+// SHARE HAS DRIFTED ABOUT ELEVEN POINTS SINCE #230, on neither setting this item touched - runs
+// are dying earlier than they were, and nothing here caused it or fixes it. The first draft of the
+// note over the constants quoted #230's figure as current, and the only reason it is not shipped
+// that way is that the row was measured rather than copied. That is E09's defect with a fresher
+// date on it, and it is filed here rather than chased, because chasing it is its own item.
+//   ^^ READ: STILL OPEN, and deliberately not this item's. An eleven-point move in WHERE runs
+//   die is a real question; turning a dial the owner named is a different one, and folding the
+//   two together is how a tuning commit ends up carrying an unmeasured claim. Whoever takes it
+//   should first check that the row still MEANS what it meant in #230 - my share is t10 over the
+//   sum of the printed `wipes by tier` row, and #230 never wrote its denominator down - before
+//   concluding the game drifted rather than the reading.
+//
 // ── S04: THE THREE OPEN CLAIMS, RE-READ - ONE SETTLES, ONE INVERTS, AND S03 LOSES ALL THREE ──
 // S03 measured that a difficulty lever resolves about three times cheaper on the wipe count than
 // on the win count, and the record carried three claims that had died on the win column. This is
@@ -4339,7 +4391,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   12 answered by a later item     3 still open     6 not an open claim after reading
+//   12 answered by a later item     4 still open     6 not an open claim after reading
 //
 // and 0 carrying two verdicts that disagree.
 //

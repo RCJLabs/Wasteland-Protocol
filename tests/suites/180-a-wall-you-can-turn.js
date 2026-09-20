@@ -1,7 +1,8 @@
 // ── #230: THE ONE DIAL WITH A TARGET BEHIND IT WAS THE ONE DIAL NOBODY COULD TURN ─────
 //
 // SECTOR_HP_SCALE and SECTOR_DMG_SCALE are the wall. I06 cut them to 1.08 / 1.10 against a
-// stated 30% win-rate target; H13 had them at 1.06 / 1.08 and before that 1.25 / 1.28. Every
+// stated 30% win-rate target; H13 had them at 1.06 / 1.08 and before that 1.25 / 1.28; S05 turned
+// them to 1.06 / 1.075 at the owner's target of about 19%. Every
 // one of those re-cuts was done by editing game.js, running careers, and editing it again -
 // the only tuning question in this project without a `--flag`, and the one with a number it is
 // supposed to hit. They are an arm now, defaulted to the shipped values.
@@ -27,17 +28,27 @@ module.exports = {
     await page.goto(`${base}/index.html`); await engineUp(page);
 
     const shipped = await page.evaluate(() => ({ hp: SECTOR_HP_SCALE, dmg: SECTOR_DMG_SCALE }));
-    ok(`the wall ships at the values I06 cut it to (hp ${shipped.hp}, dmg ${shipped.dmg})`,
-      shipped.hp === 1.08 && shipped.dmg === 1.10);
+    // S05: the owner set the target at about 19% and the dial moved one step down #230's curve.
+    // The ratio is the part worth pinning rather than the pair: I06 cut damage in 1.25x the
+    // health increment and that is what keeps this one dial instead of two numbers chosen apart.
+    ok(`the wall ships where the owner set it (hp ${shipped.hp}, dmg ${shipped.dmg})`,
+      shipped.hp === 1.06 && shipped.dmg === 1.075);
+    ok('damage still moves in I06\'s 1.25x ratio on the increment',
+      Math.abs((shipped.dmg - 1) / (shipped.hp - 1) - 1.25) < 1e-9);
 
     // ── The dial reaches the scaling, and only where it should ───────────────────────────
     const reach = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0);
       const at = s => { currentSector = s; currentTier = 5; return { hp: fightMult(), dmg: fightDmgMult() }; };
       const before = { s1: at(1), s4: at(4), s7: at(7) };
+      // S05: the shipped pair is READ and put back, not restored to a literal. The first cut
+      // wrote 1.08 / 1.10 in three places, so turning the dial broke this suite in two ways that
+      // had nothing to do with what it tests - and a restore-to-literal silently leaves the
+      // engine on the OLD value for every suite that runs after it.
+      const was = { hp: SECTOR_HP_SCALE, dmg: SECTOR_DMG_SCALE };
       SECTOR_HP_SCALE = 1.02; SECTOR_DMG_SCALE = 1.03;
       const after = { s1: at(1), s4: at(4), s7: at(7) };
-      SECTOR_HP_SCALE = 1.08; SECTOR_DMG_SCALE = 1.10;
+      SECTOR_HP_SCALE = was.hp; SECTOR_DMG_SCALE = was.dmg;
       const restored = { s7: at(7) };
       return { before, after, restored };
     });
@@ -79,12 +90,13 @@ module.exports = {
     ok('the wall is exposed as one accessor, not a value and an accessor both',
       once.hasGet && once.hasSet && once.notPlain);
     const writeThrough = await page.evaluate(() => {
+      const was = SECTOR_HP_SCALE;
       WP.SECTOR_HP_SCALE = 1.11;
       const seen = SECTOR_HP_SCALE;
-      WP.SECTOR_HP_SCALE = 1.08;
-      return { seen, back: SECTOR_HP_SCALE };
+      WP.SECTOR_HP_SCALE = was;
+      return { seen, back: SECTOR_HP_SCALE, was };
     });
     ok('and writing through it reaches the engine, which is what an arm needs',
-      writeThrough.seen === 1.11 && writeThrough.back === 1.08);
+      writeThrough.seen === 1.11 && writeThrough.back === writeThrough.was);
   }
 };
