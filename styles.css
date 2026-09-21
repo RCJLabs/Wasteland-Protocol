@@ -853,6 +853,20 @@ button.reach-short { border-color: #7a5a20; }
              text-transform: none; font-style: italic; padding-bottom: 3px; }
 .roll-none, .roll-more { font-size: 0.5625rem; color: #7d786c; letter-spacing: 0; line-height: 1.4; text-transform: none; }
 .roll-more { margin-top: 4px; border-top: 1px solid #3a2828; padding-top: 4px; }
+/* W01: the fold above the roll's rows. Same red as the roll's own head so it reads as part of
+   that panel rather than a second one, and the numbers are tabular so the percentages line up
+   down the column. */
+.fold { margin: 2px 0 7px; padding-bottom: 6px; border-bottom: 1px solid #3a2828; }
+.fold-head { font-size: 0.5625rem; letter-spacing: 1px; color: #8a8578; margin-bottom: 4px; }
+.fold-kinds { display: flex; flex-wrap: wrap; gap: 3px 10px; margin-bottom: 4px; }
+.fold-kind { font-size: 0.5625rem; letter-spacing: 1px; color: #7d786c;
+             font-variant-numeric: tabular-nums; }
+.fold-kind b { color: #c86a5a; font-weight: 600; }
+.fold-unwit b { color: #7d786c; }
+.fold-line { display: flex; justify-content: space-between; gap: 10px; font-size: 0.5625rem;
+             letter-spacing: 1px; color: #8a8578; font-variant-numeric: tabular-nums; }
+.fold-line span:last-child { color: #d5cfc0; text-align: right; }
+.fold-line b { color: #c86a5a; font-weight: 600; }
 .career-lost span:last-child { color: #c86a5a; }
 
 .chronicle-ladder { flex-shrink: 0; border: 1px solid #4a4030; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }

@@ -2457,6 +2457,75 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── W01: WHAT KEEPS KILLING THEM ────────────────────────────────────────────────────
+//
+// E14 gave every operator who does not come home a line of their own, and it has been right for
+// a long time: who put them down, with what, where, at what level, stamped when the blow lands
+// rather than read off the run at bleed-out time. The Chronicle printed those lines and added
+// nothing up. U01, V01 and V02 made a fight legible; this is the same question asked of a
+// career, and it was the one screen where the game knew the answer and did not say it.
+//
+// MEASURED FIRST, 40 then 50 expeditions of the simulator:
+//
+//   4.15 operators lost per run          the log on disk holds 50 expeditions
+//   33 of 40 runs buried somebody        the roll draws 40 names off it
+//   31 distinct killers                  so the panel names a fraction of one career's dead
+//
+// Forty names in a column is not a pattern anybody reads. Which faction keeps doing it and
+// which of your own classes keeps dying is the part a player could act on, and it was the part
+// with no surface. MOST FIELDED sits three lines above the roll and is already a career-long
+// rollup of one column, so the panel's own design had admitted the shape years ago; this is the
+// counterpart column - what the wasteland did back.
+//
+// ── THE CENSUS FOUND A CONSTANT, WHICH CHANGED WHAT GOT BUILT ───────────────────────
+//
+// The first plan was to fold on `cause`, since felledPhrase already speaks five different
+// endings. The instrument had never counted causes - T06 split the dead by clock and by boss
+// and stopped there - so the fold went into the simulator first, and it came back COMBAT on
+// 121 of 121, then 125 of 125. The four non-combat ends are wired, reachable, and covered by
+// suite 105 by construction; almost nothing is taken off the roster for good by one. A tick
+// that drops somebody usually leaves them DOWN, and whatever lands afterwards is a blow.
+//
+// So the fold buckets on the blow's own fields - warlords, elites, the rank and file - with the
+// sky and their wounds kept as buckets for the rare real case rather than as the headline. A
+// fold built on the first plan would have printed one row reading COMBAT 100% and been useless
+// in a way no test would have caught.
+//
+// felledPhrase and the new felledKind read ONE table. The bucket and the sentence are the same
+// decision - which of the wasteland's ways this was - and two switch statements would have been
+// K04's rule broken in the one place where breaking it is visible: a row saying "Choked out by
+// the smog" above a summary filing that body under nothing recorded.
+//
+// ── AND MY OWN HEADING WAS WRONG BEFORE THE SUITE CAUGHT IT ─────────────────────────
+//
+// The class line shipped its first draft headed COSTLIEST TO FIELD, ranked by bodies. A test
+// fixture with a class fielded nine times and a class fielded thirty, tied at four dead, went
+// red - and it was right to: the heading promises a rate and the arithmetic was a count. The
+// count is the correct ranking (one deployment, one death, 100%, top of the list forever is
+// what a rate does to a small denominator), so the heading moved to MOST BURIED and the
+// deployment figure is printed beside it, which is the honest way to offer a rate: both numbers
+// rather than a ratio built out of nothing. A row that pins the ranking against a pair the two
+// readings disagree about holds it there.
+//
+// Two smaller ones, both mine, both found by looking at the output rather than at the code: a
+// nonzero bucket rounded to 0% on a long roll - a row saying a thing happened and then that it
+// happened none of the time - and SECTOR 2 7, where the tally read as part of the sector number.
+//
+// AND THE SUITE'S OWN FLOOR ROW WAS A COINCIDENCE FOR ONE DRAFT. It exercised the 0% guard with
+// one body in two hundred, where the naive rounding still reaches 1%, so the row passed with the
+// guard deleted. One in three hundred is 0.33% and rounds to nothing. Nine mutations go red now,
+// that one included.
+//
+// NOT MEASURED, AND DELIBERATELY: wins. Nothing here is reachable during a run - it is a panel
+// on the Chronicle - so no career can tell it apart from its absence. What the simulator gained
+// is the cause and killer census itself, which is now a standing line in the report.
+//
+// KEYBOARD CONTROL WAS THE OTHER CANDIDATE AND IS REFUTED. The one keydown handler in the tree
+// carries a comment saying it exists "so the game is playable without a pointer", and nothing
+// checked it. Swept across the title, a live fight and the map: every clickable thing - the deck
+// buttons, the five inspectable bodies, the map nodes, the menus - is either a real button or
+// carries tabindex="0", and :focus-visible is styled globally. There was nothing to fix.
+
 // ── V02: WHAT A COOLDOWN COSTS ──────────────────────────────────────────────────────
 //
 // F09 routed every cooldown in the game through cdFor so ION STORM's banner - "cooldowns a turn
@@ -9371,6 +9440,15 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
       const k = (f.boss ? 'boss' : 'road') + (f.clocked ? 'Clocked' : 'Plain');
       stat.deadBy = stat.deadBy || { roadClocked: 0, roadPlain: 0, bossClocked: 0, bossPlain: 0 };
       stat.deadBy[k]++;
+      // W01: the same slice again, by WHAT took them. The instrument has counted how many the
+      // squad buries since the beginning and has never once counted what by - T06 added the
+      // clock split above and stopped there - so a panel proposing to tell the player which of
+      // the wasteland's ways is costing them had nothing to check itself against.
+      stat.deadCause = stat.deadCause || {};
+      const cz = f.cause ? String(f.cause) : 'NONE_RECORDED';
+      stat.deadCause[cz] = (stat.deadCause[cz] || 0) + 1;
+      stat.deadKiller = stat.deadKiller || {};
+      if (f.killer) stat.deadKiller[f.killer] = (stat.deadKiller[f.killer] || 0) + 1;
       stat.lost.push(f.name);
     });
     activeEntities.forEach(e => { delete e.__counted; });
@@ -10575,6 +10653,19 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
   }
   line('  median / worst run', `${lostPer[Math.floor(n / 2)]} / ${lostPer[n - 1]}`);
   line('runs that lost nobody', `${results.filter(r => !r.lost.length).length} of ${n}`);
+  // W01: what buried them, not just how many. The cause column is the one that surprised - it
+  // reads COMBAT on essentially everything, so the four non-combat ends felledPhrase can speak
+  // are wired and reachable but almost never the thing that actually takes somebody off the
+  // roster for good. The killer column is where the information is, which is what the panel
+  // this measurement was taken for ended up folding on.
+  { const cz = {}, kl = {};
+    results.forEach(r => { Object.entries(r.deadCause || {}).forEach(([k, v]) => cz[k] = (cz[k] || 0) + v);
+                           Object.entries(r.deadKiller || {}).forEach(([k, v]) => kl[k] = (kl[k] || 0) + v); });
+    const tot = Object.values(cz).reduce((a, b) => a + b, 0) || 1;
+    const bySize = o => Object.entries(o).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+    line('  what took them', bySize(cz).map(([k, v]) => `${k} ${v} (${(100 * v / tot).toFixed(0)}%)`).join(', ') || 'nobody');
+    line('  distinct killers', `${Object.keys(kl).length}`);
+    line('  worst of them', bySize(kl).slice(0, 8).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'); }
   line('runs that ran out of squad', results.filter(r => r.endedBy === 'wiped-out').length);
 
   // What the floor costs the ones who get up. A rate near one a run is the target: often enough

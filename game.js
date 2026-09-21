@@ -6236,21 +6236,68 @@ function writeChronicle(entry) {
 // must not word it differently. Returns null when there is nothing to name, which is the
 // caller's cue that it does not know.
 const FELLED_VERBS = ['Torn apart by', 'Gunned down by', 'Broken by', 'Dragged down by', 'Finished by'];
+// A death that was not a blow. W01 wants these bucketed as well as spoken, and the bucket and
+// the sentence are the same decision - which of the wasteland's ways this was - so they are one
+// table rather than two switch statements that can drift apart. COMBAT is deliberately absent:
+// it means a blow landed, and the blow's own fields say who by.
+const FELLED_CAUSES = {
+    SMOG:     { phrase: 'Choked out by the smog',     kind: 'the sky' },
+    SHRAPNEL: { phrase: 'Cut down by shrapnel winds', kind: 'the sky' },
+    BLEED:    { phrase: 'Bled out on the road',       kind: 'their wounds' },
+    BLED_OUT: { phrase: 'Bled out on the road',       kind: 'their wounds' },
+};
 function felledPhrase(k) {
     if (!k) return null;
-    if (k.cause === 'SMOG') return 'Choked out by the smog';
-    if (k.cause === 'SHRAPNEL') return 'Cut down by shrapnel winds';
-    if (k.cause === 'BLEED' || k.cause === 'BLED_OUT') return 'Bled out on the road';
+    if (FELLED_CAUSES[k.cause]) return FELLED_CAUSES[k.cause].phrase;
     if (!k.name) return null;
     const verb = FELLED_VERBS[seedFromString(k.name) % FELLED_VERBS.length];
     const name = `${k.elite ? String(k.elite).toUpperCase() + ' ' : ''}${k.name}`;
     return `${verb} ${k.boss ? 'the warlord ' : 'a '}${name}`;
+}
+// What KIND of end this was, for the fold above the roll. Null for the same input felledPhrase
+// returns null on - a record with nothing in it - so the two surfaces agree on what counts as
+// unwitnessed instead of each deciding for itself.
+function felledKind(k) {
+    if (!k) return null;
+    if (FELLED_CAUSES[k.cause]) return FELLED_CAUSES[k.cause].kind;
+    if (!k.name) return null;
+    return k.boss ? 'warlords' : k.elite ? 'elites' : 'the rank and file';
 }
 // A fallen record names the operator and carries the killer under `killer`; felledPhrase reads
 // a killer whose own name is `name`. That remap is the entire difference between the two
 // shapes, so it lives here rather than at every call site that wants a line for the dead.
 function fallenPhrase(f) {
     return f ? felledPhrase({ cause: f.cause, name: f.killer, elite: f.elite, boss: f.boss }) : null;
+}
+function fallenKind(f) {
+    return f ? felledKind({ cause: f.cause, name: f.killer, elite: f.elite, boss: f.boss }) : null;
+}
+// THE FOLD. E14 gave every operator a line; nothing ever added them up. At the measured loss
+// rate a career buries them far faster than forty lines can describe, and forty names in a
+// column is not a pattern anybody reads - which of the wasteland's ways is actually taking
+// them is the one thing on this screen that could change how somebody plays, and it was the
+// one thing not written down.
+//
+// Every column here comes off the same array the rows below are drawn from. Nothing is counted
+// twice or kept anywhere: a fold that keeps its own tally is a second copy of the roll.
+function rollFold(roll) {
+    const kinds = {}, killers = {}, classes = {}, sectors = {};
+    let unwitnessed = 0;
+    (roll || []).forEach(f => {
+        const k = fallenKind(f);
+        if (k) kinds[k] = (kinds[k] || 0) + 1; else unwitnessed++;
+        if (f.killer) killers[f.killer] = (killers[f.killer] || 0) + 1;
+        if (f.classType) classes[f.classType] = (classes[f.classType] || 0) + 1;
+        const sec = f.sector || 1;
+        sectors[sec] = (sectors[sec] || 0) + 1;
+    });
+    // Ties are broken by name, not left to insertion order. Two killers level on three bodies
+    // each is an ordinary state of a young career, and a panel that shows a different one of
+    // them every time it is opened looks broken.
+    const rank = o => Object.entries(o).sort((a, b) => b[1] - a[1] || String(a[0]).localeCompare(String(b[0])));
+    return { n: (roll || []).length, unwitnessed,
+             kinds: rank(kinds), killers: rank(killers), classes: rank(classes),
+             sectors: Object.entries(sectors).sort((a, b) => b[1] - a[1] || Number(a[0]) - Number(b[0])) };
 }
 // The epitaph tells the truth: whoever landed the last blow, or whatever the weather was.
 function epitaphFor(st) {
@@ -6264,6 +6311,46 @@ function latestEpitaph() {
     let best = null;
     for (let s = 1; s <= 3; s++) readChronicle(s).forEach(e => { if (!best || (e.when || 0) > (best.when || 0)) best = e; });
     return best ? best.epitaph : null;
+}
+
+// The fold, drawn. MOST FIELDED on the career block above is already a rollup of one column of
+// a career, so the panel's own design admits the shape; this is the counterpart column - what
+// the wasteland did back. The lifetime tally and the log are different lengths and the line
+// says which one it is reading rather than implying the bigger number.
+const FOLD_TOP = 3;
+function rollFoldHtml(roll, merged) {
+    const f = rollFold(roll);
+    if (!f.n) return '';
+    // A roll can run to a couple of hundred names, and one body in two hundred rounds to zero -
+    // a row that says a thing happened and then says it happened 0% of the time. Nonzero never
+    // prints as nothing; the column is a sense of proportion, not a sum that has to reach 100.
+    const pc = v => v > 0 ? Math.max(1, Math.round(100 * v / f.n)) : 0;
+    const kinds = f.kinds.map(([k, v]) => `<span class="fold-kind">${k} <b>${v}</b> \u00B7 ${pc(v)}%</span>`).join('')
+        + (f.unwitnessed ? `<span class="fold-kind fold-unwit">nothing recorded <b>${f.unwitnessed}</b> \u00B7 ${pc(f.unwitnessed)}%</span>` : '');
+    const worst = f.killers.slice(0, FOLD_TOP).map(([k, v]) => `${k} <b>${v}</b>`).join(' \u00B7 ');
+    // The class column only means something against how often that class was sent out - losing
+    // six of a class you field every run is not the same story as losing six of one you field
+    // twice - and the career block right above is already counting the deployments.
+    //
+    // RANKED BY BODIES, NOT BY RATE, and the label says so. The first draft of this line was
+    // headed COSTLIEST TO FIELD, which promises a rate and was picking the class with the most
+    // dead; a class fielded nine times and a class fielded thirty tied at four and the panel
+    // called them equally costly. A rate is the wrong ranking anyway - one deployment, one
+    // death, 100%, top of the list forever - so the arithmetic stays and the heading matches
+    // it. The deployment count is printed beside it, which is the honest way to offer a rate:
+    // give the reader both numbers rather than a ratio built out of a tiny denominator.
+    const [cls, lost] = f.classes[0] || [null, 0];
+    const sent = cls ? (merged.fielded || {})[cls] || 0 : 0;
+    const [sec, at] = f.sectors[0] || [null, 0];
+    const scope = f.n < (merged.lost || 0)
+        ? `the ${f.n.toLocaleString()} still on the log` : `all ${f.n.toLocaleString()}`;
+    return `<div class="fold">
+        <div class="fold-head">WHAT KEEPS KILLING THEM \u00B7 ${scope}</div>
+        <div class="fold-kinds">${kinds}</div>
+        ${worst ? `<div class="fold-line"><span>WORST OF THEM</span><span>${worst}</span></div>` : ''}
+        ${cls ? `<div class="fold-line"><span>MOST BURIED</span><span>${cls.replace(/_/g, ' ')} \u00B7 <b>${lost}</b> lost${sent ? ` of ${sent} deployed` : ''}</span></div>` : ''}
+        ${sec ? `<div class="fold-line"><span>WORST GROUND</span><span>SECTOR ${sec} \u00B7 <b>${at}</b> lost</span></div>` : ''}
+    </div>`;
 }
 
 function renderChronicle() {
@@ -6338,6 +6425,7 @@ function renderChronicle() {
     // plainly what is not, and never assume - a career that predates this must open, not crash.
     document.getElementById('chronicle-roll').innerHTML = merged.runs === 0 ? '' :
         `<div class="roll-head">THE ROLL OF THE DEAD \u00B7 ${merged.lost.toLocaleString()}</div>` +
+        rollFoldHtml(roll, merged) +
         (roll.length === 0
             ? `<div class="roll-none">${merged.lost
                 ? 'Nobody on the expeditions still logged. The rest are off the end of it.'
@@ -14827,7 +14915,7 @@ globalThis.WP = {
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, MOVE_CD, DECK_MOVES, moveDetail, reachFor, operatorFileHtml, resRowHtml, RANK_LABELS, get deckInspect() { return deckInspect; }, set deckInspect(v) { deckInspect = v; }, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, openEnragePhase, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, MOVE_CD, DECK_MOVES, moveDetail, reachFor, operatorFileHtml, resRowHtml, FELLED_CAUSES, felledPhrase, fallenPhrase, felledKind, fallenKind, rollFold, rollFoldHtml, FOLD_TOP, RANK_LABELS, get deckInspect() { return deckInspect; }, set deckInspect(v) { deckInspect = v; }, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, openEnragePhase, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
