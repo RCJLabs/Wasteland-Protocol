@@ -2457,6 +2457,109 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── T-AUDIT: THREE SWEEPS CAME BACK EMPTY, AND THE FOURTH FOUND A SENTENCE SAID TWICE ─
+//
+// A fresh sweep of the tree after the T-series, run the way the S-audit was: kill candidates
+// before writing them down, and expect most to die because the file already says so.
+//
+// THE THREE SHAPES THAT WERE PRODUCTIVE IN EARLIER AUDITS ARE NOW CLEAN, which is the result
+// and not an absence of one:
+//
+//   top-level const/let declared and never used again      none of 335   (S02, L02, N05/N06)
+//   module-level let written and read in one function       none of 101   (S02's shape)
+//   object fields written by game.js and read by nothing    none of 215   4 hits, all false
+//
+// The third needs its false positives written down, because I nearly filed them: `buffer` and
+// `loop` are AudioBufferSourceNode properties the BROWSER reads, `scrollTop` is a DOM property,
+// and `WP` is the inspection surface game.js documents. My exclusion set knew about `style` and
+// `textContent` and not about these. A sweep for state nothing reads cannot tell an unread
+// field from a field read by something that is not this program.
+//
+// MY OWN FIRST SWEEP WAS WRONG, and the bug over-reported. `(^|[^\w.$])NAME\b` excludes a
+// spread use, because the character before `...TERRAIN_IDS` is a dot: TERRAIN_IDS counted 1
+// use and has 3, and with `(^|[^\w$.]|\.\.\.)` the first sweep fell from one hit to none.
+// T04's five names were each checked by hand with plain grep, so its conclusions stand.
+//
+// ── WHAT THE FOURTH SWEEP FOUND ─────────────────────────────────────────────────────
+//
+// F03's rule is that the engine books and the harness reads back: a second copy of a constant
+// is one edit from quoting a number the game does not use. It is enforced in CODE - 180 asserts
+// the wall is one accessor rather than a value and an accessor both, so there is one spelling
+// of it. It was not enforced in PROSE, and prose is where it happened three times, to the two
+// dials this project re-cuts most:
+//
+//   game.js    the note explaining the clock named PRESSED_AT and gave its value as 20. There
+//              has never been a PRESSED_AT - the dial is PRESSED = { at, share } and the switch
+//              is PRESSED_ON - and R02b re-cut the clock to 25 EIGHT LINES BELOW, leaving the
+//              case for 20 standing above it. The paragraph also cited the wrong row of its own
+//              histogram: "one fight in five" is the 19% at turn 20, and 25 is one in seven.
+//
+//   suite 100  E09 wrote one sentence in two places - above sectorRewardMult and in this suite
+//              header - saying the enemy curves are 1.25 and 1.28. H13 cut them to 1.06 / 1.08
+//              IN THE COMMIT THAT ALSO EDITED THIS FILE, and fixed only the game.js copy. I06
+//              moved them to 1.08 / 1.10 and S05 to 1.06 / 1.075. The second copy sat at E09's
+//              numbers through all three, in the present tense.
+//
+//   suite 180  "the defaults are asserted against the numbers I06 left". S05 turned the dial,
+//              moved the assertion to 1.06 / 1.075 and moved the history line above it, and not
+//              this sentence - the one a reader checks to learn WHICH value the suite guards.
+//              Found by reading the file the sweep pointed at, not by the sweep.
+//
+// THE POINT IS NOT THAT PROSE GOES STALE. It is that F03's defect has a second home nobody was
+// watching. Every one of these was written by an item that had the right number in its hand:
+// H13 fixed one copy of a sentence it was holding both copies of.
+//
+// WHAT IS NOW CHECKED, and why it is narrow. 187 fails the battery on a comment that says a
+// name, then "is", then a number, where the number disagrees with game.js or the name is not
+// declared anywhere in the tree. Everything wider was tried and refused:
+//
+//   a name in prose absent from code     12 of 176, and 11 are the record naming in the PAST
+//                                        tense what it deleted - T04's three among them. That
+//                                        is what a record is for. 1 of 12 was a live claim.
+//   a comment quoting a constant's value 36 flagged, ~34 are history ("I06 cut them to 1.08")
+//                                        or hypotheticals ("at OLD_GUARD_VETS = 2 the muster")
+//   an ok() message stating a number      89 of 4,695, and they are sample sizes and base
+//     its own condition does not use      values. Not a defect shape. Nothing filed.
+//
+// So the rule is the flat present-tense claim and nothing else, and a correction may quote the
+// sentence it corrects - that is how this record is written, from H14's paragraph down to the
+// ^^ markers - so quoted text is an exhibit and the scan steps over it, across line breaks.
+// 12 live claims about 7 dials pass it today; the 3 above are what it was calibrated against,
+// and it was mutation-tested by putting all three back and watching it name them.
+//
+// AND IT READS ITSELF, which 132 hit first: a suite reporting on a gap must not close the gap
+// by mentioning it. Every string 187 would otherwise match on is assembled from pieces.
+//
+// ── AND THE BATTERY ITSELF WENT RED, WHICH IS THE OTHER HALF OF THIS ITEM ───────────
+//
+// The first full battery after the three sentences above came back 5001/1. The red row was
+// 185's phone-width label census, in a diff that contains no code - three comments and a new
+// suite - so it could not have been caused by anything here. Measured rather than re-run: 20
+// stagings of 185 alone read sixteen zeroes, two ones and two twos at 390 wide, and twenty
+// zeroes at 1280. A bound of 1 that fires one battery in ten is not a flake, it is a bound.
+//
+// I GUESSED THE ELEMENT OFF ITS TEXT AND GUESSED WRONG. The pairs printed things like
+// "FRENZY over -13" and "/91 over -13", and a small negative number beside an hp denominator
+// reads like a resistance badge, so I wrote down that these were static readouts and that T03's
+// FCT clamp was therefore not involved. Probing the class names instead of the text: every one
+// of those numbers was `.fct` inside `.fx-layer`, a floating damage readout. T03's clamp pulls
+// an FCT that would have drawn off-screen back inside the viewport, and at 390 wide inside the
+// viewport is where the static labels are - so the thing T03 fixed is the thing that made this
+// fire, and 185's bound had been set over eight runs taken before that clamp existed.
+//
+// THE FIX IS AN EXCLUSION, which needs saying carefully because excluding what turned a row red
+// is the anti-pattern 112 and 132 exist to record. What justifies it is that `.fx-layer` is an
+// overlay and not a box in the row: 185 is about `.entity`'s negative margin, a max-width rule
+// and a box-sizing bug, all of which are about boxes that SHARE a line, and an FCT shares
+// nothing - it floats above the field for a second and leaves. Where an FCT lands is 186's
+// question, asked against the body it reports. And in 34 stagings this census never once found
+// two STATIC labels on each other at either width, which is the claim 185 actually makes. Both
+// rows now print how many labels they judged, so a later exclusion cannot quietly empty it.
+
+// NOT FILED, AND WHY: the two open claims stay open (R01's +5.33 and R02b's -3.00, both under
+// K06's floor and both wanting ~25 careers an arm). No dial moved here and no measurement was
+// taken - this item is three sentences and a ratchet, and the wall it talks about is untouched.
+
 // ── T06: THE CLOCK'S DOOR IS THE WRONG DOOR, AND THE OTHER ONE CANNOT BE READ ────────
 // R02b measured the clock converting deaths into setbacks - wipes a run up 0.46, operators lost
 // for good down 0.41 - and wrote down what it had not done: "THAT PAIRING IS THE READING AND IT

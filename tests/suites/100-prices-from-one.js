@@ -15,7 +15,14 @@
 // breakdown and the sell - with every sector-one price unchanged.
 //
 // And the note above sectorRewardMult said "Enemy stats climb 1.5x per sector", which they have
-// not for a long time: SECTOR_HP_SCALE is 1.25 and SECTOR_DMG_SCALE is 1.28.
+// not for a long time: at E09 SECTOR_HP_SCALE was 1.25 and SECTOR_DMG_SCALE 1.28.
+// ^^ T-audit: that clause stood in the present tense until now. E09 wrote this sentence TWICE -
+//    here and above sectorRewardMult in game.js - and H13 cut the wall to 1.06 / 1.08 in the
+//    very commit that also edited this file, fixing the game.js copy and not this one. I06 and
+//    S05 then moved the pair again, to 1.06 / 1.075, while this line went on naming E09's.
+//    F03's defect in prose: a second copy of a number is one edit from quoting one the game
+//    does not use, and it took three edits. game.js and 180's header carry the live chain;
+//    this file now dates its own figure instead of keeping a third copy of it.
 module.exports = {
   name: 'Prices from sector one',
   run: async ({ page, ok, base, engineUp }) => {

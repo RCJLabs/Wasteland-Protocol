@@ -1700,9 +1700,15 @@ const GRUDGE_CAP = { phaseAt: 0.45, keepsArmour: false, refundEnrage: true };
 //
 // A CLOCK IS THE SHAPE THE DATA SUPPORTS, and the histogram says exactly what each one costs:
 // a deadline at squad turn 12 would catch 39% of fights, at 16 27%, at 20 19%, at 25 14%, at
-// 30 10%. PRESSED_AT is 20 because one fight in five is a mechanic somebody meets and one in ten
-// is a curiosity, and because 20 sits well past the median win of 9 - a squad playing normally
-// finishes long before the clock, and only a fight that is already going badly ever sees it.
+// 30 10%. PRESSED.at is 25, which that histogram puts at one fight in seven, and 25 sits well
+// past the median win of 9 - a squad playing normally finishes long before the clock, and only
+// a fight that is already going badly ever sees it.
+// ^^ T-audit: this read "PRESSED_AT is 20 because one fight in five is a mechanic somebody
+//    meets and one in ten is a curiosity", in the present tense, under a name that has never
+//    existed in this file - the dial is PRESSED = { at, share } and the switch is PRESSED_ON.
+//    The paragraph below re-cut the clock to 25 and left the case for 20 standing above it, so
+//    the note argued for a number the game does not use and cited the wrong row of its own
+//    table to do it. Why 25 rather than 20 is that paragraph's to say, and it says it.
 //
 // AND IT CUT BOTH WAYS, WHICH IS WHY IT WAS AN ARM. The prediction written down before the
 // careers was that the win column would go UP - a fight that ends stops costing. It went DOWN

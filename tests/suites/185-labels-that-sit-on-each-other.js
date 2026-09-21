@@ -18,6 +18,28 @@
 // HELD AT ONE, not at zero. Which labels are on screen depends on the drafted roster and the
 // rolled enemy row, and a bound with no slack is the K03 defect this file exists to catch. Eight
 // measurements after the fix read zero; one is a single unit of slack over everything seen.
+// ── T-audit: AND IT WAS COUNTING THE ONE LAYER THAT IS SUPPOSED TO SIT ON THINGS ─────
+//
+// This row went red one battery in ten at 390 wide, and the pairs it printed always had the
+// same shape: a static label over a small negative number. Probed for class names, every one of
+// those numbers was `.fct` inside `.fx-layer` - a floating damage readout, drawn over the field
+// on purpose and removed after 1000ms. Measured over 34 stagings: 0 collisions at 1280, and at
+// 390 sixteen zeroes, two ones and two twos, all four involving the fx-layer and NONE of them
+// two static labels. The layout this suite is about has been clean at both widths throughout.
+//
+// T03 is why it surfaced now. Its clamp pulls an FCT that would have drawn off the screen back
+// inside the viewport, which at phone width is where the static labels are - so the thing T03
+// fixed is the thing that made this fire. The bound was set over eight runs that all read zero,
+// before that clamp existed, which is K03's shape again: a number calibrated inside its own
+// noise, in a file whose own header says that is the defect it exists to catch.
+//
+// SO THE FX LAYER IS OUT OF THIS CENSUS, and not because it made a row go red. It is an overlay
+// with no place in the layout: `.entity`'s negative margin, the `max-width` rule and the
+// box-sizing fix above are all about boxes that SHARE the row, and an FCT shares nothing - it
+// floats above the field for a second and leaves. Where an FCT lands is 186's question and 186
+// measures it against the body it reports. What is asserted here is that two labels which are
+// both part of the layout never sit on each other, and the element count is printed so that a
+// later exclusion cannot quietly empty this out.
 const CEILING = { wide: 1, phone: 1 };
 module.exports = {
   name: 'Labels that sit on each other',
@@ -25,7 +47,8 @@ module.exports = {
     const collisions = async () => await page.evaluate(() => {
       const els = [...document.querySelectorAll('.battlefield *')]
         .filter(e => e.children.length === 0 && e.innerText && e.innerText.trim()
-                  && e.getBoundingClientRect().width > 0);
+                  && e.getBoundingClientRect().width > 0
+                  && !e.closest('.fx-layer'));   // an overlay, not a box in the row
       const hits = [];
       for (let i = 0; i < els.length; i++) for (let j = i + 1; j < els.length; j++) {
         const a = els[i].getBoundingClientRect(), b = els[j].getBoundingClientRect();
@@ -35,7 +58,7 @@ module.exports = {
         if (ox > 2 && oy > 2) hits.push(`${els[i].innerText.trim().slice(0, 14)} over `
           + `${els[j].innerText.trim().slice(0, 14)} (${Math.round(ox)}x${Math.round(oy)})`);
       }
-      return hits;
+      return { hits, seen: els.length };
     });
     const stage = async () => await page.evaluate(() => {
       localStorage.clear(); currentSlot = 1; loadMeta(); confirmNewGame(1.0); sectorFront = null;
@@ -63,14 +86,17 @@ module.exports = {
       set.clock > 0 && set.enemies >= 2);
 
     const wide = await collisions();
-    ok(`at 1280 wide, labels on labels are held at ${CEILING.wide} (${wide.length}: ${wide.join('; ') || 'none'})`,
-      wide.length <= CEILING.wide);
+    ok(`at 1280 wide, labels on labels are held at ${CEILING.wide} (${wide.hits.length}: ${wide.hits.join('; ') || 'none'})`,
+      wide.hits.length <= CEILING.wide);
+    ok(`and it is judging a populated field rather than an emptied one (${wide.seen} labels)`,
+      wide.seen >= 20);
 
     await resized(page, { width: 390, height: 844 });
     await stage();
     const phone = await collisions();
-    ok(`at 390 wide, held at ${CEILING.phone} (${phone.length}: ${phone.join('; ') || 'none'})`,
-      phone.length <= CEILING.phone);
+    ok(`at 390 wide, held at ${CEILING.phone} (${phone.hits.length}: ${phone.hits.join('; ') || 'none'})`,
+      phone.hits.length <= CEILING.phone);
+    ok(`and the phone field is populated too (${phone.seen} labels)`, phone.seen >= 20);
 
     // The measurement has to be able to SEE a collision, or the two rows above are green for the
     // wrong reason. Two boxes are put on the same pixels on purpose and the counter must find it.

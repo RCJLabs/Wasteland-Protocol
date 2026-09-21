@@ -17,9 +17,12 @@
 // WHAT THIS SUITE IS FOR is the half that could go wrong silently: an arm that defaults to
 // something other than the shipped value would move the game while claiming not to, and every
 // balance figure taken after it would be measured against a wall nobody chose. So the defaults
-// are asserted against the numbers I06 left, the setter is asserted to actually reach the
+// are asserted against the shipped pair, the setter is asserted to actually reach the
 // scaling, and sector 1 is asserted NOT to move - because the scale is an exponent on
 // (sector - 1) and a dial that changed the first sector would be a different dial.
+// ^^ T-audit: that first clause read "the numbers I06 left" until now. S05 turned the dial to
+//    1.06 / 1.075, moved the assertion below and moved the history line above with it, and not
+//    this sentence - the one a reader checks to learn WHICH value the suite guards.
 const { engineUp } = require('../boot');
 
 module.exports = {
