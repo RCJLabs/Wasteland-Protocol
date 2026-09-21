@@ -145,11 +145,11 @@ let isCurrentNodeElite = false;
 // pool is fifteen now, and the new ten interact with formation, combos and the economy - so
 // who rolled what is worth reading at muster, and worth a reroll token when it isn't.
 const QUIRK_POOL = [
-    { id: 'RECKLESS',   name: 'RECKLESS',   desc: '+5 DMG, -15 HP', dmg: 5, hp: -15, spd: 0 },
-    { id: 'TWITCHY',    name: 'TWITCHY',    desc: '+3 SPD, -10 HP', dmg: 0, hp: -10, spd: 3 },
-    { id: 'STURDY',     name: 'STURDY',     desc: '+20 HP, -2 SPD', dmg: 0, hp: 20, spd: -2 },
+    { id: 'RECKLESS',   name: 'RECKLESS',   dmg: 5, hp: -15, spd: 0 },
+    { id: 'TWITCHY',    name: 'TWITCHY',    dmg: 0, hp: -10, spd: 3 },
+    { id: 'STURDY',     name: 'STURDY',     dmg: 0, hp: 20, spd: -2 },
     { id: 'VAMPIRIC',   name: 'VAMPIRIC',   desc: 'Heals 2 on every hit they land', dmg: 0, hp: 0, spd: 0 },
-    { id: 'LETHARGIC',  name: 'LETHARGIC',  desc: '+8 DMG, -3 SPD', dmg: 8, hp: 0, spd: -3 },
+    { id: 'LETHARGIC',  name: 'LETHARGIC',  dmg: 8, hp: 0, spd: -3 },
     { id: 'PACK_HUNTER',name: 'PACK HUNTER',desc: '+30% DMG with an ally standing on both sides of them', dmg: 0, hp: 0, spd: 0 },
     { id: 'LONER',      name: 'LONER',      desc: '+40% DMG while the enemy outnumbers what is left of the squad', dmg: 0, hp: 0, spd: 0 },
     { id: 'SCRAP_RAT',  name: 'SCRAP RAT',  desc: '+1 material after fights they survive', dmg: 0, hp: 0, spd: 0 },
@@ -684,11 +684,15 @@ const SCAR_TREAT_SKULLS = 40;
 // the way a quirk is; the other two are read where they bite - the first turn of a fight, and
 // the bleed-out clock.
 const SCAR_POOL = [
-    { id: 'CRACKED_RIBS', name: 'CRACKED RIBS', desc: '-10 max HP. It never set right.',           hp: -10, dmg: 0,  spd: 0 },
-    { id: 'NERVE_DAMAGE', name: 'NERVE DAMAGE', desc: '-2 SPD. The leg drags.',                    hp: 0,   dmg: 0,  spd: -2 },
-    { id: 'TREMOR',       name: 'TREMOR',       desc: '-3 DMG. The hand will not hold steady.',    hp: 0,   dmg: -3, spd: 0 },
-    { id: 'SHELL_SHOCK',  name: 'SHELL SHOCK',  desc: 'Loses the first turn of every fight.',      hp: 0,   dmg: 0,  spd: 0 },
-    { id: 'SLOW_TO_RISE', name: 'SLOW TO RISE', desc: 'Bleeds out in 2 turns instead of 3.',       hp: 0,   dmg: 0,  spd: 0 },
+    { id: 'CRACKED_RIBS', name: 'CRACKED RIBS', flavour: 'It never set right.',            hp: -10, dmg: 0,  spd: 0 },
+    { id: 'NERVE_DAMAGE', name: 'NERVE DAMAGE', flavour: 'The leg drags.',                   hp: 0,   dmg: 0,  spd: -2 },
+    { id: 'TREMOR',       name: 'TREMOR',       flavour: 'The hand will not hold steady.',   hp: 0,   dmg: -3, spd: 0 },
+    { id: 'SHELL_SHOCK',  name: 'SHELL SHOCK',  desc: 'Loses the first turn of every fight.', hp: 0,  dmg: 0,  spd: 0 },
+    // The one scar whose number is a DIAL rather than a stat field: it takes a turn off the
+    // bleed-out clock, and the card used to write both the clock and the result out by hand -
+    // "2 turns instead of 3" - while the codex two screens away already read ${BLEED_OUT}. The
+    // bleedClause below builds it from the same constant goDown counts with.
+    { id: 'SLOW_TO_RISE', name: 'SLOW TO RISE', bleedOff: 1,                                 hp: 0,   dmg: 0,  spd: 0 },
     // M01: the five above are all the same scar wearing different numbers - each one is equally
     // bad on every road, which makes "treat this for 120 scrap" a question about your purse
     // rather than about where you are going. These five are SITUATIONAL: vicious against some
@@ -1527,7 +1531,12 @@ const BOSS_POOL = [
         enrage: { cry: 'THE MARSHAL CALLS THE COLUMN IN!', dmgScale: 1.3, speedBonus: 3, reEscort: true },
         // You went through the hound to get to it. It brought a second hound.
         grudge: { cry: 'THE COLUMN ARRIVES - ANOTHER HOUND!', name: 'THE COLUMN',
-                  tell: 'A fresh hound off the wagon, and the plate goes back up.',
+                  // X-audit: the plate clause came off. A capped Marshal - and 426 of 492
+                  // commander fights are against a capped commander - raises no plate, and this
+                  // line was told to the player anyway, one log row above the code that does not
+                  // do it. What is left is the half that is true every time; openGrudgePhase
+                  // announces the plate itself, on the turns there is one.
+                  tell: 'A fresh hound off the wagon.',
                   reEscort: true, armorBonus: 14 }
     },
     {
@@ -1678,8 +1687,15 @@ const GRUDGE = {
 // Vatborn's buys doses rather than a multiplier, and pays those instead. A capped commander that
 // opens the grudge phase hands that multiplier back - it stops swinging bigger and starts doing
 // the thing. That is the sentence the whole item is for, made literal: at the cap, growing is
-// over, spending starts. The plate still goes on the Marshal, because the Marshal is the one
-// commander for whom plate IS the padding.
+// over, spending starts. The plate comes off the Marshal with it, because the Marshal is the one
+// commander whose plate IS the padding.
+//
+// ^^ X-audit CORRECTION. This read "The plate still goes on the Marshal, because the Marshal is
+// the one commander for whom plate IS the padding" - the opposite of what the code does, and of
+// what the comment at the gate itself says ("both come off"). Measured to settle it: an uncapped
+// Marshal opens the phase at 10 armour and goes to 24; a capped one opens at 10 and stays at 10.
+// The behaviour is right and was always right; the sentence was wrong, and it is the sentence a
+// reader would have checked.
 //
 // Measured before it was built, the way R03 was: the phase opens in 45% of commander fights
 // reached and runs a median of 6 commander turns once it does, so it is a slice somebody plays
@@ -5583,6 +5599,42 @@ function noteFightWon() {
 // not "somebody fell", it is "somebody fell and this fight is still going", which is a thing
 // the player can see coming and spend a turn on.
 const BLEED_OUT = 3;          // their own turns, from falling to gone
+
+// ── X-audit: A CARD'S NUMBERS, WRITTEN ONCE ─────────────────────────────────────────
+// Seven cards across the scar and quirk pools carried their effect twice - once in the `desc` a
+// player reads and once in the field the engine applies - and an eighth, SLOW TO RISE, wrote out
+// both the bleed-out clock and the result of shortening it while the codex two screens away
+// already interpolated BLEED_OUT. F03's rule says the engine books and everything else reads
+// back; these were eight cards where the player's copy could drift off the engine's and nothing
+// would notice, which is exactly how M01 and M05b could rebuild both pools and leave the
+// duplication standing.
+//
+// Only the cards whose effect IS a stat field are derived. VAMPIRIC, PACK HUNTER, THICK HIDE and
+// the rest keep an authored line, because what they do lives in a branch somewhere rather than
+// in a number on the card, and a sentence is the honest way to say so.
+//
+// ONE WORDING CHANGE, DELIBERATE: the quirks said "HP" and the scars said "max HP" for the same
+// field. They all say max HP now - it is the accurate one, and K04's rule is that a thing has
+// one wording wherever it is drawn.
+const STAT_WORDS = [['dmg', 'DMG'], ['spd', 'SPD'], ['hp', 'max HP']];
+function statClause(e) {
+    const say = ([k, w]) => `${e[k] > 0 ? '+' : ''}${e[k]} ${w}`;
+    // The good half first and the cost second, which is how every one of these was authored.
+    return [...STAT_WORDS.filter(([k]) => e[k] > 0).map(say),
+            ...STAT_WORDS.filter(([k]) => e[k] < 0).map(say)].join(', ');
+}
+function bleedClause(e) {
+    return e.bleedOff
+        ? `Bleeds out in ${Math.max(1, BLEED_OUT - e.bleedOff)} turns instead of ${BLEED_OUT}.` : '';
+}
+function cardDesc(e) {
+    const body = [statClause(e), bleedClause(e)].filter(Boolean).join('. ');
+    return e.flavour ? (body ? `${body}. ${e.flavour}` : e.flavour) : body;
+}
+[SCAR_POOL, QUIRK_POOL].forEach(pool => pool.forEach(e => {
+    if (typeof e.desc === 'string') return;   // authored: the effect is not a stat field
+    Object.defineProperty(e, 'desc', { get: () => cardDesc(e), configurable: true, enumerable: true });
+}));
 // Flat, and deliberately so, but not for the reason first published here. D09 graded this the
 // way it grades the scar roll - 25% for a body picked up on a full clock down to 10% for one
 // left through two of its own turns - and it was removed after five 14-expedition samples read
@@ -8919,7 +8971,10 @@ function migrateTraits(roster) {
         if (c.quirk && c.quirk.id) {
             const live = QUIRK_POOL.find(q => q.id === c.quirk.id)
                       || Object.values(CLASS_QUIRKS || {}).find(q => q && q.id === c.quirk.id);
-            if (live) { c.quirk.name = live.name; c.quirk.desc = live.desc; }
+            // X-audit: skipped when the operator is already holding the live entry. A fresh
+            // run assigns the pool object itself, and `desc` is derived there - copying onto it
+            // would be a write to a getter, which throws in a module.
+            if (live && c.quirk !== live) { c.quirk.name = live.name; c.quirk.desc = live.desc; }
         }
     });
     return roster;
@@ -13925,7 +13980,19 @@ function openGrudgePhase(enemy) {
     // `armorBonus` on the whole grudge shelf, and the damage multiplier phase two put on the
     // swing, which nearly every commander has. Everything below this line - the charge, the lay,
     // the vent, the blood debt, the second ward - fires exactly as it always did.
-    if (gm.armorBonus && !capShaped(enemy)) { enemy.armor += gm.armorBonus; enemy.baseArmor = (enemy.baseArmor || 0) + gm.armorBonus; }
+    // X-audit: GRUDGE_CAP.keepsArmour is what decides this, rather than a literal written here.
+    // The field was declared with R01 and had exactly one occurrence in the whole tree - its own
+    // declaration - while the behaviour it names sat at this line as `!capShaped(enemy)`. F03's
+    // defect in a config object: a dial nothing reads is a dial that can be edited with no
+    // effect, which is worse than not having one.
+    const platesUp = !capShaped(enemy) || GRUDGE_CAP.keepsArmour;
+    if (gm.armorBonus && platesUp) {
+        enemy.armor += gm.armorBonus; enemy.baseArmor = (enemy.baseArmor || 0) + gm.armorBonus;
+        // Said where it happens. The tell above promises the hound, which always arrives; the
+        // plate is the half that does not, so it is announced by the code that raises it rather
+        // than by a sentence written before anybody knew whether it would.
+        log(`> The plate goes back up. +${gm.armorBonus} armour.`, 'log-status');
+    }
     if (capShaped(enemy)) {
         // Divided rather than restored from a saved figure, so anything else that multiplied the
         // swing in between - a Vatborn's doses, most of all - keeps its share instead of being

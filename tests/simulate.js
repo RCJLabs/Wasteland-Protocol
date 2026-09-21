@@ -2457,6 +2457,89 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── X-AUDIT: FOUR SWEEPS, TWO EMPTY, AND A DIAL WITH NO READER ──────────────────────
+//
+// Four items since the T-audit - U01, V01, V02, X01 - every target chosen by me and all four in
+// the same few hundred lines. Three of the four turned up defects in my own new code that only
+// showed when I read OUTPUT rather than code. An audit is the mechanism for the rest of the
+// tree, so the sweeps below are mechanical on purpose: each one has a definite answer that does
+// not depend on what I found interesting.
+//
+//   1  a property declared and never read       GRUDGE_CAP.keepsArmour - one occurrence in the
+//                                               whole tree, its own declaration
+//   2  grudge/enrage fields, gated or not       armorBonus is the only one the cap withholds
+//   3  numbers in player prose vs the dials      NOT RATCHETABLE - 248 hits, nearly all
+//                                               coincidence; surfaced one real card
+//   4  functions declared and never called       EMPTY - all 11 candidates are boot or harness
+//                                               entry points called from the page or the suites
+//
+// Sweep 1's first draft returned 130 names and was useless: it matched prose inside template
+// literals. Blanking every string and template literal first cut it to a list I could read, and
+// the second run found the one that matters. A sweep that reports everything reports nothing.
+//
+// ── FINDING 1: THE PLATE THE CAPPED MARSHAL NEVER RAISES ────────────────────────────
+//
+// R01 declared GRUDGE_CAP with three fields. phaseAt and refundEnrage have readers. keepsArmour
+// had none - the behaviour it names was written at the use site as `!capShaped(enemy)` - which
+// is F03's defect inside a config object, and worse than not having the dial: editing it does
+// nothing, silently.
+//
+// THREE SURFACES DESCRIBED IT AND TWO WERE WRONG. The comment at the gate said the plate "comes
+// off" at the cap. The comment above the declaration said "the plate still goes on the Marshal".
+// And the Marshal's own tell told the PLAYER "A fresh hound off the wagon, and the plate goes
+// back up" - one log row above the code that does not raise it.
+//
+// Measured before anything moved: an uncapped Marshal opens the grudge phase at 10 armour and
+// goes to 24; a capped one opens at 10 and stays at 10. The code was right the whole time and
+// has been since R01. The dial, one comment, and the line the player actually reads were the
+// three things wrong about it - and 426 of 492 commander fights are against a capped commander,
+// so the line a player sees was the false one nearly every time.
+//
+// Fixed at all three: the gate reads GRUDGE_CAP.keepsArmour, the tell keeps only the half that
+// is always true (the hound does arrive), and the plate is announced by the code that raises it,
+// the way the damage refund beside it already was. The correction is marked with ^^ in game.js
+// rather than edited out, which is how this record handles a sentence that was wrong.
+//
+// ── FINDING 2: EIGHT CARDS THAT WROTE THEIR NUMBERS TWICE ───────────────────────────
+//
+// Seven cards across the scar and quirk pools carried their effect in the `desc` a player reads
+// AND in the field the engine applies. An eighth, SLOW TO RISE, wrote out both the bleed-out
+// clock and the result of shortening it - "Bleeds out in 2 turns instead of 3" - while the codex
+// two screens away already interpolated BLEED_OUT. M01 rebuilt the scar pool and M05b rebuilt
+// the quirk pool; both touched these exact cards and left the duplication standing, because a
+// duplicated number is invisible until the two copies disagree.
+//
+// It was contained rather than a habit: PERK_POOL and GEAR_POOL have 23 cards with numbers in
+// their text and 0 of them echo a field, because what those cards do lives in a branch and a
+// sentence is the honest way to say so. Only the cards whose effect IS a stat field are derived
+// now; the rest keep an authored line.
+//
+// ONE WORDING CHANGE, DELIBERATE: the quirks said "HP" and the scars said "max HP" for the same
+// field. They all say max HP now, which is K04's rule and the accurate one.
+//
+// ── AND TWO OF MY OWN ROWS WERE WRONG BEFORE THE SUITE WAS ──────────────────────────
+//
+// The first draft of the ratchet grepped game.js for `capShaped` on the same line as a field
+// name - and MY OWN FIX broke it, because moving the gate onto its own line emptied the result.
+// A source regex was the wrong instrument for a question about behaviour; every commander is
+// opened twice now, capped and not, and the entities diffed.
+//
+// The second read "no tell names a field it may not get" and flagged the Ossuary, whose line -
+// "The armour comes off and goes into the swing" - names armour and is exactly right. Scoped to
+// the commanders that HAVE a plate, it is silent. A check that reports a defect which is not
+// there costs more than one that reports nothing, and I have now written one of each in two
+// items running: X01's census read CODEX bodies the wrong way and invented a gap.
+//
+// AND ONE RATCHET PASSED ON A COINCIDENCE. The bleed row compared the card's sentence against
+// one built from BLEED_OUT - and a hardcoded "2 turns instead of 3" is the same characters while
+// the constant holds its value, so it survived the mutation. BLEED_OUT is a const and cannot be
+// moved from a test; the card's own bleedOff can, so the row turns that instead and watches the
+// sentence follow. Five mutations go red now.
+//
+// NOT MEASURED, AND DELIBERATELY: wins. Nothing here changes what the game does - the plate
+// behaviour is what it has been since R01, and eight cards say the same numbers they said
+// before. What changed is that three of them can no longer drift.
+
 // ── X01: THE FOURTH YOU LEFT AT HOME ────────────────────────────────────────────────
 //
 // E12b found ten abilities this file had never fired. E12c settled which three of four a rank
