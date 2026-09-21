@@ -75,13 +75,25 @@ module.exports = {
                unset: declared.filter(a => !a.reach).map(a => a.move),
                kinds: [...new Set(declared.map(a => a.reach))].sort(),
                mapped: Object.keys(MOVE_REACH).length,
+               uncovered: declared.filter(a => !(a.move in MOVE_REACH)).map(a => a.move),
+               beyond: Object.keys(MOVE_REACH).filter(m => !declared.some(a => a.move === m)).sort(),
+               deckOwn: Object.keys(DECK_MOVES).sort(),
                melee: declared.filter(a => a.reach === 'melee').map(a => a.move).sort(),
                selfOnly: Object.entries(ABILITIES).filter(([, l]) => l.every(a => a.reach === 'self')).map(([c]) => c),
                sample: { blade: isMelee('SCRAP_BLADE'), pistol: isRanged('PISTOL'), guard: isMelee('IRON_GUARD') } };
     });
     ok('every ability declares its reach', table.unset.length === 0);
     ok('and only in the three kinds that exist', table.kinds.join() === 'melee,ranged,self');
-    ok(`the lookup covers all ${table.total} of them`, table.mapped === table.total);
+    // U01: this asked `Object.keys(MOVE_REACH).length === declared.length`. That reads as
+    // coverage and is really a size, and the two are not the same claim: the lookup grew by
+    // two when the deck's own classless moves were declared INTO it, which a size equality
+    // calls a failure and a coverage claim does not. Asked as the rule now, and stronger for
+    // it - a size can be right while an ability is missing and something else stands in its
+    // place, which is exactly the shape of the defect U01 found.
+    ok(`the lookup covers every one of the ${table.total} abilities (${table.uncovered.join(', ') || 'none missing'})`,
+      table.uncovered.length === 0);
+    ok(`and holds nothing beyond them but the deck's own two (${table.beyond.join(', ') || 'none'})`,
+      table.beyond.join() === table.deckOwn.join());
     // This was a roll-call of every melee move, which is a copy of the table rather than a
     // claim about it: adding a class broke it, and flipping a reach by accident would not have.
     // These are the anchors - the ones whose reach is the whole point of the ability.

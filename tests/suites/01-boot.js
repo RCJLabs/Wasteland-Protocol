@@ -78,9 +78,20 @@ module.exports = {
       if (/SQUAD DOWN|FAILED/i.test(deck)) { await page.click('#command-deck button'); outcome = 'wipe'; break; }
       const target = await page.$('.targetable-enemy') || await page.$('.targetable-ally');
       if (target) { await target.click().catch(() => {}); continue; }
-      for (const b of await page.$$('#command-deck button:not([disabled])')) {
+      // U01: this asked for the first enabled button whose TEXT was not CANCEL, BACK or BAG -
+      // a hand-kept list of the things in a deck that are NOT orders, which is a second
+      // definition of "an order" living in a test. It broke the moment a fourth non-order
+      // control was added at the head of the deck: the walker pressed it two hundred times
+      // and the fight never advanced. Asked structurally instead - an order is a button that
+      // carries a move, or a tactic that spends the bar. Both, because the text list admitted
+      // tactics and narrowing to moves alone would have quietly changed how this walks a
+      // fight: it stops spending momentum, which is a different walk from the one every
+      // reading in the record was taken against.
+      const ORDERS = '#command-deck button[data-move]:not([disabled]),'
+                   + '#command-deck button[data-action="tactic"]:not([disabled])';
+      for (const b of await page.$$(ORDERS)) {
         const t = ((await b.textContent()) || '').trim();
-        if (t && !/CANCEL|BACK|BAG/i.test(t)) { await b.click().catch(() => {}); break; }
+        if (t) { await b.click().catch(() => {}); break; }
       }
     }
     ok(`combat reaches a conclusion (${outcome})`, outcome !== 'timeout');

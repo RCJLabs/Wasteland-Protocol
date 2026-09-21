@@ -2457,6 +2457,111 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── U01: WHAT THE MOVE DOES, ON THE MOVE ────────────────────────────────────────────
+//
+// The ask was a way to see what attacks and abilities do mid-fight. Checked against the record
+// first, because two items already live here and the answer changed what was worth building.
+//
+// E12 found that the one fact deciding whether a swing lands at all - its damage type, against
+// three resistance axes and hard immunities - was printed on no surface in the game, and fixed
+// it by COMPUTING a manual entry per class off the same tables the resolver reads. It refused
+// forty hand-authored sentences in as many words: expensive, drift-prone and unearned. G10 then
+// put the settings gear, and the FIELD MANUAL behind it, inside a fight. So the information
+// existed, was computed, and was reachable. It was three taps deep on another screen, behind a
+// class entry you had to know to open, and it was never on the control.
+//
+// So this is not missing content. It is a legible-design item, and the whole of it is moving a
+// string that already exists to where the thumb is. Nothing was written: moveLine split into
+// moveDetail plus a label, and the deck prints the detail.
+//
+// WHAT THE DECK SAID BEFORE, measured on a live deck rather than read off the source:
+//
+//   five moves           none carrying any explanation at all
+//   three other controls two of them explaining themselves in a sentence
+//
+// Every other thing in that deck already says what it does - tactics through tacticDesc,
+// overdrives and bag items through `desc`, WITHDRAW and RETREAT in a sentence each. The
+// abilities, the thing a player presses every single turn, said their name and a one-letter
+// type glyph that nothing on the screen decoded.
+//
+// WHY A TOGGLE. F14 settled the mechanism one item over and its note is still in the deck code:
+// a title tooltip does not exist on a touch screen, so the overdrive's line went into the deck
+// where the thumb is. Why not always-on: measured at 390 wide, the deck is a 188px column beside
+// the log, buttons are 166x46 at 11.7px, and five moves already scroll - a second line on every
+// button every turn pushes half of them off the screen. So it is asked for. It is a VIEW and not
+// a mode: a tap still queues the move while the detail is showing, which is held by a row, so
+// there is no state in which a deck button does something other than what it says. It is sticky
+// across turns and fights, because a player who wanted the detail this turn wants it next turn.
+//
+// ── AND MEASURING IT FOUND A BUG, WHICH THE FILE HAD ALREADY PREDICTED ──────────────
+//
+// dealsDamage asks `MOVE_REACH[move] !== 'self'`, and MOVE_REACH is DERIVED from the ability
+// tables - so a move that is not in them reads back `undefined`, which `!== 'self'` answers TRUE
+// for. The command deck pushes two moves of its own, declared inline at the push site:
+// REPOSITION, which ALLY_MOVES happened to catch, and HOLD, which nothing caught.
+//
+//   the pass-your-turn button was tagged P, physical damage, on every deck in the game
+//
+// One of the 42 moves that can reach a deck. It stayed cosmetic because DAMAGING_MOVES - the
+// list that decides what cashes a mark and builds a hound's momentum - is a CLOSED list built
+// from the declarations, and HOLD is not in them. The note beside that list had already written
+// this hazard down: "an open-world dealsDamage() answers true for those, and would quietly hand
+// overdrives a mark cash they have never had. A closed list built from the declarations cannot."
+// The gameplay sites took that advice. The two display sites called the open predicate directly.
+//
+// Fixed at the declaration rather than at the two call sites: DECK_MOVES holds the deck's own
+// two, and MOVE_REACH derives from it as well, so every move that can appear on a deck has a
+// row and the next one added gets one for free.
+//
+// 19-position had to be rewritten for that, and the rewrite is the point rather than the cost.
+// It asked `Object.keys(MOVE_REACH).length === declared.length` under the label "the lookup
+// covers all 40 of them" - which reads as coverage and is really a size. The lookup legitimately
+// grew by two, so a size equality calls that a failure. Asked as the rule now - no declared
+// ability is missing, and nothing is in there but the deck's own two - and strictly stronger for
+// it: a size can be right while an ability is missing and something else stands in its place,
+// which is the exact shape of the defect this item found. N04's precedent, a guard written
+// against the rule instead of the spelling.
+//
+// ── AND THE BATTERY CAUGHT TWO THINGS I HAD PUT IN IT ───────────────────────────────
+//
+// Both real, both mine, and both from adding one control to a screen that already had rules
+// about controls. Worth writing down because neither was visible from the diff.
+//
+//   the toggle was 171x20    46-legibility sweeps every button on seven screens against
+//                            TOUCH_FLOOR, which G08 set at 44px because a thumb is 44px. I gave
+//                            the new control 4px of padding and a 9px font and it came out half
+//                            the floor. It is a control on the screen this game is mostly played
+//                            on; it meets the same floor as the moves under it now, at the cost
+//                            of a row at the head of a deck that already scrolls.
+//
+//   the walkers pressed it   01-boot and 03-combat-resume drive a whole fight by clicking the
+//     two hundred times      first enabled deck button whose TEXT is not CANCEL, BACK or BAG -
+//                            a hand-kept list of the things in a deck that are NOT moves, which
+//                            is a second definition of "move button" living in a test. A fourth
+//                            non-move control at the head of the deck was all it took: the
+//                            walker toggled the view two hundred times and the fight never
+//                            advanced. Three assertions timed out, in two suites, in three
+//                            batteries out of three.
+//
+// The second one is F03's shape again and it is fixed the same way, structurally: both walkers
+// ask for `button[data-move]` or `button[data-action="tactic"]` now, and the text list is gone.
+// It was exactly the hazard 161's header names - "a hand-kept list of read sites is the F03
+// defect" - and it survived this long because nothing had ever been added to the head of a deck.
+//
+// AND MY FIRST CUT OF THAT FIX WAS WRONG IN A WAY THE BATTERY ALMOST LET THROUGH. I narrowed it
+// to `[data-move]` alone, which reads as the tidier rule and is not the same walk: the text list
+// admitted TACTICS, and moves alone means the walker stops spending momentum. Three batteries on
+// that version came back 5019/3, 5019/3 and 5018/4, then 5021/1 - one timeout in 01-boot, which
+// twelve runs of that suite on its own did not reproduce, so it only shows under a loaded
+// battery. The tactics went back because the narrowing was wrong on its own terms rather than to
+// chase that timeout: every reading in this record was taken against a walk that spends the bar,
+// and quietly changing the walk to tidy up a selector would make this file's own history
+// slightly untrue about what was measured. Three batteries with them back came back clean.
+//
+// NOT MEASURED, AND DELIBERATELY: what this is worth in wins. It is a readout. It changes no
+// number the simulator can see - the harness does not read tooltips - so there is nothing here
+// for a career to settle, and claiming otherwise would be inventing a result.
+
 // ── T-AUDIT: THREE SWEEPS CAME BACK EMPTY, AND THE FOURTH FOUND A SENTENCE SAID TWICE ─
 //
 // A fresh sweep of the tree after the T-series, run the way the S-audit was: kill candidates

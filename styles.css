@@ -613,6 +613,21 @@ button.combo-ready { border-color: #ff44ff; color: #ff9cff; box-shadow: 0 0 10px
 
 button.reach-short { border-color: #7a5a20; }
 .reach-tag { font-size: 0.5625rem; letter-spacing: 1px; color: #ffb347; }
+
+/* ── U01: what a move does, on the move ────────────────────────────────────────────────
+   The manual's own sentence for a move, printed under its button when the deck's WHAT
+   THESE DO toggle is on. Small, dim and in ordinary case on purpose: the label stays the
+   control and this is the footnote beneath it, so it has to read as a different thing at a
+   glance. Case matters here - the detail carries names like EXECUTE x1.5 into stunned, and
+   shouting the whole line would bury the one word in it that is already a proper noun. */
+.move-what { display: block; margin-top: 3px; font-size: 0.5625rem; line-height: 1.35;
+  letter-spacing: 0; color: #8fa06a; text-transform: none; white-space: normal; }
+/* 46-legibility's floor applies to this as much as to a move: it is a control on the screen
+   the game is mostly played on, and G08 set 44px because a thumb is 44px. It costs a row at
+   the head of a deck that already scrolls, which is the price of it being pressable at all. */
+.deck-what { min-height: 44px; padding: 4px 6px; font-size: 0.5625rem; letter-spacing: 1px;
+  border-color: #3f4a2d; color: #7d8c5c; }
+.deck-what[aria-pressed="true"] { border-color: #8fa06a; color: #c3d49a; }
 /* E12: what a move is made of, on the button that fires it. Deliberately quieter than the
    combo and reach tags - those are situational and worth interrupting for, where this is on
    every damaging button all the time and only has to be readable when looked for. The colour

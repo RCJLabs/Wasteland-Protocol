@@ -4746,6 +4746,7 @@ const ACTIONS = {
     'seed-daily':       () => { document.getElementById('seed-input').value = dailySeed(); },
     'chronicle':        () => renderChronicle(),
     'inspect':          el => openDossier(el.dataset.id),
+    'deck-inspect':     () => { deckInspect = !deckInspect; renderCommandDeck(); },
     'dossier-close':    () => closeDossier(),
     'explain':          el => openExplain(el.dataset.hit),
     'explain-close':    () => closeExplain(),
@@ -10442,6 +10443,10 @@ function dossierHtml(name) {
 }
 
 let inspecting = null;   // the id of the hostile whose file is open
+// U01: whether the command deck is printing what each move does. A view preference, not a mode -
+// a tap still queues the move either way - so it is deliberately sticky across turns and fights:
+// a player who wanted the detail on this turn wants it on the next one too.
+let deckInspect = false;
 
 function renderDossier() {
     const el = document.getElementById('dossier');
@@ -11043,7 +11048,9 @@ function deckFor(char) {
 // Computed, not written. Forty hand-authored sentences would be expensive, drift-prone and
 // unearned; every line below is read off the same tables the resolver reads, so a move that
 // changes reach or type or cooldown changes its own entry.
-function moveLine(a) {
+// U01: split so the deck can print what a move does without repeating the label it is already
+// written on. One computation, two callers - the codex line is this with the label in front.
+function moveDetail(a) {
     const bits = [];
     if (dealsDamage(a.move)) bits.push(`${typeGlyph(damageTypeOf(a.move))} ${damageTypeOf(a.move)}`);
     bits.push(a.reach === 'self' ? 'self' : a.reach);
@@ -11051,8 +11058,9 @@ function moveLine(a) {
     if (a.cd) bits.push('cooldown');
     const combo = COMBOS.find(c => c.move === a.move);
     const note = combo ? ` \u2014 ${combo.name} x${combo.mult} into ${combo.needs.replace('Turns', '')}` : '';
-    return `${a.label} \u00B7 ${bits.join(', ')}${note}`;
+    return `${bits.join(', ')}${note}`;
 }
+function moveLine(a) { return `${a.label} \u00B7 ${moveDetail(a)}`; }
 function classCodexLines(cls) {
     const deck = ABILITIES[cls] || [];
     const fourth = FOURTH_ABILITIES[cls];
@@ -11068,8 +11076,22 @@ function classCodexLines(cls) {
     ];
 }
 
+// U01: the two moves every deck carries that belong to no class. They were declared inline at
+// the push site in renderCommandDeck, which is the one place a declaration must not live: every
+// lookup in this file derives from the tables, so a move declared somewhere else is a move the
+// lookups do not have. MOVE_REACH had no row for either, and dealsDamage asks
+// `MOVE_REACH[move] !== 'self'` - which `undefined` answers TRUE. REPOSITION was saved by being
+// an ALLY_MOVE; HOLD was not, so the pass-your-turn button was tagged P, physical damage, on
+// every deck in the game. The closed DAMAGING_MOVES list below is why that stayed cosmetic, and
+// the note beside it had already written the hazard down: an open-world dealsDamage answers true
+// for anything undeclared. This is that hazard, in the two moves the deck declares itself.
+const DECK_MOVES = {
+    REPOSITION: { move: 'REPOSITION', label: '↔ Reposition', reach: 'self' },
+    HOLD:       { move: 'HOLD',       label: '⊘ Hold',       reach: 'self', act: 'self' },
+};
 const MOVE_REACH = Object.fromEntries(
-    [...Object.values(ABILITIES).flat(), ...Object.values(FOURTH_ABILITIES)].map(a => [a.move, a.reach]));
+    [...Object.values(ABILITIES).flat(), ...Object.values(FOURTH_ABILITIES),
+     ...Object.values(DECK_MOVES)].map(a => [a.move, a.reach]));
 // Which abilities land on more than one body, read off the same declarations - so the ground
 // rule and the second hit can never disagree about what counts as an area attack.
 const MOVE_AOE = Object.fromEntries(
@@ -11917,12 +11939,22 @@ function renderCommandDeck() {
     // Formation was fixed the moment the fight started, so a medic caught in the front rank
     // stayed there until it died. Swapping costs the whole turn, which is the price of it.
     if (activeEntities.filter(e => e.isPlayer && e.hp > 0 && e.id !== aE.id).length > 0) {
-        deck.push({ move: 'REPOSITION', label: '↔ Reposition', reach: 'self' });
+        deck.push(DECK_MOVES.REPOSITION);
     }
     // F10: last, and on every deck. Without it a turn where everything is cooling had nothing
     // on it that resolved the turn - only the two ways out of the fight - and the muster's own
     // loadout chip lets a rank III operator bench the free move that used to guarantee one.
-    deck.push({ move: 'HOLD', label: '⊘ Hold', reach: 'self', act: 'self' });
+    deck.push(DECK_MOVES.HOLD);
+
+    // U01: what each move DOES, on the control rather than three taps away behind the gear.
+    // F14 settled the mechanism one item over - a title tooltip does not exist on a touch screen,
+    // so the line belongs in the deck where the thumb is - and the only open question was cost.
+    // At 390 wide the deck is a 188px column and five moves already scroll, so a second line on
+    // every button every turn would push half of them off the screen. Hence a toggle rather than
+    // always-on. It is a VIEW and not a mode: a tap still queues the move while the detail is
+    // showing, so there is no state in which a deck button does something other than it says.
+    deckHtml += `<button class="deck-what" data-action="deck-inspect" aria-pressed="${deckInspect}">`
+              + `${deckInspect ? '✕ HIDE WHAT THESE DO' : '? WHAT THESE DO'}</button>`;
 
     for (const a of deck) {
         const cd = a.cd ? (cds[a.cd] || 0) : 0;
@@ -11946,9 +11978,15 @@ function renderCommandDeck() {
         // smallest control in the game: the same vocabulary read from the same table.
         const dt = dealsDamage(a.move) ? damageTypeOf(a.move) : null;
         const typeTag = dt ? ` <span class="dmg-tag dmg-${dt}" title="${dt} damage">${typeGlyph(dt)}</span>` : '';
-        deckHtml += `<button ${cd > 0 ? 'disabled' : ''} ${cls ? `class="${cls}"` : ''} data-action="${a.act || 'queue'}" data-move="${a.move}">`
+        // The same computation the manual's class entry is built from - moveLine is this with
+        // the label in front - so a move that changes reach, type or cooldown changes both at
+        // once. The tooltip is dropped while the line is visible: it would be the same sentence
+        // twice, and a screen reader would read it twice.
+        const what = moveDetail(a);
+        deckHtml += `<button ${cd > 0 ? 'disabled' : ''} ${cls ? `class="${cls}"` : ''} ${deckInspect ? '' : `title="${what}"`} data-action="${a.act || 'queue'}" data-move="${a.move}">`
                   + `${a.label}${typeTag}${cd > 0 ? ` [${cd}]` : ''}${ready ? ` <span class="combo-tag">${ready}</span>` : ''}`
-                  + `${short ? ` <span class="reach-tag">REACH ${short}</span>` : ''}</button>`;
+                  + `${short ? ` <span class="reach-tag">REACH ${short}</span>` : ''}`
+                  + `${deckInspect ? `<span class="move-what">${what}</span>` : ''}</button>`;
     }
 
     if (inventory.length > 0) { deckHtml += `<button style="border-color:#B8860B; color:#B8860B;" data-action="bag">BAG (${inventory.length})</button>`; }
@@ -14703,7 +14741,7 @@ globalThis.WP = {
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, RANK_LABELS, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, openEnragePhase, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, DECK_MOVES, moveDetail, RANK_LABELS, get deckInspect() { return deckInspect; }, set deckInspect(v) { deckInspect = v; }, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, openEnragePhase, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
