@@ -2457,6 +2457,91 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── V02: WHAT A COOLDOWN COSTS ──────────────────────────────────────────────────────
+//
+// F09 routed every cooldown in the game through cdFor so ION STORM's banner - "cooldowns a turn
+// shorter" - could reach all of them instead of the third that happened to ask. That unified who
+// MODIFIES a price. The price itself stayed a literal passed in at each of the 29 resolve sites,
+// `cdFor(actEnt, 'heavy_wrench', 3)`: a declaration living at its use site, where nothing but
+// that site can read it.
+//
+// So nothing could report one. U01 put what a move does on its button and the cooldown bit could
+// only ever say the word, because there was no table to read a number off - and a COUNTERWEIGHT,
+// which takes a turn off the Heavy Wrench, had no surface anywhere saying so. The hostiles'
+// signature cooldowns have been declared as data since they were written; the squad's were not.
+//
+//   29 resolve sites, 29 cd keys on the abilities, and the two sets are identical
+//   3 of the 29 were gated on a PERK by a ternary at the call site
+//   6 weapon mods, the sky and a scar did the same job INSIDE cdFor
+//
+// That last pair is the part worth naming: one question - what does this cost this operator -
+// answered in two places, by two mechanisms, for no reason but the order they were written in.
+// All of it is inside cdFor now, and the base comes out of MOVE_CD, derived from the ability
+// declarations exactly as MOVE_REACH and MOVE_AOE already are.
+//
+// NOTHING ABOUT THE GAME MOVED. Every price resolves to what it did before - 29 of 29 checked
+// bare, the six mods still take their turn off, the three perks still take theirs, the scar
+// still adds one and the floor still holds at one. A refactor that changes a number is not a
+// refactor. What changed is that the deck can say "cooldown 2" to the operator holding the
+// COUNTERWEIGHT while the manual says 3, which is the same split U01 and V01 settled for reach.
+//
+// ── TWO THINGS I GOT WRONG BUILDING IT, BOTH THE SAME MISTAKE ───────────────────────
+//
+// THE SCRIPT REWROTE ITS OWN COMMENT. The patch that replaced the 29 call sites ran a regex for
+// `cdFor(actEnt, '...', N)` - and the comment it had just inserted, explaining the old form,
+// quotes exactly that. 27 matches against 26 real ones, and the count is the only reason I
+// looked. 132's rule about a suite that reads itself, in a migration script.
+//
+// AND THE FIRST SUITE PASSED A MUTATED PRICE. Every row compared the table with itself: the
+// resolver reads MOVE_CD, the assertion read MOVE_CD, so moving heavy_wrench from 3 to 5 was
+// consistent and green. A cost has to be pinned against something outside the table. Not a
+// roll-call of all 29 - 19-position's header is about exactly that, a copy of a table rather
+// than a claim about it - but five anchors and the shape of the set, 2: 7, 3: 18, 4: 4. Both
+// rows go red on that mutation now.
+//
+// That is three items running where asserting the helper instead of the shipped thing would
+// have let a live defect through: U01's deck line, V01's reach row, and this. The pattern is
+// worth stating plainly - a test that imports the same function the code calls is checking that
+// the function is itself, and the only cure is a fact from outside it.
+//
+// ── AND THE BATTERY FOUND TWO MORE OF IT, IN SUITES I DID NOT WRITE ─────────────────
+//
+// Dropping the base argument broke three standing suites, which is what a signature change is
+// supposed to do. Two of the three breakages were a defect standing behind the compile error.
+//
+//   66-scars  asked the scar's question of a move called 'nothing_in_particular' at a base of
+//             3, and again at a base of 1 to show it reaching the cheapest thing in the deck.
+//             Neither move exists. With no base to pass, the rows now sweep all 29 real prices
+//             and name the real cheapest - which costs 2, so the second row had been describing
+//             a deck nobody can field.
+//
+//   72-skies  claimed ION STORM "stacks with a mod that already cut it" against a fixture of
+//             `{ weaponMod: 'CHAIN_OILER', trinket: null }`. hasMod reads isPlayer, which that
+//             object does not set, so the mod has never applied: the row compared the storm
+//             against itself and passed on the storm alone - the same coincidence my own suite
+//             190 passed on earlier in this item, found twice in one afternoon. Fixed, it reads
+//             ripsaw three ways - 3 bare, 2 modded, 1 modded under the storm - and each step
+//             of the three is asserted rather than just the span.
+//
+//   162       wanted the three signature perks NAMED in code that reads them. Folding the
+//             per-site ternaries into a table made their keys computed, so they vanished from
+//             the text. They are quoted in cdFor's perk table on purpose now, with a note
+//             saying which suite the quoting is for, because an unexplained quoted key is the
+//             next reader's dead weight.
+//
+// THE FLOOR TURNED OUT NOT TO BE REACHABLE FROM BELOW. 72-skies proved Math.max(1) by handing
+// cdFor a 1-turn move; asked of the real table across all 928 states the game can assemble -
+// 8 skies x 29 moves x with and without the one mod or perk that discounts each x with and
+// without STIFF_JOINTS - the cheapest answer is one turn and nothing is under it. The deepest
+// discount lands ON the floor with no headroom. So the clamp guards the next cheap move
+// somebody adds rather than anything the game does today, and the rewritten row says so
+// plainly, including that it would not notice the clamp being deleted. A row that cannot fail
+// on the mutation it appears to guard should admit it rather than imply otherwise.
+//
+// NOT MEASURED, AND DELIBERATELY: wins. No price changed, so there is nothing for a career to
+// say, and running one to prove a refactor inert would be spending careers to confirm an
+// assertion that is already exact.
+
 // ── V01: THE FILE ON THE OTHER SIDE OF THE FIELD ────────────────────────────────────
 //
 // N02 gave every hostile a tappable file and F11 closed the two holes left in it. The operator

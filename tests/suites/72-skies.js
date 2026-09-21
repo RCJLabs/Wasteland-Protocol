@@ -91,23 +91,54 @@ module.exports = {
     ok(`it smothers area attacks too (${ash.aoeBare} -> ${ash.aoeAsh})`, ash.aoeAsh < ash.aoeBare);
 
     // ---- ION STORM: cooldowns ----
+    // V02: the four cdFor calls here each carried their own base price - 3, 3, 1, 4 - for a move
+    // the engine prices at 3. The engine books the prices now, so the bases are gone and the
+    // sweep below asks the question of every move that has one.
     const ion = await page.evaluate(() => {
-      const e = { weaponMod: null, trinket: null };
-      __at('CLEAR'); const plain = cdFor(e, 'ripsaw', 3);
-      __at('ION_STORM'); const charged = cdFor(e, 'ripsaw', 3); const floored = cdFor(e, 'ripsaw', 1);
+      const bare = { isPlayer: true, weaponMod: null, trinket: null, traits: [], scars: [] };
+      const keys = Object.keys(MOVE_CD);
+      __at('CLEAR'); const clear = keys.map(k => cdFor(bare, k));
+      __at('ION_STORM'); const charged = keys.map(k => cdFor(bare, k));
       // A mod that already cut the cooldown and the storm stack rather than one shadowing the other.
-      const modded = { weaponMod: 'CHAIN_OILER', trinket: null };
-      const both = cdFor(modded, 'ripsaw', 4);
-      __at('CLEAR'); const modOnly = cdFor(modded, 'ripsaw', 4);
+      // The isPlayer flag is load-bearing and was missing: hasMod reads it, so the mod on the old
+      // fixture never applied and this pair measured the storm against itself. CHAIN_OILER cuts
+      // ripsaw, so the row reads ripsaw three ways - bare, modded, modded under the storm.
+      const modded = { isPlayer: true, weaponMod: 'CHAIN_OILER', trinket: null, traits: [], scars: [] };
+      const both = cdFor(modded, 'ripsaw');
+      __at('CLEAR'); const modOnly = cdFor(modded, 'ripsaw'), sawBare = cdFor(bare, 'ripsaw');
+      // Every state the game can put a cooldown in: each sky, each move, with and without the one
+      // mod or perk that discounts it, with and without the scar that lengthens it.
+      const carriers = { heavy_wrench: { weaponMod: 'COUNTERWEIGHT' }, cauterize: { weaponMod: 'PRESSURE_SYRINGE' },
+        spotters_mark: { weaponMod: 'SPOTTING_SCOPE' }, rip_and_tear: { weaponMod: 'WAR_HARNESS' },
+        ripsaw: { weaponMod: 'CHAIN_OILER' }, drag_line: { weaponMod: 'SWIVEL_MOUNT' },
+        flashbang: { traits: ['QUICK_HANDS'] }, purge_valve: { traits: ['SPARE_FILTERS'] },
+        thermite: { traits: ['CONTROLLED_BURN'] } };
+      let floor = 99, floorAt = null, states = 0;
+      for (const sky of Object.keys(WEATHER)) {
+        __at(sky);
+        for (const k of keys) for (const cut of [false, true]) for (const scars of [[], ['STIFF_JOINTS']]) {
+          const v = cdFor({ ...bare, scars, ...(cut ? (carriers[k] || {}) : {}) }, k);
+          states++;
+          if (v < floor) { floor = v; floorAt = `${sky} ${k}${cut ? ' discounted' : ''}${scars.length ? ' stiff' : ''}`; }
+        }
+      }
       const foe = { dmgBase: 100, range: 'melee', classType: 'RAIDER' };
-      const hitPlain = enemyStrike(foe, { type: 'ATTACK' });
+      __at('CLEAR'); const hitPlain = enemyStrike(foe, { type: 'ATTACK' });
       __at('ION_STORM'); const hitSoft = enemyStrike(foe, { type: 'ATTACK' });
       __clear();
-      return { plain, charged, floored, both, modOnly, hitPlain, hitSoft };
+      return { n: keys.length, held: keys.filter((k, i) => charged[i] !== clear[i] - 1),
+               sawBare, modOnly, both, floor, floorAt, states, hitPlain, hitSoft };
     });
-    ok(`ION STORM brings everything back a turn sooner (${ion.plain} -> ${ion.charged})`, ion.charged === ion.plain - 1);
-    ok('never below one turn', ion.floored === 1);
-    ok(`and stacks with a mod that already cut it (${ion.modOnly} -> ${ion.both})`, ion.both === ion.modOnly - 1);
+    ok(`ION STORM brings everything back a turn sooner - all ${ion.n} of them `
+       + `(${ion.held.join(', ') || 'none held back'})`, ion.held.length === 0);
+    ok(`and stacks with a mod that already cut it (ripsaw ${ion.sawBare} -> ${ion.modOnly} -> ${ion.both})`,
+      ion.modOnly === ion.sawBare - 1 && ion.both === ion.modOnly - 1);
+    // The old row for this fed cdFor a hypothetical one-turn move to watch Math.max catch it.
+    // No move is priced that low, so it was a test of arithmetic rather than of the game. Asked
+    // of the real table across every reachable state, the answer is that the deepest discount
+    // lands ON the floor with nothing to spare - so the clamp guards the next cheap move somebody
+    // adds rather than anything the game does today, and this row would not notice its removal.
+    ok(`never below one turn - cheapest of ${ion.states} states is ${ion.floor} (${ion.floorAt})`, ion.floor === 1);
     ok(`everything lands softer under it (${ion.hitPlain} -> ${ion.hitSoft})`, ion.hitSoft < ion.hitPlain);
 
     // ---- BLOOD HAZE: nobody can see, including them ----

@@ -858,13 +858,27 @@ function moveReachFor(move, ent) {
 // shorter". Eleven moves used to set their cooldown directly instead of asking here, among them
 // all three self-actions and most of the classic deck, so the storm shortened maybe a third of
 // what a squad presses. Every cooldown in the game is now priced through this one function.
-function cdFor(ent, id, base) {
+// V02: the base is READ rather than passed. It was an argument at 29 call sites, which is the
+// same shape U01 found in the deck's own moves and the T-audit found in the record's prose - a
+// declaration living at the use site, where nothing but that site can read it. And three PERKS
+// shortened a cooldown by a ternary on the way in, while six mods, the sky and a scar did it
+// inside here: one question answered in two places. All of it is in this function now, so
+// "what does this move cost this operator" has one answer and a readout can ask it.
+function cdFor(ent, id) {
     const mods = { COUNTERWEIGHT: 'heavy_wrench', PRESSURE_SYRINGE: 'cauterize',
                    SPOTTING_SCOPE: 'spotters_mark', WAR_HARNESS: 'rip_and_tear',
                    CHAIN_OILER: 'ripsaw', SWIVEL_MOUNT: 'drag_line' };
-    let cd = base;
+    // Quoted on purpose: 162 asks that every signature perk be NAMED somewhere that reads it,
+    // and every other reader in this file spells one as hasTrait(ent, 'QUICK_HANDS'). A bare
+    // object key is the same id to JavaScript and a different string to a reader looking for it.
+    const perks = { 'QUICK_HANDS': 'flashbang', 'SPARE_FILTERS': 'purge_valve',
+                    'CONTROLLED_BURN': 'thermite' };
+    let cd = MOVE_CD[id];
     for (const [mod, key] of Object.entries(mods)) {
         if (key === id && hasMod(ent, mod)) cd -= 1;
+    }
+    for (const [perk, key] of Object.entries(perks)) {
+        if (key === id && hasTrait(ent, perk)) cd -= 1;
     }
     // A charged sky cycles everything faster, the squad's and theirs alike.
     cd -= (sky().cdCut || 0);
@@ -5818,7 +5832,7 @@ function executeSelfAction(type) {
         spawnFCT(actEnt.id, "HOLD", "fct-status"); playSFX('click');
     }
     if (type === 'IRON_GUARD') {
-        actEnt.armor += plate(15); actEnt.armorTurns = 2; actEnt.guardTurns = 2; actEnt.cooldowns.iron_guard = cdFor(actEnt, 'iron_guard', 3);
+        actEnt.armor += plate(15); actEnt.armorTurns = 2; actEnt.guardTurns = 2; actEnt.cooldowns.iron_guard = cdFor(actEnt, 'iron_guard');
         // Armour alone only ever protected the Bruiser. Bracing now covers the ranks behind it,
         // which is what gives the front rank a job beyond absorbing whatever walks into it.
         log(`> ${actEnt.name} braces and covers the line behind (+${plate(15)} ARMOR).`, "log-status");
@@ -5829,7 +5843,7 @@ function executeSelfAction(type) {
         const cost = hasTrait(actEnt, 'SECOND_LUNG') ? 0 : Math.max(1, Math.floor(actEnt.maxHp * FIEND_CHARGE_COST));
         actEnt.hp = Math.max(1, actEnt.hp - cost);
         actEnt.chargeTurns = CHARGE_TURNS + 1;   // spent down at the start of his own next turn
-        actEnt.cooldowns.over_the_top = cdFor(actEnt, 'over_the_top', 4);
+        actEnt.cooldowns.over_the_top = cdFor(actEnt, 'over_the_top');
         log(cost > 0
             ? `> ${actEnt.name} goes over the top. -${cost} HP, and everything hits harder.`
             : `> ${actEnt.name} goes over the top without breaking stride.`, "log-status");
@@ -5843,7 +5857,7 @@ function executeSelfAction(type) {
             a.hp = Math.min(a.maxHp, a.hp + heal);
             spawnFCT(a.id, `+${heal}`, "fct-heal");
         });
-        actEnt.cooldowns.purge_valve = cdFor(actEnt, 'purge_valve', hasTrait(actEnt, 'SPARE_FILTERS') ? 2 : 3);
+        actEnt.cooldowns.purge_valve = cdFor(actEnt, 'purge_valve');
         log(`> ${actEnt.name} vents the tanks. The squad is scrubbed clean and patched for ${heal}.`, "log-heal");
         playSFX('heal', 1.4);
     }
@@ -10954,36 +10968,36 @@ const COMBOS = [
 // The command deck is rendered from this, so an ability exists in exactly one place.
 const ABILITIES = {
     BRUISER:    [{ move: 'SCRAP_BLADE',   label: 'Scrap Blade',           reach: 'melee' },
-                 { move: 'HEAVY_WRENCH',  label: 'Heavy Wrench',         reach: 'melee', cd: 'heavy_wrench' },
-                 { move: 'IRON_GUARD',    label: 'Iron Guard',           reach: 'self',  cd: 'iron_guard', act: 'self' }],
+                 { move: 'HEAVY_WRENCH',  label: 'Heavy Wrench',         reach: 'melee', cd: 'heavy_wrench', cdTurns: 3 },
+                 { move: 'IRON_GUARD',    label: 'Iron Guard',           reach: 'self',  cd: 'iron_guard', cdTurns: 3, act: 'self' }],
     MEDIC:      [{ move: 'PISTOL',        label: 'Pistol',               reach: 'ranged' },
                  { move: 'RAD_SHOT',      label: 'Rad Shot',             reach: 'ranged' },
-                 { move: 'CAUTERIZE',     label: 'Cauterize',            reach: 'self',  cd: 'cauterize' }],
+                 { move: 'CAUTERIZE',     label: 'Cauterize',            reach: 'self',  cd: 'cauterize', cdTurns: 3 }],
     SCAVENGER:  [{ move: 'PIPE_RIFLE',    label: 'Pipe Rifle',           reach: 'ranged' },
-                 { move: 'FLASHBANG',     label: 'Flashbang',            reach: 'ranged', cd: 'flashbang' },
-                 { move: 'ACID_FLASK',    label: 'Acid Flask (Corrode)', reach: 'ranged', cd: 'acid_flask' }],
+                 { move: 'FLASHBANG',     label: 'Flashbang',            reach: 'ranged', cd: 'flashbang', cdTurns: 4 },
+                 { move: 'ACID_FLASK',    label: 'Acid Flask (Corrode)', reach: 'ranged', cd: 'acid_flask', cdTurns: 3 }],
     PYROMANIAC: [{ move: 'FLARE_GUN',     label: 'Flare Gun (Oil)',      reach: 'ranged' },
-                 { move: 'MOLOTOV',       label: 'Molotov (AoE)',        reach: 'ranged', cd: 'molotov' },
-                 { move: 'THERMITE',      label: 'Thermite',             reach: 'ranged', cd: 'thermite' }],
+                 { move: 'MOLOTOV',       label: 'Molotov (AoE)',        reach: 'ranged', cd: 'molotov', cdTurns: 3 },
+                 { move: 'THERMITE',      label: 'Thermite',             reach: 'ranged', cd: 'thermite', cdTurns: 4 }],
     SHOTGUNNER: [{ move: 'SLUG_SHOT',     label: 'Slug Shot',            reach: 'ranged' },
-                 { move: 'BUCKSHOT',      label: 'Buckshot (Front)',     reach: 'melee', cd: 'buckshot' },
-                 { move: 'EXECUTE_SHOT',  label: 'Execute',              reach: 'ranged', cd: 'execute_shot' }],
+                 { move: 'BUCKSHOT',      label: 'Buckshot (Front)',     reach: 'melee', cd: 'buckshot', cdTurns: 2 },
+                 { move: 'EXECUTE_SHOT',  label: 'Execute',              reach: 'ranged', cd: 'execute_shot', cdTurns: 3 }],
     SNIPER:     [{ move: 'QUICK_SHOT',    label: 'Quick Shot',           reach: 'ranged' },
-                 { move: 'DEADEYE',       label: 'Deadeye (Back)',       reach: 'ranged', cd: 'deadeye' },
-                 { move: 'SPOTTERS_MARK', label: "Spotter's Mark",       reach: 'ranged', cd: 'spotters_mark' }],
+                 { move: 'DEADEYE',       label: 'Deadeye (Back)',       reach: 'ranged', cd: 'deadeye', cdTurns: 2 },
+                 { move: 'SPOTTERS_MARK', label: "Spotter's Mark",       reach: 'ranged', cd: 'spotters_mark', cdTurns: 3 }],
     HOUND:      [{ move: 'SNAP',          label: 'Snap',                 reach: 'melee' },
-                 { move: 'FERAL_BITE',    label: 'Feral Bite (Bleed)',   reach: 'melee', cd: 'feral_bite' },
-                 { move: 'RIP_AND_TEAR',  label: 'Rip and Tear (Bleed)', reach: 'melee', cd: 'rip_and_tear' }],
+                 { move: 'FERAL_BITE',    label: 'Feral Bite (Bleed)',   reach: 'melee', cd: 'feral_bite', cdTurns: 3 },
+                 { move: 'RIP_AND_TEAR',  label: 'Rip and Tear (Bleed)', reach: 'melee', cd: 'rip_and_tear', cdTurns: 3 }],
     // The three you find on the road rather than start with.
     TRENCH_FIEND:[{ move: 'BAYONET_THRUST', label: 'Bayonet Thrust',     reach: 'melee' },
-                 { move: 'RIPSAW',        label: 'Ripsaw (Bleed)',       reach: 'melee', cd: 'ripsaw' },
-                 { move: 'OVER_THE_TOP',  label: 'Over The Top',         reach: 'self',  cd: 'over_the_top', act: 'self' }],
+                 { move: 'RIPSAW',        label: 'Ripsaw (Bleed)',       reach: 'melee', cd: 'ripsaw', cdTurns: 3 },
+                 { move: 'OVER_THE_TOP',  label: 'Over The Top',         reach: 'self',  cd: 'over_the_top', cdTurns: 4, act: 'self' }],
     HAZMAT:     [{ move: 'SPRAY_GUN',     label: 'Spray Gun',            reach: 'ranged' },
-                 { move: 'CAUSTIC_BURST', label: 'Caustic Burst (Two)',  reach: 'ranged', cd: 'caustic_burst', aoe: true },
-                 { move: 'PURGE_VALVE',   label: 'Purge Valve',          reach: 'self',  cd: 'purge_valve', act: 'self' }],
+                 { move: 'CAUSTIC_BURST', label: 'Caustic Burst (Two)',  reach: 'ranged', cd: 'caustic_burst', cdTurns: 3, aoe: true },
+                 { move: 'PURGE_VALVE',   label: 'Purge Valve',          reach: 'self',  cd: 'purge_valve', cdTurns: 3, act: 'self' }],
     HARPOONER:  [{ move: 'HARPOON',       label: 'Harpoon',              reach: 'ranged' },
-                 { move: 'DRAG_LINE',     label: 'Drag Line (Pull)',     reach: 'ranged', cd: 'drag_line' },
-                 { move: 'BARBED_SHOT',   label: 'Barbed Shot (Bleed)',  reach: 'ranged', cd: 'barbed_shot' }]
+                 { move: 'DRAG_LINE',     label: 'Drag Line (Pull)',     reach: 'ranged', cd: 'drag_line', cdTurns: 3 },
+                 { move: 'BARBED_SHOT',   label: 'Barbed Shot (Bleed)',  reach: 'ranged', cd: 'barbed_shot', cdTurns: 3 }]
 };
 
 // Formation used to be decided at the Outpost and then mean nothing once the shooting started.
@@ -11040,16 +11054,16 @@ function quirkPoolFor(cls) {
 
 // Rank III: the fourth ability. The muster picks which three of the four deploy.
 const FOURTH_ABILITIES = {
-    BRUISER:    { move: 'SHIELD_SLAM',     label: 'Shield Slam',            reach: 'melee',  cd: 'shield_slam' },
-    MEDIC:      { move: 'STIM_DART',       label: 'Stim Dart (Ally)',       reach: 'ranged', cd: 'stim_dart' },
-    SCAVENGER:  { move: 'SHIV',            label: 'Shiv',                   reach: 'melee',  cd: 'shiv' },
-    PYROMANIAC: { move: 'HEAT_WAVE',       label: 'Heat Wave (Two)',        reach: 'ranged', cd: 'heat_wave', aoe: true },
-    SHOTGUNNER: { move: 'RIOT_BUTT',       label: 'Riot Butt',              reach: 'melee',  cd: 'riot_butt' },
-    SNIPER:     { move: 'PIERCING_VOLLEY', label: 'Piercing Volley (Two)',  reach: 'ranged', cd: 'piercing_volley', aoe: true },
-    HOUND:      { move: 'HARRY',           label: 'Harry (Twice)',          reach: 'melee',  cd: 'harry' },
-    TRENCH_FIEND:{ move: 'TRENCH_SWEEP',   label: 'Trench Sweep (Two)',     reach: 'melee',  cd: 'trench_sweep', aoe: true },
-    HAZMAT:     { move: 'TANK_RUPTURE',   label: 'Tank Rupture',           reach: 'ranged', cd: 'tank_rupture' },
-    HARPOONER:  { move: 'WHALE_LINE',     label: 'Whale Line (Two)',       reach: 'ranged', cd: 'whale_line', aoe: true }
+    BRUISER:    { move: 'SHIELD_SLAM',     label: 'Shield Slam',            reach: 'melee',  cd: 'shield_slam', cdTurns: 2 },
+    MEDIC:      { move: 'STIM_DART',       label: 'Stim Dart (Ally)',       reach: 'ranged', cd: 'stim_dart', cdTurns: 2 },
+    SCAVENGER:  { move: 'SHIV',            label: 'Shiv',                   reach: 'melee',  cd: 'shiv', cdTurns: 2 },
+    PYROMANIAC: { move: 'HEAT_WAVE',       label: 'Heat Wave (Two)',        reach: 'ranged', cd: 'heat_wave', cdTurns: 3, aoe: true },
+    SHOTGUNNER: { move: 'RIOT_BUTT',       label: 'Riot Butt',              reach: 'melee',  cd: 'riot_butt', cdTurns: 2 },
+    SNIPER:     { move: 'PIERCING_VOLLEY', label: 'Piercing Volley (Two)',  reach: 'ranged', cd: 'piercing_volley', cdTurns: 3, aoe: true },
+    HOUND:      { move: 'HARRY',           label: 'Harry (Twice)',          reach: 'melee',  cd: 'harry', cdTurns: 2 },
+    TRENCH_FIEND:{ move: 'TRENCH_SWEEP',   label: 'Trench Sweep (Two)',     reach: 'melee',  cd: 'trench_sweep', cdTurns: 3, aoe: true },
+    HAZMAT:     { move: 'TANK_RUPTURE',   label: 'Tank Rupture',           reach: 'ranged', cd: 'tank_rupture', cdTurns: 4 },
+    HARPOONER:  { move: 'WHALE_LINE',     label: 'Whale Line (Two)',       reach: 'ranged', cd: 'whale_line', cdTurns: 3, aoe: true }
 };
 // The deck an operator actually brings: the classic three below rank III; at III, four
 // minus whichever one the muster benched (the fourth sits out by default).
@@ -11109,7 +11123,9 @@ function moveDetail(a, ent) {
     // the operator; the manual's class entry has no hands to put a mod in and passes nothing.
     bits.push(reachFor(a, ent));
     if (isAoe(a.move)) bits.push('hits two');
-    if (a.cd) bits.push('cooldown');
+    // V02: the price, not the word. Per operator when there is one - a COUNTERWEIGHT makes the
+    // Heavy Wrench a turn cheaper - and the declared cost in the manual, which has no hands.
+    if (a.cd) bits.push(`cooldown ${ent ? cdFor(ent, a.cd) : MOVE_CD[a.cd]}`);
     const combo = COMBOS.find(c => c.move === a.move);
     const note = combo ? ` \u2014 ${combo.name} x${combo.mult} into ${combo.needs.replace('Turns', '')}` : '';
     return `${bits.join(', ')}${note}`;
@@ -11153,6 +11169,15 @@ const MOVE_REACH = Object.fromEntries(
      ...Object.values(DECK_MOVES)].map(a => [a.move, a.reach]));
 // Which abilities land on more than one body, read off the same declarations - so the ground
 // rule and the second hit can never disagree about what counts as an area attack.
+// V02: what a cooldown COSTS, declared once. F09 routed every cooldown through cdFor so a
+// charged sky could reach all of them - that unified who MODIFIES a price. The price itself was
+// still a literal passed in at each of the 29 resolve sites, so no readout could name it: the
+// deck could say the word and never a number, and a COUNTERWEIGHT that takes a turn off one had
+// no surface anywhere saying so. The hostiles' signature cooldowns have been declared as data
+// since they were written; the squad's were not.
+const MOVE_CD = Object.fromEntries(
+    [...Object.values(ABILITIES).flat(), ...Object.values(FOURTH_ABILITIES)]
+        .filter(a => a.cd).map(a => [a.cd, a.cdTurns]));
 const MOVE_AOE = Object.fromEntries(
     [...Object.values(ABILITIES).flat(), ...Object.values(FOURTH_ABILITIES)].map(a => [a.move, !!a.aoe]));
 function isAoe(move) { return !!MOVE_AOE[move]; }
@@ -12851,7 +12876,7 @@ function resolveAction(targetId) {
 
     if (pendingAction === 'CAUTERIZE') {
         let heal = 20 + Math.floor(Math.random() * 10) + (hasMod(actEnt, 'FIELD_KIT') ? 15 : 0);
-        target.hp = Math.min(target.maxHp, target.hp + heal); actEnt.cooldowns.cauterize = cdFor(actEnt, 'cauterize', 3);
+        target.hp = Math.min(target.maxHp, target.hp + heal); actEnt.cooldowns.cauterize = cdFor(actEnt, 'cauterize');
         if (hasTrait(actEnt, 'FIELD_SURGEON')) { clearBleed(target); target.stunnedTurns = 0; target.oiledTurns = 0; spawnFCT(target.id, "CLEANSED", "fct-status"); }
         if (hasCap(actEnt, 'CAP_WHOLE_LINE')) {
             const share = Math.max(1, Math.floor(heal / 3));
@@ -12867,7 +12892,7 @@ function resolveAction(targetId) {
         // shakes a stun loose.
         const heal = 12;
         target.hp = Math.min(target.maxHp, target.hp + heal); target.stunnedTurns = 0;
-        actEnt.cooldowns.stim_dart = cdFor(actEnt, 'stim_dart', 2);
+        actEnt.cooldowns.stim_dart = cdFor(actEnt, 'stim_dart');
         log(`> ${actEnt.name} darts ${target.name} for ${heal}.`, "log-heal"); spawnFCT(target.id, `+${heal}`, "fct-heal"); playSFX('heal');
     } else {
         let atkType = damageTypeOf(pendingAction);
@@ -12884,32 +12909,32 @@ function resolveAction(targetId) {
             if (Math.abs(f - 1) > 0.005) hitTrace.push({ label, f }); traceMark = dmgMult; };
 
         // Each ability's own profile first - flat rates and positional swings both settle here.
-        if (pendingAction === 'FLASHBANG') { dmgMult = 0.4; actEnt.cooldowns.flashbang = cdFor(actEnt, 'flashbang', hasTrait(actEnt, 'QUICK_HANDS') ? 3 : 4); }
-        if (pendingAction === 'HEAVY_WRENCH') { dmgMult = 1.5; actEnt.cooldowns.heavy_wrench = cdFor(actEnt, 'heavy_wrench', 3); }
-        if (pendingAction === 'FERAL_BITE') { dmgMult = 1.2; actEnt.cooldowns.feral_bite = cdFor(actEnt, 'feral_bite', 3); }
-        if (pendingAction === 'DEADEYE') { if (dist === livingEnemies.length - 1 && dist !== 0) dmgMult = hasTrait(actEnt, 'PATIENT_HUNTER') ? 2.1 : 1.8; else dmgMult = hasMod(actEnt, 'LONG_BARREL') ? 1.0 : 0.8; actEnt.cooldowns.deadeye = cdFor(actEnt, 'deadeye', 2); }
-        if (pendingAction === 'BUCKSHOT') { dmgMult *= (dist === 0 ? (hasTrait(actEnt, 'POINT_BLANK') ? 1.8 : 1.5) : 0.8); actEnt.cooldowns.buckshot = cdFor(actEnt, 'buckshot', 2); }
-        if (pendingAction === 'ACID_FLASK') { dmgMult = 0.5; actEnt.cooldowns.acid_flask = cdFor(actEnt, 'acid_flask', 3); }
-        if (pendingAction === 'THERMITE') { dmgMult *= 1.6; actEnt.cooldowns.thermite = cdFor(actEnt, 'thermite', hasTrait(actEnt, 'CONTROLLED_BURN') ? 3 : 4); }
-        if (pendingAction === 'EXECUTE_SHOT') { dmgMult *= 1.4; actEnt.cooldowns.execute_shot = cdFor(actEnt, 'execute_shot', 3); }
-        if (pendingAction === 'SPOTTERS_MARK') { dmgMult = 0.4; actEnt.cooldowns.spotters_mark = cdFor(actEnt, 'spotters_mark', 3); }
-        if (pendingAction === 'RIP_AND_TEAR') { dmgMult *= 1.2; actEnt.cooldowns.rip_and_tear = cdFor(actEnt, 'rip_and_tear', 3); }
+        if (pendingAction === 'FLASHBANG') { dmgMult = 0.4; actEnt.cooldowns.flashbang = cdFor(actEnt, 'flashbang'); }
+        if (pendingAction === 'HEAVY_WRENCH') { dmgMult = 1.5; actEnt.cooldowns.heavy_wrench = cdFor(actEnt, 'heavy_wrench'); }
+        if (pendingAction === 'FERAL_BITE') { dmgMult = 1.2; actEnt.cooldowns.feral_bite = cdFor(actEnt, 'feral_bite'); }
+        if (pendingAction === 'DEADEYE') { if (dist === livingEnemies.length - 1 && dist !== 0) dmgMult = hasTrait(actEnt, 'PATIENT_HUNTER') ? 2.1 : 1.8; else dmgMult = hasMod(actEnt, 'LONG_BARREL') ? 1.0 : 0.8; actEnt.cooldowns.deadeye = cdFor(actEnt, 'deadeye'); }
+        if (pendingAction === 'BUCKSHOT') { dmgMult *= (dist === 0 ? (hasTrait(actEnt, 'POINT_BLANK') ? 1.8 : 1.5) : 0.8); actEnt.cooldowns.buckshot = cdFor(actEnt, 'buckshot'); }
+        if (pendingAction === 'ACID_FLASK') { dmgMult = 0.5; actEnt.cooldowns.acid_flask = cdFor(actEnt, 'acid_flask'); }
+        if (pendingAction === 'THERMITE') { dmgMult *= 1.6; actEnt.cooldowns.thermite = cdFor(actEnt, 'thermite'); }
+        if (pendingAction === 'EXECUTE_SHOT') { dmgMult *= 1.4; actEnt.cooldowns.execute_shot = cdFor(actEnt, 'execute_shot'); }
+        if (pendingAction === 'SPOTTERS_MARK') { dmgMult = 0.4; actEnt.cooldowns.spotters_mark = cdFor(actEnt, 'spotters_mark'); }
+        if (pendingAction === 'RIP_AND_TEAR') { dmgMult *= 1.2; actEnt.cooldowns.rip_and_tear = cdFor(actEnt, 'rip_and_tear'); }
         // The mastered fourth verbs, priced like the classics.
-        if (pendingAction === 'SHIELD_SLAM') { dmgMult *= 0.85; actEnt.cooldowns.shield_slam = cdFor(actEnt, 'shield_slam', 2); }
-        if (pendingAction === 'SHIV') { dmgMult *= 0.9; actEnt.cooldowns.shiv = cdFor(actEnt, 'shiv', 2); }
-        if (pendingAction === 'HEAT_WAVE') { dmgMult *= 0.7; actEnt.cooldowns.heat_wave = cdFor(actEnt, 'heat_wave', 3); }
-        if (pendingAction === 'RIOT_BUTT') { dmgMult *= 0.85; actEnt.cooldowns.riot_butt = cdFor(actEnt, 'riot_butt', 2); }
-        if (pendingAction === 'PIERCING_VOLLEY') { dmgMult *= 0.75; actEnt.cooldowns.piercing_volley = cdFor(actEnt, 'piercing_volley', 3); }
-        if (pendingAction === 'HARRY') { dmgMult *= 0.6; actEnt.cooldowns.harry = cdFor(actEnt, 'harry', 2); }
+        if (pendingAction === 'SHIELD_SLAM') { dmgMult *= 0.85; actEnt.cooldowns.shield_slam = cdFor(actEnt, 'shield_slam'); }
+        if (pendingAction === 'SHIV') { dmgMult *= 0.9; actEnt.cooldowns.shiv = cdFor(actEnt, 'shiv'); }
+        if (pendingAction === 'HEAT_WAVE') { dmgMult *= 0.7; actEnt.cooldowns.heat_wave = cdFor(actEnt, 'heat_wave'); }
+        if (pendingAction === 'RIOT_BUTT') { dmgMult *= 0.85; actEnt.cooldowns.riot_butt = cdFor(actEnt, 'riot_butt'); }
+        if (pendingAction === 'PIERCING_VOLLEY') { dmgMult *= 0.75; actEnt.cooldowns.piercing_volley = cdFor(actEnt, 'piercing_volley'); }
+        if (pendingAction === 'HARRY') { dmgMult *= 0.6; actEnt.cooldowns.harry = cdFor(actEnt, 'harry'); }
         // The three found on the road.
-        if (pendingAction === 'RIPSAW') { dmgMult *= 1.5; actEnt.cooldowns.ripsaw = cdFor(actEnt, 'ripsaw', 3); }
-        if (pendingAction === 'CAUSTIC_BURST') { dmgMult *= 0.6; actEnt.cooldowns.caustic_burst = cdFor(actEnt, 'caustic_burst', 3); }
+        if (pendingAction === 'RIPSAW') { dmgMult *= 1.5; actEnt.cooldowns.ripsaw = cdFor(actEnt, 'ripsaw'); }
+        if (pendingAction === 'CAUSTIC_BURST') { dmgMult *= 0.6; actEnt.cooldowns.caustic_burst = cdFor(actEnt, 'caustic_burst'); }
         // Hauling something out of the back line is most of the point; the hit is the smaller half.
-        if (pendingAction === 'DRAG_LINE') { dmgMult *= 0.8; actEnt.cooldowns.drag_line = cdFor(actEnt, 'drag_line', 3); }
-        if (pendingAction === 'BARBED_SHOT') { dmgMult *= 1.35; actEnt.cooldowns.barbed_shot = cdFor(actEnt, 'barbed_shot', 3); }
-        if (pendingAction === 'TRENCH_SWEEP') { dmgMult *= 0.7; actEnt.cooldowns.trench_sweep = cdFor(actEnt, 'trench_sweep', 3); }
-        if (pendingAction === 'TANK_RUPTURE') { dmgMult *= 1.8; actEnt.cooldowns.tank_rupture = cdFor(actEnt, 'tank_rupture', 4); }
-        if (pendingAction === 'WHALE_LINE') { dmgMult *= 0.75; actEnt.cooldowns.whale_line = cdFor(actEnt, 'whale_line', 3); }
+        if (pendingAction === 'DRAG_LINE') { dmgMult *= 0.8; actEnt.cooldowns.drag_line = cdFor(actEnt, 'drag_line'); }
+        if (pendingAction === 'BARBED_SHOT') { dmgMult *= 1.35; actEnt.cooldowns.barbed_shot = cdFor(actEnt, 'barbed_shot'); }
+        if (pendingAction === 'TRENCH_SWEEP') { dmgMult *= 0.7; actEnt.cooldowns.trench_sweep = cdFor(actEnt, 'trench_sweep'); }
+        if (pendingAction === 'TANK_RUPTURE') { dmgMult *= 1.8; actEnt.cooldowns.tank_rupture = cdFor(actEnt, 'tank_rupture'); }
+        if (pendingAction === 'WHALE_LINE') { dmgMult *= 0.75; actEnt.cooldowns.whale_line = cdFor(actEnt, 'whale_line'); }
         if (pendingAction === 'HARPOON' && hasMod(actEnt, 'TOGGLE_HEAD') && (target.bleedingTurns || 0) > 0) { dmgMult *= 1.3; }
         if (pendingAction === 'SNAP' && hasMod(actEnt, 'BLOOD_TRACKER') && (target.bleedingTurns || 0) > 0) { dmgMult *= 1.3; }
         // The Bayonet turns the rifle into a spear: front-rank bonus in, reach penalties honest.
@@ -13076,7 +13101,7 @@ function resolveAction(targetId) {
             } }
         if (pendingAction === 'RIP_AND_TEAR' && target.hp > 0) { bleedFor(target, 3, 'RIP_AND_TEAR'); setTimeout(() => spawnFCT(target.id, "BLEED", "fct-status"), 400); }
         if (pendingAction === 'MOLOTOV') {
-            actEnt.cooldowns.molotov = cdFor(actEnt, 'molotov', 3); triggerShake();
+            actEnt.cooldowns.molotov = cdFor(actEnt, 'molotov'); triggerShake();
             if (hasMod(actEnt, 'NAPALM_MIX') && target.hp > 0) { target.oiledTurns = Math.max(target.oiledTurns, 3); setTimeout(() => spawnFCT(target.id, "OILED", "fct-weak"), 450); }
             let secondaries = livingEnemies.filter(e => e.id !== targetId);
             if (secondaries.length > 0) { let sTarg = secondaries[Math.floor(Math.random() * secondaries.length)]; applyDamageHit(actEnt, sTarg, Math.floor(baseDmg * (hasTrait(actEnt, 'BACKDRAFT') ? 1.0 : 0.7)), atkType, null);
@@ -14802,7 +14827,7 @@ globalThis.WP = {
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, DECK_MOVES, moveDetail, reachFor, operatorFileHtml, resRowHtml, RANK_LABELS, get deckInspect() { return deckInspect; }, set deckInspect(v) { deckInspect = v; }, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, openEnragePhase, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, MOVE_CD, DECK_MOVES, moveDetail, reachFor, operatorFileHtml, resRowHtml, RANK_LABELS, get deckInspect() { return deckInspect; }, set deckInspect(v) { deckInspect = v; }, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, openEnragePhase, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },

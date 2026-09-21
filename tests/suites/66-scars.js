@@ -339,18 +339,26 @@ module.exports = {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       window.__clearField();
       const t = window.__bare(playerRoster.find(c => c.gridPos > 0));
-      const base = cdFor(t, 'nothing_in_particular', 3);
+      // V02: this asked cdFor for a move called 'nothing_in_particular' at a base of 3, to say
+      // the scar is move-agnostic, and at a base of 1 to say it reaches the cheapest thing in
+      // the deck. A price is read from MOVE_CD now rather than passed in, so a move that does
+      // not exist has no price - and the question is better asked of the moves that do: EVERY
+      // one of the 29, rather than one invented one. The cheapest real cooldown is 2.
+      const keys = Object.keys(MOVE_CD);
+      const before = keys.map(k => cdFor(t, k));
       t.scars = ['STIFF_JOINTS'];
-      return { base, scarred: cdFor(t, 'nothing_in_particular', 3),
-               floored: cdFor(t, 'nothing_in_particular', 1) };
+      const after = keys.map(k => cdFor(t, k));
+      const cheapest = keys.reduce((a, k) => MOVE_CD[k] < MOVE_CD[a] ? k : a, keys[0]);
+      return { n: keys.length, missed: keys.filter((k, i) => after[i] !== before[i] + 1),
+               cheapest, cheapBefore: MOVE_CD[cheapest], cheapAfter: cdFor(t, cheapest) };
     });
-    ok(`STIFF JOINTS puts a turn on every cooldown (${stiff.base} -> ${stiff.scarred})`,
-      stiff.scarred === stiff.base + 1);
+    ok(`STIFF JOINTS puts a turn on every cooldown - all ${stiff.n} of them `
+       + `(${stiff.missed.join(', ') || 'none missed'})`, stiff.missed.length === 0);
     // Said plainly rather than as a floor check, which is what the first draft of this row
     // claimed and was not: the scar puts a turn on the SHORTEST move too, so the cheapest thing
     // in the deck stops being free. The Math.max(1) in cdFor guards the sky's cdCut, not this.
-    ok(`including the cheapest move in the deck (a 1-turn cooldown becomes ${stiff.floored})`,
-      stiff.floored === 2);
+    ok(`including the cheapest move in the deck (${stiff.cheapest} ${stiff.cheapBefore} -> ${stiff.cheapAfter})`,
+      stiff.cheapAfter === stiff.cheapBefore + 1);
 
     const thin = await page.evaluate(() => {
       const tick = (scars, quirk) => {
