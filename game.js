@@ -10406,6 +10406,19 @@ function unlockDepth(minTier) {
     return { sector, tier: minTier - (sector - 1) * SECTOR_TIER_BONUS };
 }
 
+// V01: one resistance row, drawn the same on a hostile's file and on an operator's - K04's rule
+// that a thing is worded identically wherever it appears. A POSITIVE under the badge threshold
+// used to print as an em-dash here, which is the badge's rule leaking into the file: a threshold
+// is about what earns a mark on a crowded field, and a file is the one place the number belongs.
+// The count is asserted in 189-your-own-file rather than written here, so it cannot go stale.
+function resRowHtml(res) {
+    return `<div class="dos-res-row">` + ['phys', 'bio', 'energy'].map(t => {
+        const v = (res || {})[t] || 0;
+        const word = v >= 100 ? 'IMMUNE' : v > 5 ? `RESISTS ${v}` : v > 0 ? `+${v}` : v < 0 ? `WEAK ${v}` : '\u2014';
+        const cls = v >= 100 ? 'dos-immune' : v > 5 ? 'dos-strong' : v < 0 ? 'dos-weak' : '';
+        return `<div class="dos-res ${cls}"><span>${t.toUpperCase()}</span><span>${word}</span></div>`;
+    }).join('') + `</div>`;
+}
 function dossierHtml(name) {
     const rec = bestiaryRecord(name);
     const tally = bestiaryEntry(name);
@@ -10415,12 +10428,7 @@ function dossierHtml(name) {
     // The file is looked up by the stripped name, so an elite's card carries the rider its
     // species carries - which is the whole point of moving it off enemy.name.
     const rider = rec.rider ? ENEMY_RIDERS[rec.rider] : null;
-    const res = ['phys', 'bio', 'energy'].map(t => {
-        const v = (rec.resistances || {})[t] || 0;
-        const word = v >= 100 ? 'IMMUNE' : v > 5 ? `RESISTS ${v}` : v < 0 ? `WEAK ${v}` : '\u2014';
-        const cls = v >= 100 ? 'dos-immune' : v > 5 ? 'dos-strong' : v < 0 ? 'dos-weak' : '';
-        return `<div class="dos-res ${cls}"><span>${t.toUpperCase()}</span><span>${word}</span></div>`;
-    }).join('');
+    const res = resRowHtml(rec.resistances);
     return `<div class="dossier-body">
         <div class="dossier-name">${name}</div>
         <div class="dossier-sub">${rec.boss ? 'WARLORD' : rec.faction} \u00B7 ${rec.range === 'ranged' ? 'RANGED' : 'MELEE'}${rec.isHeavy && !rec.boss ? ' \u00B7 HEAVY' : ''} \u00B7 THROWS ${(rec.dmgType || 'phys').toUpperCase()}${rec.minTier ? (d => ` \u00B7 FROM S${d.sector} T${d.tier}`)(unlockDepth(rec.minTier)) : ''}</div>
@@ -10433,7 +10441,7 @@ function dossierHtml(name) {
         ${rider ? `<div class="dossier-sig"><span class="dossier-sig-name">${rider.name}</span>
             <span class="dossier-sig-kind">RIDER</span>
             <span class="dossier-sig-desc">${rider.desc}</span></div>` : ''}
-        <div class="dos-res-row">${res}</div>
+        ${res}
         <div class="dossier-tally">
             <span>MET <b>${tally.met}</b></span>
             <span>KILLED <b>${tally.killed}</b></span>
@@ -10447,6 +10455,46 @@ let inspecting = null;   // the id of the hostile whose file is open
 // a tap still queues the move either way - so it is deliberately sticky across turns and fights:
 // a player who wanted the detail on this turn wants it on the next one too.
 let deckInspect = false;
+
+// V01: the other half of the Archive. A hostile has had a tappable file since N02 and the
+// operator standing opposite it never did - and the operator is the one carrying the perks, the
+// quirk, the scars, the bonds and the gear that decide what their moves actually do. Measured on
+// a squad three nodes deep: perks 3 of 3 carried and 0 on screen, quirk 3 and 0, gear 2 and 0,
+// and the deck readable for exactly the one whose turn it is.
+//
+// Every line is an existing reader - the Outpost's operator card is built from the same ones -
+// so this is composition, not a second description of an operator. What it deliberately does NOT
+// carry is that card's other half: the buy buttons. A fight is not a place you spend, and a file
+// you can act from stops being a file.
+function operatorFileHtml(ch) {
+    const rows = [];
+    const add = (label, body, title) => { if (body) rows.push(
+        `<div class="dossier-sig"><span class="dossier-sig-name">${label}</span>`
+        + `<span class="dossier-sig-desc"${title ? ` title="${title}"` : ''}>${body}</span></div>`); };
+
+    // Read for THIS operator, so a mod that changes a reach reads here exactly as it reads on
+    // the button - and so the three moves of somebody whose turn it is not are legible at all.
+    add('DECK', deckFor(ch).map(a => `${a.label} \u00B7 ${moveDetail(a, ch)}`).join('<br>'));
+    add('PERKS', traitSummary(ch));
+    if (ch.quirk) add('QUIRK', ch.quirk.name, ch.quirk.desc || '');
+    const scars = scarsOf(ch);
+    if (scars.length) add('SCARS', scars.map(sc => sc.name).join(', '),
+        scars.map(sc => `${sc.name}: ${sc.desc}`).join(' \u2014 '));
+    add('BONDS', bondLineFor(ch));
+    const gear = [gearById(ch.weaponMod), gearById(ch.trinket)].filter(Boolean);
+    if (gear.length) add('GEAR', gear.map(g => g.name).join(', '),
+        gear.map(g => `${g.name}: ${g.desc}`).join(' \u2014 '));
+    const rank = masteryRank(ch.classType);
+    if (rank >= 1) add('MASTERY', `${MASTERY_TITLES[ch.classType]} \u00B7 RANK ${['0', 'I', 'II', 'III'][rank]}`);
+
+    const pos = ch.gridPos > 0 ? RANK_LABELS[ch.gridPos] : 'BENCH';
+    return `<div class="dossier-body">
+        <div class="dossier-name">${ch.name}</div>
+        <div class="dossier-sub">${ch.classType.replace(/_/g, ' ')} \u00B7 ${pos} \u00B7 LVL ${ch.level || 1} \u00B7 ${ch.hp}/${ch.maxHp}</div>
+        ${rows.join('')}
+        ${resRowHtml(ch.resistances)}
+    </div>`;
+}
 
 function renderDossier() {
     const el = document.getElementById('dossier');
@@ -10463,7 +10511,7 @@ function renderDossier() {
         ${worn.map(a => `<div class="dossier-sig"><span class="dossier-sig-name">${a.name}</span>
             <span class="dossier-sig-desc">${a.desc}</span></div>`).join('')}
     </div>` : '';
-    el.innerHTML = dossierHtml(typeNameOf(ent)) + affixCard
+    el.innerHTML = (ent.isPlayer ? operatorFileHtml(ent) : dossierHtml(typeNameOf(ent)) + affixCard)
         + `<button class="dossier-close" data-action="dossier-close">CLOSE</button>`;
     el.style.display = 'flex';
 }
@@ -11050,10 +11098,16 @@ function deckFor(char) {
 // changes reach or type or cooldown changes its own entry.
 // U01: split so the deck can print what a move does without repeating the label it is already
 // written on. One computation, two callers - the codex line is this with the label in front.
-function moveDetail(a) {
+function moveDetail(a, ent) {
     const bits = [];
     if (dealsDamage(a.move)) bits.push(`${typeGlyph(damageTypeOf(a.move))} ${damageTypeOf(a.move)}`);
-    bits.push(a.reach === 'self' ? 'self' : a.reach);
+    // V01, and this was U01's bug: reach is a property of the move IN A PAIR OF HANDS, not of
+    // the move. A Bayonet turns the Pipe Rifle melee - moveReachFor exists for exactly that, and
+    // this printed the declared row instead, so a Scavenger holding one read "ranged" off a
+    // button whose own REACH tag was computed per-operator. Two readings of one swing on one
+    // control, which is the defect E03 is named for. The deck knows whose turn it is and passes
+    // the operator; the manual's class entry has no hands to put a mod in and passes nothing.
+    bits.push(reachFor(a, ent));
     if (isAoe(a.move)) bits.push('hits two');
     if (a.cd) bits.push('cooldown');
     const combo = COMBOS.find(c => c.move === a.move);
@@ -11061,6 +11115,11 @@ function moveDetail(a) {
     return `${bits.join(', ')}${note}`;
 }
 function moveLine(a) { return `${a.label} \u00B7 ${moveDetail(a)}`; }
+// One answer to "how far does this reach", asked with or without an operator.
+function reachFor(a, ent) {
+    const r = ent ? moveReachFor(a.move, ent) : a.reach;
+    return r === 'self' ? 'self' : r;
+}
 function classCodexLines(cls) {
     const deck = ABILITIES[cls] || [];
     const fourth = FOURTH_ABILITIES[cls];
@@ -11788,8 +11847,10 @@ function renderField() {
             if (!ent.isPlayer) sigsShown.add(tagText);
             sigTag = `<div class="sig-tag${tagSpent ? ' sig-spent' : ''}${echo ? ' sig-echo' : ''}"${echo ? ' aria-hidden="true"' : ` title="${tagTitle}"`}>${tagText}</div>`;
         }
-        // Not aiming at anything? Then a tap on a hostile opens its file rather than doing nothing.
-        if (!pendingAction && !ent.isPlayer && !isDead) {
+        // Not aiming at anything? Then a tap opens that body's file rather than doing nothing.
+        // V01: either body's. Aiming still owns the tap, because a tap that sometimes fires and
+        // sometimes reads is the misclick trap the armed deck exists to avoid.
+        if (!pendingAction && !isDead) {
             tCls = 'inspectable';
             clk = `tabindex="0" role="button" aria-label="Inspect ${ent.name}" data-action="inspect" data-id="${ent.id}"`;
         }
@@ -11982,7 +12043,7 @@ function renderCommandDeck() {
         // the label in front - so a move that changes reach, type or cooldown changes both at
         // once. The tooltip is dropped while the line is visible: it would be the same sentence
         // twice, and a screen reader would read it twice.
-        const what = moveDetail(a);
+        const what = moveDetail(a, aE);
         deckHtml += `<button ${cd > 0 ? 'disabled' : ''} ${cls ? `class="${cls}"` : ''} ${deckInspect ? '' : `title="${what}"`} data-action="${a.act || 'queue'}" data-move="${a.move}">`
                   + `${a.label}${typeTag}${cd > 0 ? ` [${cd}]` : ''}${ready ? ` <span class="combo-tag">${ready}</span>` : ''}`
                   + `${short ? ` <span class="reach-tag">REACH ${short}</span>` : ''}`
@@ -14741,7 +14802,7 @@ globalThis.WP = {
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, DECK_MOVES, moveDetail, RANK_LABELS, get deckInspect() { return deckInspect; }, set deckInspect(v) { deckInspect = v; }, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, openEnragePhase, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, DECK_MOVES, moveDetail, reachFor, operatorFileHtml, resRowHtml, RANK_LABELS, get deckInspect() { return deckInspect; }, set deckInspect(v) { deckInspect = v; }, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, openEnragePhase, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },

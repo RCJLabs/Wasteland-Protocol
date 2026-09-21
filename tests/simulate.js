@@ -2457,6 +2457,91 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── V01: THE FILE ON THE OTHER SIDE OF THE FIELD ────────────────────────────────────
+//
+// N02 gave every hostile a tappable file and F11 closed the two holes left in it. The operator
+// standing opposite had none until this item - and the operator is the one carrying the perks,
+// the quirk, the scars, the bonds and the gear that decide what their own moves do. Written in
+// the past tense on purpose: "has never had one" is the shape stale.js counts as an open claim,
+// and it would have been one more marked row on a count 173 pins deliberately. The sentence
+// describes a state this entry ends, so the tense that says so is also the accurate one.
+// Checked against
+// the record first: F11 is about the BESTIARY, species files for things that walk, and E13 is
+// about mastery numbers being unreachable for three classes. Neither scoped the player out on
+// purpose; the gate was just `!ent.isPlayer` with a comment saying "a tap on a hostile".
+//
+// MEASURED ON A SQUAD THREE NODES DEEP, what the character carries against what the combat
+// screen paints:
+//
+//   perks    3 of 3 carried    0 on screen        gear   2 of 2 carried   0 on screen
+//   quirk    3 of 3 carried    0 on screen        deck   readable for the one whose turn it is
+//
+// Resistances are the exception and they are NOT a finding: K04 badges them on the field above a
+// threshold, which is a deliberate rule about what earns a mark on a crowded row.
+//
+// The file is composed from the readers the Outpost's operator card already uses - traitSummary,
+// scarsOf, bondLineFor, gearById, masteryRank - so it is not a second description of an operator.
+// It drops that card's other half, the buy buttons, and a row asserts it: a fight is not a place
+// you spend, and a file you can act from stops being a file.
+//
+// ── AND IT FOUND A BUG I SHIPPED ONE ITEM AGO ───────────────────────────────────────
+//
+// U01 put what a move does on its button and computed the reach off the move's DECLARED row.
+// Reach is a property of a move in a pair of hands: the Bayonet turns the Pipe Rifle melee -
+// "+25% from the front rank, and sandstorms no longer blind it" - which is what moveReachFor
+// exists for and what the button's own REACH tag was already using. So a Scavenger holding one
+// read `P phys, ranged` off a line sitting beside a tag computed per operator:
+//
+//   moveReachFor('PIPE_RIFLE', a Scavenger with a Bayonet)   melee
+//   the line U01 shipped beside it                            ranged
+//
+// Two readings of one swing on one control, which is the defect E03 is named for, inside the
+// thing built to end exactly that. moveDetail takes the operator now; the manual keeps the
+// declared row, because a class entry has no hands to put a mod in.
+//
+// MY FIRST CUT OF THE SUITE DID NOT CATCH IT. The reach row called moveDetail(a, me) directly
+// and passed with the DECK still calling moveDetail(a) - the mutation test ran green on the half
+// that mattered, and caught only the five rows about the file. The bug was at the call site, so
+// the assertion reads the button that ships. That is the second time in two items that asserting
+// a helper instead of the shipped surface would have let a live defect through.
+//
+// ── AND ONE WORDING WENT WITH IT ────────────────────────────────────────────────────
+//
+// The hostile file printed an em-dash for any POSITIVE resistance at or under +5 - the badge
+// threshold leaking into the file. Both files read one builder now, so they cannot word the same
+// thing two ways (K04's rule), and the number prints:
+//
+//   8 of 72 non-zero resistances across 32 hostile files sat in that band and read as nothing
+//   3 of the 7 starting classes carry one (BRUISER phys, SCAVENGER energy, SHOTGUNNER phys)
+//
+// I nearly reported that as ZERO. The first probe passed bestiaryRoster()'s RECORDS to
+// bestiaryRecord() as if they were names, got nothing back, and I was one step from writing down
+// that no hostile sits in the band. The second read the source with a grep and over-counted the
+// other way, because half the blocks it matched were player classes. Two wrong numbers before
+// the right one, on a question worth about four lines of code.
+//
+// ── AND THE BATTERY CAUGHT A BOUND OF MINE SITTING ON ITS OWN BOUNDARY ──────────────
+//
+// 186's 320-wide row went red once in three batteries with "THE SKY TURNS by 0px", which is a
+// readout rounding away the quantity it exists to report - the same shape as the prose defects
+// the T-audit filed, in a number. Printed to two decimals instead: one run in eight had any
+// overflow, and it was 0.03 to 0.14px across four strings.
+//
+// The cause is structural rather than random. T03 put translateX(-50%) on `.fct` so a floating
+// readout centres on the body it reports; a centred element of ODD width therefore sits on a
+// half-pixel, while the clamp beside it computes in whole ones. getBoundingClientRect comes back
+// fractional by construction, and the row judged that float against a strict zero.
+//
+// So the bound is half a pixel now, which is the residue a 50% translate can leave and the floor
+// of what an eye could resolve - 185's idiom, where two pixels of slack is a layout meeting
+// rather than a collision. It is worth being plain that this is a bound moving to admit a red
+// row, which is the anti-pattern 112 and 132 record: what makes it legitimate is that the
+// quantity was MEASURED first and is three orders of magnitude under the defect this suite was
+// built for. T03's actual finding was 85px. Ten runs at 320 clean after it.
+
+// NOT MEASURED, AND DELIBERATELY: what any of this is worth in wins. It is a readout, the
+// harness does not tap bodies, and no dial moved.
+
 // ── U01: WHAT THE MOVE DOES, ON THE MOVE ────────────────────────────────────────────
 //
 // The ask was a way to see what attacks and abilities do mid-fight. Checked against the record

@@ -116,7 +116,17 @@ module.exports = {
           n++;
           const over = Math.max(r.right - Math.min(f.right, window.innerWidth),
                                 Math.max(f.left, 0) - r.left);
-          if (over > 0) bad.push(`${text} by ${Math.round(over)}px`);
+          // V01: two things were wrong with this line. It ROUNDED the overflow it was
+          // reporting, so the one row that ever fired printed "by 0px" - a readout rounding
+          // away the quantity it exists to report. And it judged a float against a strict
+          // zero: `.fct` carries translateX(-50%), so a centred element of ODD width sits on
+          // a half-pixel while the clamp computes in whole ones, and the rect comes back
+          // fractional by construction. Measured over eight runs at 320: one run had any
+          // overflow at all, and it was 0.03 to 0.14px across four strings. T03's actual
+          // defect was 85px. Half a pixel is the residue a 50% translate can leave and the
+          // floor of what an eye could resolve, so that is the bound - 185's idiom, where
+          // two pixels of slack is a layout meeting rather than a collision.
+          if (over > 0.5) bad.push(`${text} by ${over.toFixed(2)}px`);
           el.remove();
         }
         combatActive = false;
