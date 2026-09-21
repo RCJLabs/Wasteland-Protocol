@@ -2457,6 +2457,51 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── X01: THE FOURTH YOU LEFT AT HOME ────────────────────────────────────────────────
+//
+// E12b found ten abilities this file had never fired. E12c settled which three of four a rank
+// III operator brings, kept the engine's default - the muster benches the newly-earned fourth -
+// and justified keeping it in one sentence: "a player sees the bench control every time they
+// muster". That sentence is true, and it is about the muster. The fight was never brought into
+// line with it.
+//
+// CENSUSED BEFORE BUILDING, every class at rank III:
+//
+//   10 of 10 classes have a fourth ability, and a fresh squad benches 7 of 7 of them
+//   codex DECK_<CLASS>     names all four, marks the fourth "(rank III)", explains the bench
+//   muster / roster chips  four chips, the benched one crossed
+//   V01's operator file    three verbs, no fourth named, mid-fight
+//   Chronicle dossier      "rank III at 8,000: Stim Dart" - a flat promise
+//
+// So an operator who earned a move at rank III and is not carrying it read exactly like one who
+// never earned it, on the screen you look at while deciding what to do. deckFor drops the
+// benched move and V01's file inherited the filter without inheriting the explanation. The file
+// names all four now, the one staying behind crossed and said in words, read through benchedFor
+// - the rule deckFor itself applies - so the list cannot name a move the deck is carrying.
+//
+// AND I PITCHED IT WIDER THAN IT WAS. The first census said the codex did not name the fourth
+// either, which would have made it four broken surfaces. It was my probe: CODEX bodies are
+// FUNCTIONS, and the check stringified the table, so the entry's whole text was invisible to
+// it. Read properly the manual is complete and correct - "Shield Slam · P phys, melee, cooldown
+// 2 (rank III)" under a line explaining the bench. The scope shrank to the fight plus two small
+// ones, which is what shipped. A census that reads a structure the wrong way does not report
+// nothing; it reports a gap that is not there, which is the more expensive failure.
+//
+// TWO SMALLER ONES, BOTH REAL. The chip row's cross was explained only by a title attribute -
+// nothing at all on a touch screen - and this file already keeps the opposite rule for the
+// tactic buttons, "legible without a hover, the full line is the tooltip". It has a heading
+// now, with the count derived rather than written out. And the dossier promised the ability
+// flatly when rank III opens a CHOICE: the line says what it costs.
+//
+// NOT MEASURED, AND DELIBERATELY: wins. No default moved and no price changed - E12c measured
+// that choice against the wall and found it a null either way, and this item deliberately did
+// not reopen it. What changed is that the choice is legible where it is acted on.
+//
+// THE SUITE'S OWN CENSUS READ 6 OF 7 FIRST, and it was the test's fault: the block above it
+// un-benches an operator to prove the mark follows the choice, and the census inherited that
+// squad. Re-seeded, with the reason written beside it, because 6 of 7 looks exactly like a
+// defect in buildNewRun and the next reader should not have to find that out twice.
+
 // ── W01: WHAT KEEPS KILLING THEM ────────────────────────────────────────────────────
 //
 // E14 gave every operator who does not come home a line of their own, and it has been right for

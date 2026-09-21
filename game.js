@@ -6403,8 +6403,13 @@ function renderChronicle() {
             const next = r < MASTERY_RANKS.length - 1 ? MASTERY_RANKS[r + 1] : null;
             const unlock = r === 0 ? `rank I at ${MASTERY_RANKS[1].toLocaleString()}: the title`
                 : r === 1 ? `rank II at ${MASTERY_RANKS[2].toLocaleString()}: ${CLASS_QUIRKS[cls].name} joins the quirk draw`
-                : r === 2 ? `rank III at ${MASTERY_RANKS[3].toLocaleString()}: ${FOURTH_ABILITIES[cls].label}`
-                : `${MASTERY_TITLES[cls]} \u2014 ${CLASS_QUIRKS[cls].name}, ${FOURTH_ABILITIES[cls].label}`;
+                // X01: both lines used to name the fourth ability flatly, as a thing rank III
+                // hands over. It does not hand it over - it opens a choice, and the muster's
+                // default leaves the new move behind, so a player who reads this line, reaches
+                // rank III and looks at their deck finds three verbs and the promise unkept.
+                // The clause is the difference between an unlock and an offer.
+                : r === 2 ? `rank III at ${MASTERY_RANKS[3].toLocaleString()}: ${FOURTH_ABILITIES[cls].label}, to bring in place of one of the three`
+                : `${MASTERY_TITLES[cls]} \u2014 ${CLASS_QUIRKS[cls].name}, and ${FOURTH_ABILITIES[cls].label} to bring in place of one of the three`;
             return `<div class="dossier-row dossier-r${r}">
                 <span class="dossier-mark">${MARKS[r]}</span>
                 <span class="dossier-cls">${cls.replace(/_/g, ' ')}</span>
@@ -10576,7 +10581,20 @@ function operatorFileHtml(ch) {
 
     // Read for THIS operator, so a mod that changes a reach reads here exactly as it reads on
     // the button - and so the three moves of somebody whose turn it is not are legible at all.
-    add('DECK', deckFor(ch).map(a => `${a.label} \u00B7 ${moveDetail(a, ch)}`).join('<br>'));
+    //
+    // X01: AND THE ONE THEY LEFT AT HOME. deckFor drops the benched move at rank III, and V01's
+    // file inherited that filter without inheriting the explanation: it listed three verbs and
+    // said nothing about a fourth existing, so an operator who unlocked a move at rank III and
+    // is not carrying it looked identical to one who never earned it. Every class has a fourth
+    // and every one of them is benched by default, so this is the ordinary case rather than an
+    // edge. The row reads benchedFor - the rule deckFor itself applies - so the list below can
+    // never name a move the deck is actually carrying, or miss one it is not.
+    const bench = masteryRank(ch.classType) >= 3 ? benchedFor(ch) : null;
+    const held = bench ? [...(ABILITIES[ch.classType] || []), FOURTH_ABILITIES[ch.classType]]
+        .find(a => a && a.move === bench) : null;
+    add('DECK', deckFor(ch).map(a => `${a.label} \u00B7 ${moveDetail(a, ch)}`).join('<br>')
+        + (held ? `<br><span class="deck-benched">\u2715 ${held.label} \u00B7 ${moveDetail(held, ch)}`
+                + ` \u2014 sitting this expedition out</span>` : ''));
     add('PERKS', traitSummary(ch));
     if (ch.quirk) add('QUIRK', ch.quirk.name, ch.quirk.desc || '');
     const scars = scarsOf(ch);
@@ -11165,7 +11183,15 @@ function loadoutChipsHtml(classType, benched, id, kind) {
     if (!fourth || masteryRank(classType) < 3) return '';
     const all = [...(ABILITIES[classType] || []), fourth];
     const out = (benched && all.some(a => a.move === benched)) ? benched : fourth.move;
-    return `<div class="muster-loadout">` + all.map(a =>
+    // X01: a heading, because until now the row was four unlabelled chips with one of them
+    // marked, and what that mark MEANT lived only in a title attribute - which is nothing at
+    // all on a touch screen. The rule this file already keeps for the tactic buttons applies
+    // here: legible without a hover, with the tooltip as the longer version rather than the
+    // only version. The count is derived; a class that ever gains a fifth verb says five here
+    // without anybody remembering to come back.
+    return `<div class="loadout-head">BRINGING ${all.length - 1} OF ${all.length}`
+        + ` \u00B7 tap one to sit it out</div>`
+        + `<div class="muster-loadout">` + all.map(a =>
         `<button class="loadout-chip ${a.move === out ? 'chip-benched' : ''}" data-action="loadout-bench"`
         + ` data-id="${id}" data-kind="${kind || 'roster'}" data-move="${a.move}"`
         + ` title="${a.move === out ? 'Sitting out this expedition' : 'Bring this one; tap to sit it out instead'}">`

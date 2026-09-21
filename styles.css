@@ -867,6 +867,14 @@ button.reach-short { border-color: #7a5a20; }
              letter-spacing: 1px; color: #8a8578; font-variant-numeric: tabular-nums; }
 .fold-line span:last-child { color: #d5cfc0; text-align: right; }
 .fold-line b { color: #c86a5a; font-weight: 600; }
+/* X01: the move an operator earned and is not carrying, on their own file. Dimmed and struck
+   through so it reads as absent at a glance rather than as a fourth thing they can tap. */
+.deck-benched { color: #6d685e; }
+.deck-benched::first-line { color: #6d685e; }
+/* X01: the heading over the four loadout chips. Small and quiet - it explains the row once,
+   it is not a section header competing with the card's own. */
+.loadout-head { font-size: 0.5rem; letter-spacing: 1px; color: #7d786c; margin: 3px 0 2px;
+                text-transform: none; }
 .career-lost span:last-child { color: #c86a5a; }
 
 .chronicle-ladder { flex-shrink: 0; border: 1px solid #4a4030; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; }
