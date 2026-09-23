@@ -290,12 +290,13 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 #screen-combat { display: none; flex-direction: column; height: 100%; }
 .sky-layer { background-size: cover; background-position: center bottom; flex-grow: 1; display: flex; flex-direction: column; position: relative; }
 /* Y01: the weather, drawn. Absolutely placed over the whole sky layer, under everything in it,
-   and it never takes a tap. Every OTHER child of the layer is positioned so that it paints above
-   the canvas - an unpositioned banner paints before a positioned canvas and would sit under the
-   weather. Written against the rule rather than as a list of today's banners, so the next banner
-   anybody adds cannot quietly land underneath it. */
+   and it never takes a tap. Every child of the layer that is not scenery is positioned so that it
+   paints above the scenery - an unpositioned banner paints before a positioned layer and would sit
+   under the weather. Written against the rule rather than as a list of today's banners, so the
+   next banner anybody adds cannot quietly land underneath it; Y02 made the rule name the class
+   every scenery layer carries rather than the one layer there was, for the same reason. */
 .sky-fx { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
-.sky-layer > :not(.sky-fx) { position: relative; }
+.sky-layer > :not(.scene-fx) { position: relative; }
 /* The pall, tint and veil: a background, never a frame. */
 .sky-fx-still { position: absolute; inset: 0; }
 /* Each particle plane is a repeating tile slid on transform - the compositor moves it without a
@@ -325,6 +326,43 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 /* Still: the player asked for less motion, not less information. Everything stays where it was. */
 .sky-fx.still *, .sky-fx.still { animation: none !important; }
 .sky-fx.still .sky-strike { display: none; }
+/* Y02: the ground, drawn. Two layers either side of the squad: .ground-fx over the weather and
+   under everything standing on the field, .ground-fx-front over the feet and under everything that
+   has to be read - z-index 10 is above the cards (1-4) and below the first flag drawn over them
+   (25). The feet line is the backdrop's own lift, handed down as --ground-lift so a band anchored
+   to it follows the field whatever the screen's height does. */
+.ground-fx, .ground-fx-front { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.ground-fx { z-index: 0; }
+.ground-fx-front { z-index: 10; }
+.ground-part { position: absolute; left: 0; width: 100%; }
+.ground-band { bottom: 0; height: var(--ground-lift, 12vh); background-repeat: repeat; }
+.ground-rise { -webkit-mask-image: linear-gradient(to bottom, transparent, #000 28px); mask-image: linear-gradient(to bottom, transparent, #000 28px); }
+.ground-strip { background-repeat: repeat-x; }
+/* The water under the squad is the place itself, upside down: the backdrop mirrored about the feet
+   line and cut to the band below it. Drawn once, like everything else here. */
+.ground-reflect { top: 0; height: 100%; background-size: cover; background-position: center bottom;
+                  transform-origin: 0 calc(100% - var(--ground-lift, 12vh)); transform: scaleY(-1);
+                  clip-path: inset(calc(100% - 2 * var(--ground-lift, 12vh)) 0 var(--ground-lift, 12vh) 0); }
+.ground-surface { bottom: calc(var(--ground-lift, 12vh) - 6px); height: 16px; overflow: hidden; }
+.ground-shimmer { overflow: hidden; -webkit-mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent); mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent); }
+.ground-drift { position: absolute; background-repeat: repeat; will-change: transform; animation: sky-drift linear infinite; }
+/* A lamp on a bad circuit, and something alive in the eggs: opacity only, like the sky's flicker. */
+.ground-flicker { animation: ground-flicker 5.2s linear infinite; }
+.ground-pulse { animation: ground-pulse 3.4s ease-in-out infinite alternate; }
+@keyframes ground-flicker { 0%, 37%, 41%, 100% { opacity: 1; } 38% { opacity: 0.55; } 39.5% { opacity: 0.9; } 70% { opacity: 0.85; } }
+@keyframes ground-pulse { from { opacity: 0.35; } to { opacity: 0.9; } }
+.ground-fx.still *, .ground-fx-front.still * { animation: none !important; }
+/* The ruins' cover is the squad's, so it hangs off the squad: from behind the front rank out to
+   the middle of the gap between the lines. Wherever the field puts the team, at whatever width, the
+   wall stands in front of the front rank - which a share of the screen's width did at 390 and did
+   not at 1280. Its end is half the field's own gap past the team: each card overlaps that gap by
+   the same margin from either side, so the middle is the one place that is always between the
+   lines. Sized off the card width (.entity's own formula), behind the cards (z 0 against 1-4). */
+.sky-layer.ground-cover #player-team { position: relative; }
+.sky-layer.ground-cover #player-team::before { content: ''; position: absolute; z-index: 0; pointer-events: none;
+    --unit: calc(clamp(55px, 16vw, 110px) * var(--field-fit, 1));
+    right: calc(var(--field-gap) * -0.5); bottom: -2px; width: calc(var(--unit) * 1.25); height: calc(var(--unit) * 0.6);
+    background: var(--ground-cover) center bottom / 100% 100% no-repeat; }
 #queue-display { text-align: center; color: #ccc; padding: 8px; font-size: clamp(0.625rem, calc(3vw * var(--text-scale, 1)), 0.75rem); letter-spacing: 2px; font-weight: bold; background: rgba(0,0,0,0.7); text-shadow: 1px 1px 2px #000; border-bottom: 1px solid #222; }
 
 .runover-score { font-family: monospace; font-size: clamp(2.375rem, calc(12vw * var(--text-scale, 1)), 3.75rem); font-weight: bold; color: #B8860B; text-align: center; letter-spacing: 2px; text-shadow: 2px 2px 0 #8B0000; margin: 6px 0 2px; }
@@ -393,7 +431,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 
 .intent-icon { position: absolute; top: -25px; font-size: 0.875rem; background: #111; border: 1px solid #444; border-radius: 50%; width: 22px; height: 22px; display: flex; justify-content: center; align-items: center; z-index: 20; box-shadow: 0 2px 4px #000; }
 
-.battlefield { position: relative; display: flex; justify-content: center; gap: clamp(18px, 9vw, 70px); flex-grow: 1; align-items: flex-end; padding: 0 11px; box-sizing: border-box; margin-bottom: 12vh; /* overridden per backdrop by applyCombatScenery; relative so tracer lines can anchor to it */ }
+.battlefield { position: relative; display: flex; justify-content: center; --field-gap: clamp(18px, 9vw, 70px); gap: var(--field-gap); flex-grow: 1; align-items: flex-end; padding: 0 11px; box-sizing: border-box; margin-bottom: 12vh; /* overridden per backdrop by applyCombatScenery; relative so tracer lines can anchor to it */ }
 .team { display: flex; align-items: flex-end; justify-content: center; min-width: 0; }
 /* Four-strong squads tighten up so oversized sprites stay inside the viewport. */
 .team.crowded .entity { width: calc(clamp(42px, 11vw, 78px) * var(--field-fit, 1)); }

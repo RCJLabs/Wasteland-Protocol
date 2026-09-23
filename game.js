@@ -2397,26 +2397,57 @@ const TERRAIN = {
     TUNNELS:    { name: 'TUNNELS', short: 'TUNNELS', dot: 'tr-tunnel',
                   desc: 'A service tunnel two ranks wide. Everything is within arm\u2019s reach, there are no firing lanes, and there is nowhere to be when something goes off.',
                   reachFree: true, ranged: 0.85, aoe: 1.3,
-                  banner: '\u26CF TUNNELS: melee ignores reach, ranged -15%, area attacks +30% \u26CF' },
+                  banner: '\u26CF TUNNELS: melee ignores reach, ranged -15%, area attacks +30% \u26CF',
+                  // Y02: "a service tunnel two ranks wide" - a low roof, walls close on both sides,
+                  // daylight gone, and the only light what hangs from the roof.
+                  fx: { layers: [
+                      { kind: 'dim', rgb: [10, 8, 5], a: 0.55 },
+                      { kind: 'gloom', rgb: [6, 4, 3], a: 0.7, reach: 0.55 },
+                      { kind: 'walls', rgb: [12, 9, 6], a: 0.92, reach: 0.17 },
+                      { kind: 'ceiling', rgb: [42, 31, 20], lip: [120, 98, 62], depth: 0.24 },
+                      { kind: 'lamps', rgb: [201, 162, 39], a: 0.6, n: 3 } ] } },
     OPEN_FLATS: { name: 'OPEN FLATS', short: 'FLATS', dot: 'tr-flats',
                   desc: 'A hundred metres of hardpan. Rifles own it, and anything carrying a blade has to walk it.',
                   ranged: 1.15, reach: 0.8, backline: 2,
-                  banner: '\u25B3 OPEN FLATS: ranged +15%, melee -20%, your back rank is exposed \u25B3' },
+                  banner: '\u25B3 OPEN FLATS: ranged +15%, melee -20%, your back rank is exposed \u25B3',
+                  // Y02: "a hundred metres of hardpan" - cracked ground to the feet, and the air over
+                  // it wavering in the heat. The waver is the banner's pale blue: a mirage off hot
+                  // ground is the sky, shown where the ground should be.
+                  fx: { layers: [
+                      { kind: 'haze', rgb: [214, 206, 186], a: 0.30, y: [0.40, 0.84] },
+                      { kind: 'shimmer', rgb: [143, 182, 214], a: 0.34, n: 30, y: [0.52, 0.88], speed: 0.018 },
+                      { kind: 'floor', pattern: 'cracks', rgb: [38, 32, 24], a: 0.7, dust: [206, 192, 162, 0.26], rise: 24 } ] } },
     RUINS:      { name: 'RUINS', short: 'RUINS', dot: 'tr-ruins',
                   desc: 'Broken concrete in every direction. Your front rank has something to stand behind, a blast has somewhere to stop, and nobody has a clean line at anything.',
                   frontCover: 0.8, ranged: 0.9, aoe: 0.75,
-                  banner: '\u25A6 RUINS: your front rank -20%, ranged -10%, area attacks -25% \u25A6' },
+                  banner: '\u25A6 RUINS: your front rank -20%, ranged -10%, area attacks -25% \u25A6',
+                  // Y02: "your front rank has something to stand behind" - a broken wall between the
+                  // lines, on the squad's side of the gap, and concrete at every foot.
+                  fx: { layers: [
+                      { kind: 'floor', pattern: 'rubble', rgb: [168, 176, 154], a: 0.55 },
+                      { kind: 'cover', rgb: [168, 176, 154] },
+                      { kind: 'rubble', rgb: [168, 176, 154], n: 16, h: 24, front: true } ] } },
     // The Choir and the Carrion had no ground of their own - they borrowed tunnels and ruins
     // off the Mech and the Beasts, so two of five factions fought nowhere in particular. A
     // faction that reads as a place is the other half of what a named formation does.
     FLOODED:    { name: 'FLOODED WORKS', short: 'WATER', dot: 'tr-flooded',
                   desc: 'Ankle-deep in a drowned refinery. Nothing to brace against, blades drag through it, and whatever goes off carries across the water.',
                   reach: 0.85, aoe: 1.25, frontCover: 1.2,
-                  banner: '\u2248 FLOODED WORKS: melee -15%, area attacks +25%, your front rank has nothing to stand behind \u2248' },
+                  banner: '\u2248 FLOODED WORKS: melee -15%, area attacks +25%, your front rank has nothing to stand behind \u2248',
+                  // Y02: "ankle-deep in a drowned refinery" - the place hangs upside down in the water
+                  // under the squad, the light breaks up on it, and the waterline is over their ankles.
+                  fx: { layers: [
+                      { kind: 'reflect', rgb: [22, 36, 42], a: 0.55 },
+                      { kind: 'ripple', rgb: [127, 196, 207], a: 0.55, n: 70, speed: 0.025 },
+                      { kind: 'surface', rgb: [22, 36, 42], hi: [127, 196, 207], front: true } ] } },
     NEST:       { name: 'THE NEST', short: 'NEST', dot: 'tr-nest',
                   desc: 'Chitin underfoot and egg-cases to the ceiling. They are packed in tight enough to catch a blast properly - and they know the floor better than you do.',
                   aoe: 1.35, ranged: 0.9, backline: 2,
-                  banner: '\u2726 THE NEST: area attacks +35%, ranged -10%, your back rank is exposed \u2726' }
+                  banner: '\u2726 THE NEST: area attacks +35%, ranged -10%, your back rank is exposed \u2726',
+                  // Y02: "chitin underfoot and egg-cases to the ceiling", and something in them alive.
+                  fx: { layers: [
+                      { kind: 'floor', pattern: 'chitin', rgb: [36, 26, 34], a: 0.62, rim: [201, 143, 176], rise: 20 },
+                      { kind: 'eggs', rgb: [201, 143, 176], a: 0.62, n: 22, reach: 0.15 } ] } }
 };
 const TERRAIN_IDS = Object.keys(TERRAIN);
 // Ground is the place rather than an event, so it is commoner than weather's 0.4. Measured at
@@ -5525,7 +5556,7 @@ function skyFxStart() {
     if (!layer) return;
     if (!skyFx.el) {
         skyFx.el = document.createElement('div');
-        skyFx.el.className = 'sky-fx'; skyFx.el.setAttribute('aria-hidden', 'true');
+        skyFx.el.className = 'sky-fx scene-fx'; skyFx.el.setAttribute('aria-hidden', 'true');
         layer.prepend(skyFx.el);
         if (typeof ResizeObserver === 'function') {
             // A turned phone is a different field. Streak lengths and bank sizes are drawn for a
@@ -5552,6 +5583,426 @@ function skyFxState() {
     return { id: skyFx.id, built: !!(el && el.children.length), still: skyFx.still,
              planes: tiles.length, kinds: tiles.map(t => t.className.split(' ')[1].replace('sky-', '')),
              bolts: el ? el.querySelectorAll('.sky-strike').length : 0 };
+}
+
+// ── Y02: THE GROUND, DRAWN ──────────────────────────────────────────────────────────
+// Five grounds bend real rules - a tunnel frees every blade and punishes every blast, water drags
+// a swing and carries the blast across it, the flats hand the fight to the rifles - and on the
+// field each was one line of coloured text, as the skies were before Y01. The backdrop is the
+// FACTION's and says nothing about the ground: a Mech fight on RUINS and a Mech fight in TUNNELS
+// stood in the same refinery, and the Beasts' tunnel was a sunlit canyon.
+//
+// So the ground is drawn in two layers either side of the squad. `.ground-fx` sits over the
+// weather and under everything standing on the field: a ceiling is the one thing that should hide
+// the sky, and the squad stands in front of the walls. `.ground-fx-front` sits over the feet and
+// under everything that has to be read: z-index 10 is above the cards (1-4) and below the first
+// flag drawn over them (25). It holds only what belongs in front of an ankle - the waterline and
+// the rubble - and nothing in it reaches a card's hit points or its intent.
+//
+// Same shape as the sky and for the same measured reasons: painted ONCE, moved only on transform
+// and opacity, a still frame for a player who asked for less motion, nothing for the simulator,
+// and nothing for OPEN ROAD, which is the ground as painted. Measured the way the sky was, at 4x
+// CPU throttle: every ground reads 2.1-2.9 ms/s against 1.0-2.9 for its own backdrop bare
+// (medians of five four-second windows), and a faction's sky over its own ground within a few
+// tenths of that sky alone. One thing in every ground wears its
+// banner's colour - the lamps, the mirage, the concrete, the light on the water, the eggs - so the
+// line of text and the place it describes are visibly the same place.
+const GROUND_TILE = 256;
+let groundFx = { id: null, bg: null, back: null, front: null, w: 0, h: 0, still: false, ro: null };
+const groundTiles = {};
+const groundRgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+const groundShade = (c, k) => c.map(v => Math.max(0, Math.min(255, Math.round(v * k))));
+
+// Paint once into an image and keep it. The pen is seeded off the ground's own name, like the
+// sky's, so the still frame is the same picture every time and no run's random stream is touched.
+// `seed` lets two images share one draw of the dice - the egg-cases and their glow.
+function groundTile(id, salt, w, h, draw, seed = salt) {
+    const key = `${id}|${salt}|${Math.round(w)}|${Math.round(h)}`;
+    if (groundTiles[key]) return groundTiles[key];
+    const dpr = Math.min(window.devicePixelRatio || 1, SKY_FX_DPR_CAP);
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(w * dpr)); c.height = Math.max(1, Math.round(h * dpr));
+    const g = c.getContext('2d'); g.scale(dpr, dpr);
+    draw(g, w, h, skyRng(`ground|${id}`, seed));
+    return (groundTiles[key] = c.toDataURL());
+}
+// Draw a shape again on every side it crosses, so a tile repeats without a seam.
+function groundWrap(w, h, x, y, m, draw, wrapY = true) {
+    [-w, 0, w].forEach(ox => (wrapY ? [-h, 0, h] : [0]).forEach(oy => {
+        const X = x + ox, Y = y + oy;
+        if (X > -m && X < w + m && Y > -m && Y < h + m) draw(X, Y);
+    }));
+}
+
+// Hardpan: jagged cracks, flattened into the ground plane, over a dust wash.
+function groundCracks(L) {
+    return (g, w, h, rnd) => {
+        g.fillStyle = groundRgba(L.dust, L.dust[3]); g.fillRect(0, 0, w, h);
+        g.strokeStyle = groundRgba(L.rgb, L.a); g.lineCap = 'round'; g.lineJoin = 'round';
+        for (let i = 0; i < 18; i++) {
+            let x = rnd() * w, y = rnd() * h, ang = rnd() * Math.PI * 2;
+            const pts = [[0, 0]], n = 5 + Math.floor(rnd() * 7);
+            for (let s = 0; s < n; s++) { ang += (rnd() - 0.5) * 1.3; const d = 7 + rnd() * 13; pts.push([pts[s][0] + Math.cos(ang) * d, pts[s][1] + Math.sin(ang) * d * 0.55]); }
+            g.lineWidth = 0.7 + rnd() * 1.1;
+            groundWrap(w, h, x, y, w, (X, Y) => {
+                g.beginPath(); pts.forEach(([px, py], j) => (j ? g.lineTo(X + px, Y + py) : g.moveTo(X + px, Y + py))); g.stroke();
+            });
+        }
+    };
+}
+// Chitin: overlapping plates, row on row, each lit along its rim.
+function groundChitin(L) {
+    return (g, w, h, rnd) => {
+        const rows = 12, step = h / rows, cols = 8, pw = w / cols;
+        for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+            const x = c * pw + (r % 2) * pw / 2 + (rnd() - 0.5) * pw * 0.45, y = r * step + (rnd() - 0.5) * step * 0.6;
+            const rw = pw * (0.45 + rnd() * 0.35), rh = step * (0.8 + rnd() * 0.9), shade = 0.65 + rnd() * 0.6;
+            groundWrap(w, h, x, y, pw, (X, Y) => {
+                g.beginPath(); g.ellipse(X, Y, rw, rh, 0, 0, Math.PI);
+                g.fillStyle = groundRgba(groundShade(L.rgb, shade), L.a); g.fill();
+                g.strokeStyle = groundRgba(L.rim, 0.3); g.lineWidth = 1; g.stroke();
+            });
+        }
+    };
+}
+// Broken concrete, as a scatter of chunks: the ground a ruin leaves. The outline is thrown once and
+// drawn at every copy, or a chunk crossing the tile's edge would change shape at the seam.
+function groundChunkShape(rnd, s) {
+    const k = 5 + Math.floor(rnd() * 3), pts = [];
+    for (let i = 0; i < k; i++) { const a = (i / k) * Math.PI * 2 + rnd() * 0.5, r = s * (0.6 + rnd() * 0.5); pts.push([Math.cos(a) * r, Math.sin(a) * r * 0.7]); }
+    return pts;
+}
+function groundChunk(g, X, Y, shape, rgb, shade) {
+    shade *= 0.7;                         // concrete in these backdrops is dark, never the banner's grey
+    const k = shape.length, pts = shape.map(([dx, dy]) => [X + dx, Y + dy]);
+    g.beginPath(); pts.forEach(([px, py], j) => (j ? g.lineTo(px, py) : g.moveTo(px, py))); g.closePath();
+    g.fillStyle = groundRgba(groundShade(rgb, shade), 1); g.fill();
+    g.strokeStyle = 'rgba(14,14,12,0.75)'; g.lineWidth = 1; g.stroke();
+    // the lit top face
+    g.beginPath(); g.moveTo(pts[k - 1][0], pts[k - 1][1]);
+    pts.filter(([, py]) => py < Y).forEach(([px, py]) => g.lineTo(px, py));
+    g.strokeStyle = groundRgba(groundShade(rgb, shade + 0.35), 0.8); g.stroke();
+}
+function groundRubbleFloor(L) {
+    return (g, w, h, rnd) => {
+        for (let i = 0; i < 42; i++) {
+            const s = 3 + rnd() * rnd() * 12, x = rnd() * w, y = rnd() * h, shade = 0.25 + rnd() * 0.3, shape = groundChunkShape(rnd, s);
+            g.globalAlpha = L.a;
+            groundWrap(w, h, x, y, s + 2, (X, Y) => groundChunk(g, X, Y, shape, L.rgb, shade));
+        }
+    };
+}
+// Light broken up on water: short bright dashes.
+function groundRipples(L, n) {
+    return (g, w, h, rnd) => {
+        g.strokeStyle = groundRgba(L.rgb || L.hi, 1); g.lineCap = 'round';
+        for (let i = 0; i < n; i++) {
+            const len = 6 + rnd() * 28, x = rnd() * w, y = rnd() * h;
+            g.globalAlpha = L.a * (0.25 + rnd() * 0.75); g.lineWidth = 0.8 + rnd();
+            groundWrap(w, h, x, y, len, (X, Y) => { g.beginPath(); g.moveTo(X, Y); g.lineTo(X + len, Y); g.stroke(); });
+        }
+    };
+}
+// Heat off the hardpan: short wavering strokes, drawn to rise.
+function groundShimmer(L) {
+    return (g, w, h, rnd) => {
+        g.strokeStyle = groundRgba(L.rgb, 1); g.lineCap = 'round'; g.filter = 'blur(0.8px)';
+        for (let i = 0; i < L.n; i++) {
+            const len = 16 + rnd() * 40, x = rnd() * w, y = rnd() * h, amp = 0.6 + rnd() * 0.8, per = 9 + rnd() * 9;
+            g.globalAlpha = L.a * (0.3 + rnd() * 0.7); g.lineWidth = 0.9 + rnd() * 0.8;
+            groundWrap(w, h, x, y, len + 4, (X, Y) => {
+                g.beginPath();
+                for (let t = 0; t <= len; t += 2) { const px = X + t, py = Y + Math.sin(t / per * Math.PI * 2) * amp; t ? g.lineTo(px, py) : g.moveTo(px, py); }
+                g.stroke();
+            });
+        }
+    };
+}
+// A tunnel roof: a mass that darkens upward, two pipes, struts with rivets, and a lit lip with
+// its shadow under it - the lip is what makes it read as a ceiling rather than a dark sky.
+function groundCeiling(L) {
+    return (g, w, h) => {
+        const lip = h - 22;
+        const body = g.createLinearGradient(0, 0, 0, lip);
+        body.addColorStop(0, groundRgba(groundShade(L.rgb, 0.35), 1)); body.addColorStop(1, groundRgba(L.rgb, 1));
+        g.fillStyle = body; g.fillRect(0, 0, w, lip);
+        [[0.34, 7], [0.62, 10]].forEach(([at, ph]) => {
+            const py = lip * at, pg = g.createLinearGradient(0, py, 0, py + ph);
+            pg.addColorStop(0, groundRgba(groundShade(L.lip, 0.45), 1)); pg.addColorStop(0.35, groundRgba(L.lip, 1));
+            pg.addColorStop(1, groundRgba(groundShade(L.rgb, 0.55), 1));
+            g.fillStyle = pg; g.fillRect(0, py, w, ph);
+        });
+        [0.2, 0.7].forEach(at => {
+            const sx = w * at;
+            g.fillStyle = groundRgba(groundShade(L.rgb, 0.7), 1); g.fillRect(sx, 0, 13, lip);
+            g.fillStyle = groundRgba(L.lip, 0.8);
+            for (let ry = 7; ry < lip - 4; ry += 13) { g.beginPath(); g.arc(sx + 3.5, ry, 1.3, 0, 7); g.arc(sx + 9.5, ry, 1.3, 0, 7); g.fill(); }
+        });
+        g.fillStyle = groundRgba(L.lip, 1); g.fillRect(0, lip, w, 3);
+        // cable sagging between the struts - a straight lip reads as a toolbar, a sag reads as a roof
+        g.strokeStyle = 'rgba(8,6,4,0.9)'; g.lineWidth = 1.6;
+        [[0.2, 0.7, 12], [0.7, 1.2, 8]].forEach(([a, b, sag]) => {
+            g.beginPath(); g.moveTo(w * a + 6, lip + 2); g.quadraticCurveTo(w * (a + b) / 2 + 6, lip + 2 + sag * 2, w * b + 6, lip + 2); g.stroke();
+        });
+        const sh = g.createLinearGradient(0, lip + 3, 0, h);
+        sh.addColorStop(0, 'rgba(0,0,0,0.6)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = sh; g.fillRect(0, lip + 3, w, h - lip - 3);
+    };
+}
+// The squad's own light, hung under the lip: a cone each and the bulb - and, from the same seed, the
+// pool each one throws on the floor, which is the half that puts the squad inside the tunnel.
+function groundLampPools(L) {
+    return (g, w, h, rnd) => {
+        for (let i = 0; i < L.n; i++) {
+            const x = (i + 0.5) / L.n * w + (rnd() - 0.5) * w * 0.08;
+            g.save(); g.translate(x, h / 2); g.scale(1, 0.28);
+            const gr = g.createRadialGradient(0, 0, 0, 0, 0, w / L.n * 0.55);
+            gr.addColorStop(0, groundRgba(L.rgb, L.a * 0.7)); gr.addColorStop(1, groundRgba(L.rgb, 0));
+            g.fillStyle = gr; g.fillRect(-w / L.n, -h * 2, w / L.n * 2, h * 4); g.restore();
+        }
+    };
+}
+function groundLamps(L) {
+    return (g, w, h, rnd) => {
+        for (let i = 0; i < L.n; i++) {
+            const x = (i + 0.5) / L.n * w + (rnd() - 0.5) * w * 0.08, y = 8;
+            g.save(); g.translate(x, y); g.scale(1, 1.8);
+            const gr = g.createRadialGradient(0, 0, 0, 0, 0, 62);
+            gr.addColorStop(0, groundRgba(L.rgb, L.a)); gr.addColorStop(0.35, groundRgba(L.rgb, L.a * 0.4)); gr.addColorStop(1, groundRgba(L.rgb, 0));
+            g.fillStyle = gr; g.fillRect(-62, 0, 124, 62); g.restore();
+            g.fillStyle = 'rgba(255,238,176,0.95)'; g.beginPath(); g.arc(x, y, 2.6, 0, 7); g.fill();
+        }
+    };
+}
+// Cover: a broken wall, higher on the side the squad stands behind, with rebar out of the break.
+function groundCover(L) {
+    return (g, w, h, rnd) => {
+        const top = [[0, h * 0.30]];
+        for (let x = 0; x < w;) { x = Math.min(w, x + 4 + rnd() * 9); top.push([x, h * (0.12 + rnd() * 0.22) + (x / w) * h * 0.34]); }
+        const body = g.createLinearGradient(0, 0, 0, h);
+        body.addColorStop(0, groundRgba(groundShade(L.rgb, 0.46), 1)); body.addColorStop(1, groundRgba(groundShade(L.rgb, 0.16), 1));
+        g.beginPath(); g.moveTo(0, h); top.forEach(([x, y]) => g.lineTo(x, y)); g.lineTo(w, h); g.closePath();
+        g.fillStyle = body; g.fill(); g.strokeStyle = 'rgba(12,12,10,0.9)'; g.lineWidth = 1.2; g.stroke();
+        // grime: the art around it is hatched and filthy, and a clean slab is a sticker on it
+        g.save(); g.clip();
+        for (let i = 0; i < w * h / 14; i++) {
+            g.fillStyle = rnd() < 0.5 ? 'rgba(0,0,0,0.28)' : groundRgba(groundShade(L.rgb, 0.7), 0.16);
+            g.fillRect(rnd() * w, rnd() * h, 1 + rnd() * 1.5, 1 + rnd() * 1.5);
+        }
+        g.restore();
+        g.strokeStyle = groundRgba(groundShade(L.rgb, 0.7), 0.6); g.lineWidth = 1;
+        g.beginPath(); top.forEach(([x, y], j) => (j ? g.lineTo(x, y + 1) : g.moveTo(x, y + 1))); g.stroke();
+        g.strokeStyle = 'rgba(20,20,18,0.55)';
+        for (let i = 0; i < 4; i++) {
+            let x = rnd() * w, y = h * (0.45 + rnd() * 0.4); g.beginPath(); g.moveTo(x, y);
+            for (let s = 0; s < 4; s++) { x += (rnd() - 0.5) * 12; y += 3 + rnd() * 5; g.lineTo(x, y); }
+            g.stroke();
+        }
+        g.strokeStyle = 'rgba(70,48,36,0.95)'; g.lineWidth = 1.4;
+        for (let i = 0; i < 4; i++) {
+            const [x, y] = top[1 + Math.floor(rnd() * (top.length - 2))], len = 5 + rnd() * 9;
+            g.beginPath(); g.moveTo(x, y + 2); g.lineTo(x + (rnd() - 0.5) * 6, y - len); g.stroke();
+        }
+    };
+}
+// Rubble at the feet, in front of them: chunks along a strip, a few standing proud of the line.
+function groundRubbleStrip(L) {
+    return (g, w, h, rnd) => {
+        for (let c = 0; c < Math.ceil(L.n / 4); c++) {
+            const cx = rnd() * w;
+            for (let i = 0; i < 4; i++) {
+                const s = 2.5 + rnd() * rnd() * 9, x = cx + (rnd() - 0.5) * 34, y = h * 0.5 + rnd() * h * 0.45, shade = 0.3 + rnd() * 0.4, shape = groundChunkShape(rnd, s);
+                groundWrap(w, h, x, y, s + 2, (X, Y) => groundChunk(g, X, Y, shape, L.rgb, shade), false);
+            }
+        }
+    };
+}
+// Egg-cases, climbing a wall from the floor to the ceiling: thick at the floor, thinning upward.
+// The same seeded list feeds the cases and their glow, so the glow sits inside the right eggs.
+function groundEggList(rnd, n, w, h) {
+    const eggs = [];
+    for (let i = 0; i < n; i++) {
+        const t = Math.pow(rnd(), 0.7), y = h * (1 - t * 0.96) - 6, rx = (5 + rnd() * 8) * (0.6 + 0.5 * (1 - t));
+        eggs.push({ x: rx + rnd() * (w - rx * 2) * (0.35 + 0.65 * (1 - t)), y, rx, ry: rx * 1.35, rot: (rnd() - 0.5) * 0.7, glow: rnd() < 0.45 });
+    }
+    return eggs.sort((a, b) => a.y - b.y);
+}
+function groundEggs(L, side, glow) {
+    return (g, w, h, rnd) => {
+        if (side === 'right') { g.translate(w, 0); g.scale(-1, 1); }
+        const eggs = groundEggList(rnd, L.n, w, h);
+        if (glow) {
+            eggs.filter(e => e.glow).forEach(e => {
+                const gr = g.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.ry * 1.6);
+                gr.addColorStop(0, groundRgba(groundShade(L.rgb, 1.25), 0.85)); gr.addColorStop(1, groundRgba(L.rgb, 0));
+                g.fillStyle = gr; g.fillRect(e.x - e.ry * 1.6, e.y - e.ry * 1.6, e.ry * 3.2, e.ry * 3.2);
+            });
+            return;
+        }
+        const wall = g.createLinearGradient(0, 0, w, 0);
+        wall.addColorStop(0, groundRgba(groundShade(L.rgb, 0.18), 0.92)); wall.addColorStop(1, groundRgba(groundShade(L.rgb, 0.18), 0));
+        g.fillStyle = wall; g.fillRect(0, 0, w, h);
+        g.strokeStyle = groundRgba(L.rgb, 0.22); g.lineWidth = 0.8;
+        eggs.forEach((e, i) => { const o = eggs[(i + 3) % eggs.length]; g.beginPath(); g.moveTo(e.x, e.y); g.quadraticCurveTo((e.x + o.x) / 2 + 6, (e.y + o.y) / 2, o.x, o.y); g.stroke(); });
+        eggs.forEach(e => {
+            g.save(); g.translate(e.x, e.y); g.rotate(e.rot);
+            const body = g.createRadialGradient(-e.rx * 0.3, -e.ry * 0.3, 1, 0, 0, e.ry);
+            body.addColorStop(0, groundRgba(groundShade(L.rgb, 1.25), L.a)); body.addColorStop(0.6, groundRgba(L.rgb, L.a * 0.85));
+            body.addColorStop(1, groundRgba(groundShade(L.rgb, 0.35), L.a));
+            g.fillStyle = body; g.beginPath(); g.ellipse(0, 0, e.rx, e.ry, 0, 0, 7); g.fill();
+            g.fillStyle = groundRgba(groundShade(L.rgb, 0.25), 0.55); g.beginPath(); g.ellipse(e.rx * 0.1, e.ry * 0.15, e.rx * 0.45, e.ry * 0.4, 0.4, 0, 7); g.fill();
+            g.fillStyle = 'rgba(255,255,255,0.45)'; g.beginPath(); g.ellipse(-e.rx * 0.35, -e.ry * 0.45, e.rx * 0.18, e.ry * 0.12, -0.5, 0, 7); g.fill();
+            g.strokeStyle = groundRgba(groundShade(L.rgb, 0.2), 0.7); g.lineWidth = 1; g.beginPath(); g.ellipse(0, 0, e.rx, e.ry, 0, 0, 7); g.stroke();
+            g.restore();
+        });
+    };
+}
+
+// The ones that never move are one background, like the sky's pall and tint.
+function groundStillBackground(fx) {
+    const layers = [];
+    fx.layers.forEach(L => {
+        if (L.kind === 'walls') {
+            layers.push(`linear-gradient(to right, ${groundRgba(L.rgb, L.a)} 0%, ${groundRgba(L.rgb, 0)} ${L.reach * 100}%)`,
+                        `linear-gradient(to left, ${groundRgba(L.rgb, L.a)} 0%, ${groundRgba(L.rgb, 0)} ${L.reach * 100}%)`);
+        } else if (L.kind === 'haze') {
+            const [a, b] = L.y, mid = (a + b) / 2;
+            layers.push(`linear-gradient(to bottom, ${groundRgba(L.rgb, 0)} ${a * 100}%, ${groundRgba(L.rgb, L.a)} ${mid * 100}%, ${groundRgba(L.rgb, 0)} ${b * 100}%)`);
+        } else if (L.kind === 'gloom') {
+            layers.push(`linear-gradient(to bottom, ${groundRgba(L.rgb, L.a)} 0%, ${groundRgba(L.rgb, 0)} ${L.reach * 100}%)`);
+        } else if (L.kind === 'dim') layers.push(`linear-gradient(${groundRgba(L.rgb, L.a)}, ${groundRgba(L.rgb, L.a)})`);
+    });
+    return layers.join(', ');
+}
+
+function groundFxBuild(id) {
+    const layerEl = document.getElementById('combat-sky-layer');
+    const back = groundFx.back, front = groundFx.front;
+    back.innerHTML = ''; front.innerHTML = '';
+    layerEl.classList.remove('ground-cover'); layerEl.style.removeProperty('--ground-cover');
+    const fx = TERRAIN[id] && TERRAIN[id].fx;
+    if (!fx) return;
+    const W = layerEl.clientWidth || 390, H = layerEl.clientHeight || 560;
+    groundFx.w = W; groundFx.h = H;
+    // Where the feet are: the field stands on its backdrop's ground line, lifted per backdrop.
+    const field = layerEl.querySelector('.battlefield');
+    const feet = H - ((field && parseFloat(getComputedStyle(field).marginBottom)) || H * 0.12);
+    const part = (host, kinds, cls, css) => {
+        const d = document.createElement('div');
+        d.className = `ground-part ${cls}`; d.dataset.kind = kinds;
+        Object.assign(d.style, css); host.appendChild(d); return d;
+    };
+    // A moving tile: oversized by one loop in its direction of travel so the band is always covered.
+    const drift = (host, url, tw, th, dx, dy, pxPerSec) => {
+        const t = document.createElement('div'); t.className = 'ground-drift';
+        Object.assign(t.style, { backgroundImage: `url(${url})`, backgroundSize: `${tw}px ${th}px`,
+            left: `${dx > 0 ? -dx : 0}px`, top: `${dy > 0 ? -dy : 0}px`,
+            width: `calc(100% + ${Math.abs(dx)}px)`, height: `calc(100% + ${Math.abs(dy)}px)` });
+        t.style.setProperty('--dx', `${dx}px`); t.style.setProperty('--dy', `${dy}px`);
+        t.style.animationDuration = `${(Math.hypot(dx, dy) / Math.max(1, pxPerSec)).toFixed(2)}s`;
+        host.appendChild(t);
+    };
+    const still = groundStillBackground(fx);
+    if (still) part(back, fx.layers.filter(L => ['dim', 'gloom', 'walls', 'haze'].includes(L.kind)).map(L => L.kind).join(' '),
+        'ground-still', { top: '0', height: '100%', backgroundImage: still });
+    fx.layers.forEach(L => {
+        const T = GROUND_TILE;
+        if (L.kind === 'reflect') {
+            part(back, 'reflect', 'ground-reflect', { backgroundImage: `url('${combatBgFile}')`, opacity: String(L.a) });
+            part(back, 'reflect', 'ground-band', { backgroundImage:
+                `linear-gradient(to bottom, ${groundRgba(L.rgb, 0.25)}, ${groundRgba(L.rgb, 0.9)})` });
+        } else if (L.kind === 'ripple') {
+            const band = part(back, 'ripple', 'ground-band', { overflow: 'hidden' });
+            drift(band, groundTile(id, 'ripple', T, T / 2, groundRipples(L, L.n)), T, T / 2, T, 0, L.speed * W);
+        } else if (L.kind === 'floor') {
+            const paint = L.pattern === 'cracks' ? groundCracks(L) : L.pattern === 'chitin' ? groundChitin(L) : groundRubbleFloor(L);
+            part(back, 'floor', 'ground-band' + (L.rise ? ' ground-rise' : ''), {
+                backgroundImage: `url(${groundTile(id, `floor|${L.pattern}`, T, T, paint)})`, backgroundSize: `${T}px ${T}px`,
+                height: L.rise ? `calc(var(--ground-lift, 12vh) + ${L.rise}px)` : '' });
+        } else if (L.kind === 'ceiling') {
+            const ch = Math.round(H * L.depth);
+            part(back, 'ceiling', 'ground-strip', { top: '0', height: `${ch}px`,
+                backgroundImage: `url(${groundTile(id, 'ceiling', T, ch, groundCeiling(L))})`, backgroundSize: `${T}px ${ch}px` });
+        } else if (L.kind === 'lamps') {
+            const lip = Math.round(H * (fx.layers.find(C => C.kind === 'ceiling') || { depth: 0.2 }).depth) - 22;
+            part(back, 'lamps', 'ground-strip ground-flicker', { top: `${lip - 8}px`, height: '130px',
+                backgroundImage: `url(${groundTile(id, 'lamps', W, 130, groundLamps(L))})`, backgroundSize: `${W}px 130px`, backgroundRepeat: 'no-repeat' });
+            part(back, 'lamps', 'ground-strip ground-flicker', { top: `${Math.round(feet - 30)}px`, height: '60px',
+                backgroundImage: `url(${groundTile(id, 'pools', W, 60, groundLampPools(L), 'lamps')})`, backgroundSize: `${W}px 60px`, backgroundRepeat: 'no-repeat' });
+        } else if (L.kind === 'shimmer') {
+            const band = part(back, 'shimmer', 'ground-shimmer', { top: `${Math.round(L.y[0] * H)}px`, height: `${Math.round((L.y[1] - L.y[0]) * H)}px` });
+            drift(band, groundTile(id, 'shimmer', T, T / 2, groundShimmer(L)), T, T / 2, 0, -T / 2, L.speed * H);
+        } else if (L.kind === 'cover') {
+            // Hung off the squad rather than placed on the screen: see ground-cover in the stylesheet.
+            // A share of the field's width put it in front of the front rank at 390 and under the
+            // enemy's turret at 1280, because the field does not centre its teams at every width.
+            layerEl.style.setProperty('--ground-cover', `url(${groundTile(id, 'cover', 150, 72, groundCover(L))})`);
+            layerEl.classList.add('ground-cover');
+        } else if (L.kind === 'eggs') {
+            const ew = Math.round(L.reach * W), eh = Math.round(feet + 24);
+            ['left', 'right'].forEach(side => {
+                const at = side === 'left' ? { left: '0' } : { left: `${W - ew}px` };
+                part(back, 'eggs', 'ground-strip', { ...at, width: `${ew}px`, top: '0', height: `${eh}px`,
+                    backgroundImage: `url(${groundTile(id, `eggs|${side}`, ew, eh, groundEggs(L, side, false))})`, backgroundSize: '100% 100%' });
+                part(back, 'eggs', 'ground-strip ground-pulse', { ...at, width: `${ew}px`, top: '0', height: `${eh}px`,
+                    backgroundImage: `url(${groundTile(id, `glow|${side}`, ew, eh, groundEggs(L, side, true), `eggs|${side}`)})`, backgroundSize: '100% 100%' });
+            });
+        } else if (L.kind === 'rubble') {
+            part(front, 'rubble', 'ground-strip', { bottom: `calc(var(--ground-lift, 12vh) - ${L.h - 8}px)`, height: `${L.h}px`,
+                backgroundImage: `url(${groundTile(id, 'rubble', T, L.h, groundRubbleStrip(L))})`, backgroundSize: `${T}px ${L.h}px`, backgroundRepeat: 'repeat-x' });
+        } else if (L.kind === 'surface') {
+            const s = part(front, 'surface', 'ground-surface', { backgroundImage:
+                `linear-gradient(to bottom, ${groundRgba(L.hi, 0.42)} 0px, ${groundRgba(L.hi, 0.12)} 2px, ${groundRgba(L.rgb, 0.28)} 4px, ${groundRgba(L.rgb, 0.6)} 100%)` });
+            drift(s, groundTile(id, 'surface', T, 16, groundRipples({ rgb: L.hi, a: 0.8 }, 26)), T, 16, -T, 0, 0.012 * W);
+        }
+    });
+}
+
+// Called with the sky, wherever the scenery is (re)applied. The ground cannot change mid-fight, so
+// this builds once a fight and afterwards only re-checks stillness.
+function groundFxStart() {
+    if (paintOff) return;
+    const layer = document.getElementById('combat-sky-layer');
+    if (!layer) return;
+    if (!groundFx.back) {
+        const make = cls => { const d = document.createElement('div'); d.className = `${cls} scene-fx`; d.setAttribute('aria-hidden', 'true'); return d; };
+        groundFx.back = make('ground-fx'); groundFx.front = make('ground-fx-front');
+        if (typeof ResizeObserver === 'function') {
+            // Positions here are drawn for a height as well as a width - the feet line is in vh -
+            // so either changing by enough rebuilds.
+            groundFx.ro = new ResizeObserver(() => {
+                if (groundFx.id && (Math.abs(layer.clientWidth - groundFx.w) > groundFx.w * 0.15
+                    || Math.abs(layer.clientHeight - groundFx.h) > groundFx.h * 0.15)) groundFxBuild(groundFx.id);
+            });
+            groundFx.ro.observe(layer);
+        }
+    }
+    // Directly over the weather, whatever else has been added since; the front layer is last, where
+    // its z-index would put it anyway.
+    const sky = layer.querySelector(':scope > .sky-fx');
+    if (sky ? sky.nextElementSibling !== groundFx.back : layer.firstElementChild !== groundFx.back) {
+        if (sky) sky.after(groundFx.back); else layer.prepend(groundFx.back);
+    }
+    if (groundFx.front.parentNode !== layer) layer.appendChild(groundFx.front);
+    layer.style.setProperty('--ground-lift', GROUND_LIFT[combatBgFile] || DEFAULT_LIFT);
+    const id = TERRAIN[currentTerrain] && TERRAIN[currentTerrain].fx ? currentTerrain : null;
+    if (id !== groundFx.id || groundFx.bg !== combatBgFile) { groundFx.id = id; groundFx.bg = combatBgFile; groundFxBuild(id); }
+    groundFx.still = motionOff();
+    [groundFx.back, groundFx.front].forEach(el => el.classList.toggle('still', groundFx.still));
+}
+function groundFxClear() {
+    if (groundFx.back) { groundFx.back.innerHTML = ''; groundFx.front.innerHTML = ''; }
+    const layer = document.getElementById('combat-sky-layer');
+    if (layer) { layer.classList.remove('ground-cover'); layer.style.removeProperty('--ground-cover'); }
+    groundFx.id = null; groundFx.bg = null;
+}
+// For the suites, the way skyFxState reports the sky.
+function groundFxState() {
+    const kinds = el => (el ? [...el.children].flatMap(c => (c.dataset.kind || '').split(' ').filter(Boolean)) : []);
+    const layer = document.getElementById('combat-sky-layer');
+    return { id: groundFx.id, built: !!(groundFx.back && (groundFx.back.children.length + groundFx.front.children.length)),
+             still: groundFx.still, back: kinds(groundFx.back), front: kinds(groundFx.front),
+             cover: !!layer && layer.classList.contains('ground-cover') };
 }
 
 function triggerShake() {
@@ -7388,7 +7839,7 @@ function initEngine() {
 // (five units and a five-deep queue, unchanged across an open and a close). The list was the
 // only thing keeping it out.
 const SETTINGS_GEAR_OFF = ['screen-settings', 'screen-codex'];
-function switchScreen(screenId) { if (screenId !== 'screen-combat') { stopAmbience(); skyFxClear(); } document.querySelectorAll('#engine > div:not(.settings-icon):not(#screen-settings):not(.overlay)').forEach(el => el.style.display = 'none'); document.getElementById(screenId).style.display = 'flex'; document.getElementById('btn-global-settings').style.display = SETTINGS_GEAR_OFF.includes(screenId) ? 'none' : 'block'; focusScreen(screenId); }
+function switchScreen(screenId) { if (screenId !== 'screen-combat') { stopAmbience(); skyFxClear(); groundFxClear(); } document.querySelectorAll('#engine > div:not(.settings-icon):not(#screen-settings):not(.overlay)').forEach(el => el.style.display = 'none'); document.getElementById(screenId).style.display = 'flex'; document.getElementById('btn-global-settings').style.display = SETTINGS_GEAR_OFF.includes(screenId) ? 'none' : 'block'; focusScreen(screenId); }
 // Which screen is actually up, ignoring the settings panel that floats over one and the
 // overlays that float over all of them.
 function currentScreen() {
@@ -11922,6 +12373,8 @@ function applyCombatScenery(bgFile, bannerText) {
         cBanner.innerText = c ? `\u21AF ${weatherName(currentWeather)} OVER ${ground().name}: ${c.note}` : '';
         cBanner.style.display = c ? 'block' : 'none';
     }
+    // Last, so the feet line above is where the ground is drawn to.
+    groundFxStart();
 }
 
 function initiateCombat(nodeType, isEliteNode) {
@@ -15297,7 +15750,7 @@ globalThis.WP = {
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, MOVE_CD, DECK_MOVES, skyFxState, skyFxStart, skyFxClear, skyStreakStep, SKY_TILE, SKY_PLANES, SKY_FX_DPR_CAP, applyCombatScenery, moveDetail, reachFor, operatorFileHtml, resRowHtml, FELLED_CAUSES, felledPhrase, fallenPhrase, felledKind, fallenKind, rollFold, rollFoldHtml, FOLD_TOP, RANK_LABELS, get deckInspect() { return deckInspect; }, set deckInspect(v) { deckInspect = v; }, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, openEnragePhase, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, MOVE_CD, DECK_MOVES, skyFxState, skyFxStart, skyFxClear, skyStreakStep, SKY_TILE, SKY_PLANES, SKY_FX_DPR_CAP, applyCombatScenery, groundFxState, groundFxStart, groundFxClear, GROUND_TILE, moveDetail, reachFor, operatorFileHtml, resRowHtml, FELLED_CAUSES, felledPhrase, fallenPhrase, felledKind, fallenKind, rollFold, rollFoldHtml, FOLD_TOP, RANK_LABELS, get deckInspect() { return deckInspect; }, set deckInspect(v) { deckInspect = v; }, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, openEnragePhase, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },

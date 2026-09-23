@@ -109,7 +109,12 @@ module.exports = {
       // 320px row. The first draft said the mechanism "is not found yet" - true, present tense,
       // and not a phrase this scanner reads, which is R01's wording gap a second time. Worded
       // in the tracked vocabulary at the claim and marked in the same breath, as above.
-      && r.open === 3 && r.total === 23);
+      //
+      // Y02 moved it 3 -> 5 of 23 -> 25 with two it found in passing and did not chase, both older
+      // than the item and both reproduced on the tree before it: the squad's back rank cut off at
+      // the field's edge at 1280, and main-thread spikes in some sector-2 fights with nothing drawn.
+      // Written in the tracked words the first time, which is the lesson of the two moves above.
+      && r.open === 5 && r.total === 25);
     // AND NO CLAIM CARRIES TWO VERDICTS THAT DISAGREE. K11's did for two commits: K11b wrote its
     // answer ABOVE the marker already there and left the old one standing, so the last word a
     // reader got was the stale one. The scan passed it, because it tested the window for an
@@ -215,10 +220,10 @@ module.exports = {
     })());
     // And the record proves it in the live scan: R05's entry quotes "has never had the same
     // treatment" and O17's table quotes two more, and none of the three is counted as a claim.
-    // It moves with the pin above whenever an item files a real claim at its own site, as S05
-    // and Y01 each did; a quotation leaking in moves this one alone.
+    // It moves with the pin above whenever an item files a real claim at its own site, as S05,
+    // Y01 and Y02 each did; a quotation leaking in moves this one alone.
     ok(`the three quoted phrases in the record file no claims (${r.total} total)`,
-      r.total === 23);
+      r.total === 25);
 
     ok('a marker quoting what it used to say is not still saying it', (() => {
       // How every correction in this record is written. Without the strip, the quotation reads

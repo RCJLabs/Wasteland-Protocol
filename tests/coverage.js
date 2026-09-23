@@ -79,7 +79,10 @@ const DOM_WRITTEN = new Set([
     // context that paints each tile ONCE, before the compositor takes over and nothing is drawn
     // again. All eight are read by the browser, which is the first category above, not a new one.
     'animationDuration', 'animationDelay', 'backgroundSize',
-    'fillStyle', 'globalAlpha', 'lineCap', 'lineWidth', 'strokeStyle'
+    'fillStyle', 'globalAlpha', 'lineCap', 'lineWidth', 'strokeStyle',
+    // Y02, the ground drawn under and over the squad's feet: the same pen, joining the corners of
+    // its cracks and outlines. Read by the browser, like the five above it.
+    'lineJoin'
 ]);
 
 // The one engine field written here and read entirely outside this file: the namespace the page

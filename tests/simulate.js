@@ -2457,6 +2457,94 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── Y02: THE GROUND, DRAWN ──────────────────────────────────────────────────────────────
+//
+// Five grounds bend real rules, and on the field each was one line of coloured text, as the skies
+// were before Y01. Worse than the sky, the picture under them belongs to someone else: the
+// backdrop is the FACTION's, so a Mech fight on RUINS and one in TUNNELS stood in the same
+// refinery, and the Beasts' service tunnel was a sunlit canyon. Measured at 390x844 before anything
+// was drawn, the squad stands 101px above the bottom of the field on three backdrops, 169px on the
+// carrion field and 219px on the congregation - and those last two bands were black.
+//
+// Each ground is drawn from its own description, in two layers either side of the squad. Behind it
+// and over the weather: a tunnel's roof, walls and dark, with lamps that throw pools of light on
+// the floor; the hardpan's cracks under a heat haze and a mirage; the flooded works hanging upside
+// down in the water - the fight's own backdrop, mirrored about the feet line; chitin plates and
+// egg-cases climbing both walls. In front of the feet, at z-index 10 - over the cards, which stack
+// at 1 to 4, and under the tracers and readouts drawn over the whole field at 25 and 30 - only what
+// belongs in front of an ankle: the waterline and the rubble. One thing in every ground wears its
+// banner's colour, and the suite reads that colour off the banner as the page paints it rather
+// than off the table, so a drawing that drifts from its own line of text is caught.
+//
+// THE FLAGS ON A CARD ARE NOT WHAT THEIR Z-INDEX SAYS. Combo, reach and guard flags carry 25, but
+// they sit inside the card, and every card is its own stacking context at 1 to 4 - so to anything
+// outside it they are at the card's depth, and a layer at 10 draws over them wherever it reaches.
+// It reaches nowhere near: every flag is 46px above its card and the front layer rises no more
+// than 10px above the feet. So the guarantee is geometric and the rows say so - nothing drawn in
+// front of the feet reaches a card's hit points or intent (33px or more clear in the water and 39px
+// in the ruins, on the rosters these runs drew), and nothing rises past an ankle (10px and 8px).
+//
+// ── THE WALL WAS IN THE RIGHT PLACE AT ONE WIDTH ────────────────────────────────────────
+//
+// RUINS says your front rank has something to stand behind, so the ruins draw a broken wall between
+// the lines. The first cut placed it at a share of the field's width, and at 390 it stood in front
+// of the front rank. At 1280 it stood under the enemy's turret: the field does not centre its
+// teams at every width, which nothing had needed to know until something was drawn relative to
+// them. It hangs off the squad now, a pseudo-element on the player's team - and its first
+// placement off the squad reached 5 and 10px into the first hostile's card, which a row that only
+// asked for the far half let through. It ends in the middle of the field's own gap now, named once
+// as --field-gap rather than copied: each card overlaps that gap by the same margin from either
+// side, so the middle is the one place that is always between the lines. 12px past the front
+// rank and 12px short of the enemy at 390, 16 and 16 at 1280, and below every hit-point bar.
+//
+// Looking at 1280 found something older: the squad's back rank is cut off at the field's left
+// edge in a Carrion fight at sector 2, on the tree before this item as much as after it. Why the
+// field sits left of centre at that width is its own item.
+//   ^^ READ: STILL OPEN, filed as #253. A phone is where the owner plays; 390 and 320 are clear.
+//
+// The positioning rule Y01 wrote against a rule rather than a list - every child of the sky
+// layer that is not the weather is positioned, so it paints above it - would have forced the
+// ground's layers out of absolute positioning, since they are not the weather either. It names
+// the class every scenery layer carries now, rather than the one layer there was.
+//
+// ── CHEAP, AND A SLOWDOWN THAT WAS ALREADY THERE ────────────────────────────────────────
+//
+// Same shape as the sky: painted once, moved on transform and opacity, a still frame for motion
+// off, nothing for the simulator. At 4x throttle every ground reads 2.1-2.9 ms/s against 1.0-2.9
+// for the same backdrop bare - medians of five windows - and a sandstorm over the nest or smog over
+// the flooded works within a few tenths of the sky alone.
+//
+// Medians, because about one window in eight read 140-210 ms/s, and not because of the ground: the
+// spikes fell in fights with nothing drawn as often as in fights with it, and on the tree BEFORE
+// this item the same probe spiked in 4 of 8 Raider windows and 2 of 8 Carrion ones. Half a second
+// and more of main thread inside four seconds is a hitch a phone player feels, if it is the game
+// and not the probe. What runs in those windows is its own item.
+//   ^^ READ: STILL OPEN, filed as #254 with the trace to take first. Not chased here: it is older
+//   than this item, and the ground neither causes it nor hides it.
+//
+// ── MY OWN SUITE, AGAIN ─────────────────────────────────────────────────────────────────
+//
+// Suite 195 has twenty-six rows and seventeen mutations. Two survived the first run, both for the
+// reason this record keeps finding. Deleting the tunnel's roof passed, because the row compared
+// what was drawn with the table and the table had lost the roof too - the code checked against
+// itself. It is held against the five things the ground was pitched as now: water on FLOODED,
+// rubble on RUINS, a low ceiling in TUNNELS, heat on the flats, egg-cases in the NEST. And deleting
+// the builder's own clean-up passed, because leaving a fight clears the wall first and every row
+// left the fight between grounds; a row builds one ground over another inside one fight now, which
+// is what a commander turning the ground would do. All seventeen go red.
+//
+// The tap row asked the wrong question first. It asked that a tap on an operator's ankle land on
+// that operator, and one did not - a neighbour's 100px sprite overlaps its feet and stacks above
+// it, which is the field's layout and was true before any ground was drawn. What the ground owes is
+// to change nothing, so that is the row now: every ankle, with the ground drawn and with it hidden,
+// hits the same element.
+//
+// And 132's scan named one new field, the canvas pen's lineJoin, which the browser reads; it joins
+// the five Y01 allowed, in writing.
+//
+// NOT MEASURED, AND DELIBERATELY: wins. No rule or number in a fight changed, the simulator builds
+// nothing, and every stroke is drawn from the ground's own seeded generator.
+//
 // ── Y01: THE SKY, DRAWN ─────────────────────────────────────────────────────────────────
 //
 // C06 gave seven skies real rules - ash that cakes plate, an ion storm that shortens every
@@ -5546,7 +5634,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   14 answered by a later item     3 still open     6 not an open claim after reading
+//   14 answered by a later item     5 still open     6 not an open claim after reading
 //
 // and 0 carrying two verdicts that disagree.
 //
