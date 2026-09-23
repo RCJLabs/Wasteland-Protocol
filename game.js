@@ -2525,6 +2525,9 @@ function placeHome(file) {
     const f = Object.values(FACTIONS).find(x => x.places && Object.values(x.places).includes(file));
     return f ? f.bg : null;
 }
+// The open road: the picture a fight is drawn on when no faction's is, and since Y04 the picture a
+// front that leans on no faction puts behind the map.
+const ROAD_ART = 'bg_combat.webp';
 const FIGHT_NODES = Object.keys(FACTIONS);
 function factionsAt(sector) { return FIGHT_NODES.filter(f => (FACTIONS[f].minSector || 1) <= sector); }
 // How deep a node really is. A tier number on its own says nothing - tier 1 of sector 5 is
@@ -3014,19 +3017,19 @@ const FRONTS = [
     // A front tilts the sky as well as the roads. IRRADIATED always did - it is where the
     // 0.7 comes from - and the other three carry the skies added at C06, at a lower rate so
     // that a faction's own weather still gets a look in underneath.
-    { id: 'RAIDER_WARBAND',   name: 'Raider Warband',   icon: '☠', sky: 'ASHFALL', skyChance: 0.35,
+    { id: 'RAIDER_WARBAND',   name: 'Raider Warband',   icon: '☠', sky: 'ASHFALL', skyChance: 0.35, faction: 'RAIDERS',
       desc: 'Raider-heavy roads under the ash of what they burned. Their elites hit a quarter harder; their loot pays double.' },
-    { id: 'MACHINE_UPRISING', name: 'Machine Uprising', icon: '⚙', sky: 'ION_STORM', skyChance: 0.35,
+    { id: 'MACHINE_UPRISING', name: 'Machine Uprising', icon: '⚙', sky: 'ION_STORM', skyChance: 0.35, faction: 'MECH',
       desc: 'The machines are walking and the air is charged with it. Mech-heavy roads past the shallows, and tech falls in pairs.' },
-    { id: 'BLOOD_MOON',       name: 'Blood Moon',       icon: '◖', sky: 'BLOOD_HAZE', skyChance: 0.35,
+    { id: 'BLOOD_MOON',       name: 'Blood Moon',       icon: '◖', sky: 'BLOOD_HAZE', skyChance: 0.35, faction: 'BEASTS',
       desc: 'Beasts everywhere under a red haze, and every wound wants to bleed.' },
     { id: 'IRRADIATED',       name: 'Irradiated',       icon: '☢', sky: 'TOXIC_SMOG', skyChance: 0.7, bossSky: true,
       desc: 'Smog hangs over most roads, and the boss fights under it. Chems fall in pairs.' },
     { id: 'QUIET_ROADS',      name: 'Quiet Roads',      icon: '~',
       desc: 'Fewer fights, more strange encounters, leaner XP - and a boss hoarding double scrap. Clear skies, for what that is worth.' },
-    { id: 'THE_CHOIR',        name: 'The Choir',        icon: '\u2670', minSector: 2,
+    { id: 'THE_CHOIR',        name: 'The Choir',        icon: '\u2670', minSector: 2, faction: 'CHOIR',
       desc: 'Something is being sung out there. Cultists on half the roads, and the smog follows them.' },
-    { id: 'CARRION_BLOOM',    name: 'Carrion Bloom',    icon: '\u2042', minSector: 2,
+    { id: 'CARRION_BLOOM',    name: 'Carrion Bloom',    icon: '\u2042', minSector: 2, faction: 'CARRION',
       desc: 'Something large died, and everything came. Swarms on half the roads, and they come in numbers.' }
 ];
 let sectorFront = null;        // rolled per sector; null on saves from before fronts existed
@@ -3048,15 +3051,31 @@ function rollFront(rng = Math.random, sector = currentSector) {
 // The generation tilt: half of everything on the roads is the front's own faction. The
 // machines stay out of the opening of a run, same as the base table - and, since D08, that
 // means the first two nodes of a NEW run rather than the first two tiers of every sector.
+// Y04: which faction a front leans toward is on the front itself now. It was a table inside this
+// function, and the map is a second reader of the same fact.
 function frontFactionBias(depth, rng) {
-    const bias = { RAIDER_WARBAND: 'RAIDERS', MACHINE_UPRISING: 'MECH', BLOOD_MOON: 'BEASTS',
-                   THE_CHOIR: 'CHOIR', CARRION_BLOOM: 'CARRION' }[sectorFront];
+    const front = currentFront();
+    const bias = front && front.faction;
     if (!bias) return null;
     // The shallow tiers stay on the stock a new squad has answers for, and a faction the
     // sector cannot field yet is never biased toward. Depth, not tier: see rollNodeFaction.
     if (depth < 3 && bias !== 'RAIDERS' && bias !== 'BEASTS') return null;
     if (!factionsAt(currentSector || 1).includes(bias)) return null;
     return rng() < 0.5 ? bias : null;
+}
+
+// Y04: THE MAP IS DRAWN OVER THE FRONT. It sat on the same bare grid in all seven sectors, so a
+// Blood Moon and a Machine Uprising looked alike until you read the badge. Behind the route now,
+// dimmed, is the home picture of the faction the front leans the roads toward; the two fronts
+// that lean on no faction get the open road, which is what they are. A front that tilts the sky
+// washes the picture in that sky's own tint off WEATHER, so Irradiated is the road under its smog
+// and Quiet Roads the same road under a clear one. And the last sector is not a road sector: the
+// road ends at its commander, so it shows the commander's arena. No new pictures.
+function mapArt(sector = currentSector, front = currentFront()) {
+    const boss = isFinalSector(sector) ? bossForSector(sector) : null;
+    const home = front && FACTIONS[front.faction];
+    const sky = front && front.sky && WEATHER[front.sky] && WEATHER[front.sky].fx;
+    return { file: (boss && boss.bg) || (home && home.bg) || ROAD_ART, tint: sky ? sky.tint.slice(0, 3) : null };
 }
 
 function generateSectorMap(rng = Math.random) {
@@ -9069,6 +9088,11 @@ function renderMap() {
     renderMarchRead();
 
     const mapC = document.getElementById('map-nodes');
+    // Y04: set before the viewport's own early returns, so a secured sector and the recall stand
+    // on the same ground as the route they end.
+    const art = mapArt();
+    mapC.style.setProperty('--map-art', `url('${art.file}')`);
+    mapC.style.setProperty('--map-tint', art.tint ? art.tint.join(', ') : '0, 0, 0');
     if (currentTier > TOTAL_TIERS) {
         // The order is up. Not for the long road, where the ending has already asked its own
         // version of this question and been answered.
@@ -9085,19 +9109,26 @@ function renderMap() {
 
     // Edges first, under the nodes: gold-dashed where you can go, green where you have been,
     // near-black where the routing has already cut a path off.
-    let edges = '';
+    // Y04: every road still in play is drawn over a dark casing, the way a printed map draws its
+    // roads. On the bare grid a road read at 2.2:1 against the dark behind it; over the front's
+    // picture the dark behind it is gone, and the plain grey road fell to 1.3:1 under the smog.
+    // A road the routing has cut off gets no casing, so it sinks into the picture - which is what
+    // near-black was for.
+    let edges = '', cases = '';
     sectorMap.nodes.forEach(n => n.edges.forEach(id => {
         const to = nodeById(id); if (!to) return;
         let cls = 'edge-base';
         if (cleared.has(n.id) && cleared.has(to.id)) cls = 'edge-traveled';
         else if (n.id === currentNodeId && avail.has(to.id)) cls = 'edge-open';
         else if (!reach.has(to.id) && !cleared.has(to.id)) cls = 'edge-dim';
-        edges += `<line class="${cls}" x1="${MAP_COL_X[n.col]}%" y1="${yOf(n.tier)}" x2="${MAP_COL_X[to.col]}%" y2="${yOf(to.tier)}"></line>`;
+        const at = `x1="${MAP_COL_X[n.col]}%" y1="${yOf(n.tier)}" x2="${MAP_COL_X[to.col]}%" y2="${yOf(to.tier)}"`;
+        if (cls !== 'edge-dim') cases += `<line class="edge-case" ${at}></line>`;
+        edges += `<line class="${cls}" ${at}></line>`;
     }));
 
     if (sectorMap.nodes.some(n => n.edges.length > 1)) firePrompt('ROUTE');
     let m = `<div class="map-graph" style="height:${TOTAL_TIERS * MAP_ROW_H}px">`;
-    m += `<svg class="map-edges" aria-hidden="true">${edges}</svg>`;
+    m += `<svg class="map-edges" aria-hidden="true">${cases}${edges}</svg>`;
     sectorMap.nodes.forEach(n => {
         let icon = '🎯', lbl = n.type, hint = '';
         // A node holding a known composition says which one. A plain faction label is a loose
@@ -12424,8 +12455,8 @@ function initiateCombat(nodeType, isEliteNode) {
 
     switchScreen('screen-combat'); combatActive = true; document.getElementById('log').innerHTML = '';
 
-    let bgFile = 'bg_combat.webp'; currentWeather = 'CLEAR'; currentNodeType = nodeType; isCurrentNodeElite = isEliteNode;
-    if (currentTier === 1 && currentSector === 1) { bgFile = 'bg_combat.webp'; } else {
+    let bgFile = ROAD_ART; currentWeather = 'CLEAR'; currentNodeType = nodeType; isCurrentNodeElite = isEliteNode;
+    if (currentTier === 1 && currentSector === 1) { bgFile = ROAD_ART; } else {
         if (nodeType === 'BOSS') { bgFile = bossForSector().bg || 'bg_thunderdome.webp'; currentWeather = 'BLOODLUST'; }
         else if (FACTIONS[nodeType]) {
             bgFile = FACTIONS[nodeType].bg;

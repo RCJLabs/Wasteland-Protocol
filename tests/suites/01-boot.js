@@ -87,8 +87,13 @@ module.exports = {
       // tactics and narrowing to moves alone would have quietly changed how this walks a
       // fight: it stops spending momentum, which is a different walk from the one every
       // reading in the record was taken against.
+      // Y04: and the skip a stunned operator is left with. On a stunned turn it is the only control
+      // the deck offers, and it carries neither a move nor a tactic, so the walker spun on it until
+      // it ran out of passes - 5 playthroughs in 20 on the tree before Y04, run alone, and every
+      // one caught in the act was a stunned turn. Pressing it is what a player does.
       const ORDERS = '#command-deck button[data-move]:not([disabled]),'
-                   + '#command-deck button[data-action="tactic"]:not([disabled])';
+                   + '#command-deck button[data-action="tactic"]:not([disabled]),'
+                   + '#command-deck button[data-action="skip-turn"]:not([disabled])';
       for (const b of await page.$$(ORDERS)) {
         const t = ((await b.textContent()) || '').trim();
         if (t) { await b.click().catch(() => {}); break; }

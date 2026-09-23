@@ -129,7 +129,9 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .march-grim .march-body b { color: #ff8a5c; }
 
 /* F13: and the graph keeps a floor whatever the panel above it is doing. */
-.map-viewport { flex-grow: 1; min-height: 45%; border: 1px solid #222; background: linear-gradient(rgba(15,15,15,0.9), rgba(5,5,5,0.9)), repeating-linear-gradient(0deg, transparent, transparent 19px, #1a1a1a 19px, #1a1a1a 20px), repeating-linear-gradient(90deg, transparent, transparent 19px, #1a1a1a 19px, #1a1a1a 20px); overflow-y: auto; display: flex; flex-direction: column; align-items: center; padding: 30px 0; position: relative; }
+/* Y04: the front behind the route - its picture in --map-art and its sky in --map-tint, both set
+   by renderMap. The dim over them is what keeps the graph readable, and suite 197 holds it. */
+.map-viewport { flex-grow: 1; min-height: 45%; border: 1px solid #222; background: linear-gradient(rgba(var(--map-tint, 0, 0, 0), 0.14), rgba(var(--map-tint, 0, 0, 0), 0.06)), linear-gradient(rgba(15,15,15,0.78), rgba(5,5,5,0.86)), repeating-linear-gradient(0deg, transparent, transparent 19px, rgba(0, 0, 0, 0.35) 19px, rgba(0, 0, 0, 0.35) 20px), repeating-linear-gradient(90deg, transparent, transparent 19px, rgba(0, 0, 0, 0.35) 19px, rgba(0, 0, 0, 0.35) 20px), var(--map-art, none) center / cover no-repeat; overflow-y: auto; display: flex; flex-direction: column; align-items: center; padding: 30px 0; position: relative; }
 /* The route graph: nodes positioned absolutely on a tall canvas, edges drawn under them.
    Gold-dashed edges are where you can go, green where you have been, near-black what the
    routing has already cut off. */
@@ -143,6 +145,9 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .map-edges .edge-open { stroke: #B8860B; stroke-dasharray: 6 5; }
 .map-edges .edge-traveled { stroke: #6B8E23; }
 .map-edges .edge-dim { stroke: #26261f; }
+/* Y04: the dark each road is drawn over, so it reads against its own edge whatever picture is
+   behind the map. Two pixels a side past the road's three. */
+.map-edges line.edge-case { stroke: rgba(4, 4, 4, 0.82); stroke-width: 7; }
 .map-graph .map-node { position: absolute; transform: translateX(-50%); margin: 0; z-index: 2; }
 .node-cutoff { opacity: 0.28; filter: grayscale(0.8); }
 .node-weather { position: absolute; top: 2px; right: 2px; width: 11px; height: 11px;

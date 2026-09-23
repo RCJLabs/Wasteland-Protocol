@@ -2457,6 +2457,101 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── Y04: A MAP THAT LOOKS LIKE THE FRONT ────────────────────────────────────────────────
+//
+// Photographed first, in all seven sectors under all seven fronts: the same black screen and the
+// same dark grid every time, with the front's name in a badge the only difference. The pitch was
+// a dimmed version of the front's art behind the route, and a boss sector that looks different
+// from a road sector. The game's own words say which sector that is - "THE ROAD ENDS HERE. This
+// is the last sector", whose commander "is not one of the seven that hold the road" - so every
+// other sector is a road sector, and the last one shows the arena the road ends at.
+//
+// Behind the route now, dimmed: the home picture of the faction the front leans the roads toward,
+// the open road for the two fronts that lean on none, and the arena in the last sector. A front
+// that tilts the sky washes its picture in that sky's own tint, off WEATHER, which is what tells
+// Irradiated from Quiet Roads - both are the open road, one under smog and one under a clear sky.
+// No new pictures. Which faction each front leans toward was a table inside frontFactionBias; it
+// is a field on the front now, read by the generator and the map both. 2,240 seeded maps and 350
+// front rolls hash the same before and after, twice.
+//
+// ── THE ROADS WERE THE COST, AND MY FIRST THREE READINGS OF THEM WERE WRONG ─────────────
+//
+// On the bare grid a grey road read at 2.2:1 against the dark behind it. Put a picture behind it
+// and the dark is gone: on the same seeded maps the median fell to 1.30-1.35:1 under the smog,
+// 1.04-1.05 in the worst tenth, and to 1.55-1.94 on the rest. Every road still in play is drawn
+// over a dark casing now, the way a printed map draws its roads, and the medians are back to
+// 2.13-2.23 against 2.19-2.22 on the old tree. A road the routing has cut off gets no casing and
+// sinks.
+//
+// Getting that number took four tries, and three were wrong. The first hid one class of road at a
+// time and afterwards removed the last <style> on the page rather than the one it had added, so
+// the hidden classes piled up - it reported open and cut-off roads with identical contrast, and
+// travelled roads at the start of a sector, where there are none - and it counted only pixels past
+// a threshold, which drops exactly the faint ones in question. The second read the roads'
+// positions before renderMap's own 10ms scroll, sampled 48px off them, and scored every grey road
+// 1.00 on both trees. The third was right about the bare picture and wrong about the casing: it
+// read each road against the pixel 3px out, which is the casing's anti-aliased rim, on maps rolled
+// fresh for every run. The fourth samples along each road's centre on one seeded map per front for
+// every tree, and reads the clearest edge 2-4px out on either side.
+//
+// The grid went from opaque lines to 35% black. Opaque, every picture sat behind a dark mesh; the
+// roads' contrast is the same either way (2.13-2.23 on both), so this one is taste, and says so.
+//
+// ── THE LABELS, AND AN OPACITY THAT NEVER APPLIED ───────────────────────────────────────
+//
+// The names on the nodes you can take sit on opaque discs and read exactly as before, 5.91:1 at
+// the lowest. The ones you cannot take yet were about 1.2:1 on the bare grid - faint by design -
+// and their medians are 1.22-1.41 now. The single worst went from 1.16 to 1.01, over the canyon:
+// faded gold on red-brown matches it in brightness and parts from it only in hue, which a
+// luminance ratio cannot see and an eye can.
+//
+// Faint at 20%, not the 30% the stylesheet declares. Every map node you cannot take is a
+// disabled button, and `button:disabled` at 0.2 outranks both `.node-locked`'s 0.3 and
+// `.node-cutoff`'s 0.28, so neither declaration has ever reached a map. Found because a mutation
+// that faded locked nodes through `.node-locked` changed nothing at all. Left as found: 20% is
+// what every player has seen, and the rows measure what is drawn.
+//
+// Scrolling the map costs what it did: 161-181 ms/s against 165-167 before at 4x throttle, both
+// at 60fps, inside each tree's own spread of 128-203 between windows. On a desktop the parked
+// 340px ribbon is untouched and the picture fills the viewport either side of it.
+//
+// ── THE FIRST BATTERY: A COUNT THE CASINGS DOUBLED, AND A WALKER THAT COULD NOT SKIP ────
+//
+// The first battery on this item came back with two reds. One was mine: suite 24 counts every line
+// in the map's SVG as an edge, and at the start of a sector every road is still in play, so every
+// road had a casing and the count doubled - 74 lines for 37 edges. It counts roads now.
+//
+// The other was 01-boot's "combat reaches a conclusion (timeout)". U01 recorded one of those that
+// twelve runs of the suite alone did not reproduce, and put it down to a loaded battery. It is not
+// the load. Run alone it timed out in 5 playthroughs of 20 on the tree before this item and 2 of
+// 20 after, and every timeout ended 11-13s into the suite, nowhere near the walker's 180s deadline
+// - a walker spinning through its 250 passes, not waiting. Replayed with the deck dumped whenever
+// it spun, both timeouts caught were a stunned turn: the deck's only control is SKIP TURN, which
+// carries neither a move nor a tactic, so the walker's definition of an order had nothing to press
+// for 250 passes. Both walkers press it now, and 20 playthroughs of 20 won; 3 replays of 15
+// pressed it and went on to win. The copy of the walker in 03-combat-resume also still waited for
+// FAILED on a wipe, which nothing writes - SQUAD DOWN is what checkWinState says, as 01-boot
+// already knew.
+//
+// ── MY OWN SUITE ────────────────────────────────────────────────────────────────────────
+//
+// Suite 197 has twelve rows and seventeen mutations, and every row goes red under at least one.
+// The picture each front gets is held against what its roads carry, counted off 40 generated maps
+// a front - the five factions at 2.4x to 3.6x their share with no front - and its wash against
+// the sky its roads are counted under: 4.8x and up for the four fronts that tilt one, 1.7x at most
+// for the three that do not. That row exists because of the one survivor of the first run: every
+// front washed in ash passed, since nothing asked whether a front's tint was its own sky.
+//
+// Two rows were measuring the wrong thing before either could fail. The first reading of the
+// locked labels hid the roads with the text, so a road crossing a label's box was scored as its
+// letters, 1.87:1; separated, 1.23. And the tappable labels and the locked ones moved under no
+// change to this item's code at all - the discs are opaque whatever is behind them - so they are
+// held against the changes that would break them: glass discs over a lighter picture (1.44:1),
+// and a further fade on the locked nodes.
+//
+// NOT MEASURED, AND DELIBERATELY: wins. Nothing in a fight changed, and the generator rolls the
+// same maps it did.
+//
 // ── Y03: A PLACE FOR EVERY GROUND ───────────────────────────────────────────────────────
 //
 // Pitched as one new backdrop for each faction's second ground. Checked against the pictures before

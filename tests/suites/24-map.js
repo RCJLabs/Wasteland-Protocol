@@ -42,7 +42,9 @@ module.exports = {
       activeContracts = []; currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
       renderMap();
       const nodes = [...document.querySelectorAll('.map-node')];
-      const lines = document.querySelectorAll('#map-nodes svg line');
+      // Y04: a road still in play is drawn twice, over a dark casing of its own; the casings are
+      // not edges, so they are not counted as ones. Suite 197 reads what they are for off the pixels.
+      const lines = document.querySelectorAll('#map-nodes svg line:not(.edge-case)');
       const open = nodes.filter(n => !n.disabled);
       const tier1 = sectorMap.nodes.filter(n => n.tier === 1);
       return { nodes: nodes.length, mapNodes: sectorMap.nodes.length, lines: lines.length,
