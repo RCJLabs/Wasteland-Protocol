@@ -9,7 +9,8 @@ not yet drawn: the preloader and the service worker skip it, and something alrea
 stands in for it - the Warlord portrait for a portrait, the faction's home picture for a
 place - so the game stays playable while art is outstanding.
 
-**Outstanding now: five places, one per faction.** Their briefs are the next section.
+**Outstanding now: the Frost - six portraits and three pictures - and five places, one per
+faction.** Their briefs are the next two sections.
 
 ## Shared style brief
 
@@ -23,6 +24,162 @@ Put this in front of every prompt:
 
 Reference pieces: `enemy_boss.webp`, `enemy_boss_mech.webp`, `enemy_boss_vulture.webp`. A
 commander should read as roughly twice the bulk of a regular raider.
+
+---
+
+## Commissioned - the Frost
+
+The sixth faction, and the first thing in the game that is cold. Up north the winter never
+ended: the bombs put enough into the sky to shut the sun out, and up there it never came all
+the way back. What comes down out of it is not a gang and not a cult. It is a garrison that was
+put into cold storage to wait out the war and has been waking up a few at a time ever since -
+still in uniform, still under orders, and in no hurry at all, because the cold has always been
+on its side. The roads turn north from sector 3.
+
+Every one of them asks the same question: **can you end it before the cold does?** Rime sets on
+them every turn they are left standing, they freeze your people solid, they bleed the whole line
+while they stand, and one of them is counting down to a barrage. Heat is the answer to all of it.
+
+Nine pieces: six portraits and three pictures. Until each one lands, something already drawn
+stands in for it - listed below - so the faction is playable from the first commit.
+
+| File | What it is | Stands in until drawn |
+|---|---|---|
+| `enemy_frost_trooper.webp` | Frost Trooper - the line | `enemy_raider.webp` |
+| `enemy_frost_gunner.webp` | Cryo Gunner - freezes an operator solid | `enemy_choir_censer.webp` |
+| `enemy_frost_hauler.webp` | Coldhauler - its cold bleeds the line | `enemy_juggernaut.webp` |
+| `enemy_frost_signaller.webp` | Signaller - calls the guns every third turn | `enemy_sniper.webp` |
+| `enemy_boss_commandant.webp` | The Commandant - the commander | `enemy_boss_marshal.webp` |
+| `enemy_frost_pod.webp` | Cryo Pod - the Commandant's garrison, on ice | `enemy_turret.webp` |
+| `bg_icefield.webp` | The Frost's home - THE ICE | `bg_combat.webp` |
+| `bg_cryovault.webp` | The Frost in the TUNNELS | `bg_icefield.webp` (or `bg_combat.webp`) |
+| `bg_blastdoor.webp` | The Commandant's arena | `bg_thunderdome.webp` |
+
+**Palette.** Use the shared style brief above for the portraits and the background style brief
+in the next section for the pictures, but swap the palette for this faction: *muted palette of
+dirty snow-white, gunmetal grey and frostbitten blue, with one saturated accent colour*. The
+accent throughout is **glacier cyan** - the coolant their equipment runs on and the colour the
+ice glows where it cracks. Keep it to the coolant, the lights and the ice; the rest stays grey.
+
+**Shared look.** Pre-war cold-weather military kit that has been on ice for a very long time:
+stained white winter-camouflage smocks over dented grey plate, fur-lined hoods, frost-rimed gas
+masks and goggles, coolant tanks and armoured hoses with cyan fluid showing through viewports,
+a stencilled unit number and a snowflake insignia on the plate, ice crusted along every edge
+and seam, breath fog. Frostbitten skin where any shows. Soldiers, not savages: upright,
+drilled, deliberate - and slow, because everything about them is cold.
+
+**The portraits.** Ordinary hostiles match the weight of `enemy_raider.webp`; the Coldhauler is
+a heavy, drawn at the bulk of `enemy_juggernaut.webp`; the Commandant is a commander, twice a
+trooper's bulk.
+
+### `enemy_frost_trooper.webp` - Frost Trooper
+*Rime sets on it every turn it takes; a heavy hit or any fire shatters it.*
+
+> A pre-war infantry soldier thawed out of cold storage: a stained white winter-camouflage
+> smock over dented grey body armour, a fur-lined hood drawn tight over a frost-rimed gas
+> mask with round goggles, a sharpened entrenching spade held low in one hand, a rifle slung
+> across the back, and ice growing thick along the shoulders and forearms like a second
+> shell. Hunched against the cold, advancing at a slow trudge. Accent colour: glacier cyan
+> glinting in the ice.
+
+### `enemy_frost_gunner.webp` - Cryo Gunner
+*Freezes an operator solid: they lose a turn.*
+
+> A soldier in a quilted grey cold-weather suit with a heavy coolant tank on the back and a
+> glowing cyan viewport in the tank, a stubby wide-mouthed cryo-projector held at the hip
+> fed by an armoured hose, white freezing vapour pouring from the muzzle, a sealed hood with
+> a single cracked visor slit, frost spreading up both gauntlets. Braced, spraying across
+> the body. Accent colour: glacier cyan coolant.
+
+### `enemy_frost_hauler.webp` - Coldhauler
+*While it stands, the cold takes a bite out of every operator every turn.*
+
+> A huge soldier bent under a refrigeration plant strapped to its back - a boxy rusted
+> cooling unit with fins, a fan cage and a dripping condenser coil - venting a heavy fog of
+> white cold that pours down around its legs, layered riveted armour furred with hoarfrost,
+> thick arms ending in a frost-caked pry bar, face hidden behind an iced-over respirator.
+> Slow and heavy, with cold coming off it like smoke. Accent colour: glacier cyan warning
+> lights on the plant.
+
+### `enemy_frost_signaller.webp` - Signaller
+*Calls in the guns: every third turn a shell lands on the whole squad until it dies.*
+
+> A lean officer in a long white greatcoat with a fur collar and a fur-trimmed peaked cap, a
+> field radio set with a tall whip aerial strapped to the back, a telephone handset pressed
+> to one ear, heavy binoculars at the chest, the free arm raised and pointing hard out of
+> frame as if calling a target. Frost in the eyebrows, lips blue with cold. Accent colour:
+> glacier cyan on the radio's tuning dial.
+
+### `enemy_boss_commandant.webp` - The Commandant
+*The commander: arrives with two of its garrison frozen in pods, and every third turn one opens.*
+
+> A towering garrison commander in pre-war powered cold-weather armour under a long
+> ice-stiffened officer's greatcoat and a high fur mantle, a peaked officer's cap over a
+> sealed frost-crusted faceplate with a cracked visor, a spine of cyan-lit cryo tubes
+> running down its back into the armour, rows of frozen medals across the chest, a heavy
+> cryo-cannon carried in one hand like a walking stick, the other gloved hand raised to give
+> an order. Frost billowing off it. Completely unhurried. Accent colour: glacier cyan
+> coolant light.
+
+### `enemy_frost_pod.webp` - Cryo Pod
+*A sealed pod on the field: break it before it opens and what is inside never wakes.*
+
+> A pre-war cryogenic storage pod stood upright and dragged onto the ice: a scratched steel
+> capsule with a frosted glass window in the front, the dim silhouette of a frozen soldier
+> just visible through the rime inside, heavy locking clamps, torn coolant pipes venting
+> white vapour, a stencilled number and snowflake insignia on the casing, cyan status lights.
+> Nothing outside the pod.
+
+**The pictures.** Same frame as the places in the next section: opaque WebP, portrait, about
+768x1344, subject centred, lower third left as open, lit ground for the line to stand on.
+
+**What the game draws over them.** The Frost's own sky is new, and so is its ground:
+
+- **BLIZZARD**, the Frost's weather - snow driven sideways across the whole frame, white banks
+  of it rolling through, and a cold blue-white cast over everything. Paint the sky overcast
+  and dim, not already mid-blizzard, or the two stack into a white-out.
+- **THE ICE**, the Frost's ground - a pale sheen across the floor, cracks in the ice, snow
+  lifting at the squad's feet and glints on the surface.
+- **TUNNELS** - as in the next section: a roof strip, three lamps, dark walls and the frame
+  dimmed by about half. Paint the vault lit, with an opening to the sky for the snow.
+
+### `bg_icefield.webp` - the Frost's home, THE ICE
+*"A frozen lake under a foot of snow." Where the garrison comes down off the glacier.*
+
+> A frozen lake at the foot of a glacier under a nuclear-winter sky: a wide flat sheet of
+> snow-dusted ice running back to a far shore of dead black pines and a collapsed radio mast,
+> a pre-war icebreaker ship frozen in at an angle in the middle distance with its hull split
+> open, pressure ridges and long cracks across the ice, wind-scoured drifts, a dim white disc
+> of sun behind heavy grey cloud. Accent colour: glacier cyan in the cracks of the ice.
+
+### `bg_cryovault.webp` - the Frost in the TUNNELS
+*The vault the garrison sleeps in, two ranks wide.*
+
+> The garrison's cryo-vault: a concrete bore two ranks wide lined down both sides with upright
+> cryo pods, most still sealed with frost over the glass, a few burst open and empty, conduit
+> and coolant pipes along the ceiling furred with ice, caged work lamps, a frozen floor with
+> drag marks, and at the far end a breach in the vault roof where snow falls through a shaft
+> of grey daylight. Accent colour: glacier cyan pod lights.
+
+### `bg_blastdoor.webp` - the Commandant's arena
+*Where the vault opens onto the ice.*
+
+> A vast pre-war blast door set into the face of a glacier, standing half open with cold cyan
+> light and vapour spilling out of it, a frozen parade ground in front ringed by snow-buried
+> vehicles, bare flagpoles and dead searchlight towers, the garrison's stencilled insignia
+> across the door. Wide, empty and waiting.
+
+### Delivering the Frost
+
+1. Save each piece as WebP in the repo root under exactly the filename above - portraits
+   trimmed to their alpha with the long side at 640, pictures at quality ~88.
+2. Take it off `PENDING_ART` at the top of `game.js` and leave it in `ASSET_LIST`. That is the
+   whole switch: the stand-in above stops being used the moment it comes off.
+3. Run the suites. Suite 49 measures a picture's foreground and fails if it needs a
+   `GROUND_LIFT` entry; the Frost's own suite fails if a piece is still pending with its file
+   already in the repo, or is off the list with no file.
+4. Look at it on the phone in a real fight, and check the `scale` - the Commandant stands next
+   to its pods, and a wide silhouette at the same scale reads much larger than a tall one.
 
 ---
 
