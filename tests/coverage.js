@@ -71,7 +71,15 @@ const DOM_WRITTEN = new Set([
     'muted', 'crossOrigin', 'decoding', 'loading', 'role', 'hidden', 'open', 'selected',
     'visibility', 'borderColor', 'marginBottom', 'backgroundImage', 'onended', 'onkeydown',
     'onchange', 'oninput', 'onmouseenter', 'onmouseleave', 'onerror', 'onload', 'onblur',
-    'onfocus', 'onsubmit'
+    'onfocus', 'onsubmit',
+    // Y01, the weather drawn on the field. It is the game's first canvas pen and its first
+    // per-element animation timing, so these arrived with it rather than being missed before.
+    // Three are style properties set on the drift tiles and the lightning: how long one loop
+    // takes, where in its cycle a bolt starts, and the size a tile repeats at. Five are the 2D
+    // context that paints each tile ONCE, before the compositor takes over and nothing is drawn
+    // again. All eight are read by the browser, which is the first category above, not a new one.
+    'animationDuration', 'animationDelay', 'backgroundSize',
+    'fillStyle', 'globalAlpha', 'lineCap', 'lineWidth', 'strokeStyle'
 ]);
 
 // The one engine field written here and read entirely outside this file: the namespace the page

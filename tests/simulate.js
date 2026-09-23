@@ -2457,6 +2457,133 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── Y01: THE SKY, DRAWN ─────────────────────────────────────────────────────────────────
+//
+// C06 gave seven skies real rules - ash that cakes plate, an ion storm that shortens every
+// cooldown, a haze that hides the back rank - and on the field every one of them looked the same:
+// the faction's backdrop under one fixed red gradient, with the sky named in a banner and nowhere
+// else. There was no canvas anywhere in the game. Seven of the ten places already sounded like
+// themselves (the other three are Y08); not one of them looked any different under ash than
+// under a clear sky.
+//
+// Each sky's look is an `fx` entry on the WEATHER table, and each was read off that sky's own
+// description rather than invented: "yellow air that settles in the low ground" pools at the feet,
+// "grey snow off something that burned for a week" falls under a grey pall, "the air is charged"
+// rises in sparks and now and then discharges. Blood haze's rule is that your back rank is hard to
+// find, so the haze is heaviest over it - and where it stands was measured, not assumed: on a 390px
+// phone rank 3 is drawn 21% of the way across the field and rank 1 at 47%.
+//
+// ── IT LOOKED LIKE NOTHING, THEN IT COST TOO MUCH ───────────────────────────────────────
+//
+// THE FIRST CUT WAS INVISIBLE. Tint plus particles, and on the highway backdrop four of seven
+// skies were indistinguishable from CLEAR at phone size: the painted blue sky kept saying "clear
+// day" whatever drifted in front of it. Weather changes the sky before it changes anything else,
+// so every sky gained a pall - a gradient that re-colours the sky from the top down - and all
+// seven read at once. The shrapnel read as grey with nothing in it twice, once in each build,
+// because its glints flicker and a flicker caught at its dim end is gone; it carries bold chunks
+// that never flicker now, and no glint dims below 0.6.
+//
+// THE SECOND CUT WAS EXPENSIVE. It was a canvas redrawn thirty times a second, and at 4x CPU
+// throttle it kept the main thread busy for 460-840 ms of every second against 3 for a clear
+// sky. Taken apart on the sandstorm, one piece at a time on top of an empty canvas - so the
+// pieces overlap and do not sum to the whole:
+//
+//   an EMPTY canvas, cleared every frame      232 ms/s   the floor for any per-frame canvas
+//   that, plus only the tint and pall         414        +182 for a picture that never changes
+//   that, plus only the fog banks             502        +270
+//   that, plus only the streaks               345        +113
+//   the whole sandstorm                       769
+//
+// Almost none of it was drawing anything new. So nothing is redrawn now: each particle field is
+// drawn ONCE into a tile and CSS slides the tiles on transform, which the compositor moves
+// without a repaint, and the pall, tint and veil are a plain background. The seven skies now
+// measure 3.5-4.3 ms/s against 1.0 for CLEAR, three four-second windows a sky at the same
+// throttle. Headless Chromium rasterises in software and overstates what a phone's GPU pays - but
+// two orders of magnitude is not a gap a GPU closes, and a prototype of one layer (6.6 ms/s) was
+// measured before the rebuild was committed to.
+//
+// ── THEN THE LIGHTNING, CAUGHT BY MEASURING AGAIN BEFORE THE COMMIT ─────────────────────
+//
+// The first reading of the tile build said 2.4-4 ms/s. Taken again on the finished tree, after
+// three clean batteries and before the commit, six skies read 3.5-4.7 and the ion storm 17.3 -
+// four times any other. With its bolt switched off it read 4.7, so the whole difference was the
+// lightning, and at a forced cadence each strike cost about 35 ms of main thread at 4x throttle.
+//
+// MY FIRST FIX WAS BUILT ON A WRONG GUESS. I took the cost for the insert - a fresh element per
+// flash, built and thrown away - and built one element to re-light instead. It measured the same,
+// 33 ms a strike, and so did variants without the flash, without the bolt, and held on a layer of
+// its own: the element was never the price. A trace said what was. About six and a half full
+// main-thread frames per strike - style, layering, pre-paint, commit - because a one-shot
+// animation has to be started and finished by the main thread whatever it animates.
+//
+// So each bolt now runs an ENDLESS compositor cycle that is dark for 98% of it and flashes in the
+// last 2%. Three bolts on cycles of 0.82, 1 and 1.26 times three times the sky's `every` flash at
+// irregular moments and average one every 4.48 s against the table's 4.5. There is no timer and no
+// script per flash: a trace at two flashes a second records no main-thread frames at all, and the
+// ion storm measures 3.9 ms/s with the rest. The table lost `life`, because how long a flash lasts
+// is the keyframe's to say now, and a second copy of it would drift - F03's rule.
+//
+// THREE SWITCHES, and they mean different things. paintOff is the simulator's and builds nothing.
+// motionOff is the player's and gives a STILL FRAME: the weather is information about the fight,
+// so a player who asked for less motion still gets the pall, the haze and the flakes where they
+// were - and never a lightning flash, the one thing here they most want gone. A hidden page moves
+// nothing: there is no timer to stop, and the browser does not animate a page nobody can see.
+//
+// Every other child of the sky layer is positioned so it paints above the weather, written as a
+// rule - `.sky-layer > :not(.sky-fx)` - rather than a list of the six it has today (four
+// banners, the turn queue and the field), so the next banner cannot quietly land underneath it.
+//
+// ── MY OWN SUITE, FOUR TIMES ────────────────────────────────────────────────────────────
+//
+// Suite 194 passed all twenty-eight rows first time, which on this project is a reason to read
+// the rows. The haze's colour row had fallen back to "the first colour found" and was testing
+// the veil, not the pall. The row that says everything moves on transform or opacity only looked
+// at the sandstorm, which has no flicker, so the flicker was never examined - and, found only
+// later, neither was the strike, because no strike existed at the moment the row looked. And a
+// mutation that deleted each strike's own cleanup SURVIVED: the row called skyFxClear before
+// counting, which empties the whole layer, so it tested the clear.
+//
+// The rebuilt lightning took the strike rows with it, and the first of their replacements was
+// wrong the other way round: it failed on a correct build. A bolt starts part-way into its cycle
+// on a negative delay, and the row's seek subtracted that delay where it should have added it, so
+// it read every bolt at the wrong moment - a probe showed 0.966 of the way through a cycle where
+// the row asked for 0.5. It reads each bolt lit at the top of its flash (1.00) and gone between
+// (0.00) now, and it is the row that catches a flash which never reaches the screen. Twenty-nine
+// rows; nineteen mutations, all red.
+//
+// ── ONE ALLOWLIST, EXTENDED IN WRITING ──────────────────────────────────────────────────
+//
+// The first three full batteries went red on one row, the same one each time: 132's scan for a
+// field written and never read named seven - animationDuration and backgroundSize on the tiles,
+// and fillStyle, globalAlpha, lineCap, lineWidth and strokeStyle on the pen that paints each tile
+// once. The rebuilt lightning added an eighth, animationDelay - where in its cycle a bolt starts.
+// All eight are read by the browser, the first kind of exception that list already names, and
+// none was on it only because the game had never had a canvas or timed an element's animation
+// itself: the tree before this item has none of the eight. They are added with that reason
+// written beside them, rather than the writes being reshaped to slip past the scan, which is
+// N04's rule.
+//
+// ── AND A FLAKE THAT WAS ALREADY THERE, IN A BOUND I SET ────────────────────────────────
+//
+// 186's 320px row went red once while this was built, and it is not this item's: run alone it
+// exceeds its 0.5px bound in 5 of 11 runs on the tree WITHOUT the weather layer and 3 of 11 with
+// it, by up to 1.5px. The bound is mine, set in V01 from eight runs - inside the row's own noise,
+// which is K03's rule broken. It passed in every full battery this item ran. spawnFCT's clamp is
+// exact arithmetic, so the box must move between the clamp and the read, and what moves it
+// is its own item. Widening a bound to get a battery green is the one move this record has
+// refused every time, and it is not made here.
+//   ^^ READ: STILL OPEN, filed rather than chased. Whoever takes it measures before theorising:
+//   one readout's rect read every frame from its spawn, against the clamp's own arithmetic.
+//
+// The first draft said the mechanism "is not found yet" - true, present tense, and not a phrase
+// tests/stale.js reads, which is R01's wording gap a second time. Worded where the scanner sees
+// it, the record's open claims go 2 -> 3 of 22 -> 23, and suite 173's pins move with them.
+//
+// NOT MEASURED, AND DELIBERATELY: wins. No rule or number in a fight changed. The simulator
+// builds no layer, and the layer spends no randomness while you play: tiles and bolts alike are
+// drawn from their own seeded generator, so the weather touches neither Math.random nor any
+// stream a daily run replays.
+//
 // ── X-AUDIT: FOUR SWEEPS, TWO EMPTY, AND A DIAL WITH NO READER ──────────────────────
 //
 // Four items since the T-audit - U01, V01, V02, X01 - every target chosen by me and all four in
@@ -5419,7 +5546,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   14 answered by a later item     2 still open     6 not an open claim after reading
+//   14 answered by a later item     3 still open     6 not an open claim after reading
 //
 // and 0 carrying two verdicts that disagree.
 //

@@ -289,6 +289,42 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 
 #screen-combat { display: none; flex-direction: column; height: 100%; }
 .sky-layer { background-size: cover; background-position: center bottom; flex-grow: 1; display: flex; flex-direction: column; position: relative; }
+/* Y01: the weather, drawn. Absolutely placed over the whole sky layer, under everything in it,
+   and it never takes a tap. Every OTHER child of the layer is positioned so that it paints above
+   the canvas - an unpositioned banner paints before a positioned canvas and would sit under the
+   weather. Written against the rule rather than as a list of today's banners, so the next banner
+   anybody adds cannot quietly land underneath it. */
+.sky-fx { position: absolute; inset: 0; z-index: 0; pointer-events: none; overflow: hidden; }
+.sky-layer > :not(.sky-fx) { position: relative; }
+/* The pall, tint and veil: a background, never a frame. */
+.sky-fx-still { position: absolute; inset: 0; }
+/* Each particle plane is a repeating tile slid on transform - the compositor moves it without a
+   repaint, which is the whole reason this is not a canvas. --dx/--dy are one loop, a whole number
+   of tiles, so the end of the cycle is pixel-identical to its start. */
+.sky-fx-tile { position: absolute; left: 0; top: 0; width: 100%; height: 100%; background-repeat: repeat;
+               will-change: transform; animation-name: sky-drift; animation-timing-function: linear;
+               animation-iteration-count: infinite; }
+.sky-fx-tile.sky-flicker { animation-name: sky-drift, sky-flicker;
+                           animation-timing-function: linear, ease-in-out;
+                           animation-direction: normal, alternate; }
+.sky-fx-sway { position: absolute; inset: 0; will-change: transform; animation: sky-sway 4s ease-in-out infinite alternate; }
+@keyframes sky-drift { from { transform: translate3d(0, 0, 0); } to { transform: translate3d(var(--dx), var(--dy), 0); } }
+/* A floor of 0.6, not lower: a whole plane flickers together, and at 0.4 a screenshot of the
+   shrapnel caught both glint planes at the bottom of the cycle with nothing left to see. */
+@keyframes sky-flicker { from { opacity: 0.6; } to { opacity: 1; } }
+@keyframes sky-sway { from { transform: translate3d(calc(var(--sway) * -1), 0, 0); } to { transform: translate3d(var(--sway), 0, 0); } }
+/* The lightning. Each bolt runs an endless cycle that is dark for all but its last sliver and
+   flashes there, on the compositor, for as long as the storm lasts: no timer, no script and no
+   main-thread frame per flash. A one-shot animation per flash took six-odd full frames to start
+   and finish, about 35 ms at 4x throttle. The flash is the last 2% of the cycle - up in 0.5%,
+   down in 1.5% - which at the ion storm's 11-17 s cycles is a fifth to a third of a second. */
+.sky-strike { position: absolute; inset: 0; opacity: 0; animation: sky-strike linear infinite; }
+.sky-strike svg { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+.sky-flash { position: absolute; inset: 0; }
+@keyframes sky-strike { 0%, 98% { opacity: 0; } 98.5% { opacity: 1; } 100% { opacity: 0; } }
+/* Still: the player asked for less motion, not less information. Everything stays where it was. */
+.sky-fx.still *, .sky-fx.still { animation: none !important; }
+.sky-fx.still .sky-strike { display: none; }
 #queue-display { text-align: center; color: #ccc; padding: 8px; font-size: clamp(0.625rem, calc(3vw * var(--text-scale, 1)), 0.75rem); letter-spacing: 2px; font-weight: bold; background: rgba(0,0,0,0.7); text-shadow: 1px 1px 2px #000; border-bottom: 1px solid #222; }
 
 .runover-score { font-family: monospace; font-size: clamp(2.375rem, calc(12vw * var(--text-scale, 1)), 3.75rem); font-weight: bold; color: #B8860B; text-align: center; letter-spacing: 2px; text-shadow: 2px 2px 0 #8B0000; margin: 6px 0 2px; }

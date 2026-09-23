@@ -2257,33 +2257,70 @@ const WEATHER = {
         // K08: the type lives here rather than at the call site, so the manual can name it off
         // the same table the arithmetic reads and the two cannot drift apart.
         chip: 2, chipType: 'bio',
-        banner: '\u26A0\uFE0F TOXIC SMOG: passive Bio DMG to active units \u26A0\uFE0F' },
+        banner: '\u26A0\uFE0F TOXIC SMOG: passive Bio DMG to active units \u26A0\uFE0F',
+        // Y01: "yellow air that settles in the low ground" - so it pools at the feet and drifts.
+        fx: { tint: [150, 160, 40, 0.10], pall: [120, 130, 35, 0.55, 0.70], layers: [
+            { kind: 'bank', n: 8, rgb: [175, 185, 60], a: 0.30, r: [0.25, 0.45], y: [0.60, 1.0], speed: 0.010 },
+            { kind: 'rise', n: 18, rgb: [215, 225, 110], a: 0.60, size: [1.2, 2.4], y: [0.45, 1.0], speed: 0.018 } ] } },
     SANDSTORM: { name: 'SANDSTORM', short: 'SAND', dot: 'wx-sand', cls: 'weather-sand',
         desc: 'Grit at forty miles an hour. Nothing fired across the field arrives the way it left.',
         ranged: 0.75,
-        banner: '\u26A0\uFE0F SANDSTORM: ranged attacks -25% \u26A0\uFE0F' },
+        banner: '\u26A0\uFE0F SANDSTORM: ranged attacks -25% \u26A0\uFE0F',
+        // Y01: "grit at forty miles an hour" - fast streaks, and a haze thick enough that nothing
+        // fired across it arrives the way it left.
+        fx: { tint: [170, 120, 50, 0.14], pall: [165, 110, 50, 0.62, 0.85], layers: [
+            { kind: 'bank', n: 6, rgb: [195, 145, 75], a: 0.24, r: [0.30, 0.50], y: [0.15, 0.90], speed: 0.070 },
+            { kind: 'streak', n: 90, rgb: [230, 190, 125], a: 0.55, len: [0.04, 0.10], w: 1.3, speed: 1.00, ang: 0.18 } ] } },
     SHRAPNEL_WINDS: { name: 'SHRAPNEL WINDS', short: 'SHRAP', dot: 'wx-shrap', cls: 'weather-shrap',
         desc: 'The wind is carrying the last place it went through. Standing still is not safe either.',
         shrapnel: { chance: 0.3, dmg: 5, type: 'phys' },
-        banner: '\u26A0\uFE0F SHRAPNEL WINDS: 30% chance of random DMG at turn start \u26A0\uFE0F' },
+        banner: '\u26A0\uFE0F SHRAPNEL WINDS: 30% chance of random DMG at turn start \u26A0\uFE0F',
+        // Y01: "the wind is carrying the last place it went through" - metal, fast, catching light.
+        fx: { tint: [90, 90, 95, 0.08], pall: [70, 75, 82, 0.42, 0.65], layers: [
+            // Chunks first, then the glints on them. Twice now this sky has read as grey with nothing
+            // in it: the glints flicker, and a flicker caught at its dim end is gone. The chunks do
+            // not flicker, so they are what keeps the wind visible on any frame, and they are bold.
+            { kind: 'streak', n: 45, rgb: [50, 52, 56], a: 0.85, len: [0.012, 0.025], w: 3, speed: 0.95, ang: 0.10 },
+            { kind: 'streak', n: 60, rgb: [225, 230, 235], a: 0.90, len: [0.030, 0.060], w: 1.7, speed: 1.30, ang: 0.08, flicker: true } ] } },
     // Three skies with rules of the ground's weight, each pulling a lever nothing else pulls:
     // plating, cooldowns, and how easily the back rank is found.
     ASHFALL: { name: 'ASHFALL', short: 'ASH', dot: 'wx-ash', cls: 'weather-ash',
         desc: 'Grey snow off something that burned for a week. It cakes on armour and it smothers a blast.',
         armor: 2, aoe: 0.7,
-        banner: '\u26A0\uFE0F ASHFALL: every unit +2 armour, area attacks -30% \u26A0\uFE0F' },
+        banner: '\u26A0\uFE0F ASHFALL: every unit +2 armour, area attacks -30% \u26A0\uFE0F',
+        // Y01: "grey snow off something that burned for a week" - slow flakes under a pall.
+        fx: { tint: [120, 115, 108, 0.12], pall: [105, 100, 95, 0.60, 0.80], layers: [
+            { kind: 'bank', n: 5, rgb: [150, 145, 135], a: 0.18, r: [0.35, 0.50], y: [0.0, 0.55], speed: 0.005 },
+            { kind: 'fall', n: 90, rgb: [230, 225, 215], a: 0.80, size: [1.4, 3.4], speed: 0.045, sway: 12 } ] } },
     ION_STORM: { name: 'ION STORM', short: 'ION', dot: 'wx-ion', cls: 'weather-ion',
         desc: 'The air is charged and everything in it cycles faster and lands softer.',
         cdCut: 1, all: 0.85,
-        banner: '\u26A0\uFE0F ION STORM: cooldowns a turn shorter, all damage -15% \u26A0\uFE0F' },
+        banner: '\u26A0\uFE0F ION STORM: cooldowns a turn shorter, all damage -15% \u26A0\uFE0F',
+        // Y01: "the air is charged" - rising sparks, and now and then the sky discharges. Rare and
+        // dim on purpose: a flash is the one thing here a reduced-motion player most wants gone,
+        // and it is gone for them - the still frame stops every animation and hides the bolts.
+        // `every` is the average gap between flashes; how long one lasts is the keyframe's to say.
+        fx: { tint: [40, 120, 140, 0.10], pall: [18, 62, 80, 0.60, 0.80], layers: [
+            { kind: 'rise', n: 26, rgb: [150, 240, 250], a: 0.75, size: [1.2, 2.2], y: [0.2, 1.0], speed: 0.030, flicker: true },
+            { kind: 'bolt', every: 4.5, rgb: [175, 245, 255], a: 0.80, flash: 0.07 } ] } },
     BLOOD_HAZE: { name: 'BLOOD HAZE', short: 'HAZE', dot: 'wx-haze', cls: 'weather-haze',
         desc: 'Red air thick enough to lose a squad in. Nobody can shoot, and nobody can find your back rank either.',
         ranged: 0.6, backline: 0.3,
-        banner: '\u26A0\uFE0F BLOOD HAZE: ranged -40%, your back rank is hard to find \u26A0\uFE0F' },
+        banner: '\u26A0\uFE0F BLOOD HAZE: ranged -40%, your back rank is hard to find \u26A0\uFE0F',
+        // Y01: "red air thick enough to lose a squad in... nobody can find your back rank". The
+        // veil sits over the left of the field because that is where the back rank stands:
+        // measured on a 390px phone, rank 3 is drawn 21% of the way across and rank 1 at 47%.
+        fx: { tint: [120, 20, 20, 0.14], pall: [110, 18, 18, 0.40, 0.65], layers: [
+            { kind: 'bank', n: 8, rgb: [150, 35, 35], a: 0.24, r: [0.30, 0.50], y: [0.25, 1.0], speed: 0.008 },
+            { kind: 'veil', side: 'left', reach: 0.35, rgb: [100, 12, 12], a: 0.42 } ] } },
     BLOODLUST: { name: 'THUNDERDOME BLOODLUST', short: 'BLOOD', dot: 'wx-blood', cls: 'weather-blood',
         desc: 'The arena wants a short fight and everything in it obliges.',
         all: 1.2, arena: true,
-        banner: '\uD83D\uDC80 THUNDERDOME BLOODLUST: all units deal +20% DMG \uD83D\uDC80' }
+        banner: '\uD83D\uDC80 THUNDERDOME BLOODLUST: all units deal +20% DMG \uD83D\uDC80',
+        // Y01: "the arena wants a short fight" - embers off the floor and heat at the feet.
+        fx: { tint: [140, 30, 10, 0.12], pall: [110, 25, 10, 0.45, 0.60], layers: [
+            { kind: 'bank', n: 3, rgb: [160, 40, 20], a: 0.16, r: [0.40, 0.60], y: [0.70, 1.0], speed: 0.010 },
+            { kind: 'rise', n: 36, rgb: [255, 155, 60], a: 0.80, size: [1.4, 3.0], y: [0.3, 1.0], speed: 0.060, flicker: true } ] } }
 };
 // Everything a road can actually roll. BLOODLUST is the commander's arena and is never dealt.
 const WEATHER_IDS = Object.keys(WEATHER).filter(id => id !== 'CLEAR' && !WEATHER[id].arena);
@@ -5266,6 +5303,257 @@ function ambienceState() {
              layers: n ? Object.keys(n.parts) : [], heat: ambienceHeatLevel, motes: ambienceMotes };
 }
 
+// ── Y01: THE SKY, DRAWN ─────────────────────────────────────────────────────────────
+// C06 made weather a table and gave seven skies real rules, and every one of them looked the
+// same on the field: the faction's backdrop under one fixed red gradient, with the sky named in
+// a banner. A sandstorm that blinds the guns and an ion storm that speeds every cooldown were a
+// line of text apiece. The bed above already tells seven of the ten places apart by ear; this is
+// the same idea for the eye, and for the weather rather than the place.
+//
+// Everything a sky looks like is its `fx` entry on the WEATHER table - there is no second list of
+// skies here to drift - and this block only knows how to draw a handful of kinds. It sits behind
+// the squad and every banner, never takes a tap, and builds nothing for CLEAR.
+//
+// IT IS NOT A CANVAS, AND THE FIRST CUT WAS. A canvas redrawn thirty times a second kept the main
+// thread busy for 460-840 ms of every second at 4x CPU throttle, against 3 ms for a clear sky -
+// and taking it apart on the sandstorm showed why: an EMPTY canvas invalidated every frame cost
+// 232 ms/s on its own, and a tint and a pall that never change cost 182 more to redraw. Almost
+// none of it was drawing anything new. So each particle field is drawn ONCE into a tile, and CSS
+// slides the tiles on `transform`, which the compositor moves without repainting: the seven skies
+// measure 3.5-4.3 ms/s against 1.0 for a clear sky, at the same throttle. Headless rasterises in
+// software and overstates what a phone's GPU pays, but a ratio that size is not something a GPU
+// closes.
+//
+// THE LIGHTNING IS NOT A TIMER, AND THE FIRST ONE WAS. A strike built per flash cost about 35 ms
+// of main thread at 4x throttle - and re-lighting one element built in advance cost the same within
+// noise, because the price was never the element: a one-shot animation takes six-odd full frames
+// of style, layering and commit to start and to finish. It put the ion storm at four times any
+// other sky. So each bolt is drawn once like everything else and runs an endless cycle that is
+// dark but for its last sliver; three of them on cycles that do not line up give irregular
+// flashes, with no timer and no script at all once they are built.
+//
+// THREE SWITCHES, and they mean different things. paintOff is the simulator's and means build
+// nothing. motionOff is the player's and means A STILL FRAME: the weather is information about the
+// fight, and a player who has asked for less motion has not asked to be told less - so they get
+// the pall, the haze and the flakes exactly where they were, and never a lightning flash. And a
+// hidden page moves nothing: there is no timer here, and the browser stops composited animations
+// on its own.
+const SKY_TILE = 256;            // CSS px; every loop travels a whole number of tiles, so it is seamless
+const SKY_FX_DPR_CAP = 1.5;      // soft particles - a 3x backing store buys nothing visible
+// Two depth planes per particle field: the near one bigger and faster, the far one smaller, slower
+// and fainter. One tile moves as a block, and a second at another speed is what stops it reading
+// as wallpaper being dragged past the window.
+const SKY_PLANES = [{ share: 0.6, size: 1, speed: 1, alpha: 1 }, { share: 0.4, size: 0.6, speed: 0.6, alpha: 0.7 }];
+// Three bolts, each on a cycle this many times three times the sky's `every`. Cycles that do not
+// line up make the flashes land irregularly, and together they still average one every `every`
+// seconds - the harmonic mean of these three is within half a percent of one.
+const SKY_BOLT_CYCLES = [0.82, 1, 1.26];
+let skyFx = { id: null, el: null, w: 0, still: false, ro: null };
+const skyTiles = {};
+
+// Seeded off the sky's own name rather than the run, so the still frame is the same picture every
+// time and nothing here ever draws on a random stream a run depends on.
+function skyRng(id, salt) { return mulberry32(seedFromString(`sky-fx|${id}|${salt}`)); }
+
+// A soft round sprite per colour, drawn once, stamped into tiles.
+const skySprites = {};
+function skySprite(rgb) {
+    const key = rgb.join(',');
+    if (skySprites[key]) return skySprites[key];
+    const c = document.createElement('canvas'); c.width = c.height = 64;
+    const g = c.getContext('2d');
+    const grad = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+    grad.addColorStop(0, `rgba(${key},1)`); grad.addColorStop(0.55, `rgba(${key},0.45)`);
+    grad.addColorStop(1, `rgba(${key},0)`);
+    g.fillStyle = grad; g.fillRect(0, 0, 64, 64);
+    return (skySprites[key] = c);
+}
+
+// The nearest whole-tile direction to a streak's angle. A loop has to end where it began, so the
+// travel is (k, m) tiles; the angle it draws at is the angle it moves at.
+function skyStreakStep(ang) {
+    const t = Math.tan(ang);
+    let best = [1, 0], err = Infinity;
+    for (let k = 1; k <= 12; k++) { const m = Math.round(k * t), e = Math.abs(Math.atan2(m, k) - ang); if (e < err) { err = e; best = [k, m]; } }
+    return best;
+}
+
+// Draw one plane of one layer into a tile and hand back its image. Everything that crosses an edge
+// is drawn again on the far side, which is what lets the tile repeat without a seam.
+function skyTile(id, li, pi, L, W, H) {
+    const key = `${id}|${li}|${pi}|${Math.round(W / 40)}`;
+    if (skyTiles[key]) return skyTiles[key];
+    const plane = SKY_PLANES[pi], rnd = skyRng(id, `${li}|${pi}`);
+    const span = ([a, b]) => a + (b - a) * rnd();
+    const bank = L.kind === 'bank';
+    const dpr = bank ? 0.5 : Math.min(window.devicePixelRatio || 1, SKY_FX_DPR_CAP);   // a blob is soft at any resolution
+    const maxR = bank ? L.r[1] * W : 0;
+    const tw = bank ? Math.round(W * 2) : SKY_TILE;
+    const th = bank ? Math.round((L.y[1] - L.y[0]) * H + maxR * 1.2) : SKY_TILE;
+    const c = document.createElement('canvas');
+    c.width = Math.max(1, Math.round(tw * dpr)); c.height = Math.max(1, Math.round(th * dpr));
+    const g = c.getContext('2d'); g.scale(dpr, dpr);
+    // The plane's alpha is baked into the tile rather than set as the element's opacity, so that
+    // opacity is free for the flicker - the one way to dim a layer that is never repainted to do it.
+    g.globalAlpha = L.a * (bank ? 1 : plane.alpha);
+    const wrap = (x, y, m, draw) => {
+        [-tw, 0, tw].forEach(ox => [-th, 0, th].forEach(oy => {
+            const X = x + ox, Y = y + oy;
+            if (X > -m && X < tw + m && Y > -m && Y < th + m && (bank ? oy === 0 : true)) draw(X, Y);
+        }));
+    };
+    if (bank) {
+        const img = skySprite(L.rgb);
+        for (let i = 0; i < L.n; i++) {
+            const R = span(L.r) * W, x = rnd() * tw, y = maxR * 0.6 + rnd() * ((L.y[1] - L.y[0]) * H);
+            wrap(x, y, R, (X, Y) => g.drawImage(img, X - R, Y - R * 0.6, R * 2, R * 1.2));
+        }
+    } else if (L.kind === 'streak') {
+        const n = Math.round(L.n * plane.share * (SKY_TILE * SKY_TILE) / (W * H));
+        g.strokeStyle = `rgb(${L.rgb.join(',')})`; g.lineWidth = L.w * (0.6 + 0.4 * plane.size); g.lineCap = 'round';
+        const [k, m] = skyStreakStep(L.ang), a = Math.atan2(m, k), dx = Math.cos(a), dy = Math.sin(a);
+        for (let i = 0; i < Math.max(4, n); i++) {
+            const len = span(L.len) * W * plane.size, x = rnd() * tw, y = rnd() * th;
+            wrap(x, y, len + 4, (X, Y) => { g.beginPath(); g.moveTo(X, Y); g.lineTo(X - dx * len, Y - dy * len); g.stroke(); });
+        }
+    } else {                                   // fall and rise: soft dots
+        const img = skySprite(L.rgb);
+        const n = Math.round(L.n * plane.share * (SKY_TILE * SKY_TILE) / (W * H));
+        for (let i = 0; i < Math.max(4, n); i++) {
+            const d = span(L.size) * 2.2 * plane.size, x = rnd() * tw, y = rnd() * th;
+            wrap(x, y, d, (X, Y) => g.drawImage(img, X - d / 2, Y - d / 2, d, d));
+        }
+    }
+    return (skyTiles[key] = { url: c.toDataURL(), tw, th, maxR });
+}
+
+// The pall, the tint and the veil never move, so they are a background and not a frame.
+function skyStillBackground(fx) {
+    const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+    const layers = [];
+    fx.layers.filter(L => L.kind === 'veil').forEach(L => layers.push(
+        `linear-gradient(to ${L.side === 'left' ? 'right' : 'left'}, ${rgba(L.rgb, L.a)} 0%, ${rgba(L.rgb, 0)} ${L.reach * 100}%)`));
+    // The pall is what makes a sky read as weather at all. Tint and particles alone, and on the
+    // highway backdrop four of seven skies were indistinguishable from CLEAR at phone size - the
+    // painted blue sky kept saying "clear day" whatever drifted in front of it. Weather changes
+    // the sky before it changes anything else.
+    if (fx.pall) layers.push(`linear-gradient(to bottom, ${rgba(fx.pall, fx.pall[3])} 0%, ${rgba(fx.pall, 0)} ${fx.pall[4] * 100}%)`);
+    layers.push(`linear-gradient(${rgba(fx.tint, fx.tint[3])}, ${rgba(fx.tint, fx.tint[3])})`);
+    return layers.join(', ');
+}
+
+function skyFxBuild(id) {
+    const layerEl = document.getElementById('combat-sky-layer');
+    const fx = WEATHER[id] && WEATHER[id].fx;
+    const el = skyFx.el;
+    el.innerHTML = '';
+    if (!fx) return;
+    const W = layerEl.clientWidth || 390, H = layerEl.clientHeight || 560;
+    skyFx.w = W;
+    const still = document.createElement('div');
+    still.className = 'sky-fx-still';
+    still.style.backgroundImage = skyStillBackground(fx);
+    el.appendChild(still);
+    fx.layers.forEach((L, li) => {
+        if (L.kind === 'veil' || L.kind === 'bolt') return;
+        const planes = L.kind === 'bank' ? [0] : [0, 1];
+        planes.forEach(pi => {
+            const plane = SKY_PLANES[pi], t = skyTile(id, li, pi, L, W, H);
+            const tile = document.createElement('div');
+            tile.className = `sky-fx-tile sky-${L.kind}` + (L.flicker ? ' sky-flicker' : '');
+            const st = tile.style;
+            st.backgroundImage = `url(${t.url})`;
+            st.backgroundSize = `${t.tw}px ${t.th}px`;
+            let dx = 0, dy = 0, dist, pxPerSec;
+            if (L.kind === 'bank') {
+                dx = t.tw * (L.speed < 0 ? -1 : 1);
+                st.top = `${Math.round(L.y[0] * H - t.maxR * 0.6)}px`; st.height = `${t.th}px`;
+                dist = Math.abs(dx); pxPerSec = Math.abs(L.speed) * W;
+            } else if (L.kind === 'streak') {
+                const [k, m] = skyStreakStep(L.ang); dx = k * SKY_TILE; dy = m * SKY_TILE;
+                dist = Math.hypot(dx, dy); pxPerSec = L.speed * W * plane.speed;
+            } else {
+                dy = (L.kind === 'fall' ? 1 : -1) * SKY_TILE;
+                dist = SKY_TILE; pxPerSec = L.speed * H * plane.speed;
+            }
+            // Oversized by one loop in the direction of travel and started a loop behind, so the
+            // field is covered at every point of the cycle.
+            if (dx) { st.left = `${dx > 0 ? -dx : 0}px`; st.width = `calc(100% + ${Math.abs(dx)}px)`; }
+            if (dy && L.kind !== 'bank') { st.top = `${dy > 0 ? -dy : 0}px`; st.height = `calc(100% + ${Math.abs(dy)}px)`; }
+            st.setProperty('--dx', `${dx}px`); st.setProperty('--dy', `${dy}px`);
+            st.animationDuration = `${(dist / Math.max(1, pxPerSec)).toFixed(2)}s` + (L.flicker ? `, ${(0.6 + pi * 0.35).toFixed(2)}s` : '');
+            if (L.kind === 'fall' && L.sway) {
+                // One transform per element, so the sway is a wrapper around the fall.
+                const sway = document.createElement('div');
+                sway.className = 'sky-fx-sway';
+                sway.style.setProperty('--sway', `${L.sway}px`);
+                sway.style.animationDuration = `${(3.2 + pi * 1.4).toFixed(1)}s`;
+                sway.appendChild(tile); el.appendChild(sway);
+            } else el.appendChild(tile);
+        });
+    });
+    // The lightning, drawn once like everything else: see THE LIGHTNING IS NOT A TIMER above, and
+    // sky-strike in the stylesheet for the flash itself.
+    const B = fx.layers.find(L => L.kind === 'bolt');
+    if (B) {
+        const c = B.rgb.join(',');
+        const line = (pts, w, a) => `<polyline points="${pts}" fill="none" stroke="rgb(${c})" stroke-width="${w}" `
+            + `stroke-linejoin="round" vector-effect="non-scaling-stroke" opacity="${a}"/>`;
+        SKY_BOLT_CYCLES.forEach((f, k) => {
+            const rng = skyRng(id, `bolt|${k}`), cycle = B.every * SKY_BOLT_CYCLES.length * f;
+            // A jagged line from the top of the sky to a little under halfway down, drawn in a unit
+            // box stretched to the field so it never has to ask the page how big it is; the stroke
+            // keeps its screen width however the box is stretched.
+            let x = 15 + rng() * 70, y = 0; const pts = [];
+            while (y < 45) { pts.push(`${x.toFixed(1)},${y.toFixed(1)}`); x += (rng() - 0.5) * 8; y += 3 + rng() * 5; }
+            const bolt = document.createElement('div');
+            bolt.className = 'sky-strike';
+            bolt.style.animationDuration = `${cycle.toFixed(2)}s`;
+            bolt.style.animationDelay = `${(-rng() * cycle).toFixed(2)}s`;
+            bolt.innerHTML = `<div class="sky-flash" style="background:rgba(${c},${B.flash})"></div>`
+                + `<svg viewBox="0 0 100 100" preserveAspectRatio="none">${line(pts.join(' '), 5, 0.18)}${line(pts.join(' '), 1.6, B.a)}</svg>`;
+            el.appendChild(bolt);
+        });
+    }
+}
+
+// Called wherever the scenery is (re)applied - the start of a fight, a resume, the Stormcaller
+// turning the sky over. Idempotent: the same sky is not rebuilt, only re-checked for stillness.
+function skyFxStart() {
+    if (paintOff) return;
+    const layer = document.getElementById('combat-sky-layer');
+    if (!layer) return;
+    if (!skyFx.el) {
+        skyFx.el = document.createElement('div');
+        skyFx.el.className = 'sky-fx'; skyFx.el.setAttribute('aria-hidden', 'true');
+        layer.prepend(skyFx.el);
+        if (typeof ResizeObserver === 'function') {
+            // A turned phone is a different field. Streak lengths and bank sizes are drawn for a
+            // width, so a big enough change rebuilds; a few pixels of settling does not.
+            skyFx.ro = new ResizeObserver(() => {
+                if (skyFx.id && Math.abs(layer.clientWidth - skyFx.w) > skyFx.w * 0.15) skyFxBuild(skyFx.id);
+            });
+            skyFx.ro.observe(layer);
+        }
+    }
+    const id = WEATHER[currentWeather] && WEATHER[currentWeather].fx ? currentWeather : null;
+    if (id !== skyFx.id) { skyFx.id = id; skyFxBuild(id); }
+    skyFx.still = motionOff();
+    skyFx.el.classList.toggle('still', skyFx.still);
+}
+function skyFxClear() {
+    if (skyFx.el) skyFx.el.innerHTML = '';
+    skyFx.id = null;
+}
+// For the suites: what the layer is doing, the same way ambienceState reports the bed.
+function skyFxState() {
+    const el = skyFx.el;
+    const tiles = el ? [...el.querySelectorAll('.sky-fx-tile')] : [];
+    return { id: skyFx.id, built: !!(el && el.children.length), still: skyFx.still,
+             planes: tiles.length, kinds: tiles.map(t => t.className.split(' ')[1].replace('sky-', '')),
+             bolts: el ? el.querySelectorAll('.sky-strike').length : 0 };
+}
+
 function triggerShake() {
     let el = document.getElementById('combat-sky-layer');
     el.classList.remove('fx-shake');
@@ -7100,7 +7388,7 @@ function initEngine() {
 // (five units and a five-deep queue, unchanged across an open and a close). The list was the
 // only thing keeping it out.
 const SETTINGS_GEAR_OFF = ['screen-settings', 'screen-codex'];
-function switchScreen(screenId) { if (screenId !== 'screen-combat') stopAmbience(); document.querySelectorAll('#engine > div:not(.settings-icon):not(#screen-settings):not(.overlay)').forEach(el => el.style.display = 'none'); document.getElementById(screenId).style.display = 'flex'; document.getElementById('btn-global-settings').style.display = SETTINGS_GEAR_OFF.includes(screenId) ? 'none' : 'block'; focusScreen(screenId); }
+function switchScreen(screenId) { if (screenId !== 'screen-combat') { stopAmbience(); skyFxClear(); } document.querySelectorAll('#engine > div:not(.settings-icon):not(#screen-settings):not(.overlay)').forEach(el => el.style.display = 'none'); document.getElementById(screenId).style.display = 'flex'; document.getElementById('btn-global-settings').style.display = SETTINGS_GEAR_OFF.includes(screenId) ? 'none' : 'block'; focusScreen(screenId); }
 // Which screen is actually up, ignoring the settings panel that floats over one and the
 // overlays that float over all of them.
 function currentScreen() {
@@ -11605,6 +11893,7 @@ function renderClock() {
 }
 function applyCombatScenery(bgFile, bannerText) {
     startAmbience(bgFile);
+    skyFxStart();
     combatBgFile = bgFile;
     const field = document.querySelector('.battlefield');
     if (field) field.style.marginBottom = GROUND_LIFT[bgFile] || DEFAULT_LIFT;
@@ -15008,7 +15297,7 @@ globalThis.WP = {
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
-    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, MOVE_CD, DECK_MOVES, moveDetail, reachFor, operatorFileHtml, resRowHtml, FELLED_CAUSES, felledPhrase, fallenPhrase, felledKind, fallenKind, rollFold, rollFoldHtml, FOLD_TOP, RANK_LABELS, get deckInspect() { return deckInspect; }, set deckInspect(v) { deckInspect = v; }, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, openEnragePhase, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
+    Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, MOVE_CD, DECK_MOVES, skyFxState, skyFxStart, skyFxClear, skyStreakStep, SKY_TILE, SKY_PLANES, SKY_FX_DPR_CAP, applyCombatScenery, moveDetail, reachFor, operatorFileHtml, resRowHtml, FELLED_CAUSES, felledPhrase, fallenPhrase, felledKind, fallenKind, rollFold, rollFoldHtml, FOLD_TOP, RANK_LABELS, get deckInspect() { return deckInspect; }, set deckInspect(v) { deckInspect = v; }, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, openEnragePhase, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,
     // live run state, readable and writable so a suite can set up a scenario
     get audioCtx() { return audioCtx; }, set audioCtx(v) { audioCtx = v; },
     get sfxLog() { return sfxLog; }, set sfxLog(v) { sfxLog = v; },
