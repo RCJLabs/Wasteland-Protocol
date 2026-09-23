@@ -114,7 +114,11 @@ module.exports = {
       // than the item and both reproduced on the tree before it: the squad's back rank cut off at
       // the field's edge at 1280, and main-thread spikes in some sector-2 fights with nothing drawn.
       // Written in the tracked words the first time, which is the lesson of the two moves above.
-      && r.open === 5 && r.total === 25);
+      //
+      // Y03 moved it 5 -> 6 of 25 -> 26 with one nobody can settle yet, rather than one it did
+      // not chase: whether Y02's tunnel dressing still earns its place over a painted tunnel,
+      // which needs a tunnel to be painted first. Filed in the tracked words at its own site.
+      && r.open === 6 && r.total === 26);
     // AND NO CLAIM CARRIES TWO VERDICTS THAT DISAGREE. K11's did for two commits: K11b wrote its
     // answer ABOVE the marker already there and left the old one standing, so the last word a
     // reader got was the stale one. The scan passed it, because it tested the window for an
@@ -221,9 +225,9 @@ module.exports = {
     // And the record proves it in the live scan: R05's entry quotes "has never had the same
     // treatment" and O17's table quotes two more, and none of the three is counted as a claim.
     // It moves with the pin above whenever an item files a real claim at its own site, as S05,
-    // Y01 and Y02 each did; a quotation leaking in moves this one alone.
+    // Y01, Y02 and Y03 each did; a quotation leaking in moves this one alone.
     ok(`the three quoted phrases in the record file no claims (${r.total} total)`,
-      r.total === 25);
+      r.total === 26);
 
     ok('a marker quoting what it used to say is not still saying it', (() => {
       // How every correction in this record is written. Without the strip, the quotation reads

@@ -296,7 +296,10 @@ module.exports = {
         };
         img.src = src;
       });
-      const bgs = ASSET_LIST.filter(f => f.startsWith('bg_') && f !== 'bg_title.webp');
+      // Y03: a picture still on PENDING_ART has no file to measure yet. Skipped by name rather
+      // than left to fail to load - the moment it comes off the list it is measured like the rest,
+      // and a painted foreground without a GROUND_LIFT entry fails here on the day it arrives.
+      const bgs = ASSET_LIST.filter(f => f.startsWith('bg_') && f !== 'bg_title.webp' && !PENDING_ART.includes(f));
       const out = [];
       for (const f of bgs) {
         const b = await band(f);

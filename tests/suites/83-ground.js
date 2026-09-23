@@ -154,8 +154,10 @@ module.exports = {
 
     // ── The signature ground is the first entry, everywhere ──────────────────────────────
     // Two tables agree on it and neither says so out loud, so this is where it is written down:
-    // a faction's backdrop is a picture of its first ground, and its confluence - its own sky
-    // over its own ground - is keyed to the same one.
+    // a faction fights on its first ground most, and its confluence - its own sky over its own
+    // ground - is keyed to the same one. This used to add that the faction's backdrop is a
+    // picture of that ground, which was never true of the Raiders or the Beasts - Y03 gives each
+    // ground its own picture, and suite 196 holds that.
     const sig = await page.evaluate(() => {
       const rows = FIGHT_NODES.map(f => {
         const c = CONFLUENCE.find(x => x.faction === f);

@@ -5,8 +5,10 @@
 
 // Art that is commissioned but not yet drawn. Anything listed here is kept out of the
 // preloader and the service worker cache so neither chases a file that does not exist, and
-// the portrait fallback covers it on the field. Empty is the healthy state.
-const PENDING_ART = [];
+// something already drawn stands in for it: the portrait fallback on the field, and for a place
+// (Y03, at FACTIONS) the faction's home picture. Empty is the healthy state. Every entry has a
+// brief in ART_PROMPTS.md, and taking one off this list is how a finished picture goes live.
+const PENDING_ART = ['bg_saltflats.webp', 'bg_den.webp', 'bg_pipeworks.webp', 'bg_exclusion.webp', 'bg_burrows.webp'];
 const ASSET_LIST = [
     "bg_title.webp", "bg_combat.webp", "bg_thunderdome.webp", "bg_refinery.webp", "bg_highway.webp", "bg_canyon.webp", "bg_foundry.webp", "bg_nest.webp",
     "hero_bruiser.webp", "hero_medic.webp", "hero_scavenger.webp", "hero_pyro.webp", "hero_shotgunner.webp", "hero_sniper.webp", "hero_hound.webp",
@@ -16,7 +18,8 @@ const ASSET_LIST = [
     "bg_ossuary.webp",
     "enemy_choir_acolyte.webp", "enemy_choir_censer.webp", "enemy_choir_reliquary.webp", "enemy_choir_hierophant.webp",
     "enemy_carrion_rat.webp", "enemy_carrion_moth.webp", "enemy_carrion_worm.webp", "enemy_carrion_brood.webp",
-    "bg_congregation.webp", "bg_carrionfield.webp"
+    "bg_congregation.webp", "bg_carrionfield.webp",
+    "bg_saltflats.webp", "bg_den.webp", "bg_pipeworks.webp", "bg_exclusion.webp", "bg_burrows.webp"
 ];
 // The title art is fetched immediately; everything else waits until the menu is up so the
 // first screen is not stuck behind the whole art set.
@@ -2457,13 +2460,14 @@ const TERRAIN_IDS = Object.keys(TERRAIN);
 // 0.75 the fights that can carry ground mostly do.
 const GROUND_CHANCE = 0.75;
 // Which of a faction's grounds it fights on. The first entry in FACTIONS[].ground is the
-// signature - the one its backdrop is a picture of - and the rest are the neighbouring places
-// it also turns up in. Split evenly, every faction donated half its ground to a NEIGHBOUR's
-// signature, which is fine for the three grounds that have several suppliers and fatal for the
-// two that have one: FLOODED comes only from the Choir and NEST only from the Carrion, so each
-// landed on 3% of fights against 20% for the shared three. Weighting the signature both closes
-// that gap and makes the rule the table already states - a refinery fights like a refinery -
-// true most of the time instead of half of it.
+// signature - the ground it fights on most - and the rest are the neighbouring grounds it also
+// turns up on. This used to say the signature is the one its backdrop is a picture of, and for
+// the Raiders and the Beasts it never was: see Y03 at FACTIONS. Split evenly, every faction
+// donated half its ground to a NEIGHBOUR's signature, which is fine for the three grounds that
+// have several suppliers and fatal for the two that have one: FLOODED comes only from the Choir
+// and NEST only from the Carrion, so each landed on 3% of fights against 20% for the shared
+// three. Weighting the signature both closes that gap and makes the rule the table already
+// states - a refinery fights like a refinery - true most of the time instead of half of it.
 const GROUND_SIGNATURE = 0.75;
 let currentTerrain = 'OPEN_ROAD'; let forecastTerrain = null;
 // One accessor, so nothing has to remember that an unknown id means "the plain one".
@@ -2478,17 +2482,49 @@ let forecastFormation = null; let currentFormation = null;
 // The factions the roads can draw from. These used to be enumerated by hand in five places -
 // the weather forecast, two map validators, the node whitelist and the backdrop switch - so a
 // fourth could not be added without finding all five of them first.
+//
+// Y03: A PICTURE FOR EVERY GROUND. Each faction used to fight all of its grounds on one picture,
+// and for two of the five it is not a picture of the ground they fight on most. The Raiders'
+// highway is a collapsed overpass in a ruined city - broken concrete, which is RUINS - and their
+// signature is OPEN FLATS. The Beasts' canyon is a salt flat between red walls - hardpan, which
+// is OPEN FLATS - and their signature is TUNNELS: Y02's roof and walls were spent making a canyon
+// read as a service tunnel.
+//
+// `bg` is the home picture, the one each faction has always had: it is shown on the open road
+// and on the ground it is a picture of. `places` holds a picture for each ground it is not, one a
+// faction. The ground lists and GROUND_SIGNATURE are untouched, so which ground a fight is on and
+// everything that follows from it is exactly what it was - a place changes what the fight looks
+// like and nothing else. A place not yet painted is on PENDING_ART, and backdropFor hands back
+// the home picture until it comes off. The briefs are in ART_PROMPTS.md.
 const FACTIONS = {
-    RAIDERS: { bg: 'bg_highway.webp',  weather: 'SHRAPNEL_WINDS', ground: ['OPEN_FLATS', 'RUINS'], allies: ['MECH', 'BEASTS'] },
-    BEASTS:  { bg: 'bg_canyon.webp',   weather: 'SANDSTORM',      ground: ['TUNNELS', 'OPEN_FLATS'], allies: [] },
-    MECH:    { bg: 'bg_refinery.webp', weather: 'TOXIC_SMOG',     ground: ['RUINS', 'TUNNELS'], allies: [] },
+    RAIDERS: { bg: 'bg_highway.webp',  weather: 'SHRAPNEL_WINDS', ground: ['OPEN_FLATS', 'RUINS'], allies: ['MECH', 'BEASTS'],
+               places: { OPEN_FLATS: 'bg_saltflats.webp' } },
+    BEASTS:  { bg: 'bg_canyon.webp',   weather: 'SANDSTORM',      ground: ['TUNNELS', 'OPEN_FLATS'], allies: [],
+               places: { TUNNELS: 'bg_den.webp' } },
+    MECH:    { bg: 'bg_refinery.webp', weather: 'TOXIC_SMOG',     ground: ['RUINS', 'TUNNELS'], allies: [],
+               places: { TUNNELS: 'bg_pipeworks.webp' } },
     // Irradiated cultists: the first enemies in the game that spend a turn on each other
     // rather than on you. Standing next to one is what makes the rest dangerous.
-    CHOIR:   { bg: 'bg_congregation.webp', weather: 'TOXIC_SMOG', ground: ['FLOODED', 'RUINS'], allies: ['BEASTS'], minSector: 2 },
+    CHOIR:   { bg: 'bg_congregation.webp', weather: 'TOXIC_SMOG', ground: ['FLOODED', 'RUINS'], allies: ['BEASTS'], minSector: 2,
+               places: { RUINS: 'bg_exclusion.webp' } },
     // A swarm. Each one is trivial and the pile is not, and the answer is to spread damage
     // across it rather than pick them off one at a time.
-    CARRION: { bg: 'bg_carrionfield.webp', weather: 'SANDSTORM',  ground: ['NEST', 'TUNNELS'], allies: [],         minSector: 2, swarm: 2, heavyCap: 2 }
+    CARRION: { bg: 'bg_carrionfield.webp', weather: 'SANDSTORM',  ground: ['NEST', 'TUNNELS'], allies: [],         minSector: 2, swarm: 2, heavyCap: 2,
+               places: { TUNNELS: 'bg_burrows.webp' } }
 };
+// The picture a fight against this faction on this ground is drawn on. Draws no dice, so a seeded
+// run and the simulator roll exactly what they did before places existed.
+function backdropFor(faction, terrain) {
+    const f = FACTIONS[faction];
+    if (!f) return null;
+    const place = f.places && f.places[terrain];
+    return place && !PENDING_ART.includes(place) ? place : f.bg;
+}
+// The home picture a place belongs to, or null for anything that is not a place.
+function placeHome(file) {
+    const f = Object.values(FACTIONS).find(x => x.places && Object.values(x.places).includes(file));
+    return f ? f.bg : null;
+}
 const FIGHT_NODES = Object.keys(FACTIONS);
 function factionsAt(sector) { return FIGHT_NODES.filter(f => (FACTIONS[f].minSector || 1) <= sector); }
 // How deep a node really is. A tier number on its own says nothing - tier 1 of sector 5 is
@@ -3152,9 +3188,10 @@ function generateSectorMap(rng = Math.random) {
             if (hasContract('HARSH_SKIES') && (n.weather || 'CLEAR') === 'CLEAR')
                 n.weather = WEATHER_IDS[Math.floor(rng() * WEATHER_IDS.length)];
         }
-        // Ground follows the place, so a refinery reliably fights like a refinery. The opening
-        // node is plain for the same reason its sky is: nothing new in the first fight. A
-        // commander's arena stays plain too - the commander is the variable there.
+        // Ground follows the faction, so a refinery reliably fights like a refinery - and since
+        // Y03 the picture follows the ground, in initiateCombat. The opening node is plain for
+        // the same reason its sky is: nothing new in the first fight. A commander's arena stays
+        // plain too - the commander is the variable there.
         // F09: keyed on the literal tier 1, while the Road Crew upgrade opens the run on tier
         // 2 - so anybody who had bought it fought their first fight under weather, on ground
         // and against a formation, which is the one fight the rule exists to keep plain.
@@ -3827,7 +3864,7 @@ const CODEX = [
     { id: 'GROUND_SKY', title: 'THE GROUND AND THE SKY', body: () => [
         `Two things stand over every fight and both are on the node before you take it: what you are standing on, and what is overhead. Ground is the commoner of the two - ${Math.round(GROUND_CHANCE * 100)}% of eligible fights carry it against weather's ${Math.round(WEATHER_CHANCE * 100)}% - because the ground is where the fight is and the weather is something happening to it. Neither is dealt in the opening fight of a run.`,
         ...TERRAIN_IDS.filter(id => TERRAIN[id].banner).map(id => `${TERRAIN[id].name} \u2014 ${TERRAIN[id].desc}`),
-        `Every faction has a home ground - the floor of the place it is a picture of - and one neighbouring ground it also turns up on. ${Math.round(GROUND_SIGNATURE * 100)}% of the ground it fights on is its own, so a sector tilted toward one faction is a sector tilted onto one kind of floor.`,
+        `Every faction has a home ground and one neighbouring ground it also turns up on. ${Math.round(GROUND_SIGNATURE * 100)}% of the ground it fights on is its own, so a sector tilted toward one faction is a sector tilted onto one kind of floor.`,
         'Overhead, a faction brings its own sky, a sector front tilts the roads toward one of its own, and a commander\u2019s arena has a sky of its own that nothing else does.',
         ...WEATHER_IDS.map(id => `${WEATHER[id].name} \u2014 ${WEATHER[id].desc}`),
         'And when a faction\u2019s own sky stands over its own ground, the two make a third thing, called out on its own line under both banners:',
@@ -5178,7 +5215,10 @@ let ambienceBg = null;          // the backdrop file, not the display name - res
 let ambienceHeatLevel = 0;      // 0 at rest, 1 at overdrive
 let ambienceMotes = 0;          // how many place-sounds have fired, for the suites
 
-function ambienceFor(bg) { return AMBIENCE[bg] || DEFAULT_AMBIENCE; }
+// Y03: a place sounds like its faction's home until it has a bed of its own. Without this, the
+// day a picture comes off PENDING_ART every fight on that ground would quietly swap its room
+// tone for the generic wastes - finishing a picture should change the picture and nothing else.
+function ambienceFor(bg) { return AMBIENCE[bg] || AMBIENCE[placeHome(bg)] || DEFAULT_AMBIENCE; }
 
 function startAmbience(bg) {
     stopAmbience();
@@ -12404,6 +12444,9 @@ function initiateCombat(nodeType, isEliteNode) {
     if (!hadForecast && hasContract('HARSH_SKIES') && currentWeather === 'CLEAR')
         currentWeather = WEATHER_IDS[Math.floor(Math.random() * WEATHER_IDS.length)];
     currentTerrain = forecastTerrain || 'OPEN_ROAD'; forecastTerrain = null;
+    // Y03: the picture follows the ground, so it waits until the ground is known. Only where the
+    // faction's own picture was chosen above - the opening fight and an arena keep theirs.
+    if (FACTIONS[nodeType] && bgFile === FACTIONS[nodeType].bg) bgFile = backdropFor(nodeType, currentTerrain);
     currentFormation = forecastFormation || null; forecastFormation = null;
     if (currentTerrain !== 'OPEN_ROAD') firePrompt('GROUND');
     // A front whose description promises the boss fights under its sky delivers that; the rest

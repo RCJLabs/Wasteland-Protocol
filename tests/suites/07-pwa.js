@@ -57,11 +57,13 @@ module.exports = {
     // The spread is the harness racing the worker rather than anything about the game, so the
     // answer is to wait for the whole set rather than to widen the band around a half-filled
     // cache. The size is read off ASSET_LIST, so a phase that adds art moves the wait with it.
+    // Y03: less PENDING_ART, which the worker is told to skip. Counting it waited on five
+    // pictures nobody has painted yet and failed at 48/53 on a cache that had everything.
     // until() evaluates its predicate in the page with no argument, so the figure is parked on
     // the window rather than baked into the closure - a closed-over value does not survive
     // being serialised across.
     const wanted = await page.evaluate(() => {
-      window.__wantArt = ASSET_LIST.filter(a => a.endsWith('.webp')).length;
+      window.__wantArt = ASSET_LIST.filter(a => a.endsWith('.webp') && !PENDING_ART.includes(a)).length;
       return window.__wantArt;
     });
     try {

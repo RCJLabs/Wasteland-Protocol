@@ -2457,6 +2457,91 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── Y03: A PLACE FOR EVERY GROUND ───────────────────────────────────────────────────────
+//
+// Pitched as one new backdrop for each faction's second ground. Checked against the pictures before
+// anything was built, and the rule the pitch leaned on is false for two of the five. The comment
+// above GROUND_SIGNATURE said a faction's first ground is "the one its backdrop is a picture of".
+// The Raiders' highway is a collapsed overpass in a ruined city - broken concrete, which is RUINS -
+// and their first ground is OPEN FLATS. The Beasts' canyon is a salt flat between red walls -
+// hardpan, which is OPEN FLATS - and their first ground is TUNNELS. The game's own words settle it:
+// "a hundred metres of hardpan" is the canyon, "broken concrete in every direction" is the highway.
+// Y02's suite had half-seen it already: "the Beasts' tunnel was a sunlit canyon".
+//
+// So a picture for each second ground would have given the Raiders a second picture of rubble and
+// the Beasts a second salt flat. Each faction's new place is for the ground its own picture does
+// not show: the second ground for the Mech, the Choir and the Carrion, the FIRST for the Raiders
+// and the Beasts. Read off generated maps - 200 per sector for all seven sectors under every front
+// and none, 184,823 fight nodes - 75.5% of the Raiders' fights with ground are on the flats and
+// 75.0% of the Beasts' are in tunnels, 54.7% and 54.5% of all their fight nodes. Across the five,
+// 37% of fight nodes stood on a ground their picture did not show.
+//
+// The false sentence was in three places, and one of them was the player's: the field manual said
+// every faction has a home ground, "the floor of the place it is a picture of". It says a home
+// ground and a neighbouring one now, which is true whether a place is painted or not. The comment
+// and suite 83's header say what the first ground is - the one a faction fights on most.
+//
+// WHAT SHIPPED. Each faction carries `places`: one picture for the ground its home picture is not
+// of. backdropFor picks it once the ground is known, and only where the faction's own picture was
+// chosen, so the opening fight and a commander's arena keep theirs. The ground lists and
+// GROUND_SIGNATURE are untouched and the pick draws no dice, so every fight rolls what it rolled
+// before; with all five pending, each of the fifteen faction-and-ground fights is drawn on the
+// picture it was drawn on before. None is painted - that is the owner's - so all five sit on
+// PENDING_ART with a brief each in ART_PROMPTS.md, and taking a name off the list is the whole of
+// delivering it.
+//
+// Two tables are keyed by the picture rather than the faction, and both had to follow it.
+// GROUND_LIFT: a place stands the squad on its own footing, which today takes the Choir's ruins
+// from 26vh to 12vh and the Carrion's tunnels from 20vh to 12vh, since neither home's painted
+// foreground is on the new picture; suite 49 measures a place's foreground the day it comes off
+// the list. AMBIENCE: the day a picture came off the list, every fight on it would have swapped
+// its bed for the generic wastes without anybody deciding that. A place plays its faction's home
+// bed until it has its own - the flats sound like the highway, the den like the canyon, the
+// pipeworks like the refinery. The Choir's and the Carrion's homes have no bed yet and their
+// places fall to the wastes with them, which is Y08's.
+//
+// The briefs are written against what the game already draws over each ground - Y02's haze on the
+// flats, rubble and a wall in the ruins, and in a tunnel a roof strip over the top quarter with the
+// frame dimmed by about half, so a tunnel painted dark goes black. And every tunnel has an opening
+// to the sky, because the weather is drawn over the whole frame and has to be coming in somewhere.
+//
+// Whether Y02's tunnel dressing still earns its place over a painted tunnel is its own item, and
+// nobody can look until one is painted. The roof, the walls and the dimming were drawn to make a
+// canyon read as underground; over a picture of a tunnel they may be doing that job twice.
+//   ^^ READ: STILL OPEN. The last step of delivering a place in ART_PROMPTS.md says to look.
+//
+// ── A SUITE THAT HAD NEVER MET PENDING ART ──────────────────────────────────────────────
+//
+// Suite 07 waits for every picture on ASSET_LIST to reach the service worker's cache, and the
+// worker is told to skip PENDING_ART. With the five listed it waited on pictures nobody has
+// painted and failed at 48/53 on a cache that held everything it was sent. It had passed only
+// because the list was empty: the wait was written in K03, nine days after C01a emptied it. It
+// counts drawn art now - reproduced at 48/53 first, 48/48 after. Suite 49's foreground scan skips
+// a pending picture by name rather than by failing to load it.
+//
+// ── MY OWN SUITE ────────────────────────────────────────────────────────────────────────
+//
+// Suite 196 has eighteen rows and twenty-one mutations, and every row goes red under one. Three
+// read the disk and the briefs rather than the table: a place is pending exactly when its file is
+// not in the repo, so a picture dropped in and never taken off the list fails, and so does one
+// taken off with no file; and nothing on PENDING_ART lacks a brief that names its faction and its
+// ground. The row that says nothing asked for an unpainted picture listens on the whole browser
+// context, so it hears the service worker - removing the worker's filter turns it red, and the
+// preloader's too. The arena row outlived the first twenty mutations and fell to one written for
+// it, a guard that protected the opening fight and nothing else.
+//
+// Two rows were written against today's data and rewritten before the first battery. One asserted
+// that exactly the Choir and the Carrion come down to the plain footing, which a place painted
+// with a foreground of its own would break for no fault; it prints today's change in its label
+// now and asserts the rule, with a probe lift set on each place that has to reach the field. The
+// other named the three home beds by hand and reads them off the game now.
+//
+// backdropFor and placeHome are not exported. A fight reaches both, and exporting them would only
+// have added two names to the list of exports no suite names.
+//
+// NOT MEASURED, AND DELIBERATELY: wins. No rule, number or roll in a fight changed, and until a
+// picture is painted nothing on the screen did either.
+//
 // ── Y02: THE GROUND, DRAWN ──────────────────────────────────────────────────────────────
 //
 // Five grounds bend real rules, and on the field each was one line of coloured text, as the skies
@@ -5634,7 +5719,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   14 answered by a later item     5 still open     6 not an open claim after reading
+//   14 answered by a later item     6 still open     6 not an open claim after reading
 //
 // and 0 carrying two verdicts that disagree.
 //

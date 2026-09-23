@@ -5,9 +5,11 @@ from. Kept so the next portrait matches the ones already on the field rather tha
 
 Save every portrait as **WebP**, trimmed tight to its alpha with the long side at 640, in
 the repo root. Anything listed in `PENDING_ART` at the top of `game.js` is commissioned but
-not yet drawn: the preloader and the service worker skip it, and a delegated error handler
-shows the stand-in Warlord portrait in its place, so the game stays playable while art is
-outstanding.
+not yet drawn: the preloader and the service worker skip it, and something already drawn
+stands in for it - the Warlord portrait for a portrait, the faction's home picture for a
+place - so the game stays playable while art is outstanding.
+
+**Outstanding now: five places, one per faction.** Their briefs are the next section.
 
 ## Shared style brief
 
@@ -21,6 +23,115 @@ Put this in front of every prompt:
 
 Reference pieces: `enemy_boss.webp`, `enemy_boss_mech.webp`, `enemy_boss_vulture.webp`. A
 commander should read as roughly twice the bulk of a regular raider.
+
+---
+
+## Commissioned - a place for every ground
+
+Each faction fights on two grounds and used to be drawn on one picture, whichever ground the
+fight was on. For two of them that picture is of the wrong ground for most of their fights: the
+Raiders' highway is broken concrete (RUINS) and three in four of their fights with ground are on
+the OPEN FLATS; the Beasts' canyon is a salt flat (OPEN FLATS) and three in four of theirs are in
+TUNNELS. Five new places, one per faction, each for the ground its home picture does not show:
+
+| Faction | Home picture shows | New place | Ground |
+|---|---|---|---|
+| Raiders | `bg_highway` - RUINS | `bg_saltflats.webp` | OPEN FLATS (their signature) |
+| Beasts | `bg_canyon` - OPEN FLATS | `bg_den.webp` | TUNNELS (their signature) |
+| Mech | `bg_refinery` - RUINS | `bg_pipeworks.webp` | TUNNELS |
+| Choir | `bg_congregation` - FLOODED WORKS | `bg_exclusion.webp` | RUINS |
+| Carrion | `bg_carrionfield` - THE NEST | `bg_burrows.webp` | TUNNELS |
+
+Nothing about the fight changes when a place arrives: which ground a fight is on is rolled
+exactly as before, and the picture only follows it. Until a file is delivered, a fight on that
+ground shows the home picture, as it always has.
+
+**Style.** Put this in front of every prompt below:
+
+> Grimy post-apocalyptic wasteland background plate, hand-painted comic-book illustration,
+> heavy black inking and cel shading, muted palette with one saturated accent colour, no
+> characters or figures, no text, no logo, no border.
+
+**Frame.** Opaque WebP, portrait, about 768x1344, like `bg_congregation` and
+`bg_carrionfield`. The game pins the picture to the bottom of the screen and crops the top and
+sides to fit a phone, so keep the subject centred and leave the lower third as open, lit ground
+for the line to stand on. If the plate comes back with a dark foreground band anyway, it needs
+a `GROUND_LIFT` entry (see *The grounds*, below).
+
+**What the game draws over it.** Each ground already has layers of its own drawn on top of
+whatever picture is behind the fight, and the weather is drawn over the whole frame. Paint to
+sit under them rather than against them:
+
+- **OPEN FLATS** - a heat haze across the middle of the frame, a pale-blue mirage low down, and
+  cracked hardpan with a lift of dust at the squad's feet.
+- **RUINS** - a rubble floor at the feet, a broken wall beside the squad's front rank, and loose
+  rubble in front of them.
+- **TUNNELS** - a roof strip across the top quarter with three hanging lamps, dark walls
+  closing in from both sides, and the whole frame dimmed by about half. A tunnel painted dark
+  goes black under that: paint it lit, with the depth in the middle of the frame. And because
+  the weather falls over everything, each tunnel below has an opening to the sky somewhere -
+  a collapse, a vent shaft, burrow mouths - for the rain or the dust to be coming through.
+
+### `bg_saltflats.webp` - the Raiders on the OPEN FLATS
+*"A hundred metres of hardpan. Rifles own it." Where the highway runs out.*
+
+> A dry salt lakebed where the highway runs out: cracked white hardpan flat to the horizon, the
+> snapped end of an elevated road stopping in mid-air at one edge of the frame, burnt-out cars
+> dragged into a ragged ring, long looping tyre tracks cut across the salt, oil drums burning
+> with black smoke, a scrap-built lookout tower flying a torn skull flag. Hard light under a
+> bruised purple storm sky - the highway's sky. Accent colour: pale mirage blue where the heat
+> lifts off the salt.
+
+### `bg_den.webp` - the Beasts in the TUNNELS
+*"A service tunnel two ranks wide." Dug into the canyon's rock, and nobody's but the pack's now.*
+
+> A service tunnel bored into red canyon rock and taken over as a den: a round concrete bore two
+> ranks wide running straight back to a collapse at the far end where daylight falls through in
+> a shaft, the walls gouged with claw marks over half-scraped hazard stencils, gnawed bones and
+> torn hide heaped along the sides, old cable hanging from rusted brackets, bedding scraped into
+> hollows, red dust hanging in the light. Accent colour: the warm amber of the daylight through
+> the collapse.
+
+### `bg_pipeworks.webp` - the Mech in the TUNNELS
+*The service tunnels under the refinery, which is what a service tunnel was built for.*
+
+> The service tunnels under the refinery: a concrete bore two ranks wide lined with pipe runs as
+> thick as a body, valve wheels and pressure gauges, a grated catwalk along one wall, caged
+> sodium lamps, steam leaking from the joints, a drone charging cradle bolted into an alcove,
+> and at the far end a ventilation shaft dropping a column of smog-light from the surface.
+> Accent colour: toxic green, the refinery's smoke finding its way down.
+
+### `bg_exclusion.webp` - the Choir in the RUINS
+*"Broken concrete in every direction." The town around the reactor the Choir worship in.*
+
+> The dead town inside the reactor's fence: gutted concrete apartment blocks with every window
+> black, a stopped fairground wheel rusting against a burnt-orange sky, the cracked containment
+> dome of the congregation on the horizon, cult symbols daubed across the walls in luminous
+> paint, rows of candles in green glass along a broken wall, fallen street signs and car shells
+> half-buried in concrete rubble. Accent colour: sickly radium green.
+
+### `bg_burrows.webp` - the Carrion in the TUNNELS
+*Under the dust plain, where the swarm has broken through into something people built.*
+
+> A service tunnel under the dust plain that the swarm has broken into: a concrete bore two ranks
+> wide split open along the roof where burrows have come through from above, roots and small
+> bones hanging through the cracks, the walls slick and scored where something large has
+> squeezed past, drifts of shed fur and chitin along the edges of the floor, gnawed cable,
+> jaundiced light falling through the burrow mouths in shafts, a haze of flies. Accent colour:
+> sallow yellow-green.
+
+### Delivering a place
+
+1. Save it as WebP (quality ~88) in the repo root, under exactly the filename above.
+2. Take it off `PENDING_ART` at the top of `game.js`, and leave it in `ASSET_LIST`. That is the
+   whole switch: the next fight on that ground is drawn on it, and it keeps the sound of its
+   faction's home picture.
+3. Run the suites. Suite 49 measures its foreground and fails if it needs a `GROUND_LIFT`
+   entry; suite 196 fails if a place is still on `PENDING_ART` with its file already in the
+   repo, or is off it with no file.
+4. Look at a fight on it on the phone, on its own ground. The layers listed above were drawn to
+   make a picture of somewhere else read as that ground. Over a picture of the ground itself,
+   some may be doing the same job twice - the tunnel's roof strip and the dimming most of all.
 
 ---
 
