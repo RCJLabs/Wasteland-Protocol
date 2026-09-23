@@ -16,6 +16,8 @@ module.exports = {
     const roster = await page.evaluate(() => ({
       count: BOSS_POOL.length,
       road: BOSS_ROTATION.length,
+      // Y05: a commander waits off the road until its own face and ground have landed.
+      waiting: BOSS_POOL.filter(b => !b.final && (PENDING_ART.includes(b.img) || PENDING_ART.includes(b.bg))).length,
       names: BOSS_POOL.map(b => b.name),
       art: BOSS_POOL.map(b => b.img),
       // Walked as depths, because "not met twice running" is a claim about consecutive sectors.
@@ -24,7 +26,7 @@ module.exports = {
       byScore: Array.from({ length: 16 }, (_, i) => i + 1)
         .map(sn => ({ id: bossForSector(sn).id, final: isFinalSector(sn) }))
     }));
-    ok(`there are ${roster.count} commanders, not one`, roster.count === 8 && roster.road === 7);
+    ok(`there are ${roster.count} commanders, not one`, roster.count === 9 && roster.road + roster.waiting === 8);
     ok('each has its own name and art',
       new Set(roster.names).size === roster.count && new Set(roster.art).size === roster.count);
     // The rotation is a seeded shuffle per run now, so the contract is coverage and no
@@ -337,7 +339,7 @@ module.exports = {
     const wantArena = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 3; currentTier = 8;
       initiateCombat('BOSS', false); saveGameState();
-      return { bg: bossForSector(3).bg, name: bossForSector(3).short };
+      return { bg: combatBgFile, table: bossForSector(3).bg, name: bossForSector(3).short };
     });
     await page.reload();
     await engineUp(page);
@@ -352,7 +354,7 @@ module.exports = {
       bg: (getComputedStyle(document.getElementById('combat-sky-layer')).backgroundImage.match(/([a-z0-9_]+\.webp)/) || [])[1],
       banner: document.getElementById('weather-banner').innerText
     }));
-    ok('a resumed boss fight keeps its arena', resumed.bg === wantArena.bg);
+    ok('a resumed boss fight keeps its arena', resumed.bg === wantArena.bg && wantArena.bg === wantArena.table);
     ok('and its banner', resumed.banner.trim().length > 8);
 
     // ---- the map says who is waiting ----

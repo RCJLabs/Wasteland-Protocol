@@ -82,13 +82,17 @@ module.exports = {
       shown[f] = await onMap(3, f);
       washed[f] = await page.evaluate(() => document.getElementById('map-nodes').style.getPropertyValue('--map-tint').trim());
     }
-    const wrong = FRONT_IDS.filter(f => shown[f] !== (heavy[f].home || road));
+    // Y05: a home picture still on PENDING_ART is not drawn, and the map shows the road in its place.
+    const declared = await page.evaluate(() => ({ pending: PENDING_ART.slice(),
+      leaning: FRONTS.filter(f => f.faction).length, tilting: FRONTS.filter(f => f.sky).length }));
+    const painted = file => file && !declared.pending.includes(file) ? file : null;
+    const wrong = FRONT_IDS.filter(f => shown[f] !== (painted(heavy[f].home) || road));
     ok(`each front is drawn as the place its roads are heavy with, counted over 40 maps each (${FRONT_IDS.map(f => `${f.toLowerCase()} ${heavy[f].faction ? heavy[f].faction.toLowerCase() + ' x' + heavy[f].lift : 'none'}`).join(', ')})`,
-      wrong.length === 0 && FRONT_IDS.filter(f => heavy[f].faction).length === 5);
+      wrong.length === 0 && FRONT_IDS.filter(f => heavy[f].faction).length === declared.leaning);
     ok(`and the two that lean on no faction are the open road, the picture the opening fight is drawn on (${road})`,
       FRONT_IDS.filter(f => !heavy[f].faction).every(f => shown[f] === road));
     ok(`each is washed in the sky its roads are counted under, and a front that tilts no sky is not washed (${FRONT_IDS.filter(f => heavy[f].sky).map(f => `${f.toLowerCase()} ${heavy[f].sky.toLowerCase()}`).join(', ')})`,
-      FRONT_IDS.every(f => washed[f] === heavy[f].tint) && FRONT_IDS.filter(f => heavy[f].sky).length === 4);
+      FRONT_IDS.every(f => washed[f] === heavy[f].tint) && FRONT_IDS.filter(f => heavy[f].sky).length === declared.tilting);
 
     // ---- the last sector is not a road sector ----
     const last = await page.evaluate(() => ({ final: FINAL_SECTOR, arena: FINAL_BOSS.bg,

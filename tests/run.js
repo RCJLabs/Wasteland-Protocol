@@ -132,7 +132,7 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
       //   STRUCTURAL - read by mitigate but not a mitigation; a body still has to be somebody
       window.__BARE_FIELDS = ['resistances', 'armor', 'baseArmor', 'plate', 'quirk', 'weaponMod',
         'trinket', 'traits', 'sig', 'venom', 'venomStacks', 'corrodedTurns', 'oiledTurns',
-        'wardId', 'wardSoak', 'escortId', 'escortArmor', 'revenantWard', 'scars', 'perkStacks'];
+        'wardId', 'wardSoak', 'escortId', 'escortArmor', 'revenantWard', 'scars', 'perkStacks', 'rime'];
       window.__FIELD_FIELDS = ['gridPos'];
       window.__STRUCTURAL_FIELDS = ['isPlayer', 'hp', 'maxHp', 'id', 'name'];
 
@@ -154,6 +154,9 @@ if (ONLY.length && !SUITES.length) { console.error(`no suite matches ${ONLY.join
         // M04 put FORTIFIED and HARDENED inside mitigate, which made a banked stat perk a
         // mitigation. 159 named it - two levels down, once its resolver was made transitive.
         ent.perkStacks = null;
+        // Y05 put the Frost's RIME inside mitigate: plate that sets on a body turn by turn and is
+        // kept apart from armor so a brace expiring cannot wipe it.
+        ent.rime = 0;
         return ent;
       };
 

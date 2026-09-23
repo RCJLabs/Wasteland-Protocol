@@ -54,7 +54,9 @@ module.exports = {
     ok('tier cannot exceed the sector length', jump.capT === jump.tiers);
 
     // ---- straight to any boss, at a sensible depth and on its own ground ----
-    const bossJumps = await page.evaluate(() => BOSS_POOL.map(b => [b.id, b.name, b.bg]));
+    // Y05: the ones the road can deal - a commander still waiting on its art is not dealt anywhere,
+    // so there is no depth for the dev jump to walk to.
+    const bossJumps = await page.evaluate(() => [...BOSS_ROTATION, FINAL_BOSS].map(b => [b.id, b.name, b.bg]));
     for (const [id, name, bg] of bossJumps) {
       const r = await page.evaluate((bid) => {
         currentSlot = 1; confirmNewGame(1.0); sectorFront = null; currentSector = 1; currentTier = 1;

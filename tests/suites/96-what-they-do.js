@@ -48,8 +48,9 @@ module.exports = {
     });
     ok(`the boot validator finds nothing wrong (${tables.bad.join('; ') || 'clean'})`, tables.bad.length === 0);
     ok(`all ${tables.total} rank-and-file types carry a table now (${tables.withTable})`,
-      tables.withTable === tables.total && tables.total === 18);
-    ok(`and the commanders still carry theirs (${tables.bossTables})`, tables.bossTables === 8);
+      tables.withTable === tables.total && tables.total === 22);
+    // Y05: the Frost's four and the Commandant, each on a table of its own from the start.
+    ok(`and the commanders still carry theirs (${tables.bossTables})`, tables.bossTables === 9);
 
     // ── Each table is worth what the fallback it replaced was worth ────────────────────
     // Priced through the engine's own model, not one retyped here - a test that carries its own

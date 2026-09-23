@@ -158,6 +158,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .wx-ash { background: #b9b2a4; box-shadow: 0 0 6px #b9b2a4; }
 .wx-ion { background: #6fd8e8; box-shadow: 0 0 6px #6fd8e8; }
 .wx-haze { background: #c85a5a; box-shadow: 0 0 6px #c85a5a; }
+.wx-snow { background: #e8f4fa; box-shadow: 0 0 6px #9fd6ea; }
 .wx-blood { background: #ff4444; box-shadow: 0 0 6px #ff4444; }
 
 .map-node { width: 75px; height: 75px; border-radius: 50%; background: #111; border: 2px solid #444; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: all 0.3s; font-family: monospace; color: #888; padding: 0; position: relative; }
@@ -430,6 +431,7 @@ body { background-color: #000; color: #c0c0c0; font-family: monospace; margin: 0
 .weather-ash { background: rgba(48, 46, 42, 0.85); color: #ded7c8; display: block !important; border-bottom: 1px solid #b9b2a4; }
 .weather-ion { background: rgba(10, 44, 52, 0.85); color: #9ff0fb; display: block !important; border-bottom: 1px solid #6fd8e8; }
 .weather-haze { background: rgba(62, 16, 16, 0.85); color: #ff9d9d; display: block !important; border-bottom: 1px solid #c85a5a; }
+.weather-snow { background: rgba(18, 32, 44, 0.85); color: #d9f1fb; display: block !important; border-bottom: 1px solid #8fd3ea; }
 /* A faction's own sky over its own ground. It gets its own line under the two banners rather
    than rewording either: both are still true, and the confluence is the third fact. */
 .confluence-banner { background: rgba(30, 24, 40, 0.9); color: #d9b8ff; border-bottom: 1px solid #7d5fa8; font-size: 0.625rem; letter-spacing: 1px; padding: 3px 8px; text-align: center; }
@@ -1294,6 +1296,8 @@ button.reach-short { border-color: #7a5a20; }
 /* Two factions that had no ground of their own now have one each. */
 .tr-flooded { background: #16242a; color: #7fc4cf; }
 .tr-nest    { background: #241a22; color: #c98fb0; }
+/* Y05: the first cold ground. */
+.tr-ice     { background: #182530; color: #bfe6f5; }
 /* Something an event promised, and how far off it is. Amber: not a threat yet, but coming. */
 .bounty-owed { color: #d9a93d; border-left: 2px solid #7a5c14; padding-left: 6px; }
 

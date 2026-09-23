@@ -2457,6 +2457,148 @@ const ROOT = path.join(__dirname, '..');
 // eats it, so the number can rise while actual damage dealt falls, which is exactly what happened.
 // Same trap as L02's "+5.8% squad damage", wearing a different costume.
 //
+// ── Y05: THE FROST, AND THE NORTH THEY HOLD ─────────────────────────────────────────────
+//
+// Nothing in the game was cold. The sixth faction is a garrison that went into cold storage to
+// wait out the war and has been waking up a few at a time ever since, and the roads turn north
+// into its ground from sector 3. Each of its four hostiles asks one question - can you end it
+// before the cold does - on an instrument of its own, and heat answers all four:
+//
+//   Frost Trooper  RIME          plate that sets 3 a turn on its own turns, to 12, both through
+//                                plate(): 6 a turn to 24 at tier 8. Any fire shatters it, and so
+//                                does a blow worth a quarter of its bar. Held apart from `armor`,
+//                                because a brace running out resets armour and rime is no brace.
+//   Cryo Gunner    FLASH FREEZE  a turn off the hardest hitter in the line who can be stunned.
+//   Coldhauler     DEEP COLD     a fifth of its own swing off every operator as their turn
+//                                opens. One bite however many haulers stand, typed energy,
+//                                and never on the Frost.
+//   Signaller      FIRE MISSION  shells on the whole line on its third turn and every third
+//                                after, counted down on its card and priced on the threat board.
+//
+// All four are weak to energy and hard to poison. Four formations. A sky, BLIZZARD - the squad's
+// cooldowns a turn longer - and a ground, THE ICE - rifles +10%, blades -15%, blasts -20% - and
+// where the two meet, a confluence: two turns on every cooldown. A front, THE LONG WINTER, from
+// sector 3. In 20,000 draws at sector 3 the Frost take 12.9% of the roads and the other five
+// give it up in proportion, each keeping 0.86-0.88 of what it had; sector 2 is the split it was.
+// On 200 maps rolled at sector 3, 76.3% of the Frost fights that have a ground are on the ice,
+// where GROUND_SIGNATURE asks for 75%.
+//
+// Nine pieces of art are commissioned and none has landed. Every portrait names something
+// already drawn to stand in for it; a place falls back to its faction's home picture, and a home
+// picture still pending falls back to the open road, which is where every Frost fight is drawn
+// today. Delivering a file and taking it off PENDING_ART is the whole of going live.
+//
+// ── HOW HARD THEY ARE, READ THREE WAYS ──────────────────────────────────────────────────
+//
+// A census staged at sector 3 first, four runs of 30 expeditions an arm, through a new block in
+// this file's report: the share of the deployed line's health a fight costs, by faction, from
+// sector 3 on. The first cut of the Frost was the cheapest of the six at 8.9% a fight, against
+// 9.4 to 18.7 for the rest. Their health went up by about 15% - Trooper 50 to 58, Gunner 42 to
+// 48, Coldhauler 95 to 110, Signaller 60 to 70 - and they read 10.8%, fourth of six. Neither
+// ranking is sharp: nothing about the Raiders changed between the arms and they went from 10.5%
+// to 12.9%.
+//
+// Then careers: six of 150 expeditions on the tree with the Frost, against six on the tree
+// before this item.
+//
+//                  won                        wiped
+//   before Y05     17 30 29 15 30 26   24.5   107 104  95 115 101 101   103.8
+//   with Frost     24 22 20 37 31 26   26.7    95 107  98  83  98  89    95.0
+//
+// Wins +2.2 at t +0.57, which is nothing. Wipes -8.8 at t -2.03, which leans, and leans the way
+// the third reading says it should. Over the 22,404 fights those six careers fought from sector
+// 3 on, the Frost took 12.7% of the line's health a fight - second cheapest, after the Choir's
+// 11.9 - where the other five average 15.1, fight for fight. They are one fight in seven from
+// sector 3 on. A faction a little softer than the fights it displaces is a push toward the ~19%
+// the wall is set for rather than away from it, so nothing was tuned on the wipe column.
+//   ^^ READ: STILL OPEN. Six careers an arm cannot say whether the -8.8 is real; S03's wipe
+//   row is the one to resolve it, and nothing here needs it resolved to ship.
+//
+// ── THE COMMANDANT WAITS FOR ITS FACE ───────────────────────────────────────────────────
+//
+// The Frost's commander arrives with two of its garrison sealed in pods, on counts of 3 and 6 of
+// their own turns. A pod's turn does nothing but count, and at the end of the count it opens
+// where it stands - the same body, slot and place in the order - into what it held. Break one
+// first and it never wakes; fell the Commandant and the ones still sealed go dark, tallied and
+// credited to nobody. Its enrage opens every pod at once. Its grudge drops a third pod with a
+// Coldhauler in it, on a count of 2. What it learns is REFREEZE: another pod with a trooper in
+// it while fewer than two are sealed, and with both holding, the rime packed to its limit on
+// every Trooper standing. BREAK aims at a pod on the last turn of its count, the one turn a stun
+// is worth there.
+//
+// Suite 16 holds that every commander on the road wears its own face, and none of the
+// Commandant's art has landed. So the rotation is now the commanders whose portrait and arena
+// are both drawn - today the seven it always was, so every seeded commander order is unchanged -
+// and the last sector's card counts the rotation instead of saying "seven". The day both files
+// land, the Commandant is dealt with nothing else changed. That is a day the wall would move
+// without a line of code to hang a record entry on, so it is priced now, on a tree with its two
+// files marked delivered:
+//
+//                  won                        wiped
+//   with Frost     24 22 20 37 31 26   26.7    95 107  98  83  98  89    95.0
+//   + Commandant   31 36 30 29 30 40   32.7    95  94 100  93  91  91    94.0
+//
+// Wins +6.0 at t +1.91, wipes -1.0 at t -0.27: 17.8% of expeditions won becomes 21.8%. The report
+// prints each commander by name now, and over those careers the Commandant fell in 47.6% of the 496
+// fights it was met in - fifth of eight, beside the Marshal's 45.4, the other heavy that is not the
+// Bastion. So the wins are not its own softness. A run's first seven sectors deal six commanders
+// sorted by threat, and an eighth leaves one more out of each run, most often a heavy one. Over
+// 4,000 seeded runs the Bastion, felled in 9.9% of its fights, is dealt in 57.4% of runs with the
+// Commandant on the road against 66.8% without, and the Colossus, at 29.0%, in 79.9% against 88.8.
+//
+// So the day its art lands, the wall moves by about four points: from a point under the ~19% it is
+// set for to about three past it. Nothing is tuned for that here: the tree it would be tuned on is
+// not the one anybody plays until the art lands, and ART_PROMPTS.md says so where the art is
+// delivered. Whether the wall is re-cut on that commit is left open for that commit.
+//   ^^ READ: STILL OPEN. The arm above is the measurement to start from, on the same instrument.
+//
+// Nothing a player can reach runs a pod's turn yet, and the simulator drives executeEnemyAi from
+// its own loop, so neither would see a pod that never handed the turn on. It hands it on through
+// checkWinState, as the burrowed hostile's turn does, and a row holds that it does so exactly
+// once on each of the nine sealed turns a staged fight gives it.
+//
+// ── WHAT BUILDING IT FOUND ──────────────────────────────────────────────────────────────
+//
+// F03 again. The boss escort carried a third copy of Y04's table of which faction each front
+// leans on, holding the five fronts there were, so a sixth faction's front would have sent its
+// commander out alone with nothing saying so. It reads `front.faction` now. The five it held are
+// the five fields the fronts already carry, so every other front's escort is what it was.
+//
+// The Ion Storm's own words were wrong. cdFor's comment said a charged sky cycles "the squad's
+// and theirs alike", and its description said everything in it cycles faster - but an enemy
+// signature's clock is sigCd, set off its table, and it never reads the sky. Found writing the
+// blizzard's banner, which would have made the same promise the other way. Both skies now say
+// "your cooldowns", and a row holds an enemy's clock steady in the snow.
+//
+// Past the counts a sixth faction moves, the first battery found four things wrong with what I had
+// built. Suite 97's scanner caught the first cut of the cold bite, which was a hand-rolled tier
+// expression in the smog's own shape; N04 says never dodge a scanner, so it became a share of the
+// hauler's own swing, which rides the fight's curve the way everything a fight spawns has since
+// E06. E05's validator in suite 96 put the Gunner's intent table at 1.110 and the Signaller's at
+// 0.610 against the fallback's 0.970, outside the band, and two of the four took the same turn as
+// tables already in the game (20 profiles for 22 types); all four were re-cut. Suite 132 caught a
+// field the dark pods wrote and nothing read. And suite 75 found REFREEZE dropping nothing on a
+// commander raised by hand, which carries no pod spec: dropPod falls back to the pool row now, the
+// way reRaiseRetinue already did.
+//
+// ── MY OWN SUITE ────────────────────────────────────────────────────────────────────────
+//
+// Suite 198 has 62 rows and 65 mutations, and every row goes red under at least one. One
+// mutation survived the first pass: a brace that wiped the rime when it ran out. The row asked
+// for at least 6, and a wiped Trooper grows one 6-step on the same turn start, so it read 6 and
+// passed. It asks for exactly one step on from the 6 it wore now.
+//
+// And one row was flaky as I first wrote it. It counted the shells as landing on any turn every
+// operator lost health, and the Signaller's own AOE does that too, 5% of its other turns; the
+// second run of the suite read "turns 2, 3, 6, 9". By the table's arithmetic that is one run in
+// four (1 - 0.95^6). It reads the intent that was up now, and 40 runs came back clean, the last
+// 20 on the suite as it ships. Writing the mutations found a third: the pod-count row read the
+// field at turns 3 and 6 only, which a pod opening a turn early also passes. It reads all six.
+//
+// Eight of the helpers I put on the engine's export were named by no suite and read by nothing,
+// so they came back off: the rows reach them through the turns that call them. And the report
+// prints each commander's fights and wins by name, which is what priced the Commandant above.
+//
 // ── Y04: A MAP THAT LOOKS LIKE THE FRONT ────────────────────────────────────────────────
 //
 // Photographed first, in all seven sectors under all seven fronts: the same black screen and the
@@ -5814,7 +5956,7 @@ const ROOT = path.join(__dirname, '..');
 // the battery instead of sitting in the paragraph that warns about miscounts. The breakdown, as
 // the file reports it rather than as I remember it:
 //
-//   14 answered by a later item     6 still open     6 not an open claim after reading
+//   14 answered by a later item     8 still open     6 not an open claim after reading
 //
 // and 0 carrying two verdicts that disagree.
 //
@@ -8543,7 +8685,7 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
                  promotions: 0, promoEmpty: 0, capsBanked: 0, held: 0, turnsPlayer: 0, ranked: 0, basicPicked: 0, basicForced: 0, freeActions: 0, sigsTaken: 0, sigsBought: 0, capsTaken: 0, capsBought: 0, gearEquipped: 0, shops: 0, shopScrap: 0, sigsFaced: {},
                  maxBond: 0, bondSaves: 0, frontsSeen: [],
                  endedBy: 'cap', score: 0, contractMult: 1, recruited: [], recruitOffers: [], saves: 0, downs: 0, lost: [], bossMet: [],
-                 extracted: false, walkedAt: 0, formations: {}, factionFights: {}, loose: 0, doctrine: null, doctrineKept: false,
+                 extracted: false, walkedAt: 0, formations: {}, factionFights: {}, factionCost: {}, loose: 0, doctrine: null, doctrineKept: false,
                  benchHeld: null,
                  docDoorAll: 0, doorBodies: [], doorBodiesLive: [], benchNodes: 0, benchInForce: 0, docDark: {}, docDoor: 0, docBreach: 0, docBreachLine: {}, docBreachFirst: null, docArrived: {},
                  booked: 0, bookedKinds: {}, augments: 0,
@@ -9814,6 +9956,15 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
     if (currentNodeType && FIGHT_NODES.includes(currentNodeType)) {
       stat.factionFights[currentNodeType] = (stat.factionFights[currentNodeType] || 0) + 1;
     }
+    // Y05: WHAT A FIGHT AGAINST EACH FACTION COSTS, at the depth where all six can be met. A new
+    // faction is a difficulty change only as far as its fights cost more or less than the ones it
+    // takes the roads from, and the career rows cannot say which faction moved them. Read from
+    // sector 3, where the Frost first walk, so every faction in the table is met at depths it
+    // shares with the rest. The line's health is read at the door and at the end, downed as zero.
+    const lineHp = () => playerRoster.filter(p => p.gridPos > 0).reduce((a, p) => a + Math.max(0, p.hp), 0);
+    const costed = currentNodeType && FIGHT_NODES.includes(currentNodeType) && currentSector >= 3
+      ? { type: currentNodeType, hp0: lineHp(), max: playerRoster.filter(p => p.gridPos > 0).reduce((a, p) => a + p.maxHp, 0) }
+      : null;
     // Counted at the door rather than at the end: a fight that is run from still happened, and
     // the squad still had to look at whatever was in it.
     activeEntities.filter(e => !e.isPlayer && e.sig).forEach(e => {
@@ -9976,6 +10127,12 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
     });
     activeEntities.forEach(e => { delete e.__counted; });
     stat.rounds += rounds;
+    if (costed && costed.max > 0) {
+      const c = stat.factionCost[costed.type] = stat.factionCost[costed.type] || { fights: 0, lost: 0, rounds: 0, wiped: 0 };
+      c.fights++; c.rounds += rounds;
+      c.lost += Math.max(0, costed.hp0 - lineHp()) / costed.max;
+      if (!fled && !fellBack && !activeEntities.some(e => e.isPlayer && e.hp > 0)) c.wiped++;
+    }
     // O16: a fall-back is not a withdrawal. The node is un-cleared and retreatNode sends the
     // walk straight back at it, so the run has spent scrap and a fight and kept the node; a
     // withdrawal gives the node up and takes a wound and a pursuit. Counted apart.
@@ -11027,6 +11184,11 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
   line('met again, carrying a grudge', `${risen.length} fought, ${rate(risen)} won`);
   [1, 2, 3].forEach(g => { const a = met.filter(m => m.grudge === g);
     if (a.length) line(`  risen ×${g}`, `${a.length} fought, ${rate(a)} won`); });
+  // Y05: and by name. A commander whose art has not landed is not on the road, so the day it
+  // lands would be the first day anything fought it - this is what prices it before then, on a
+  // tree with its art marked delivered, against the ones already there in the same careers.
+  [...new Set(met.map(m => m.id))].sort().forEach(id => { const a = met.filter(m => m.id === id);
+    line(`  ${id.toLowerCase()}`, `${a.length} fought, ${rate(a)} won`); });
 
   // H04: WHAT THE WALK IS WORTH. The brief reads 80% of wipes at tier ten and concludes the
   // nine tiers below are attrition without jeopardy. That follows only if the attrition does
@@ -11775,6 +11937,21 @@ const EXPEDITION = ({ pressedArm, wallHp, wallDmg, capShapeArm, moraleArm, recru
   console.log('\n── FIGHTS ' + '─'.repeat(48));
   const roundsPerFight = results.map(r => r.fights ? r.rounds / r.fights : 0).sort((a, b) => a - b);
   line('actor turns per fight', pct(roundsPerFight, 0.5).toFixed(1) + ' (median)');
+  // Y05: per faction, from sector 3 on - see where the bag is filled. The health column is the
+  // share of the deployed line's maximum lost between the door and the end, downed as nothing.
+  {
+    const cost = {};
+    results.forEach(r => Object.entries(r.factionCost || {}).forEach(([k, v]) => {
+      const c = cost[k] = cost[k] || { fights: 0, lost: 0, rounds: 0, wiped: 0 };
+      c.fights += v.fights; c.lost += v.lost; c.rounds += v.rounds; c.wiped += v.wiped;
+    }));
+    if (Object.keys(cost).length) {
+      console.log('  what a fight costs, by faction, sector 3 on (health lost of the line, actor turns, wipes)');
+      Object.entries(cost).sort((a, b) => b[1].lost / b[1].fights - a[1].lost / a[1].fights).forEach(([k, c]) =>
+        line(`    ${k}`, `${(100 * c.lost / c.fights).toFixed(1)}% health, ${(c.rounds / c.fights).toFixed(1)} turns, `
+          + `${c.wiped} wiped of ${c.fights}`));
+    }
+  }
 
   // R02: WHAT SHAPE A FIGHT IS, which nothing here has ever printed. checkWinState ends a fight
   // on `!pA` or `!eA` and on nothing else: there is no rout, no clock, no objective and no way

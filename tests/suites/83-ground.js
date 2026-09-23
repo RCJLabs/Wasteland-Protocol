@@ -102,12 +102,15 @@ module.exports = {
         for (let i = 0; i < 800; i++) seen.add(rollNodeFaction(effTierAt(1, s), Math.random));
         out[s] = [...seen].sort();
       });
+      // Y05: the whole table is whatever that sector can field - five at sector 2, and from sector
+      // 3 the Frost as well - so each is held against its own sector's list rather than a count.
+      out.open = { 2: factionsAt(2).length, 5: factionsAt(5).length };
       currentSector = 1;
       return out;
     });
     ok(`tier 1 of sector 2 draws the whole table (${deep[2].join(', ')})`,
-      deep[2].length === 5 && deep[2].includes('CHOIR') && deep[2].includes('CARRION'));
-    ok(`so does tier 1 of sector 5 (${deep[5].length} factions)`, deep[5].length === 5);
+      deep[2].length === deep.open[2] && deep[2].includes('CHOIR') && deep[2].includes('CARRION'));
+    ok(`so does tier 1 of sector 5 (${deep[5].length} factions)`, deep[5].length === deep.open[5] && deep[5].includes('FROST'));
 
     // And the generator is wired to it. The draw above is the function; this is the maps it
     // actually builds, which is where a call site passing the raw tier would still hide.
@@ -148,9 +151,11 @@ module.exports = {
       stock.open.units < stock.all / 4 && stock.open.heavies === 0);
     ok(`tier 1 of sector 2 already fields more than it (${stock.s2.units} units)`,
       stock.s2.units > stock.open.units);
+    // Y05: two short now rather than one. The War Rig unlocks at 14 and the Frost's Signaller at
+    // 15, one and two tiers into sector 5, and both are heavies - so "nearly all" is all but those.
     ok(`and tier 1 of sector 5 fields nearly all of it ` +
        `(${stock.s5.units} of ${stock.all} units, ${stock.s5.heavies} of ${stock.heavies} heavies)`,
-      stock.s5.units >= stock.all - 1 && stock.s5.heavies >= stock.heavies - 1);
+      stock.s5.units >= stock.all - 2 && stock.s5.heavies >= stock.heavies - 2);
 
     // ── The signature ground is the first entry, everywhere ──────────────────────────────
     // Two tables agree on it and neither says so out loud, so this is where it is written down:

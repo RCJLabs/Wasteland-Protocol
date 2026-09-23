@@ -43,17 +43,27 @@ while they stand, and one of them is counting down to a barrage. Heat is the ans
 Nine pieces: six portraits and three pictures. Until each one lands, something already drawn
 stands in for it - listed below - so the faction is playable from the first commit.
 
+The Commandant is the one exception. A commander only holds the road once its own portrait and
+its own arena are both drawn - every commander on the road wears its own face - so until
+`enemy_boss_commandant.webp` and `bg_blastdoor.webp` have both landed, the road deals the seven
+commanders it already has and the Commandant waits. Land the second of the two and it joins the
+rotation with nothing else to change. Every seeded commander order changes on that commit too,
+because the rotation is one longer. And the game gets easier on it: measured before it landed,
+the Commandant on the road took the share of expeditions won from about 18% to about 22%. It is
+not soft itself - an eighth commander means the hardest two are dealt less often - so the commit
+that lands its second file is the one to re-read the wall on.
+
 | File | What it is | Stands in until drawn |
 |---|---|---|
 | `enemy_frost_trooper.webp` | Frost Trooper - the line | `enemy_raider.webp` |
 | `enemy_frost_gunner.webp` | Cryo Gunner - freezes an operator solid | `enemy_choir_censer.webp` |
 | `enemy_frost_hauler.webp` | Coldhauler - its cold bleeds the line | `enemy_juggernaut.webp` |
 | `enemy_frost_signaller.webp` | Signaller - calls the guns every third turn | `enemy_sniper.webp` |
-| `enemy_boss_commandant.webp` | The Commandant - the commander | `enemy_boss_marshal.webp` |
+| `enemy_boss_commandant.webp` | The Commandant - the commander | nothing: off the road until this and its arena land |
 | `enemy_frost_pod.webp` | Cryo Pod - the Commandant's garrison, on ice | `enemy_turret.webp` |
 | `bg_icefield.webp` | The Frost's home - THE ICE | `bg_combat.webp` |
 | `bg_cryovault.webp` | The Frost in the TUNNELS | `bg_icefield.webp` (or `bg_combat.webp`) |
-| `bg_blastdoor.webp` | The Commandant's arena | `bg_thunderdome.webp` |
+| `bg_blastdoor.webp` | The Commandant's arena | nothing: off the road until this and its portrait land |
 
 **Palette.** Use the shared style brief above for the portraits and the background style brief
 in the next section for the pictures, but swap the palette for this faction: *muted palette of
@@ -174,7 +184,8 @@ trooper's bulk.
 1. Save each piece as WebP in the repo root under exactly the filename above - portraits
    trimmed to their alpha with the long side at 640, pictures at quality ~88.
 2. Take it off `PENDING_ART` at the top of `game.js` and leave it in `ASSET_LIST`. That is the
-   whole switch: the stand-in above stops being used the moment it comes off.
+   whole switch: the stand-in above stops being used the moment it comes off. The Commandant
+   takes two: it goes on the road the moment the second of its portrait and arena comes off.
 3. Run the suites. Suite 49 measures a picture's foreground and fails if it needs a
    `GROUND_LIFT` entry; the Frost's own suite fails if a piece is still pending with its file
    already in the repo, or is off the list with no file.

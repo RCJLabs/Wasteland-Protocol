@@ -88,9 +88,13 @@ module.exports = {
       return out;
     };
     const homeOf = Object.fromEntries(await page.evaluate(() => FIGHT_NODES.map(f => [f, FACTIONS[f].bg])));
+    // Y05: a faction can arrive before its home picture does - the Frost's is pending with the
+    // rest of its art - and until it lands that faction's fights are drawn on the open road.
+    const road = await page.evaluate(() => ROAD_ART);
+    const shownHome = f => table.pending.includes(homeOf[f]) ? road : homeOf[f];
     const before = await every();
-    const offHome = before.filter(s => s.bg !== homeOf[s.faction] || !s.painted.includes(homeOf[s.faction]));
-    ok(`while every place is pending, all ${before.length} faction-and-ground fights are drawn on the faction’s own picture`,
+    const offHome = before.filter(s => s.bg !== shownHome(s.faction) || !s.painted.includes(shownHome(s.faction)));
+    ok(`while every place is pending, all ${before.length} faction-and-ground fights are drawn on the faction’s own picture, or the road while that is pending too`,
       table.pending.length > 0 && offHome.length === 0);
     const chased = table.pending.filter(f => asked.has(f));
     ok(`and nothing - page, preloader or service worker - asked for a picture that has not been painted (${asked.size} files asked for${chased.length ? '; chased: ' + chased.join(', ') : ''})`,

@@ -40,7 +40,7 @@ module.exports = {
         scales: armed.filter(b => b.enrage && b.enrage.dmgScale > 1).map(b => b.enrage.dmgScale),
       };
     });
-    ok(`every commander on the shelf carries a grudge move (${shelf.armed})`, shelf.armed === 8);
+    ok(`every commander on the shelf carries a grudge move (${shelf.armed})`, shelf.armed === 9);
     // The finding that rebuilt this item, pinned so it cannot be forgotten a second time.
     ok(`the plate is on ONE of them, not the shelf (${shelf.plate.join(', ') || 'none'})`,
       shelf.plate.length === 1);

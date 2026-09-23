@@ -22,6 +22,8 @@ module.exports = {
         // Read off the pool rather than pinned: the last warlord joined it and files like the
         // rest, and a new commander should file itself rather than need this line edited.
         commanders: BOSS_POOL.length, road: BOSS_ROTATION.length,
+        // Y05: filed from the day it is written, dealt from the day its art lands.
+        waiting: BOSS_POOL.filter(b => !b.final && (PENDING_ART.includes(b.img) || PENDING_ART.includes(b.bg))).length,
         named: r.every(e => e.name && e.faction && e.resistances),
         // Ordinary STOCK, which is what this claim was always about: a commander's pack is a
         // simple unit and carries no signature of its own, and the two that do (Bulldog's riot
@@ -35,7 +37,7 @@ module.exports = {
     });
     ok(`every hostile has a file (${roster.total} = ${roster.stock} stock + ${roster.bosses} warlords + ${roster.brought} brought on)`,
       roster.total === roster.stock + roster.bosses + roster.brought && roster.stock >= 10
-      && roster.bosses === roster.commanders && roster.commanders === roster.road + 1);
+      && roster.bosses === roster.commanders && roster.commanders === roster.road + roster.waiting + 1);
     ok(`including everything a commander brings with it (${roster.broughtNames})`,
       roster.brought === roster.declared && roster.brought >= 6);
     ok('each named, factioned and with resistances', roster.named);

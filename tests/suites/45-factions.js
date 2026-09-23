@@ -280,11 +280,13 @@ module.exports = {
       sectorFront = null; currentSector = 1;
       return { ids, s1: at(1), s3: at(3), leaked, bias: bias / 600 };
     });
+    // Y05 added an eighth, THE LONG WINTER, dealt from sector 3 - suite 198 holds that one.
     ok(`both new fronts exist (${fronts.ids.length} in all)`,
-      fronts.ids.includes('THE_CHOIR') && fronts.ids.includes('CARRION_BLOOM') && fronts.ids.length === 7);
+      fronts.ids.includes('THE_CHOIR') && fronts.ids.includes('CARRION_BLOOM') && fronts.ids.length === 8);
     ok(`neither is dealt in sector 1 (${fronts.s1.length} of ${fronts.ids.length})`,
       !fronts.s1.includes('THE_CHOIR') && !fronts.s1.includes('CARRION_BLOOM') && fronts.s1.length === 5);
-    ok(`and both are from sector 2 (${fronts.s3.length})`, fronts.s3.length === 7);
+    ok(`and both are from sector 2 (${fronts.s3.length})`, fronts.s3.length === 8
+      && fronts.s3.includes('THE_CHOIR') && fronts.s3.includes('CARRION_BLOOM'));
     ok('a front never biases toward a faction the sector cannot field', fronts.leaked === 0);
     ok(`where it can, it tilts half the roads (${(fronts.bias * 100).toFixed(0)}%)`,
       fronts.bias > 0.35 && fronts.bias < 0.65);

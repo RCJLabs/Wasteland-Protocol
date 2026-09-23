@@ -189,10 +189,10 @@ module.exports = {
       const offPair = confluence('SANDSTORM', 'RUINS');
       const noGround = confluence('ASHFALL', 'OPEN_ROAD');
       __clear();
-      return { rows, offPair, noGround, factions: new Set(CONFLUENCE.map(c => c.faction)).size };
+      return { rows, offPair, noGround, factions: new Set(CONFLUENCE.map(c => c.faction)).size, all: FIGHT_NODES.length };
     });
     ok(`one confluence per faction (${conf.rows.length}), each its own sky over its own ground`,
-      conf.rows.length === 5 && conf.factions === 5 && conf.rows.every(r => r.ownSky && r.ownGround));
+      conf.rows.length === conf.all && conf.factions === conf.all && conf.rows.every(r => r.ownSky && r.ownGround));
     ok('every one of them changes the fight, and says why', conf.rows.every(r => r.changed && r.note));
     ok('and a sky over ground that is not its own is just the sky',
       conf.offPair === null && conf.noGround === null);

@@ -8,7 +8,10 @@
 // something already drawn stands in for it: the portrait fallback on the field, and for a place
 // (Y03, at FACTIONS) the faction's home picture. Empty is the healthy state. Every entry has a
 // brief in ART_PROMPTS.md, and taking one off this list is how a finished picture goes live.
-const PENDING_ART = ['bg_saltflats.webp', 'bg_den.webp', 'bg_pipeworks.webp', 'bg_exclusion.webp', 'bg_burrows.webp'];
+const PENDING_ART = ['bg_saltflats.webp', 'bg_den.webp', 'bg_pipeworks.webp', 'bg_exclusion.webp', 'bg_burrows.webp',
+    // Y05: the Frost, all nine pieces. Each portrait names its stand-in on its pool entry.
+    'enemy_frost_trooper.webp', 'enemy_frost_gunner.webp', 'enemy_frost_hauler.webp', 'enemy_frost_signaller.webp',
+    'enemy_boss_commandant.webp', 'enemy_frost_pod.webp', 'bg_icefield.webp', 'bg_cryovault.webp', 'bg_blastdoor.webp'];
 const ASSET_LIST = [
     "bg_title.webp", "bg_combat.webp", "bg_thunderdome.webp", "bg_refinery.webp", "bg_highway.webp", "bg_canyon.webp", "bg_foundry.webp", "bg_nest.webp",
     "hero_bruiser.webp", "hero_medic.webp", "hero_scavenger.webp", "hero_pyro.webp", "hero_shotgunner.webp", "hero_sniper.webp", "hero_hound.webp",
@@ -19,7 +22,9 @@ const ASSET_LIST = [
     "enemy_choir_acolyte.webp", "enemy_choir_censer.webp", "enemy_choir_reliquary.webp", "enemy_choir_hierophant.webp",
     "enemy_carrion_rat.webp", "enemy_carrion_moth.webp", "enemy_carrion_worm.webp", "enemy_carrion_brood.webp",
     "bg_congregation.webp", "bg_carrionfield.webp",
-    "bg_saltflats.webp", "bg_den.webp", "bg_pipeworks.webp", "bg_exclusion.webp", "bg_burrows.webp"
+    "bg_saltflats.webp", "bg_den.webp", "bg_pipeworks.webp", "bg_exclusion.webp", "bg_burrows.webp",
+    "enemy_frost_trooper.webp", "enemy_frost_gunner.webp", "enemy_frost_hauler.webp", "enemy_frost_signaller.webp",
+    "enemy_boss_commandant.webp", "enemy_frost_pod.webp", "bg_icefield.webp", "bg_cryovault.webp", "bg_blastdoor.webp"
 ];
 // The title art is fetched immediately; everything else waits until the menu is up so the
 // first screen is not stuck behind the whole art set.
@@ -887,7 +892,10 @@ function cdFor(ent, id) {
     for (const [perk, key] of Object.entries(perks)) {
         if (key === id && hasTrait(ent, perk)) cd -= 1;
     }
-    // A charged sky cycles everything faster, the squad's and theirs alike.
+    // A charged sky cycles the squad's moves faster, and a cold one slower. Only the squad's: this
+    // line said "the squad's and theirs alike", and an enemy signature's clock is sigCd, which is
+    // set off the signature table and has never read the sky. Y05 found it writing BLIZZARD's
+    // banner, and both skies' text now says whose cooldowns they touch.
     cd -= (sky().cdCut || 0);
     // M01 STIFF JOINTS: the body still works, it just will not come back around as fast. Applied
     // after the sky so a charged storm still helps, and before the floor so it cannot go under 1.
@@ -1318,6 +1326,11 @@ const BOSS_PASSIVES = {
     // The one passive in the game that is a rule rather than a number: it counts its own dead,
     // and at the end of the fight it spends what it counted. Every add you clear off it is a
     // point it will charge you for later, and the fight says so from the first turn.
+    // Y05: a retinue on a clock. The Marshal and the Bastion stand behind something you have to
+    // kill first; the Commandant's something is still asleep, and the question is whether the
+    // turns go on breaking it before it wakes or on the commander while it sleeps.
+    COLD_STORAGE: { name: 'Cold Storage', desc: 'Two of its garrison are still in the ice beside it. Each pod opens on its own count and what is inside joins the fight. Break a pod first and what is inside never wakes - and if the Commandant falls, the pods it was keeping cold go dark.',
+               state: ent => { const n = sealedPods(ent).length; return n ? ` \u2022 ${n} SEALED` : ' \u2022 EMPTY'; } },
     TALLY:   { name: 'The Tally', desc: 'Takes a count of every one of its own that falls: +4 armour and +6% damage each, to eight. Halfway down it raises the commanders you already felled, and while any of them stands it takes 30% of what you land on it. Broken past a quarter it sheds the armour and spends the count on damage instead.',
                state: ent => (ent.revenantWard && activeEntities.some(e => e.classType === 'REVENANT' && e.hp > 0) ? ' \u2022 RAISED UP' : '')
                            + (ent.tallyStacks ? ` \u2022 TALLY ${ent.tallyStacks}/${(ent.tally || {}).max || 8}` : ' \u2022 TALLY 0') }
@@ -1583,6 +1596,34 @@ const BOSS_POOL = [
                   tell: 'A second generator drops in, and the soak comes back with it.',
                   reWard: true }
     },
+    // Y05: the Frost's commander, and the eighth that holds the road. Where the Marshal hides
+    // behind a hound that is already fighting, this one's retinue has not woken up yet: two
+    // pods, each opening on its own count three turns apart, and a fight that is decided by
+    // what the squad spends those turns on. It keeps them cold itself, so felling it first is
+    // an answer too - which is the other half of the question, and why it is not a free one.
+    {
+        id: 'COMMANDANT', threat: 3, name: 'The Commandant', short: 'COMMANDANT', img: 'enemy_boss_commandant.webp',
+        stand: 'enemy_boss_marshal.webp', scale: 2.3,
+        range: 'ranged', hpMult: 1.1, dmgMult: 0.9, speed: 7, armor: 14,
+        resistances: { phys: 10, bio: 50, energy: -15 },
+        dmgType: 'energy', passive: 'COLD_STORAGE',
+        blurb: 'It kept its garrison on ice for exactly this. Break the pods before they open, or fight every one of them.',
+        bg: 'bg_blastdoor.webp',
+        banner: '\u2744\uFE0F THE VAULT OPENS: All units deal +20% DMG \u2744\uFE0F',
+        intents: [['ATTACK', 0.35], ['AOE', 0.25], ['HEAVY', 0.20], ['STATUS', 0.20]],
+        learned: { sig: 'REFREEZE', replaces: 'STATUS' },
+        // A pod is a body in the turn order that does nothing but count: its own turns run the
+        // thaw down, so the first opens on its third turn and the second on its sixth.
+        pods: { every: 3, holds: ['Frost Trooper', 'Cryo Gunner'],
+                spec: { name: 'Cryo Pod', classType: 'POD', range: 'melee', hp: 45, dmg: 0, speed: 1, armor: 4,
+                        img: 'enemy_frost_pod.webp', stand: 'enemy_turret.webp', scale: 1.0, sig: 'SEALED',
+                        resistances: { phys: 10, bio: 100, energy: -25 } } },
+        enrage: { cry: 'THE COMMANDANT OPENS THE VAULT!', dmgScale: 1.2, openPods: true },
+        // You broke its pods. It kept one back, and it put something heavier in it.
+        grudge: { cry: 'THE RESERVE - IT HELD ONE BACK!', name: 'THE RESERVE',
+                  tell: 'A last pod drops onto the ice, and something heavy is inside it.',
+                  reserve: 'Coldhauler' }
+    },
     // ── The last warlord ────────────────────────────────────────────────────────────────
     // Seven sectors, seven commanders, and then nothing: currentSector++ ran without a ceiling,
     // bossForSector lapped the pool forever with a fresh shuffle each time round, and the
@@ -1627,9 +1668,17 @@ const BOSS_POOL = [
                   spendTally: 0.12 }
     }
 ];
-// The rotation is the seven that hold the road. The last warlord is not one of them and is
-// never dealt by depth - bossForSector hands it over at the final sector and nowhere else.
-const BOSS_ROTATION = BOSS_POOL.filter(b => !b.final);
+// The rotation is the ones that hold the road. The last warlord is not one of them and is never
+// dealt by depth - bossForSector hands it over at the final sector and nowhere else.
+//
+// Y05: AND A COMMANDER JOINS IT THE DAY ITS OWN FACE AND ITS OWN GROUND HAVE LANDED. Ordinary
+// stock can walk on behind a stand-in while its portrait is painted; a commander is the fight a
+// run is built toward, and suite 16 has held since N03b that it never ships wearing somebody
+// else's face. The Commandant is built, briefed and tested, and waits here for its portrait
+// and its arena - both on PENDING_ART - so taking the two off that list is the whole of what
+// puts it on the road. Until then the rotation, and every seeded order dealt from it, is
+// exactly the seven it was.
+const BOSS_ROTATION = BOSS_POOL.filter(b => !b.final && drawn(b.img) && drawn(b.bg));
 const FINAL_BOSS = BOSS_POOL.find(b => b.final) || null;
 
 // ── The grudge ──────────────────────────────────────────────────────────────────────────
@@ -2250,7 +2299,7 @@ const ELITE_TIERS = [5, 6, 7, 8, 9];
 //   ranged/aoe/all  damage multipliers, applied to both sides
 //   backline        how much easier the back rank is to find
 //   armor           flat plating on every unit, corrodible like any other
-//   cdCut           turns off every cooldown
+//   cdCut           turns off every one of the squad's cooldowns; negative adds them (Y05)
 //   chip            bio damage at the start of a unit's turn, scaled by tier
 //   shrapnel        { chance, dmg } at the start of a unit's turn
 const WEATHER = {
@@ -2296,9 +2345,9 @@ const WEATHER = {
             { kind: 'bank', n: 5, rgb: [150, 145, 135], a: 0.18, r: [0.35, 0.50], y: [0.0, 0.55], speed: 0.005 },
             { kind: 'fall', n: 90, rgb: [230, 225, 215], a: 0.80, size: [1.4, 3.4], speed: 0.045, sway: 12 } ] } },
     ION_STORM: { name: 'ION STORM', short: 'ION', dot: 'wx-ion', cls: 'weather-ion',
-        desc: 'The air is charged and everything in it cycles faster and lands softer.',
+        desc: 'The air is charged. Your moves come back around faster, and everything lands softer.',
         cdCut: 1, all: 0.85,
-        banner: '\u26A0\uFE0F ION STORM: cooldowns a turn shorter, all damage -15% \u26A0\uFE0F',
+        banner: '\u26A0\uFE0F ION STORM: your cooldowns a turn shorter, all damage -15% \u26A0\uFE0F',
         // Y01: "the air is charged" - rising sparks, and now and then the sky discharges. Rare and
         // dim on purpose: a flash is the one thing here a reduced-motion player most wants gone,
         // and it is gone for them - the still frame stops every animation and hides the bolts.
@@ -2316,6 +2365,21 @@ const WEATHER = {
         fx: { tint: [120, 20, 20, 0.14], pall: [110, 18, 18, 0.40, 0.65], layers: [
             { kind: 'bank', n: 8, rgb: [150, 35, 35], a: 0.24, r: [0.30, 0.50], y: [0.25, 1.0], speed: 0.008 },
             { kind: 'veil', side: 'left', reach: 0.35, rgb: [100, 12, 12], a: 0.42 } ] } },
+    // Y05: the first cold sky, and the first one that is not fair. ASHFALL is grey snow falling
+    // straight down on both sides; this comes in sideways off the ice and it slows the squad's
+    // hands and nobody else's. The Frost fight in it because it is on their side, and the text
+    // says exactly that: enemy signatures keep their own clock, which sigCd has never read the
+    // sky for, so a sky that claimed "theirs too" would be a banner with nothing behind it.
+    BLIZZARD: { name: 'BLIZZARD', short: 'SNOW', dot: 'wx-snow', cls: 'weather-snow',
+        desc: 'Snow coming in sideways off the ice. Your hands go numb and nothing comes back around as fast. Theirs went numb a long time ago.',
+        cdCut: -1,
+        banner: '\u2744\uFE0F BLIZZARD: your cooldowns a turn longer \u2744\uFE0F',
+        // Driving snow rather than falling ash: fast white banks, short thick streaks at a steep
+        // angle for the flakes going past, and a few big ones drifting down nearer the glass.
+        fx: { tint: [190, 212, 232, 0.12], pall: [172, 192, 212, 0.58, 0.80], layers: [
+            { kind: 'bank', n: 6, rgb: [226, 236, 246], a: 0.22, r: [0.30, 0.50], y: [0.10, 0.95], speed: 0.080 },
+            { kind: 'streak', n: 110, rgb: [246, 250, 255], a: 0.85, len: [0.010, 0.026], w: 2.4, speed: 0.80, ang: 0.40 },
+            { kind: 'fall', n: 26, rgb: [250, 252, 255], a: 0.70, size: [2.0, 3.6], speed: 0.090, sway: 26 } ] } },
     BLOODLUST: { name: 'THUNDERDOME BLOODLUST', short: 'BLOOD', dot: 'wx-blood', cls: 'weather-blood',
         desc: 'The arena wants a short fight and everything in it obliges.',
         all: 1.2, arena: true,
@@ -2347,7 +2411,10 @@ const CONFLUENCE = [
       mod: { chip: 4 } },
     { sky: 'SANDSTORM', ground: 'NEST', faction: 'CARRION',
       note: 'They hunt by scent. You have nothing.',
-      mod: { ranged: 0.5 } }
+      mod: { ranged: 0.5 } },
+    { sky: 'BLIZZARD', ground: 'ICE', faction: 'FROST',
+      note: 'Out on the open ice the cold gets into everything.',
+      mod: { cdCut: -2 } }
 ];
 function confluence(w = currentWeather, t = currentTerrain) {
     return CONFLUENCE.find(c => c.sky === w && c.ground === t) || null;
@@ -2450,7 +2517,21 @@ const TERRAIN = {
                   // Y02: "chitin underfoot and egg-cases to the ceiling", and something in them alive.
                   fx: { layers: [
                       { kind: 'floor', pattern: 'chitin', rgb: [36, 26, 34], a: 0.62, rim: [201, 143, 176], rise: 20 },
-                      { kind: 'eggs', rgb: [201, 143, 176], a: 0.62, n: 22, reach: 0.15 } ] } }
+                      { kind: 'eggs', rgb: [201, 143, 176], a: 0.62, n: 22, reach: 0.15 } ] } },
+    // Y05: the first cold ground. A frozen lake: clear lines of fire across it, deep snow for
+    // anyone who has to walk it, and a blast that goes down into the drifts rather than out.
+    // It leans the other way from the Frost's second ground - TUNNELS is a melee room, this is a
+    // rifle range - so which of the two a fight is on decides what the squad wants in the line.
+    ICE:        { name: 'THE ICE', short: 'ICE', dot: 'tr-ice',
+                  desc: 'A frozen lake under a foot of snow. Every line of fire is clear, every blade drags through the drifts, and a blast is swallowed whole.',
+                  ranged: 1.1, reach: 0.85, aoe: 0.8,
+                  banner: '\u2744 THE ICE: ranged +10%, melee -15%, area attacks -20% \u2744',
+                  // Y02: "a frozen lake under a foot of snow" - a low white haze off the surface,
+                  // glints across the ice, and a cracked floor with snow lifting at the feet.
+                  fx: { layers: [
+                      { kind: 'haze', rgb: [226, 236, 246], a: 0.24, y: [0.52, 0.88] },
+                      { kind: 'shimmer', rgb: [196, 238, 250], a: 0.32, n: 26, y: [0.60, 0.92], speed: 0.010 },
+                      { kind: 'floor', pattern: 'cracks', rgb: [118, 168, 196], a: 0.55, dust: [236, 243, 249, 0.30], rise: 18 } ] } }
 };
 const TERRAIN_IDS = Object.keys(TERRAIN);
 // Ground is the place rather than an event, so it is commoner than weather's 0.4. Measured at
@@ -2510,7 +2591,13 @@ const FACTIONS = {
     // A swarm. Each one is trivial and the pile is not, and the answer is to spread damage
     // across it rather than pick them off one at a time.
     CARRION: { bg: 'bg_carrionfield.webp', weather: 'SANDSTORM',  ground: ['NEST', 'TUNNELS'], allies: [],         minSector: 2, swarm: 2, heavyCap: 2,
-               places: { TUNNELS: 'bg_burrows.webp' } }
+               places: { TUNNELS: 'bg_burrows.webp' } },
+    // Y05: a garrison that went into cold storage to wait out the war and has been waking up a
+    // few at a time ever since. Everything it fields gets harder the longer it is left standing,
+    // so the question is a clock - can you end it before the cold does - and heat is the answer.
+    // The roads only turn north from sector 3. Its tunnels are the vault it sleeps in.
+    FROST:   { bg: 'bg_icefield.webp', weather: 'BLIZZARD', ground: ['ICE', 'TUNNELS'], allies: [], minSector: 3,
+               places: { TUNNELS: 'bg_cryovault.webp' } }
 };
 // The picture a fight against this faction on this ground is drawn on. Draws no dice, so a seeded
 // run and the simulator roll exactly what they did before places existed.
@@ -2518,8 +2605,13 @@ function backdropFor(faction, terrain) {
     const f = FACTIONS[faction];
     if (!f) return null;
     const place = f.places && f.places[terrain];
-    return place && !PENDING_ART.includes(place) ? place : f.bg;
+    return drawn(place) || drawn(f.bg) || ROAD_ART;
 }
+// Y05: the art if it has been painted, or null. A faction can now arrive before its own home
+// picture does - the Frost's is commissioned with the rest of it - so a place falls back to its
+// home picture, and a home picture still on PENDING_ART falls back to the open road. One reader,
+// so the fight, the map behind the route and the commander rotation all agree on what is drawn.
+function drawn(file) { return file && !PENDING_ART.includes(file) ? file : null; }
 // The home picture a place belongs to, or null for anything that is not a place.
 function placeHome(file) {
     const f = Object.values(FACTIONS).find(x => x.places && Object.values(x.places).includes(file));
@@ -2551,7 +2643,11 @@ function rollNodeFaction(depth, rng) {
     const open = factionsAt(currentSector || 1);
     const r = rng();
     if (open.length <= 3) return r < 0.4 ? 'RAIDERS' : r < 0.7 ? 'BEASTS' : 'MECH';
-    return r < 0.26 ? 'RAIDERS' : r < 0.50 ? 'BEASTS' : r < 0.70 ? 'MECH' : r < 0.86 ? 'CHOIR' : 'CARRION';
+    // Y05: sector 2 is byte-identical to what it was, so a seeded run draws the same first two
+    // sectors it always has. From sector 3 the Frost take 13% and the other five give it up in
+    // proportion - the five-way split scaled by 0.87 and rounded to the hundredth.
+    if (!open.includes('FROST')) return r < 0.26 ? 'RAIDERS' : r < 0.50 ? 'BEASTS' : r < 0.70 ? 'MECH' : r < 0.86 ? 'CHOIR' : 'CARRION';
+    return r < 0.23 ? 'RAIDERS' : r < 0.44 ? 'BEASTS' : r < 0.61 ? 'MECH' : r < 0.75 ? 'CHOIR' : r < 0.87 ? 'CARRION' : 'FROST';
 }
 
 // What the generator promises, and validateSectorMap checks: exactly two elite fights at
@@ -3030,7 +3126,11 @@ const FRONTS = [
     { id: 'THE_CHOIR',        name: 'The Choir',        icon: '\u2670', minSector: 2, faction: 'CHOIR',
       desc: 'Something is being sung out there. Cultists on half the roads, and the smog follows them.' },
     { id: 'CARRION_BLOOM',    name: 'Carrion Bloom',    icon: '\u2042', minSector: 2, faction: 'CARRION',
-      desc: 'Something large died, and everything came. Swarms on half the roads, and they come in numbers.' }
+      desc: 'Something large died, and everything came. Swarms on half the roads, and they come in numbers.' },
+    // Y05: the one front that is also a region. The Frost's roads open at sector 3, so its front
+    // does as well - a front promising a faction the sector cannot field is a front that lies.
+    { id: 'LONG_WINTER',      name: 'The Long Winter',  icon: '\u2744', minSector: 3, faction: 'FROST', sky: 'BLIZZARD', skyChance: 0.35,
+      desc: 'The winter has come down off the ice. The Frost on half the roads, and the snow comes with them.' }
 ];
 let sectorFront = null;        // rolled per sector; null on saves from before fronts existed
 let frontBannerPending = false; let frontBannerTimer = null;
@@ -3075,7 +3175,7 @@ function mapArt(sector = currentSector, front = currentFront()) {
     const boss = isFinalSector(sector) ? bossForSector(sector) : null;
     const home = front && FACTIONS[front.faction];
     const sky = front && front.sky && WEATHER[front.sky] && WEATHER[front.sky].fx;
-    return { file: (boss && boss.bg) || (home && home.bg) || ROAD_ART, tint: sky ? sky.tint.slice(0, 3) : null };
+    return { file: (boss && boss.bg) || drawn(home && home.bg) || ROAD_ART, tint: sky ? sky.tint.slice(0, 3) : null };
 }
 
 function generateSectorMap(rng = Math.random) {
@@ -5215,7 +5315,17 @@ const AMBIENCE = {
                             mote: { wave: 'sawtooth', from: 150, to: 210, dur: 2.8, gain: 0.020, noise: 2.2, filter: 1100, every: [8, 16] } },
     'bg_combat.webp':     { drone: 70, interval: 1.40, voice: 'triangle', cutoff: 380, hiss: 0.022,
                             sway: 0.40, swayRate: 0.08, name: 'WASTES',
-                            mote: { wave: 'sine',     from: 260, to: 70,  dur: 2.0, gain: 0.024, noise: 0.6, filter: 620,  every: [8, 17] } }
+                            mote: { wave: 'sine',     from: 260, to: 70,  dur: 2.0, gain: 0.024, noise: 0.6, filter: 620,  every: [8, 17] } },
+    // Y05: the Frost's two. The ice is mostly wind - the brightest, gustiest wind of any bed -
+    // over a thin high voice, and the sound only it makes is the lake cracking somewhere out on
+    // it. The vault door is a low square hum with a klaxon that has been sounding for years.
+    // Both sit on intervals and pitches no other bed uses, which 22 and 53 hold the table to.
+    'bg_icefield.webp':   { drone: 66, interval: 1.68, voice: 'sine',     cutoff: 900, hiss: 0.042,
+                            sway: 0.70, swayRate: 0.13, name: 'ICE',
+                            mote: { wave: 'triangle', from: 2200, to: 1500, dur: 0.7, gain: 0.020, noise: 0.25, filter: 3600, every: [6, 14] } },
+    'bg_blastdoor.webp':  { drone: 44, interval: 1.89, voice: 'square',   cutoff: 240, hiss: 0.028,
+                            sway: 0.30, swayRate: 0.07, name: 'VAULT',
+                            mote: { wave: 'square',   from: 330, to: 330, dur: 1.6, gain: 0.014, noise: 0.15, filter: 1400, every: [11, 21] } }
 };
 const DEFAULT_AMBIENCE = AMBIENCE['bg_combat.webp'];
 
@@ -7657,7 +7767,7 @@ const VICTORY = {
     scoreMult: 1.5    // what finishing is worth, on top of the depth that got you here
 };
 
-// The commanders felled on the way, which is never the last one - it is not one of the seven
+// The commanders felled on the way, which is never the last one - it is not one of the ones
 // that hold the road and must not be counted among them.
 function roadWarlords(st) {
     return ((st || runStats || {}).warlords || []).filter(id => BOSS_ROTATION.some(b => b.id === id));
@@ -9143,6 +9253,7 @@ function renderMap() {
         // label can be a formation name rather than the faction, the icon has to carry it.
         else if (n.type === 'CHOIR') icon = '📿';
         else if (n.type === 'CARRION') icon = '🦴';
+        else if (n.type === 'FROST') icon = '\u2744\uFE0F';
         else if (n.type === 'EVENT') { icon = '❓'; lbl = 'UNKNOWN'; }
         else if (n.type === 'CAMP') icon = '⛺';
         else if (n.type === 'SHOP') { icon = '◇'; lbl = 'ARMORY'; }
@@ -10731,6 +10842,22 @@ const ENEMY_SIGS = {
                   desc: 'Goes under for a turn, untouchable, then comes up under the front rank.' },
     BROOD:      { name: 'Brood',        kind: 'action',  icon: '\u{1F95A}', weight: 0.40, cd: 2,
                   desc: 'Lays another Carrion Rat. Keeps laying until it is killed.' },
+    // Y05: the Frost. Four instruments on one clock: a shell that sets while it is left alone,
+    // a turn taken off you, a toll for every turn it stands, and a countdown. Heat answers all
+    // of it, which is why every Frost body is weak to energy and why fire shatters rime outright.
+    RIME:       { name: 'Rime',         kind: 'passive',
+                  desc: 'Frost sets on it every turn it takes: more armour each time, up to a limit. A blow worth a quarter of its health, or any fire, shatters the lot.' },
+    FLASH_FREEZE:{ name: 'Flash Freeze', kind: 'action', icon: '\u{1F9CA}', weight: 0.35, cd: 3,
+                  desc: 'Freezes the hardest hitter in your line solid: they lose their next turn.' },
+    DEEP_COLD:  { name: 'Deep Cold',    kind: 'passive',
+                  desc: 'While it stands, the cold takes a bite out of each of your operators at the start of their turn.' },
+    // weight 1 and a lead: it fires the first turn it is able to, every time, so the count on
+    // its tag is exact - its first shells land on its third turn and every third turn after.
+    // Not a species: what the Commandant keeps beside it. Its tag carries the count.
+    SEALED:     { name: 'Sealed',       kind: 'passive',
+                  desc: 'One of the garrison, still in the ice. It opens on its own count; break it first and what is inside never wakes.' },
+    FIRE_MISSION:{ name: 'Fire Mission', kind: 'action', icon: '\u{1F4FB}', weight: 1, cd: 2, lead: 2,
+                  desc: 'Calls in the guns up on the ice: every third turn while it stands, shells land on your whole line.' },
 
     // ── What the commanders learned ─────────────────────────────────────────────────────
     // One each, armed from the second meeting. Every one of these is a thing the squad did
@@ -10750,7 +10877,9 @@ const ENEMY_SIGS = {
     FIELD_REPAIR:{ name: 'Field Repair', kind: 'action', icon: '\u{1F6E1}', weight: 0.30, cd: 3, learned: true,
                   desc: 'The Bastion patches its ward generator instead of shooting. It learned that you go for the generator.' },
     COUNT_YOURS:{ name: 'Count Yours',  kind: 'action',  icon: '\u{1F480}', weight: 0.26, cd: 2, learned: true,
-                  desc: 'The Ossuary adds your dead to its tally as well as its own. It learned that you lose people too.' }
+                  desc: 'The Ossuary adds your dead to its tally as well as its own. It learned that you lose people too.' },
+    REFREEZE:   { name: 'Refreeze',     kind: 'action',  icon: '\u{1F9CA}', weight: 0.30, cd: 3, learned: true,
+                  desc: 'The Commandant seals a broken pod back up with somebody new inside. It learned that you break the pods first.' }
 };
 // How many of the swarm are still up. Three is the line: at three the pile protects itself,
 // at two it is just fast, fragile things. Everything Carrion counts toward the floor, but only
@@ -10851,6 +10980,42 @@ function riderOf(ent) { return (ent && !ent.isPlayer && ent.rider) ? (ENEMY_RIDE
 
 function sigOf(ent) { return (ent && !ent.isPlayer && ent.sig) ? (ENEMY_SIGS[ent.sig] || null) : null; }
 function hasSig(ent, id) { return !!(ent && !ent.isPlayer && ent.sig === id); }
+// Y05: THE FROST'S NUMBERS, in one place. Rime is plate - priced through plate() like every
+// other armour grant since E04, so a turn of it is worth the same share of a hit at any depth -
+// and it is held apart from `armor` because a braced turn expiring resets armour to its base,
+// and rime is not a brace. The shatter line is a share of the body's own bar, so it scales
+// with the unit rather than with the squad. The cold's bite is a fifth of the hauler's own swing,
+// so it rides the fight's curve the way everything a fight spawns has since E06 (suite 97 holds
+// that) - at depth it lands where the smog's tick does, 5 to 9, without the smog's hand-rolled
+// tier expression.
+const RIME = { step: 3, cap: 12, shatter: 0.25 };
+const DEEP_COLD_SHARE = 0.2;
+const FIRE_MISSION_MULT = 1.0;
+function growRime(ent) {
+    const add = Math.min(plate(RIME.step), plate(RIME.cap) - (ent.rime || 0));
+    if (add <= 0) return false;
+    ent.rime = (ent.rime || 0) + add;
+    spawnFCT(ent.id, '+RIME', 'fct-heal');
+    return true;
+}
+// Whether a blow knocks the rime off: any fire at all, or a blow worth the shatter share of the
+// body's bar before anything soaked it. Read off the figure mitigate handed back, so a rime
+// that soaked the blow is still the rime that blow breaks.
+function shattersRime(target, atkType, preSoak) {
+    return !!(target && !target.isPlayer && (target.rime || 0) > 0
+        && (atkType === 'energy' || preSoak >= target.maxHp * RIME.shatter));
+}
+// One bite however many haulers stand, sized off the hardest-swinging of them; 0 with none up.
+function coldBite() {
+    const up = activeEntities.filter(e => hasSig(e, 'DEEP_COLD') && e.hp > 0);
+    return up.length ? Math.max(1, Math.floor(Math.max(...up.map(h => h.dmgBase || 0)) * DEEP_COLD_SHARE)) : 0;
+}
+// The shells, sized once for the blow and for the board: an area attack, so the ground and the
+// sky bend it the way they bend any other, at the full swing rather than AOE's seven tenths.
+function fireMissionRaw(enemy) {
+    return Math.floor(enemy.dmgBase * FIRE_MISSION_MULT * enemyDmgMult(enemy)
+        * (ground().aoe || 1) * (sky().aoe || 1) * (sky().all || 1));
+}
 // Riot Plate is a second bar that only soaks, sized off the unit so it scales with the sector
 // without needing a curve of its own. G05: one helper, because the share was written out at
 // three separate build sites and the ordinary generator read it a beat too early - before the
@@ -10882,12 +11047,12 @@ function enemyDmgMult(enemy) {
 
 // CHARGE and SALVO are not rolled from any table - they are the two turns of a wind-up, and
 // they are here because the board has to be able to draw them. See chargeIntent.
-const INTENT_ICONS = { AOE: '🧨', HEAVY: '💥', STATUS: '☣️', DEFEND: '🛡️', ATTACK: '⚔️', FLANK: '🌀', CHARGE: '⚡', SALVO: '☄️', BREAK: '🏳️' };
+const INTENT_ICONS = { AOE: '🧨', HEAVY: '💥', STATUS: '☣️', DEFEND: '🛡️', ATTACK: '⚔️', FLANK: '🌀', CHARGE: '⚡', SALVO: '☄️', BREAK: '🏳️', THAW: '\u{1F9CA}' };
 // F14: what each of them means, in one line, on the screen they appear on. The icons carry the
 // whole forecast - which is the game's central read - and nothing anywhere said what they were.
 const INTENT_WORDS = { ATTACK: 'one target', AOE: 'the line', HEAVY: 'a big one',
                        STATUS: 'a status', DEFEND: 'bracing', FLANK: 'going round',
-                       CHARGE: 'winding up', SALVO: 'everyone', BREAK: 'pulling out' };
+                       CHARGE: 'winding up', SALVO: 'everyone', BREAK: 'pulling out', THAW: 'thawing' };
 // Drawn for the intents actually on the field, so it is a key to this fight rather than a table.
 function intentLegendHtml() {
     const live = [...new Set(activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.intent)
@@ -10941,6 +11106,8 @@ function rollIntent(enemy) {
     // traded for a defect. So it does not raise the intent it cannot cash, for the same reason
     // BURROW will not go under with nothing left on the field to come up at. The weight roll
     // is spent either way, so the draw sequence is what it was.
+    // Y05: a sealed pod has one thing to do and it does not roll for it.
+    if (enemy.sealed) return intentFor('THAW', enemy);
     if (sig && sig.kind === 'action' && (enemy.sigCd || 0) <= 0 && Math.random() < sig.weight
         && !(enemy.sig === 'COUNT_YOURS' && uncountedYours(enemy) === 0)) {
         return { type: 'SIG', icon: sig.icon, sig: enemy.sig };
@@ -10953,7 +11120,7 @@ function rollIntent(enemy) {
         for (const [type, weight] of enemy.intents) { roll -= weight; if (roll <= 0) return intentFor(gateIntent(type, enemy), enemy); }
         return intentFor(gateIntent(enemy.intents[enemy.intents.length - 1][0], enemy), enemy);
     }
-    // Nothing in ENEMY_POOL reaches this any more - every one of the eighteen carries its own
+    // Nothing in ENEMY_POOL reaches this any more - every one of them carries its own
     // table. What is left for it is a unit built field-by-field rather than copied from a
     // template: a warlord's lieutenant, a ward generator, anything raised from a bare spec.
     // The icons are intentFor's now rather than minted here; the one that used to be hand-set
@@ -11063,6 +11230,8 @@ function groundReach(m) {
 
 function forecastFor(enemy) {
     if (!enemy || enemy.isPlayer || enemy.hp <= 0 || !combatActive) return null;
+    // Y05: a pod lands nothing. What it is about to do is open, and the count is on its tag.
+    if (enemy.sealed) return { kind: 'THAW', enemy, hits: [] };
     const intent = enemy.intent || { type: 'ATTACK' };
     const live = activeEntities.filter(e => e.isPlayer && e.hp > 0);
     if (!live.length) return null;
@@ -11105,6 +11274,13 @@ function forecastFor(enemy) {
         const f = { kind: 'SIG', enemy, ...pin(back, (enemy.dmgBase + 4) * enemyDmgMult(enemy)) };
         back.gridPos = was;
         return f;
+    }
+    // Y05: the shells are the one signature besides the drag that is a blow, and the one the
+    // squad most needs to see coming - every operator, priced the way the barrage lands.
+    if (intent.type === 'SIG' && enemy.sig === 'FIRE_MISSION') {
+        const raw = fireMissionRaw(enemy);
+        return { kind: 'SIG', enemy, exact: true,
+                 hits: live.map(t => ({ target: t, dmg: mitigate(enemy, t, raw, 'phys', 'BARRAGE').n, via: null })) };
     }
     if (intent.type === 'DEFEND' || intent.type === 'SIG') return { kind: intent.type, enemy };
     if (intent.type === 'AOE') {
@@ -11206,7 +11382,7 @@ const PROMPTS = [
     { id: 'ROUTE',     title: 'THE ROUTE IS A PLAN', body: 'Taking a node commits you to what it connects to. Elites and warlords pay the most; camps and the Armory cost you a node but keep the squad standing. Look two tiers ahead before you step.' },
     { id: 'EXTRACT',   title: 'YOU CAN WALK OUT', body: 'An expedition does not have to end with the squad on the floor. Calling it at a camp banks everything the run earned with a bonus that grows the deeper you got, sends a Skull to the Citadel for every sector you cleared, and brings whatever relic you are carrying home with you. It also ends the run - and score climbs far faster with depth than the bonus does, so pushing on is worth more if you survive it. That is the whole question: is the squad in front of you good for one more sector?' },
     { id: 'RECALL',    title: 'THE ORDER IS UP', body: 'This is the last sector the order signed you out for, and clearing it brings the transport. Coming home banks everything the expedition earned, pays the walk-out bonus for the depth reached, and pays the order on top of it for having been kept. Pressing on is allowed and costs nothing that is already banked - it only lets the order lapse, and a lapsed order pays nothing however much further the squad gets. The choice is whether the squad in front of you is good for a sector nobody is paying for.' },
-    { id: 'LAST',      title: 'THE ROAD ENDS HERE', body: 'This is the last sector. The commander at the top of it is not one of the seven that hold the road - it is what they answer to, it is not in the rotation, and putting it down is how an expedition is won rather than merely survived. Nothing about the way there changes: ten tiers, the same branching routes, the same fights. Only the thing at the top is different, and it is standing on everything it has outlived. Winning does not force you home - the road past the gate is still there, and the win is banked before you decide.' },
+    { id: 'LAST',      title: 'THE ROAD ENDS HERE', body: `This is the last sector. The commander at the top of it is not one of the ${BOSS_ROTATION.length} that hold the road - it is what they answer to, it is not in the rotation, and putting it down is how an expedition is won rather than merely survived. Nothing about the way there changes: ten tiers, the same branching routes, the same fights. Only the thing at the top is different, and it is standing on everything it has outlived. Winning does not force you home - the road past the gate is still there, and the win is banked before you decide.` },
     { id: 'TALLY',     title: 'IT IS COUNTING', body: 'The last warlord writes down every one of its own that falls in front of it: more armour and more damage for each, up to eight, and the count rides its passive chip where you can watch it climb. Halfway down it raises the commanders you already felled, and while any of them stands it takes 30% of what you land on it - so they have to come down, and every one that does is another point on the count. Broken past a quarter it stops counting and spends: the armour comes off and goes into the swing, and everything you cleared off it is in that number.' },
     { id: 'GRUDGE',    title: 'IT REMEMBERS YOU', body: 'You have felled this commander before, and it has come back for it - heavier, faster, better armoured, and holding a move it never needed against you the first time. That move opens under a quarter health, after the enrage you already know about, and the fight log names it at the door so you can plan around it. A warlord is the one fight you cannot walk away from, so it pays for the trouble: felling a risen one banks an extra Skull for every grudge it was carrying.' },
     { id: 'BLEEDOUT',  title: 'THEY ARE BLEEDING OUT', body: 'That operator is on the floor with a clock over them, counted in their own turns. Run it out and they are gone for the rest of the expedition - there is no reviving them at the Outpost any more. Heal them where they lie (Cauterize, a Med-Stim, the STIM tactic), or end the fight: winning it, running from it and being dragged off it all get them clear. Only the clock kills, and picking them up before the end is what skips the scar roll altogether.' },
@@ -11286,7 +11462,8 @@ function summonedRoster() {
         const kind = [[b.enrage && b.enrage.summon, 'called up when it enrages'],
                       [b.grudge && b.grudge.spawn, 'laid while the grudge phase runs'],
                       [b.escort, 'stands beside it from the door'],
-                      [b.ward, 'keeps it standing until it is broken']];
+                      [b.ward, 'keeps it standing until it is broken'],
+                      [b.pods && b.pods.spec, 'waits in the ice beside it, until it opens or you break it']];
         kind.forEach(([spec, how]) => {
             if (!spec || seen.has(spec.name)) return;
             seen.add(spec.name);
@@ -11534,6 +11711,15 @@ const ENEMY_POOL = {
     { name: "Blight Moth", dmgType: 'bio', sig: 'TEEMING', intents: [['ATTACK', 0.55], ['STATUS', 0.30], ['AOE', 0.15]], minTier: 5, isHeavy: false, classType: "VERMIN", range: 'ranged', isHovering: true, maxHp: 26, speed: 22, armor: 0, dmgBase: 11, img: "enemy_carrion_moth.webp", scale: 0.7, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: -5, bio: 30, energy: -10 } },
     { name: "Gorge Worm", sig: 'BURROW', intents: [['ATTACK', 0.45], ['HEAVY', 0.35], ['DEFEND', 0.20]], minTier: 9, isHeavy: true, classType: "VERMIN", range: 'melee', maxHp: 70, speed: 9, armor: 2, dmgBase: 22, img: "enemy_carrion_worm.webp", scale: 1.4, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 8, bio: 35, energy: -10 } },
     { name: "Brood Mother", unique: true, sig: 'BROOD', intents: [['ATTACK', 0.45], ['HEAVY', 0.20], ['DEFEND', 0.20], ['AOE', 0.15]], minTier: 12, isHeavy: true, classType: "VERMIN", range: 'ranged', maxHp: 95, speed: 8, armor: 4, dmgBase: 15, img: "enemy_carrion_brood.webp", scale: 1.6, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 45, energy: -15 } }
+    ],
+    // Y05: the Frost. Slow, patient and cold-proof - bio shrugs off a frozen body - and every one
+    // of them weak to energy, because heat is the answer the whole faction is built around. The
+    // portraits are commissioned; `stand` names what walks on in their place until they land.
+    'FROST': [
+    { name: "Frost Trooper", sig: 'RIME', intents: [['ATTACK', 0.55], ['HEAVY', 0.30], ['DEFEND', 0.15]], minTier: 7, isHeavy: false, classType: "SOLDIER", range: 'melee', maxHp: 58, speed: 8, armor: 2, dmgBase: 13, img: "enemy_frost_trooper.webp", stand: "enemy_raider.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 5, bio: 30, energy: -20 } },
+    { name: "Cryo Gunner", dmgType: 'energy', sig: 'FLASH_FREEZE', intents: [['ATTACK', 0.65], ['HEAVY', 0.15], ['STATUS', 0.10], ['DEFEND', 0.10]], minTier: 8, isHeavy: false, classType: "SOLDIER", range: 'ranged', maxHp: 48, speed: 10, armor: 0, dmgBase: 12, img: "enemy_frost_gunner.webp", stand: "enemy_choir_censer.webp", scale: 1.0, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 30, energy: -10 } },
+    { name: "Coldhauler", sig: 'DEEP_COLD', intents: [['ATTACK', 0.50], ['HEAVY', 0.30], ['DEFEND', 0.20]], minTier: 12, isHeavy: true, classType: "SOLDIER", range: 'melee', maxHp: 110, speed: 5, armor: 6, dmgBase: 17, img: "enemy_frost_hauler.webp", stand: "enemy_juggernaut.webp", scale: 1.5, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 10, bio: 40, energy: -20 } },
+    { name: "Signaller", unique: true, sig: 'FIRE_MISSION', intents: [['ATTACK', 0.75], ['STATUS', 0.10], ['AOE', 0.05], ['DEFEND', 0.10]], minTier: 15, isHeavy: true, classType: "SOLDIER", range: 'ranged', maxHp: 70, speed: 12, armor: 2, dmgBase: 14, img: "enemy_frost_signaller.webp", stand: "enemy_sniper.webp", scale: 1.1, hpDrop: 0, stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0, resistances: { phys: 0, bio: 30, energy: -10 } }
     ]
 };
 
@@ -11633,6 +11819,23 @@ const FORMATIONS = {
         { id: 'THE_NEST', name: 'The Nest', minTier: 12,
           note: 'She keeps laying. The swarm never thins on its own.',
           units: ['Brood Mother', 'Carrion Rat', 'Carrion Rat', 'Carrion Rat', 'Carrion Rat'] }
+    ],
+    // Y05: every note is a clock, because every one of these is a race. Spaced the way D14 left
+    // the others - five tiers between the opener and the next - and each at or above the tier
+    // its own units unlock at, so nothing is offered before it can be fielded.
+    FROST: [
+        { id: 'PICKET', name: 'The Picket', minTier: 8, fadeAt: 14,
+          note: 'Rime sets on all three while you work. Break them before it does.',
+          units: ['Frost Trooper', 'Frost Trooper', 'Cryo Gunner'] },
+        { id: 'COLD_CHAIN', name: 'Cold Chain', minTier: 13,
+          note: 'The cold bleeds your line for as long as the hauler stands.',
+          units: ['Coldhauler', 'Frost Trooper', 'Cryo Gunner'] },
+        { id: 'THE_GUNS', name: 'The Guns', minTier: 16,
+          note: 'Shells every third turn until the Signaller goes down.',
+          units: ['Signaller', 'Frost Trooper', 'Frost Trooper'] },
+        { id: 'THE_GARRISON', name: 'The Garrison', minTier: 19,
+          note: 'The whole watch, the cold and the guns. Every turn this lasts is theirs.',
+          units: ['Signaller', 'Coldhauler', 'Cryo Gunner', 'Frost Trooper'] }
     ]
 };
 const ALL_FORMATIONS = Object.values(FORMATIONS).flat();
@@ -11807,6 +12010,11 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
         };
         if (b.escort) { boss.escortId = 'boss_escort'; boss.escortArmor = b.escortArmor || 20; raise(b.escort, 'boss_escort'); }
         if (b.ward) { boss.wardId = 'boss_ward'; boss.wardSoak = b.wardSoak || 0.15; raise(b.ward, 'boss_ward'); }
+        if (b.pods) {
+            boss.podSpec = b.pods;
+            b.pods.holds.forEach((holds, i) => raise(b.pods.spec, `boss_pod_${i}`,
+                { podOf: boss.id, holds, sealed: true, thaw: b.pods.every * (i + 1), __mult: mult, __dmgMult: dmgMult }));
+        }
         return [boss, ...retinue];
     }
     
@@ -11877,7 +12085,9 @@ function generateEnemies(nodeType, mult, isEliteNode, dmgMult = mult, formationI
         }
         let t = JSON.parse(JSON.stringify(pick)); 
         let hp = Math.floor(t.maxHp * mult); t.hp = hp; t.maxHp = hp; t.dmgBase = Math.floor(t.dmgBase * dmgMult); t.baseArmor = t.armor || 0;
-        t.sigCd = 0;
+        // Y05: FIRE_MISSION's lead - it opens partway down its count, so the first shells come on
+        // its third turn rather than its first.
+        t.sigCd = (sigOf(t) && sigOf(t).lead) || 0;
 
         // One unit on an elite node is the champion and carries two affixes. That is the half
         // of the teeth budget that does not depend on the roll: IRONSIDE still buys the RATE
@@ -12250,6 +12460,9 @@ function breakTarget() {
         // The forecast reports no damage on a charging turn - correctly, nothing lands - so
         // without this the one thing on the field worth breaking scored zero.
         if (f.kind === 'SIG' || f.kind === 'CHARGE') return 60;
+        // Y05: and a pod on the last turn of its count, for the same reason - stunned, it does
+        // not tick. Any earlier and there is a turn left to break it in instead.
+        if (f.kind === 'THAW') return (e.thaw || 0) <= 1 ? 60 : 0;
         return (f.hits || []).reduce((a, h) => a + h.dmg, 0);
     };
     return foes.map(e => ({ e, n: worth(e) })).sort((a, b) => b.n - a.n)[0].e;
@@ -12569,8 +12782,12 @@ function initiateCombat(nodeType, isEliteNode) {
     if (sectorFront === 'RAIDER_WARBAND' && isEliteNode && nodeType === 'RAIDERS')
         activeEntities.filter(e => !e.isPlayer).forEach(e => { e.dmgBase = Math.ceil(e.dmgBase * 1.25); });
     if (nodeType === 'BOSS') {
-        const addFaction = { RAIDER_WARBAND: 'RAIDERS', MACHINE_UPRISING: 'MECH', BLOOD_MOON: 'BEASTS',
-                             THE_CHOIR: 'CHOIR', CARRION_BLOOM: 'CARRION' }[sectorFront];
+        // Y05: read off the front, where Y04 put the fact. This was a third copy of Y04's table -
+        // the generation tilt and the map are the other two readers, and both were moved onto
+        // `front.faction` - and it held the five fronts that existed then, so a sixth faction's
+        // front would have sent its commander out alone with nothing anywhere saying so. The
+        // five it held map to exactly the five `faction` fields they already carry.
+        const addFaction = (frontById(sectorFront) || {}).faction;
         if (addFaction) {
             const escort = generateEnemies(addFaction, mult, false, dmgMult, null)[0];
             escort.id = 'front_escort';
@@ -12839,6 +13056,12 @@ function renderField() {
             if (ent.sig === 'RANGING' && ent.lockOn) state = ' \u2022 LOCKED';
             if (ent.sig === 'BURROW' && ent.burrowed > 0) state = ' \u2022 UNDER';
             if (ent.sig === 'TEEMING') state = carrionStanding() >= TEEMING_FLOOR ? ' \u2022 THICK' : ' \u2022 THINNED';
+            if (ent.sig === 'RIME' && (ent.rime || 0) > 0) state = ` ${ent.rime}`;
+            if (ent.sig === 'SEALED' && ent.sealed) state = ` \u2022 OPENS IN ${ent.thaw}`;
+            // How many of its own turns until the shells land: the next one when the intent is
+            // already up, otherwise one more than the count it has left to run down.
+            if (ent.sig === 'FIRE_MISSION') state = ent.intent && ent.intent.type === 'SIG'
+                ? ' \u2022 INCOMING' : ` \u2022 IN ${(ent.sigCd || 0) + 1}`;
             tagText = `${s.name.toUpperCase()}${state}`; tagTitle = s.desc;
             tagSpent = ent.sig === 'RIOT_PLATE' && !(ent.plate > 0);
         }
@@ -13185,6 +13408,7 @@ function applyTurnStartEffects(ent) {
         ent.hp = Math.max(0, ent.hp - cut.n);
         noteWeather(_b, cause);
         log(`> ${cause === 'SMOG' ? `${ent.name} choked by Smog for ${cut.n} DMG.`
+                 : cause === 'COLD' ? `The cold takes ${cut.n} out of ${ent.name}.`
                                  : `Shrapnel struck ${ent.name} for ${cut.n} DMG!`}`, "log-dmg");
         spawnFCT(ent.id, `-${cut.n}`, cls);
         chg = true; addMomentum(5); triggerHitFlash(ent.id); noteWeatherDeath(cause);
@@ -13192,6 +13416,12 @@ function applyTurnStartEffects(ent) {
     if (wx.chip) skyHit(wx.chipType || 'phys', Math.floor(wx.chip * (1 + ((currentTier - 1) * 0.4))), 'SMOG', 'fct-status');
     if (wx.shrapnel && Math.random() < wx.shrapnel.chance)
         skyHit(wx.shrapnel.type || 'phys', Math.floor(wx.shrapnel.dmg * (1 + ((currentTier - 1) * 0.4))), 'SHRAPNEL', 'fct-dmg');
+    // Y05: a Coldhauler is a sky of its own. One bite however many of them stand - it is the cold,
+    // not the hauler - typed energy like the rest of the Frost's cold, and only on the squad: the
+    // Frost have been living in it for longer than the squad has been alive. Kill the hauler and
+    // the clock stops, which is the whole of the Coldhauler's question.
+    const bite = ent.isPlayer && ent.hp > 0 ? coldBite() : 0;
+    if (bite > 0) skyHit('energy', bite, 'COLD', 'fct-status');
 
     // Over The Top runs on the Fiend's own turns, so it is spent here rather than on the clock.
     if ((ent.chargeTurns || 0) > 0) { ent.chargeTurns--; chg = true; if (ent.chargeTurns > 0) spawnFCT(ent.id, "OVER THE TOP", "fct-combo"); }
@@ -13248,6 +13478,7 @@ function applyTurnStartEffects(ent) {
         const cap = (ent.baseArmor || 0) + plate(30);
         if (ent.armor < cap) { ent.armor = Math.min(cap, ent.armor + plate(6)); spawnFCT(ent.id, "+PLATE", "fct-heal"); chg = true; }
     }
+    if (hasSig(ent, 'RIME') && ent.hp > 0 && growRime(ent)) chg = true;
     if (ent.guardTurns > 0) { ent.guardTurns--; chg = true; }
     if (ent.oiledTurns > 0) { ent.oiledTurns--; chg = true; }
     if (ent.corrodedTurns > 0) { ent.corrodedTurns--; chg = true; }
@@ -14231,7 +14462,7 @@ function mitigate(attacker, t, calcDmg, atkType, abilityStr) {
     // you, it does nothing about the bleeding afterwards. Routed through the same abilityStr
     // door FERAL_BITE already uses rather than a new parameter.
     let ac = (abilityStr === 'FERAL_BITE' || abilityStr === 'BLEED' || (t.corrodedTurns || 0) > 0)
-        ? 0 : t.armor + (w.armor || 0);
+        ? 0 : t.armor + (w.armor || 0) + (t.rime || 0);
     if (t.oiledTurns > 0 && atkType === 'energy') rv -= 15;
     let cd = calcDmg;
     if (hasRelic('KINETIC_MESH') && t.isPlayer && t.gridPos <= meshRanks() && atkType === 'phys') cd = Math.floor(cd * 0.75);
@@ -14381,6 +14612,14 @@ function noteKill(victim, by = {}) {
             Math.max(0, ((fightLog && fightLog.turns) || 0) - victim.__phaseOpenedAtTurn));
     }
     noteBestiary(typeNameOf(victim), 'killed');
+    // Y05: the pods run off the Commandant's own plant. When it falls, the ones still sealed go
+    // dark and nothing in them wakes - a fight is not won by breaking ice nobody is keeping cold
+    // any more. Tallied as they go, so the dark ones are not kills: nobody broke them.
+    if (victim.podSpec) {
+        const dark = sealedPods(victim);
+        dark.forEach(e => { e.hp = 0; e.sealed = false; e.tallied = true; spawnFCT(e.id, 'DARK', 'fct-status'); });
+        if (dark.length) log(`> The pods it was keeping cold go dark.`, 'log-status');
+    }
     // R03: THE CENSUS THAT DECIDES WHETHER A MORALE BREAK IS REACHABLE CONTENT. The R-audit
     // found that nothing on the road ever leaves a fight - every hostile fights to the last
     // body - and proposed "kill that one and the rest lose heart". Before any of that is built,
@@ -14643,6 +14882,13 @@ function applyDamageHit(attacker, target, calcDmg, atkType, abilityStr, opts) {
             spawnFCT(target.id, 'PLATE BROKEN', 'fct-weak');
         }
     }
+    // Y05: the blow that breaks the rime is still soaked by it - it is what the blow broke - and
+    // everything after it lands on bare plate until the frost sets again.
+    if (shattersRime(target, atkType, preSoak)) {
+        target.rime = 0;
+        log(`> The rime on ${target.name} shatters!`, 'log-combo');
+        spawnFCT(target.id, 'SHATTERED', 'fct-weak');
+    }
     target.hp = Math.max(0, target.hp - netDmg);
     if (target.isPlayer && netDmg > 0 && fightLog) fightLog.hurt = true;
     if (netDmg > 0) flashClass(target.id, target.isPlayer ? 'anim-recoil-left' : 'anim-recoil-right', 320);
@@ -14840,6 +15086,8 @@ function openGrudgePhase(enemy) {
         for (let i = 0; i < gm.venomBurst && enemy.venomStacks < enemy.venom.max; i++) venomDose(enemy, true);
     }
     if (gm.aura) enemy.aura = gm.aura;
+    // Y05: the Commandant's reserve - one more pod, two turns on the count, and a Coldhauler in it.
+    if (gm.reserve && dropPod(enemy, gm.reserve, 2)) renderField();
     // The last tally.
     if (gm.spendTally) spendTally(enemy, gm.spendTally);
     // The Stormcaller stops waiting for the sky.
@@ -14874,6 +15122,51 @@ function reRaiseRetinue(enemy, which) {
     activeEntities.push(unit); turnQueue.push(unit);
     log(`> ${spec.name} takes the field.`, 'log-dmg');
     return unit;
+}
+
+// Y05: a pod at the end of its count opens where it stands, and what it held steps out of it:
+// the same body, the same slot, the same place in the turn order. Nothing in this engine is ever
+// spliced out of a fight mid-turn - R03 says why - so the pod does not go anywhere. It becomes
+// the soldier, built off the pool row at the fight's own scale.
+function hatchPod(pod) {
+    const stock = unitByName('FROST', pod.holds);
+    pod.sealed = false; pod.thaw = 0;
+    if (!stock) return null;
+    const sc = spawnScale(pod);
+    const keep = { id: pod.id, podOf: pod.podOf, __mult: pod.__mult, __dmgMult: pod.__dmgMult };
+    Object.assign(pod, JSON.parse(JSON.stringify(stock)), keep, { isPlayer: false, hatched: true });
+    pod.maxHp = pod.hp = Math.max(1, Math.floor(stock.maxHp * sc.mult));
+    pod.dmgBase = Math.max(1, Math.floor(stock.dmgBase * sc.dmg));
+    pod.armor = pod.baseArmor = stock.armor || 0;
+    pod.rime = 0; pod.sigCd = (sigOf(pod) && sigOf(pod).lead) || 0;
+    pod.intent = rollIntent(pod);
+    noteBestiary(pod.name, 'met');
+    log(`> A pod opens. ${pod.name} steps out of the ice.`, 'log-dmg');
+    spawnFCT(pod.id, 'THAWED', 'fct-weak'); playSFX('enrage'); triggerShake();
+    return pod;
+}
+function sealedPods(boss) {
+    return activeEntities.filter(e => boss && e.podOf === boss.id && e.sealed && e.hp > 0);
+}
+// A pod dropped mid-fight - the grudge's reserve and the learned refreeze - on the same spec the
+// commander arrived with, counting down from `thaw` of its own turns.
+function dropPod(boss, holds, thaw) {
+    // Off the pool row when the body was not built with the spec on it - the same fallback
+    // reRaiseRetinue reads, so a commander raised by hand still knows what its pods are.
+    const src = (boss && boss.podSpec) || (BOSS_POOL.find(x => x.id === (boss && boss.bossId)) || {}).pods;
+    if (!src) return null;
+    const spec = src.spec, sc = spawnScale(boss);
+    const pod = { id: `pod_${Date.now()}_${Math.floor(Math.random() * 999)}`, name: spec.name,
+        classType: spec.classType, range: spec.range, isPlayer: false,
+        maxHp: Math.floor(spec.hp * sc.mult), hp: Math.floor(spec.hp * sc.mult),
+        speed: spec.speed, armor: spec.armor || 0, baseArmor: spec.armor || 0,
+        dmgBase: Math.floor(spec.dmg * sc.dmg), img: spec.img, stand: spec.stand, scale: spec.scale, hpDrop: 0,
+        stunnedTurns: 0, bleedingTurns: 0, armorTurns: 0, oiledTurns: 0, corrodedTurns: 0, markedTurns: 0,
+        resistances: { ...spec.resistances }, sig: spec.sig, sigCd: 0,
+        podOf: boss.id, holds, sealed: true, thaw, __mult: sc.mult, __dmgMult: sc.dmg };
+    pod.intent = rollIntent(pod);
+    activeEntities.push(pod); turnQueue.push(pod);
+    return pod;
 }
 
 // The sky turning, which the Stormcaller does on its own clock and, from its enrage, on the spot.
@@ -14947,6 +15240,8 @@ function openEnragePhase(enemy) {
     }
     if (e.armorBonus) { enemy.armor += e.armorBonus; enemy.baseArmor = (enemy.baseArmor || 0) + e.armorBonus; }
     if (e.forceAoe) enemy.forceAoe = true;
+    // Y05: the vault opens. Every pod still sealed opens now, whatever its count said.
+    if (e.openPods) { sealedPods(enemy).forEach(hatchPod); renderField(); }
 
     // The Marshal calls the column in. Only if the column is actually down - it is one hound,
     // put back, not a second one stacked on the first.
@@ -15044,6 +15339,13 @@ function executeEnemyAi(enemy) {
         checkWinState();
         if (combatActive) setTimeout(nextTurn, 700 * globalSettings.combatSpeed);
         return;
+    }
+    // Y05: a sealed pod does nothing but count, and its turn in the order IS the count - so a
+    // pod that is stunned does not tick, which is the one way besides breaking it to buy time.
+    if (enemy.sealed) {
+        if (--enemy.thaw <= 0) hatchPod(enemy);
+        else spawnFCT(enemy.id, `OPENS IN ${enemy.thaw}`, 'fct-status');
+        renderField(); checkWinState(); return;
     }
     if (enemy.sigCd > 0) enemy.sigCd--;
 
@@ -15312,6 +15614,30 @@ function executeEnemyAi(enemy) {
             }
         }
 
+        else if (enemy.sig === 'FLASH_FREEZE') {
+            // Aimed the way LITANY aims, at whoever hits hardest: it takes a turn off whichever of
+            // you would have ended this soonest. Frozen solid is a stun, so UNSHAKEABLE - "cannot
+            // be stunned" - shrugs it off, and anything that clears a stun thaws it.
+            const mark = validTargets.filter(t => !hasTrait(t, 'UNSHAKEABLE'))
+                .sort((a, b) => (b.dmgBase || 0) - (a.dmgBase || 0))[0];
+            if (mark) {
+                mark.stunnedTurns = Math.max(mark.stunnedTurns || 0, 1);
+                log(`> ${enemy.name} freezes ${mark.name} solid.`, 'log-dmg');
+                spawnFCT(mark.id, 'FROZEN', 'fct-weak'); playSFX('heal');
+            } else {
+                log(`> ${enemy.name} sprays the line and nothing takes.`, 'log-status');
+            }
+        }
+
+        else if (enemy.sig === 'FIRE_MISSION') {
+            // Telegraphed a full turn ahead like every intent, counted on the tag between times,
+            // and it does not stop until the Signaller does.
+            const raw = fireMissionRaw(enemy);
+            log(`> ${enemy.name} calls it in. The guns up on the ice answer.`, 'log-dmg');
+            spawnFCT(enemy.id, 'FIRE MISSION', 'fct-weak'); triggerShake(); playSFX('blast');
+            validTargets.forEach(t => applyDamageHit(enemy, t, raw, 'phys', 'BARRAGE'));
+        }
+
         else if (enemy.sig === 'AEGIS') {
             const covered = activeEntities.filter(e => !e.isPlayer && e.hp > 0 && e.id !== enemy.id);
             covered.forEach(e => { e.armor = (e.armor || 0) + plate(8); e.armorTurns = Math.max(e.armorTurns || 0, 2); spawnFCT(e.id, '+ARMOR', 'fct-heal'); });
@@ -15418,6 +15744,22 @@ function executeEnemyAi(enemy) {
                 spawnFCT(gen.id, '+ARMOR', 'fct-heal'); playSFX('heal');
             } else {
                 log(`> ${enemy.name} reaches for a generator that is not there any more.`, 'log-status');
+            }
+        }
+
+        else if (enemy.sig === 'REFREEZE') {
+            // You break the pods first. It brought more ice: a fresh pod with a trooper in it, as
+            // long as there are fewer than two sealed - and with both still holding, it packs the
+            // rime back onto every soldier standing instead.
+            if (sealedPods(enemy).length < 2 && dropPod(enemy, 'Frost Trooper', (enemy.podSpec && enemy.podSpec.every) || 3)) {
+                log(`> ${enemy.name} seals another of them into the ice.`, 'log-dmg');
+                spawnFCT(enemy.id, 'REFREEZE', 'fct-weak'); playSFX('heal'); renderField();
+            } else {
+                const line = activeEntities.filter(e => !e.isPlayer && e.hp > 0 && hasSig(e, 'RIME'));
+                line.forEach(e => { e.rime = plate(RIME.cap); spawnFCT(e.id, '+RIME', 'fct-heal'); });
+                log(line.length ? `> ${enemy.name} packs the frost back onto its line.`
+                                : `> ${enemy.name} checks the seals. Both hold.`, 'log-status');
+                playSFX('heal');
             }
         }
 
@@ -15822,6 +16164,7 @@ globalThis.WP = {
     get benchJob() { return benchJob; }, set benchJob(v) { benchJob = v; },
     WEATHER, WEATHER_IDS, WEATHER_CHANCE, CONFLUENCE, confluence, sky, weatherName, skyDamageType, typedToll, noteUntyped,
     openCarrionNodes, nestTargets, callOffCarrion, setCarrionOn,
+    RIME, sealedPods, drawn, backdropFor, mapArt, ROAD_ART,
     get choirWord() { return choirWord; }, set choirWord(v) { choirWord = v; },
     get bestRung() { return bestRung; }, set bestRung(v) { bestRung = v; },
     Store, CORRUPT, PERK_POOL, ABILITIES, ENEMY_SIGS, ENEMY_POOL, CITADEL_SPOTS, CODEX, SFX, CLASS_VOICE, MOVE_VOICE_OVERRIDE, AMBIENCE, SFX_LOG_MAX, CONTRACT_POOL, EVENT_POOL, CONSEQUENCE_POOL, EVENT_MEMORY, SIG_PERKS, GEAR_POOL, QUIRK_POOL, TOUCH_FLOOR, MUSTER_REROLLS, MOMENTUM_TACTICS, stimHeal, breakTarget, STIM_FLOOR, STIM_NEED, OVERDRIVES, ELITE_TIERS, MAP_COL_X, MAP_ROW_H, WEATHER_DOTS, EMPTY_POOL_SCRAP, OVERDRIVE_AT, OVERDRIVE_AT_CHARGED, MOVE_REACH, MOVE_CD, DECK_MOVES, skyFxState, skyFxStart, skyFxClear, skyStreakStep, SKY_TILE, SKY_PLANES, SKY_FX_DPR_CAP, applyCombatScenery, groundFxState, groundFxStart, groundFxClear, GROUND_TILE, moveDetail, reachFor, operatorFileHtml, resRowHtml, FELLED_CAUSES, felledPhrase, fallenPhrase, felledKind, fallenKind, rollFold, rollFoldHtml, FOLD_TOP, RANK_LABELS, get deckInspect() { return deckInspect; }, set deckInspect(v) { deckInspect = v; }, INTENT_ICONS, REACH_PENALTY, DEPTH_PENALTY, FRONT_RANKS, BACKLINE_WEIGHT, GROUND_LIFT, DEFAULT_LIFT, RELIC_POOL, BOSS_POOL, BOSS_PASSIVES, resistBadges, STATUSES, statusChips, dispatchAction, armourScale, plate, tacticDesc, passiveDesc, fightMult, fightDmgMult, spawnScale, reRaiseRetinue, turnTheSky, openEnragePhase, XP_CURVE, BASE_SAVE_KEY, SETTINGS_KEY, META_KEY, TOTAL_TIERS, SECTOR_TIER_BONUS, HEAVY_RAMP, TIER_HP_GROWTH, TIER_DMG_GROWTH, BASE_REGROUPS, ARMORY_CUT, BOARD_SLOTS, boardSlots, spotUnlocked, spotMaxed, spotState, FACTION_ALLIES, FACTIONS, FIGHT_NODES, factionsAt, effTierAt, RESERVE_XP_RATE, ASSET_LIST, PENDING_ART, ACTIONS, BOUNTY_POOL, ROSTER_TEMPLATE,

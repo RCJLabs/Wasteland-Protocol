@@ -13,6 +13,8 @@ module.exports = {
       count: BOSS_POOL.length,
       road: BOSS_ROTATION.length,
       finals: BOSS_POOL.filter(b => b.final).length,
+      // Y05: and one more waits off the road until its face and its ground have both landed.
+      waiting: BOSS_POOL.filter(b => !b.final && (PENDING_ART.includes(b.img) || PENDING_ART.includes(b.bg))).length,
       ids: new Set(BOSS_POOL.map(b => b.id)).size,
       complete: BOSS_POOL.every(b => b.name && b.short && b.img && b.blurb && b.bg && b.banner && b.intents && b.enrage),
       arted: BOSS_POOL.every(b => ASSET_LIST.includes(b.img)),
@@ -22,8 +24,8 @@ module.exports = {
     }));
     // Seven hold the road and one waits at the end of it. The rotation deals only the seven;
     // the eighth is the ending and is dealt at the last sector alone.
-    ok(`${pool.road} warlords hold the road, and one stands at the end of it`,
-      pool.road === 7 && pool.finals === 1 && pool.count === pool.road + pool.finals);
+    ok(`${pool.road} warlords hold the road, one stands at the end of it, and ${pool.waiting} waits on its art`,
+      pool.road + pool.waiting === 8 && pool.finals === 1 && pool.count === pool.road + pool.waiting + pool.finals);
     ok('each with a unique id', pool.ids === pool.count);
     ok('each fully described, with its arena and its art declared', pool.complete && pool.arted);
     ok('every one carries a mechanic, not just intent weights', pool.mechanics === pool.count);
@@ -34,9 +36,12 @@ module.exports = {
       const named = BOSS_POOL.filter(b => b.passive);
       return { held: named.map(b => b.passive),
                described: named.every(b => BOSS_PASSIVES[b.passive] && BOSS_PASSIVES[b.passive].name && BOSS_PASSIVES[b.passive].desc),
+               // The old empty block was a heading reading "Command" and nothing else, so that is
+               // what is looked for - the Commandant carries the word in its name and its passive,
+               // and neither is a heading.
                inFile: named.every(b => {
                  const h = dossierHtml(b.name);
-                 return h.includes(BOSS_PASSIVES[b.passive].name) && !h.includes('Command');
+                 return h.includes(BOSS_PASSIVES[b.passive].name) && !/>\s*Command\s*</.test(h);
                }) };
     });
     ok(`every named passive is spelled out (${passives.held.join(', ')})`, passives.described);
@@ -90,18 +95,20 @@ module.exports = {
       // asked twice, the same sector must answer the same - the map label, the banner and the
       // fight all ask separately
       const stable = [1, 5, 9, 14].every(s => bossForSector(s).id === seq[s - 1]);
-      // every cycle is the whole pool
-      const cycle0 = new Set(seq.slice(0, 7)).size, cycle1 = new Set(seq.slice(7, 14)).size;
+      // every cycle is the whole pool - read at the rotation's own length, so a commander joining it
+      // the day its art lands does not turn this row into a count of the old one
+      const n = BOSS_ROTATION.length;
+      const cycle0 = new Set(seq.slice(0, n)).size, cycle1 = new Set(seq.slice(n, 2 * n)).size;
       // and a different run walks a different order
       const before = seq.join();
       confirmNewGame(1.0);
       const after = []; for (let s = 1; s <= 28; s++) after.push(bossForSector(s).id);
-      return { seq, backToBack, stable, cycle0, cycle1, distinct: new Set(seq).size,
+      return { seq, backToBack, stable, cycle0, cycle1, n, distinct: new Set(seq).size,
                differs: after.join() !== before };
     });
     ok('no warlord is met twice running', rotation.backToBack === 0);
     ok('the same sector always answers with the same warlord', rotation.stable);
-    ok('each cycle deals the whole roster', rotation.cycle0 === 7 && rotation.cycle1 === 7);
+    ok(`each cycle deals the whole roster (${rotation.n})`, rotation.cycle0 === rotation.n && rotation.cycle1 === rotation.n && rotation.n >= 7);
     ok('and a fresh run walks a different order', rotation.differs);
 
     const seeded = await page.evaluate(() => {

@@ -168,9 +168,12 @@ module.exports = {
         activeEntities = [...squad, boss, mate]; turnQueue = [...squad, boss, mate];
         if (b.id === 'OSSUARY') squad[0].hp = 0;
         combatActive = true; activeIndex = 0;
+        // Y05: and how many hostiles are standing. The Commandant's REFREEZE puts a sealed pod on the
+        // field, which changes the fight by a body and moves none of the other figures here.
         const snap = () => JSON.stringify({ hp: boss.hp, armor: boss.armor, tally: boss.tallyStacks || 0,
           venom: boss.venomStacks || 0, mate: mate.hp, mateArmor: mate.armor, wx: currentWeather,
-          marked: squad.filter(p => (p.markedTurns || 0) > 0).length });
+          marked: squad.filter(p => (p.markedTurns || 0) > 0).length,
+          foes: activeEntities.filter(e => !e.isPlayer && e.hp > 0).length });
         const before = snap();
         document.getElementById('log').innerHTML = '';
         boss.intent = { type: 'SIG', icon: ENEMY_SIGS[boss.sig].icon, sig: boss.sig };
@@ -260,7 +263,9 @@ module.exports = {
         initiateCombat('BOSS', false);
         return document.getElementById('log').innerText;
       };
-      const rows = BOSS_POOL.filter(b => b.learned).map(b => {
+      // Y05: every commander the road can deal - one still waiting on its art has no sector to
+      // open a fight in, and suite 198 holds that it is not dealt.
+      const rows = BOSS_POOL.filter(b => b.learned && sectorOf(b.id)).map(b => {
         const s = ENEMY_SIGS[b.learned.sig];
         const said = g => fight(b.id, g).includes('It brings ' + s.name.toUpperCase());
         const at2 = fight(b.id, 2).split('\n').map(l => l.trim());

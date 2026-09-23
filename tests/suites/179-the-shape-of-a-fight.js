@@ -64,8 +64,10 @@ module.exports = {
     // a side that breaks still ends the fight by every body reaching zero. What is missing is
     // not a way OUT for a hostile - that exists - it is any way for a fight to END other than
     // by one side's last body going down.
-    ok(`nine intents, and BREAK is the only one that is not a verb for fighting (${terminal.intents.join(', ')})`,
-      terminal.intents.length === 9 && terminal.intents.includes('BREAK') &&
+    // Y05 made it ten: THAW is a sealed pod counting down, which is a body waiting to fight rather
+    // than a way for the fight to end - the finding below is untouched by it.
+    ok(`ten intents, and BREAK and THAW are the only ones that are not verbs for fighting (${terminal.intents.join(', ')})`,
+      terminal.intents.length === 10 && terminal.intents.includes('BREAK') && terminal.intents.includes('THAW') &&
       !terminal.intents.some(i => /HOLD|GUARD|ESCORT|OBJECTIVE|TIMER/.test(i)));
     // A body pulling out threatens nobody, which is what lets the threat read stay honest while
     // R03's exit exists. Asserted off the scored table, not asserted `true` - the first draft of

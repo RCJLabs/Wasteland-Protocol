@@ -181,7 +181,9 @@ module.exports = {
     // ---- it is forecast before the node is taken ----
     const forecast = await page.evaluate(() => {
       currentSlot = 1; confirmNewGame(1.0); sectorFront = null;
-      currentSector = 2;
+      // Y05: sector 3, the first a road can carry every faction on - the Frost's ice is only ever
+      // underfoot from there, so a sector-2 sample leaves one ground out by construction.
+      currentSector = 3;
       const spread = {};
       for (let i = 0; i < 40; i++) {
         sectorMap = generateSectorMap(seededRng('ground:' + i));
